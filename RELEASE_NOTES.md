@@ -1,3 +1,8 @@
+## What's new in 1.1.0-alpha.3
+
+- **Removed the separate "Attach files" area** under the chat. Attach with **+**, paste a screenshot, or hold
+  **Shift** and drag files from Kural's file explorer into the chat.
+
 ## What's new in 1.1.0-alpha.2
 
 - **Fixed: Kural quit right after opening on a Mac.** Electron finds its helper programs by the app's name. The app

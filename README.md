@@ -96,8 +96,8 @@ The chat sits on the right and has tabs. Pick how much freedom Claude gets:
 Also in the chat:
 
 - **@ mentions.** Type `@` to mention a file in your sentence.
-- **Attachments.** **+** adds files, images and PDFs. You can also paste a screenshot, or drop files on **Attach
-  files**.
+- **Attachments.** **+** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
+  files from Kural's file explorer into the chat.
 - **Questions with options.** When a choice is yours, Claude asks with options you can click.
 - **Model and intensity.** Opus / Sonnet / Haiku, and Low → Max. You can switch in the middle of an answer.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Teacher** explains the why.
@@ -239,7 +239,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/tabpanel.js     the Tab panel
   lib/edits.js        Ctrl+K and Apply, lib/review.js (red/green review)
   lib/team-mcp.js     the agents' message board (a tiny MCP server)
-  lib/…               attachments, drop area, search, workspace folders, setup changes
+  lib/…               attachments, search, workspace folders, setup changes
   media/              the chat and search panels (HTML/CSS/JS)
   themes/             Kural Dark
 vendor/claudemeter/   Claudemeter (MIT), bundled as-is

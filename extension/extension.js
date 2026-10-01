@@ -13,7 +13,6 @@ const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edits");
 const { ReviewManager } = require("./lib/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
-const { DropZone } = require("./lib/drop");
 const { TabPanel } = require("./lib/tabpanel");
 const { LocalEngine } = require("./lib/local");
 
@@ -110,7 +109,6 @@ function activate(context) {
   const getState = () => state;
   const chat = new ChatView(context, (code, uri) => applyCode(editSession, review, getState, code, uri));
   chat.register();
-  new DropZone(chat).register(context);
   new SearchView(context).register();
   triggerOnCursor(context);
 

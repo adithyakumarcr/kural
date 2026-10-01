@@ -18,7 +18,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
     permissions, setup reload. `media/chat.js` + `media/chat.css` — the panel UI (a webview).
   - `lib/completion.js` — tab completion. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
-  - `lib/attachments.js`, `lib/drop.js` (the "Attach files" drop area), `lib/workspace.js` (multi-root),
+  - `lib/attachments.js`, `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask & Search), `lib/ui.js` (font size).
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
   `make-deb.sh` (Ubuntu), `build-mac.sh` (Apple Silicon), `build-win.sh` (Windows, runs on Linux).
@@ -39,8 +39,9 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   asks it for the final answer. Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
   Same-model agents agree too easily: the prompts make each form its own position first, require evidence and
   earned agreement, and hand work between roles for review. Test changes with a real run before shipping.
-- **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). That's
-  why `lib/drop.js` exists. Drags from the editor's own explorer reach the chat only with Shift.
+- **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). There was a
+  separate "Attach files" drop area for that; Adithya found it useless and it was removed (1.1.0-alpha.3). Attach
+  with +, paste, or Shift+drag from the editor's own explorer.
 - **Keyboard shortcuts in the chat**: VS Code's `focusedView` isn't set for webviews, so the page reports
   focus itself (`kural.chatFocused` context key).
 - **Tab completion engines**: `lib/local.js` (Ollama, raw FIM prompt `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>`

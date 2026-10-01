@@ -2,7 +2,7 @@
   "name": "kural",
   "displayName": "Kural",
   "description": "Kural Code Editor's Claude features: fast tab completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask & Search — using your Claude login.",
-  "version": "1.1.0-alpha.2",
+  "version": "1.1.0-alpha.3",
   "publisher": "kural",
   "license": "MIT",
   "engines": {
@@ -163,12 +163,6 @@
           "id": "kural.chat",
           "name": "Chat",
           "initialSize": 30
-        },
-        {
-          "id": "kural.drop",
-          "name": "Attach files",
-          "icon": "media/chat-icon.svg",
-          "initialSize": 1
         }
       ],
       "kural-tab": [

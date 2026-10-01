@@ -176,7 +176,7 @@
   const modeBtn = el("button", { class: "pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
   const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
-  const attachBtn = el("button", { class: "attach", title: "Add files, images or PDFs. You can also paste a screenshot, or drop files on \"Attach files\" below the chat.", onclick: () => post({ type: "attachPick" }) }, icon("plus"));
+  const attachBtn = el("button", { class: "attach", title: "Add files, images or PDFs. You can also paste a screenshot.", onclick: () => post({ type: "attachPick" }) }, icon("plus"));
   const composer = el("div", { class: "composer" }, popupEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }),
       sendBtn));   // (type @ to mention a project file; + attaches anything)
@@ -270,7 +270,7 @@
           tip("Agent", "Claude edits files; you keep or undo each change"),
           tip("Plan", "a plan first; click Build it when you like it"),
           tip("@", "mention a file right in your sentence"),
-          tip("+", "add files, images, PDFs; paste a screenshot; or drop files on Attach files below"),
+          tip("+", "add files, images, PDFs; or paste a screenshot"),
           tip("Ctrl+L", "send selected code as main.py (L10-20)"),
           tip("Team", "agents with roles (Developer, Tester, Critic…) split a task, or discuss and decide"),
           tip("Control+S", keys("next model; Control+M / H / O intensity; Control+P plan")),
@@ -670,8 +670,8 @@
     }
   }
   const dropTarget = document.body;
-  // (Drags from inside the editor reach here when you hold Shift. Files from your file manager
-  // can't reach a web page inside VS Code: they go to the "Attach files" area under the chat.)
+  // (Drags from the editor's own file explorer reach here when you hold Shift. Files from Finder or another
+  // file manager can't: VS Code blocks those from web pages like this chat, so use + or paste instead.)
   dropTarget.addEventListener("dragover", (e) => {
     e.preventDefault();
     const ok = e.dataTransfer.effectAllowed || "all";
