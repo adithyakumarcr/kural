@@ -1,16 +1,12 @@
-## What's new in 1.1.0-alpha.3
+## What's new in 1.1.0-alpha.2
 
 - **See the agents' discussion as it happens.** Their messages to each other now appear in the answer, in order,
   right where you're reading. Before, they sat inside the agent cards above the lead's text, out of sight.
 - **See the thinking.** Claude's thinking shows as a short summary ("Thought for 12 s", click to open). Each agent's
   card shows what it's doing right now, its thinking, and its notes. This needs a recent Claude Code; older versions
   simply don't show it.
-
 - **Removed the separate "Attach files" area** under the chat. Attach with **+**, paste a screenshot, or hold
   **Shift** and drag files from Kural's file explorer into the chat.
-
-## What's new in 1.1.0-alpha.2
-
 - **Fixed: Kural quit right after opening on a Mac.** Electron finds its helper programs by the app's name. The app
   was renamed to Kural, but its helpers were still called "VSCodium Helper", so Electron stopped at launch. The
   helpers (and the program and the `kural` command) are now renamed too. Every release is now opened for real on

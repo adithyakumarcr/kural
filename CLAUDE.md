@@ -46,7 +46,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. Debug raw output: start Kural with
   `KURAL_RAW_LOG=/tmp/raw.jsonl`.
 - **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). There was a
-  separate "Attach files" drop area for that; Adithya found it useless and it was removed (1.1.0-alpha.3). Attach
+  separate "Attach files" drop area for that; Adithya found it useless and it was removed (1.1.0-alpha.2). Attach
   with +, paste, or Shift+drag from the editor's own explorer.
 - **Keyboard shortcuts in the chat**: VS Code's `focusedView` isn't set for webviews, so the page reports
   focus itself (`kural.chatFocused` context key).
@@ -72,6 +72,8 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   Kural; on Ubuntu run "Developer: Reload Window"). View → Output → Kural shows every request with timings.
 
 ## Release
+**Version numbers:** don't bump the alpha number (1.1.0-alpha.N) unless Adithya says so; new changes go into the
+current, untagged version and its "What's new" block.
 Bump `extension/package.json` version, add a "What's new in X.Y.Z" block to `RELEASE_NOTES.md` (it becomes the release
 text, via `scripts/release-notes.sh`), commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`. The workflow
 checks the tag matches the version, builds all three, installs/starts them (Ubuntu 22.04 + 24.04, macOS, Windows),
