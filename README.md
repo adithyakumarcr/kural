@@ -219,7 +219,10 @@ To make a release:
 
 1. Bump `"version"` in `extension/package.json`.
 2. Add a `## What's new in X.Y.Z` block at the top of `RELEASE_NOTES.md`. It becomes the release text.
-3. Commit, then tag and push:
+3. Commit and push, then either:
+   - on GitHub: **Actions → Build Kural → Run workflow**, tick **Publish release**, and run it. It releases the
+     version in `extension/package.json` and creates its tag itself. This also works from your phone.
+   - or push a tag from your computer:
 
 ```bash
 git tag v1.2.0

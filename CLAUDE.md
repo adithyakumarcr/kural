@@ -75,7 +75,8 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
 **Version numbers:** don't bump the alpha number (1.1.0-alpha.N) unless Adithya says so; new changes go into the
 current, untagged version and its "What's new" block.
 Bump `extension/package.json` version, add a "What's new in X.Y.Z" block to `RELEASE_NOTES.md` (it becomes the release
-text, via `scripts/release-notes.sh`), commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`. The workflow
+text, via `scripts/release-notes.sh`), commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`, or Actions → Run workflow with "Publish release"
+(creates the tag itself; this session can't push tags, so that's how Claude releases: workflow_dispatch API). The workflow
 checks the tag matches the version, builds all three, installs/starts them (Ubuntu 22.04 + 24.04, macOS, Windows),
 and only then publishes the Release. A tag with a "-" (v1.2.0-alpha.1) becomes a GitHub Pre-release; the .deb
 version uses "~" (1.2.0~alpha.1) so the final 1.2.0 upgrades it. Repo: github.com/adithyakumarcr/kural. README screenshots: `docs/screenshots/`.

@@ -18,7 +18,14 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  # Actions tab → Build Kural → Run workflow. Tick "Publish release" to release the version in
+  # extension/package.json: the run creates the tag v<version> itself, after every check has passed.
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a release of the version in extension/package.json (creates its v tag)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # needed to publish releases for tags
@@ -35,6 +42,16 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm test
+      - name: The release doesn't exist yet
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -p 'require("./extension/package.json").version')"
+          if gh release view "$tag" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists. Bump the version in extension/package.json first."
+            exit 1
+          fi
       - name: Tag matches the version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -157,7 +174,7 @@ jobs:
 
   # ---------- Release (tags only) ----------
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
     needs: [linux-check, macos, windows-check]
     runs-on: ubuntu-24.04
     steps:
@@ -169,8 +186,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la dist
-          ./scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
-          title="Kural Code Editor $GITHUB_REF_NAME"
+          # A pushed tag, or (Run workflow + Publish release) the version in extension/package.json
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then tag="$GITHUB_REF_NAME"
+          else tag="v$(node -p 'require("./extension/package.json").version')"; fi
+          ./scripts/release-notes.sh "${tag#v}" > notes.md
+          title="Kural Code Editor $tag"
           pre=()
-          case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease); title="$title (test version)";; esac
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$title" --notes-file notes.md "${pre[@]}"
+          case "$tag" in *-*) pre=(--prerelease); title="$title (test version)";; esac
+          # --target: if the tag doesn't exist yet, it's created on the commit that was just built and tested
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "$title" --notes-file notes.md "${pre[@]}"
