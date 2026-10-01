@@ -7,8 +7,8 @@ Read `README.md` for the features. This file is how the code works and how to ch
 ## The owner
 Adithya is learning to code. Keep answers short; explain the *why* first; when fixing a bug say what
 was wrong and why; point out mistakes plainly. Small decisions: make them and say so.
-At the end of every change, give the steps to build and install the Ubuntu .deb (`./install.sh`, or the
-manual steps in README.md).
+At the end of every change, give the steps to build and install: `./install.sh` on his Mac or Ubuntu (builds from
+this folder and installs; `./install.sh --ext` when only `extension/` changed), or the release download.
 
 ## Layout
 - `extension/` — plain JavaScript, no build step, no npm dependencies at runtime.
@@ -61,8 +61,8 @@ manual steps in README.md).
 ## Test
 - `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, team board, Tab panel page script).
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
-- In the editor: copy `extension/` over `/usr/share/kural/resources/app/extensions/kural/` and run
-  "Developer: Reload Window". View → Output → Kural shows every request with timings.
+- In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts
+  Kural; on Ubuntu run "Developer: Reload Window"). View → Output → Kural shows every request with timings.
 
 ## Release
 Bump `extension/package.json` version, add a "What's new in X.Y.Z" block to `RELEASE_NOTES.md` (it becomes the release

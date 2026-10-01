@@ -173,20 +173,28 @@ moved to Ctrl+Alt+K. Use Ctrl+/ to comment code.
 
 ## Build it yourself
 
-Each build script downloads the matching VSCodium once into `downloads/` (about 150–250 MB) and writes the result
-to `dist/`.
+No GitHub needed: one command builds Kural from the code in this folder and installs it on your computer
+(a Mac with Apple Silicon, or Ubuntu / Debian):
+
+```bash
+./install.sh            # build and install (on a Mac it opens Kural when done)
+./install.sh --ext      # changed only files in extension/? put them into the installed Kural in a few seconds
+```
+
+The first build downloads VSCodium once (about 250 MB, kept in `downloads/`). After that, a build takes about a
+minute. On a Mac you need Apple's command-line tools once (`xcode-select --install`). `install.sh` sets up
+everything else itself. After `--ext` on Ubuntu, reload the window (**Developer: Reload Window**). On a Mac,
+Kural restarts.
+
+The separate build scripts, if you only want the files in `dist/`:
 
 | Computer | Command | Makes |
 |---|---|---|
-| Ubuntu (x64) | `./install.sh` | builds **and installs** the `.deb` (installs the build tools it needs first) |
 | Ubuntu (x64) | `./make-deb.sh` | `dist/kural_*_amd64.deb` |
-| Mac, Apple Silicon | `./build-mac.sh` | `dist/Kural-*-macos-arm64.zip` and `.dmg` (needs `python3 -m pip install Pillow`) |
+| Mac, Apple Silicon | `./build-mac.sh` | `dist/Kural-*-macos-arm64.zip` and `.dmg` (needs Pillow: `python3 -m pip install Pillow`) |
 | Windows (built on Linux) | `./build-win.sh` | `dist/Kural-*-windows-x64-setup.exe` + portable `.zip` (needs `nsis`, `node`) |
 
 To run the tests (no Claude needed), use `npm test`.
-
-To try a change to the extension without rebuilding, copy `extension/` over the installed copy and run **Developer:
-Reload Window**. On Ubuntu the installed copy is `/usr/share/kural/resources/app/extensions/kural/`.
 
 ## Releases
 
@@ -194,9 +202,12 @@ Releases are built by GitHub Actions (`.github/workflows/build.yml`):
 
 - **Every push and pull request:** runs the tests and all three builds. The files are under the run's **Artifacts**.
 - **A version tag:** does the same, then checks each build:
-  - installs the `.deb` on Ubuntu 22.04 **and** 24.04 and starts it,
-  - checks the Mac app's signature and starts it,
-  - installs the Windows setup silently and starts it.
+  - installs the `.deb` on Ubuntu 22.04 **and** 24.04 and opens it,
+  - installs the Mac app from the `.dmg`, checks its signature and opens it,
+  - installs the Windows setup silently and opens it.
+
+  "Opens" means the real window must still be running after 25 seconds. `./install.sh` is tested on a Mac and on
+  Ubuntu in the same run.
 
   Only then does it publish a GitHub Release with all the files.
 
