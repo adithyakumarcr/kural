@@ -219,21 +219,26 @@ To make a release:
 
 1. Bump `"version"` in `extension/package.json`.
 2. Add a `## What's new in X.Y.Z` block at the top of `RELEASE_NOTES.md`. It becomes the release text.
-3. Commit and push, then either:
-   - on GitHub: **Actions → Build Kural → Run workflow**, tick **Publish release**, and run it. It releases the
-     version in `extension/package.json` and creates its tag itself. This also works from your phone.
-   - or push a tag from your computer:
+3. Merge it into `main` (through a pull request), then tag `main` and push the tag:
 
 ```bash
+git checkout main && git pull
 git tag v1.2.0
-git push origin main v1.2.0
+git push origin v1.2.0
 ```
 
-The tag must match the version (`v1.2.0` ↔ `1.2.0`), otherwise the run stops early and says why.
+The tag must match the version (`v1.2.0` ↔ `1.2.0`) and point to a commit on `main`. Otherwise the run stops early
+and says why, and no release is made.
 
 **Test versions.** Use a version like `1.2.0-alpha.1` (or `-beta.1`, `-rc.1`) and tag `v1.2.0-alpha.1`. GitHub marks it
 as a **Pre-release**, so people see it's a test version. It uses the notes of `## What's new in 1.2.0-alpha.1`, or of
 `1.2.0` if that block doesn't exist. On Ubuntu, the final `1.2.0` later installs over the alpha as an upgrade.
+
+## Contributing
+
+`main` is protected: nobody pushes to it directly, not even the owner. Changes come in as pull requests from a
+branch or a fork. Each one needs the owner's approval (`.github/CODEOWNERS`), and the tests must pass. Only the
+owner can create release tags (`v…`). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project layout
 
