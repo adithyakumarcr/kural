@@ -1,0 +1,11 @@
+# Downloaded / built files (make-deb.sh recreates them)
+/codium.deb
+/dist/
+/pkg/
+/root/
+
+node_modules/
+*.log
+.DS_Store
+/downloads
+/build

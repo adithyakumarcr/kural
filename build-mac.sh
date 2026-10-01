@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Builds dist/Kural-<ver>-macos-arm64.zip (Apple Silicon: M1–M5) from VSCodium, plus a .dmg when run on a Mac.
+# Runs on Linux or macOS. Needs: curl, unzip, zip, python3 + Pillow, rcodesign (or macOS codesign).
+set -euo pipefail
+cd "$(dirname "$0")"
+
+CODIUM_VER="${CODIUM_VER:-1.135.06055}"
+VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')"
+SRC="downloads/VSCodium-darwin-arm64-$CODIUM_VER.zip"
+OUT="dist/Kural-$VER-macos-arm64.zip"
+WORK="build/mac"
+
+mkdir -p downloads dist
+if [ ! -f "$SRC" ]; then
+  echo "Downloading VSCodium $CODIUM_VER for macOS (Apple Silicon) ..."
+  curl -fL -o "$SRC" "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/VSCodium-darwin-arm64-$CODIUM_VER.zip"
+fi
+rm -rf "$WORK" && mkdir -p "$WORK"
+unzip -q "$SRC" -d "$WORK"      # keeps the app's internal links (symlinks) intact
+mv "$WORK/VSCodium.app" "$WORK/Kural.app"
+APP="$WORK/Kural.app"
+
+echo "Rebranding ..."
+python3 scripts/rebrand.py "$APP/Contents/Resources/app" mac
+python3 scripts/make-icons.py "$WORK/icons" >/dev/null
+cp "$WORK/icons/icon.icns" "$APP/Contents/Resources/Kural.icns"
+rm -f "$APP/Contents/Resources/VSCodium.icns"
+
+# The name macOS shows (menu bar, Dock, Finder), the app id, icon and link scheme.
+# The program inside stays "VSCodium": its helper apps are found by that name.
+python3 - "$APP/Contents/Info.plist" <<'PYEOF'
+import plistlib, sys
+p = sys.argv[1]
+with open(p, "rb") as f: d = plistlib.load(f)
+d.update(CFBundleName="Kural", CFBundleDisplayName="Kural", CFBundleIdentifier="com.kural", CFBundleIconFile="Kural.icns")
+for u in d.get("CFBundleURLTypes", []):
+    u["CFBundleURLName"] = "Kural"; u["CFBundleURLSchemes"] = ["kural"]
+with open(p, "wb") as f: plistlib.dump(d, f)
+PYEOF
+
+# macOS refuses to run changed apps unless they're signed again. We sign "ad-hoc"
+# (free, no Apple developer account). First launch then needs one approval: see README.
+echo "Signing (ad-hoc) ..."
+if command -v codesign >/dev/null 2>&1; then
+  # On a Mac: plain ad-hoc signature (no "hardened runtime", so no permissions needed).
+  codesign --force --deep --sign - "$APP"
+else
+  # On Linux: rcodesign keeps VSCodium's "hardened runtime" mode. In that mode macOS only
+  # loads libraries from the same developer, and ad-hoc signatures have no developer, so each
+  # program also gets "disable-library-validation" (plus the permissions it already had).
+  ent() {  # ent <file> <permission>...
+    local f="$1"; shift
+    { echo '<?xml version="1.0" encoding="UTF-8"?>'
+      echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+      echo '<plist version="1.0"><dict>'
+      for k in "$@"; do echo "  <key>com.apple.security.$k</key><true/>"; done
+      echo '</dict></plist>'; } > "$f"; }
+  E="$WORK/entitlements"; mkdir -p "$E"
+  DLV=cs.disable-library-validation
+  ent "$E/main.plist"     cs.allow-jit device.audio-input device.camera automation.apple-events $DLV
+  ent "$E/renderer.plist" cs.allow-jit $DLV
+  ent "$E/plugin.plist"   cs.allow-jit cs.allow-unsigned-executable-memory $DLV
+  ent "$E/plain.plist"    $DLV
+  # Each helper is its own little app; its settings are given by the path of its program file.
+  h() { echo "Contents/Frameworks/VSCodium Helper$1.app/Contents/MacOS/VSCodium Helper$1"; }
+  rcodesign sign \
+    --entitlements-xml-file "$E/main.plist" \
+    --entitlements-xml-file "$(h " (Renderer)"):$E/renderer.plist" \
+    --entitlements-xml-file "$(h " (Plugin)"):$E/plugin.plist" \
+    --entitlements-xml-file "$(h " (GPU)"):$E/plain.plist" \
+    --entitlements-xml-file "$(h ""):$E/plain.plist" \
+    "$APP" >"$WORK/sign.log" 2>&1
+fi
+
+echo "Zipping ..."
+rm -f "$OUT"
+( cd "$WORK" && zip -qry -X "../../$OUT" Kural.app )   # -y keeps symlinks as links
+DMG="dist/Kural-$VER-macos-arm64.dmg"
+if command -v hdiutil >/dev/null 2>&1; then
+  # On a Mac also make a .dmg: open it, drag Kural onto Applications.
+  echo "Making the .dmg ..."
+  rm -rf "$WORK/dmg" "$DMG" && mkdir "$WORK/dmg"
+  ditto "$APP" "$WORK/dmg/Kural.app"          # ditto keeps links and the signature intact
+  ln -s /Applications "$WORK/dmg/Applications"
+  hdiutil create -quiet -volname "Kural" -srcfolder "$WORK/dmg" -fs HFS+ -format UDZO "$DMG"
+fi
+echo
+echo "Built: $OUT"
+if [ -f "$DMG" ]; then echo "       $DMG"; fi

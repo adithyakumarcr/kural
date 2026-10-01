@@ -1,0 +1,489 @@
+{
+  "name": "kural",
+  "displayName": "Kural",
+  "description": "Kural Code Editor's Claude features: fast tab completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask & Search — using your Claude login.",
+  "version": "1.1.0",
+  "publisher": "kural",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Themes"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:kural.chat",
+    "onView:kural.search"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kural.chat.open",
+        "title": "Kural: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "kural.chat.newTab",
+        "title": "Kural: New Chat Tab",
+        "icon": "$(add)"
+      },
+      {
+        "command": "kural.chat.nextTab",
+        "title": "Kural: Next Chat Tab"
+      },
+      {
+        "command": "kural.chat.prevTab",
+        "title": "Kural: Previous Chat Tab"
+      },
+      {
+        "command": "kural.chat.closeTab",
+        "title": "Kural: Close Chat Tab"
+      },
+      {
+        "command": "kural.askSearch",
+        "title": "Kural: Ask & Search",
+        "icon": "$(search)"
+      },
+      {
+        "command": "kural.inlineEdit",
+        "title": "Kural: Edit with Claude (inline)",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "kural.review.accept",
+        "title": "Kural: Accept Change"
+      },
+      {
+        "command": "kural.review.reject",
+        "title": "Kural: Reject Change"
+      },
+      {
+        "command": "kural.toggleTab",
+        "title": "Kural: Turn Tab Completion On/Off"
+      },
+      {
+        "command": "kural.openClaudeCode",
+        "title": "Kural: Open Claude Code",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "kural.login",
+        "title": "Kural: Log In to Claude"
+      },
+      {
+        "command": "kural.install",
+        "title": "Kural: Install Claude Code"
+      },
+      {
+        "command": "kural.showLog",
+        "title": "Kural: Show Log",
+        "icon": "$(output)"
+      },
+      {
+        "command": "kural.chat.history",
+        "title": "Kural: Chat History",
+        "icon": "$(history)"
+      },
+      {
+        "command": "kural.chat.nextModel",
+        "title": "Kural: Next Model (Opus → Sonnet → Haiku)"
+      },
+      {
+        "command": "kural.chat.effortMedium",
+        "title": "Kural: Intensity Medium"
+      },
+      {
+        "command": "kural.chat.effortHigh",
+        "title": "Kural: Intensity High"
+      },
+      {
+        "command": "kural.chat.effortMax",
+        "title": "Kural: Intensity Max"
+      },
+      {
+        "command": "kural.chat.togglePlan",
+        "title": "Kural: Plan Mode On/Off"
+      },
+      {
+        "command": "kural.chat.attach",
+        "title": "Kural: Attach Files to Chat"
+      },
+      {
+        "command": "kural.tabSpeed",
+        "title": "Kural: Tab Completion Speed"
+      },
+      {
+        "command": "kural.reloadSetup",
+        "title": "Kural: Reload Claude Code Setup (connectors, MCP, plugins)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kural-search",
+          "title": "Ask & Search",
+          "icon": "media/search-icon.svg"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "kural",
+          "title": "Kural",
+          "icon": "media/chat-icon.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "kural-tab",
+          "title": "Kural Tab",
+          "icon": "media/chat-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "kural-search": [
+        {
+          "type": "webview",
+          "id": "kural.search",
+          "name": "Ask & Search"
+        }
+      ],
+      "kural": [
+        {
+          "type": "webview",
+          "id": "kural.chat",
+          "name": "Chat",
+          "initialSize": 30
+        },
+        {
+          "id": "kural.drop",
+          "name": "Attach files",
+          "icon": "media/chat-icon.svg",
+          "initialSize": 1
+        }
+      ],
+      "kural-tab": [
+        {
+          "type": "webview",
+          "id": "kural.tabPanel",
+          "name": "Tab completion"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "kural.chat.newTab",
+          "when": "view == kural.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kural.openClaudeCode",
+          "when": "view == kural.chat",
+          "group": "navigation@3"
+        },
+        {
+          "command": "kural.showLog",
+          "when": "view == kural.chat",
+          "group": "navigation@4"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "kural.chat.open",
+          "group": "navigation@90"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "kural.inlineEdit",
+          "when": "editorTextFocus",
+          "group": "0_kural@1"
+        },
+        {
+          "command": "kural.chat.open",
+          "when": "editorHasSelection",
+          "group": "0_kural@2"
+        },
+        {
+          "command": "kural.askSearch",
+          "group": "0_kural@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "kural.review.accept",
+          "when": "kural.reviewPending"
+        },
+        {
+          "command": "kural.review.reject",
+          "when": "kural.reviewPending"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "kural.chat.open",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "kural.chat.newTab",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n"
+      },
+      {
+        "command": "kural.chat.nextTab",
+        "key": "ctrl+pagedown",
+        "mac": "cmd+alt+right",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.chat.prevTab",
+        "key": "ctrl+pageup",
+        "mac": "cmd+alt+left",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.chat.closeTab",
+        "key": "ctrl+w",
+        "mac": "cmd+w",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.askSearch",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a"
+      },
+      {
+        "command": "kural.inlineEdit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "editorTextFocus && !editorReadonly"
+      },
+      {
+        "command": "kural.review.accept",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "kural.reviewPending && editorTextFocus"
+      },
+      {
+        "command": "kural.review.reject",
+        "key": "ctrl+shift+backspace",
+        "mac": "cmd+shift+backspace",
+        "when": "kural.reviewPending && editorTextFocus"
+      },
+      {
+        "command": "kural.openClaudeCode",
+        "key": "ctrl+escape",
+        "mac": "cmd+escape"
+      },
+      {
+        "command": "kural.chat.nextModel",
+        "key": "ctrl+s",
+        "mac": "ctrl+s",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.chat.effortMedium",
+        "key": "ctrl+m",
+        "mac": "ctrl+m",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.chat.effortHigh",
+        "key": "ctrl+h",
+        "mac": "ctrl+h",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.chat.effortMax",
+        "key": "ctrl+o",
+        "mac": "ctrl+o",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.chat.togglePlan",
+        "key": "ctrl+p",
+        "mac": "ctrl+p",
+        "when": "kural.chatFocused || focusedView == 'kural.chat'"
+      },
+      {
+        "command": "kural.toggleTab",
+        "key": "ctrl+alt+space",
+        "mac": "ctrl+alt+space"
+      }
+    ],
+    "configuration": {
+      "title": "Kural",
+      "properties": {
+        "kural.tabCompletion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Claude suggestions as grey text. Tab accepts."
+        },
+        "kural.tabCompletion.model": {
+          "type": "string",
+          "default": "haiku",
+          "enum": [
+            "haiku",
+            "sonnet",
+            "opus"
+          ],
+          "description": "Model for tab completion. Haiku is fastest (about half a second)."
+        },
+        "kural.tabCompletion.debounceMs": {
+          "type": "number",
+          "default": 75,
+          "minimum": 0,
+          "maximum": 2000,
+          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set from the Tab item in the status bar."
+        },
+        "kural.tabCompletion.onCursorMove": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also suggest when you place the cursor at the end of a line or on an empty line."
+        },
+        "kural.chat.model": {
+          "type": "string",
+          "default": "sonnet",
+          "enum": [
+            "opus",
+            "sonnet",
+            "haiku"
+          ],
+          "description": "Model for your very first chat. After that, new chats use whatever you picked last."
+        },
+        "kural.chat.intensity": {
+          "type": "string",
+          "default": "medium",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "max"
+          ],
+          "description": "Intensity for your very first chat. After that, new chats use whatever you picked last."
+        },
+        "kural.chat.mode": {
+          "type": "string",
+          "default": "agent",
+          "enum": [
+            "agent",
+            "auto",
+            "plan",
+            "ask"
+          ],
+          "enumDescriptions": [
+            "Claude edits files; asks before running commands",
+            "Claude edits files and runs commands without asking",
+            "Claude writes a plan first; click Build it to carry it out",
+            "Answers only; nothing changes"
+          ],
+          "description": "Mode for your very first chat. After that, new chats use whatever you picked last."
+        },
+        "kural.chat.fullClaudeCodeSetup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Chat uses your whole Claude Code setup: connectors and MCP servers, plugins, skills, hooks, settings. Kural reloads it in the same conversation when it changes. Off = a faster, minimal setup (your CLAUDE.md and .claude/rules are still used)."
+        },
+        "kural.editModel": {
+          "type": "string",
+          "default": "sonnet",
+          "enum": [
+            "sonnet",
+            "opus",
+            "haiku"
+          ],
+          "description": "Model for Ctrl+K edits and Apply."
+        },
+        "kural.askSearch.model": {
+          "type": "string",
+          "default": "sonnet",
+          "enum": [
+            "sonnet",
+            "haiku",
+            "opus"
+          ],
+          "description": "Model for Ask & Search questions."
+        },
+        "kural.fontSize": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 32,
+          "markdownDescription": "Text size in the Kural chat and Ask & Search panels, in pixels. `0` = the same as your code editor (`editor.fontSize`)."
+        },
+        "kural.tabCompletion.engine": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "local",
+            "claude"
+          ],
+          "enumDescriptions": [
+            "The local model when Ollama has it (fastest), otherwise Claude",
+            "Always the local model (Claude only if Ollama isn't available)",
+            "Always Claude"
+          ],
+          "description": "What writes Tab suggestions. Easiest to set in the Tab panel (click Tab in the status bar)."
+        },
+        "kural.tabCompletion.localModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:1.5b-base",
+          "description": "Ollama model for local Tab suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:0.5b-base / 1.5b-base / 3b-base)."
+        },
+        "kural.tabCompletion.ollamaUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Where Ollama runs."
+        }
+      }
+    },
+    "themes": [
+      {
+        "label": "Kural Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/kural-dark-color-theme.json"
+      }
+    ],
+    "configurationDefaults": {
+      "workbench.colorTheme": "Kural Dark",
+      "workbench.secondarySideBar.defaultVisibility": "visible",
+      "workbench.startupEditor": "none",
+      "workbench.tips.enabled": false,
+      "chat.commandCenter.enabled": false,
+      "chat.disableAIFeatures": true,
+      "editor.fontSize": 14,
+      "editor.lineHeight": 1.6,
+      "editor.minimap.enabled": false,
+      "editor.cursorBlinking": "smooth",
+      "editor.cursorSmoothCaretAnimation": "on",
+      "editor.smoothScrolling": true,
+      "editor.renderLineHighlight": "all",
+      "editor.inlineSuggest.enabled": true,
+      "editor.guides.bracketPairs": "active",
+      "workbench.list.smoothScrolling": true,
+      "terminal.integrated.fontSize": 14,
+      "workbench.activityBar.location": "default",
+      "workbench.sideBar.location": "left",
+      "workbench.experimental.fontSize": 14,
+      "workbench.sideBar.experimental.fontSize": 14,
+      "workbench.tabs.experimental.fontSize": 14,
+      "workbench.bottomPane.experimental.fontSize": 14,
+      "workbench.statusBar.experimental.fontSize": 13
+    }
+  },
+  "author": "Adithya Chinnakkonda"
+}
