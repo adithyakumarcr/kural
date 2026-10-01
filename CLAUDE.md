@@ -53,6 +53,9 @@ manual steps in README.md).
   request. Two warm processes (`pool: 2`), early return on `</insert>`, type-through reuse.
 - **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
+- **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
+  renames the program, the 4 helpers and `bin/kural` together; a mismatch crashes the app at launch. CI opens the real
+  app on all three systems (not just `--version`, which never starts the helpers).
 - product.json `checksums` cover VS Code's core JS files: never edit those; media files are fine.
 
 ## Test

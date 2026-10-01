@@ -9,6 +9,9 @@ case "$VER" in *-*)   # a test version (1.2.0-alpha.1): say so, and use 1.2.0's 
   printf '> **This is a test version (%s).** Expect rough edges. Please report problems under **Issues**.\n\n' "${VER#*-}" ;;
 esac
 new="$(section "$VER")"
-[ -n "$new" ] || new="$(section "${VER%%-*}")"
+case "$VER" in *-*)   # a test version also lists what its final version brings so far
+  base="$(section "${VER%%-*}")"
+  if [ -n "$new" ] && [ -n "$base" ]; then new="$new"$'\n\n'"**Also in ${VER%%-*}:**"$'\n'"$base"; else new="${new:-$base}"; fi ;;
+esac
 if [ -n "$new" ]; then printf "## What's new\n%s\n\n" "$new"; fi
 awk '/^## Downloads/ { on = 1 } on' RELEASE_NOTES.md

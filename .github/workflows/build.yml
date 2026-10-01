@@ -4,9 +4,10 @@
 #                                      Downloads are in the run's "Artifacts" (Actions tab).
 #  Push a tag like v1.2.0:             the same, then ONE GitHub Release with:
 #  (A tag like v1.2.0-alpha.1 or v1.2.0-beta.2 makes a "Pre-release": shown as a test version, not the latest.)
-#      kural_<ver>_amd64.deb                Ubuntu 22.04 / 24.04 (x64)   - installed and started on both
-#      Kural-<ver>-macos-arm64.dmg / .zip   macOS on Apple Silicon (M1-M5) - signature checked, started
-#      Kural-<ver>-windows-x64-setup.exe    Windows 10/11 installer        - installed and started
+#      kural_<ver>_amd64.deb                Ubuntu 22.04 / 24.04 (x64)   - installed and opened on both
+#      Kural-<ver>-macos-arm64.dmg / .zip   macOS on Apple Silicon (M1-M5) - installed from the .dmg, opened
+#      Kural-<ver>-windows-x64-setup.exe    Windows 10/11 installer        - installed and opened
+# "Opened" = the real window starts and is still running after 25 s (not just `kural --version`).
 #      Kural-<ver>-windows-x64.zip          Windows portable
 #
 # The tag must match extension/package.json's version (v1.2.0 <-> "1.2.0"), or the run stops early.
@@ -72,6 +73,14 @@ jobs:
           grep -q '"nameLong": "Kural Code Editor"' /usr/share/kural/resources/app/product.json
           test -f /usr/share/kural/resources/app/extensions/kural/package.json
           test -f /usr/share/applications/kural.desktop
+      - name: Open the window
+        run: |
+          sudo apt-get install -y -qq xvfb
+          Xvfb :99 -screen 0 1280x800x24 & sleep 2
+          DISPLAY=:99 /usr/share/kural/kural --user-data-dir /tmp/ud /tmp > /tmp/kural.log 2>&1 &
+          sleep 25
+          pgrep -af -- "--type=renderer" || { echo "::error::Kural quit or didn't open a window"; cat /tmp/kural.log; exit 1; }
+          pkill -x kural || true
 
   # ---------- macOS (Apple Silicon) ----------
   macos:
@@ -83,14 +92,23 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install pillow
       - run: ./build-mac.sh
-      - name: Check the signature and start it
+      - name: Install from the .dmg, check the signature, open it
         run: |
-          APP=build/mac/Kural.app
+          # Exactly what a user does: copy Kural out of the .dmg, then open it.
+          hdiutil attach -nobrowse -mountpoint /tmp/kural-dmg dist/*.dmg
+          ditto /tmp/kural-dmg/Kural.app "$RUNNER_TEMP/Kural.app"
+          hdiutil detach /tmp/kural-dmg
+          APP="$RUNNER_TEMP/Kural.app"
           codesign --verify --deep --strict "$APP"
-          ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/VSCodium" -e \
-            'const p = require(process.argv[1]); console.log(p.nameLong, p.version); if (p.nameLong !== "Kural Code Editor") process.exit(1)' \
-            "$PWD/$APP/Contents/Resources/app/product.json"
-          hdiutil verify dist/*.dmg
+          "$APP/Contents/Resources/app/bin/kural" --version
+          # The real window, not just the command line: it must still run after 25 s with its helper processes.
+          # (Electron finds its helpers by the app's name; a wrong name makes it quit at once.)
+          "$APP/Contents/MacOS/Kural" --user-data-dir "$RUNNER_TEMP/ud" --extensions-dir "$RUNNER_TEMP/ext" "$RUNNER_TEMP" > "$RUNNER_TEMP/kural.log" 2>&1 &
+          sleep 25
+          ps ax -o pid,command | grep -F "Kural Helper (Renderer)" | grep -v grep || {
+            echo "::error::Kural quit or didn't open a window"; cat "$RUNNER_TEMP/kural.log"
+            ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null; exit 1; }
+          pkill -x Kural || true
       - uses: actions/upload-artifact@v4
         with: { name: macos, path: "dist/Kural-*-macos-*", if-no-files-found: error }
 
@@ -122,6 +140,13 @@ jobs:
           if (-not (Test-Path "$dir\Kural.exe")) { throw "Kural.exe not installed" }
           & "$dir\bin\kural.cmd" --version
           if ($LASTEXITCODE -ne 0) { throw "kural --version failed" }
+          # The real window: still running after 25 s, with its helper processes
+          Start-Process -FilePath "$dir\Kural.exe" -ArgumentList "--user-data-dir", "$env:RUNNER_TEMP\ud", "$env:RUNNER_TEMP"
+          Start-Sleep -Seconds 25
+          $procs = @(Get-Process Kural -ErrorAction SilentlyContinue)
+          Write-Host "Kural processes running: $($procs.Count)"
+          if ($procs.Count -lt 2) { throw "Kural quit or didn't open a window" }
+          $procs | Stop-Process -Force
 
   # ---------- Release (tags only) ----------
   release:
