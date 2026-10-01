@@ -65,4 +65,5 @@ manual steps in README.md).
 Bump `extension/package.json` version, add a "What's new in X.Y.Z" block to `RELEASE_NOTES.md` (it becomes the release
 text, via `scripts/release-notes.sh`), commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`. The workflow
 checks the tag matches the version, builds all three, installs/starts them (Ubuntu 22.04 + 24.04, macOS, Windows),
-and only then publishes the Release. Repo: github.com/adithyakumarcr/kural. README screenshots: `docs/screenshots/`.
+and only then publishes the Release. A tag with a "-" (v1.2.0-alpha.1) becomes a GitHub Pre-release; the .deb
+version uses "~" (1.2.0~alpha.1) so the final 1.2.0 upgrades it. Repo: github.com/adithyakumarcr/kural. README screenshots: `docs/screenshots/`.

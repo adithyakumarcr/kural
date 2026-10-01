@@ -1,5 +1,7 @@
 ## What's new in 1.1.0
 
+First public version, released as the test version **1.1.0-alpha.1**.
+
 - **ClaudeX is now Kural Code Editor** (by Adithya Chinnakkonda): new name, `{K}` logo, `kural` command, settings
   under `kural.*`. Installing it on Ubuntu replaces ClaudeX. It keeps its own settings and chats, separate from ClaudeX's.
 - **Fixed: Ctrl+K could break indentation.** The first line of an edit sometimes came back one space short (4 spaces

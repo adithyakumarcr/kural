@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/adithyakumarcr/kural/releases/latest"><img src="https://img.shields.io/github/v/release/adithyakumarcr/kural?label=download" alt="Latest release"></a>
+  <a href="https://github.com/adithyakumarcr/kural/releases"><img src="https://img.shields.io/github/v/release/adithyakumarcr/kural?include_prereleases&label=download" alt="Latest release"></a>
   <a href="https://github.com/adithyakumarcr/kural/actions/workflows/build.yml"><img src="https://github.com/adithyakumarcr/kural/actions/workflows/build.yml/badge.svg" alt="Build"></a>
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-555" alt="macOS">
   <img src="https://img.shields.io/badge/Ubuntu-22.04%20%7C%2024.04-E95420" alt="Ubuntu">
@@ -44,7 +44,8 @@ terminal and type `/login`. Kural uses that login.
 
 ### 2. Download Kural
 
-Get the file for your computer from the [latest release](https://github.com/adithyakumarcr/kural/releases/latest):
+Get the file for your computer from [Releases](https://github.com/adithyakumarcr/kural/releases). Versions marked
+**Pre-release** (like `1.1.0-alpha.1`) are test versions.
 
 | Your computer | File |
 |---|---|
@@ -211,6 +212,10 @@ git push origin main v1.2.0
 ```
 
 The tag must match the version (`v1.2.0` ↔ `1.2.0`), otherwise the run stops early and says why.
+
+**Test versions.** Use a version like `1.2.0-alpha.1` (or `-beta.1`, `-rc.1`) and tag `v1.2.0-alpha.1`. GitHub marks it
+as a **Pre-release**, so people see it's a test version. It uses the notes of `## What's new in 1.2.0-alpha.1`, or of
+`1.2.0` if that block doesn't exist. On Ubuntu, the final `1.2.0` later installs over the alpha as an upgrade.
 
 ## Project layout
 

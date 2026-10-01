@@ -15,7 +15,9 @@ if [ ! -f codium.deb ]; then
 fi
 VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')+$(dpkg-deb -f codium.deb Version)"
 # "1:" (an epoch) makes 1.0.x count as newer than the earlier 3.0.0 builds, so apt upgrades cleanly.
-DEBVER="1:$VER"
+# A test version like 1.1.0-alpha.1 becomes 1.1.0~alpha.1 inside the package: "~" sorts before the final 1.1.0,
+# so apt later upgrades the alpha to 1.1.0. (A "-" would mean something else to apt.)
+DEBVER="1:${VER//-/\~}"
 R=pkg
 rm -rf root "$R" && dpkg-deb -R codium.deb root && mv root "$R"
 echo "Building $TITLE ..."

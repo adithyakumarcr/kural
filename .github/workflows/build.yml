@@ -3,6 +3,7 @@
 #  Every push to main / pull request:  tests + all builds + install checks.
 #                                      Downloads are in the run's "Artifacts" (Actions tab).
 #  Push a tag like v1.2.0:             the same, then ONE GitHub Release with:
+#  (A tag like v1.2.0-alpha.1 or v1.2.0-beta.2 makes a "Pre-release": shown as a test version, not the latest.)
 #      kural_<ver>_amd64.deb                Ubuntu 22.04 / 24.04 (x64)   - installed and started on both
 #      Kural-<ver>-macos-arm64.dmg / .zip   macOS on Apple Silicon (M1-M5) - signature checked, started
 #      Kural-<ver>-windows-x64-setup.exe    Windows 10/11 installer        - installed and started
@@ -137,4 +138,7 @@ jobs:
         run: |
           ls -la dist
           ./scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Kural Code Editor $GITHUB_REF_NAME" --notes-file notes.md
+          title="Kural Code Editor $GITHUB_REF_NAME"
+          pre=()
+          case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease); title="$title (test version)";; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$title" --notes-file notes.md "${pre[@]}"
