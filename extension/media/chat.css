@@ -239,6 +239,24 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .agent-steps .tool { margin-bottom: 2px; font-size: calc(11.5px * var(--fs, 1)); }
 .team-msg { margin: 3px 0; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(12px * var(--fs, 1)); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .team-who { font-weight: 600; color: var(--accent-hi); }
+/* The agents' discussion, in the answer itself: a bit bigger than inside a card */
+.answer > .team-msg { margin: 6px 0; padding: 6px 10px; font-size: calc(13px * var(--fs, 1)); }
+.agent-activity { font-size: calc(11px * var(--fs, 1)); color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
+.agent-say, .agent-think { margin: 3px 0; font-size: calc(12px * var(--fs, 1)); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
+.agent-think { color: var(--muted); font-style: italic; }
+.agent-think::before { content: "Thinking: "; font-style: normal; font-weight: 600; }
+.agent-say.clamp, .agent-think.clamp { max-height: 4.4em; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
+
+/* Claude's thinking (summaries) */
+.think { margin: 4px 0 8px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); }
+.think-head { cursor: pointer; display: inline-flex; align-items: center; gap: 5px; user-select: none; }
+.think-head:hover { color: var(--fg, inherit); }
+.think-caret::before { content: "▸"; display: inline-block; width: 1em; }
+.think.open .think-caret::before { content: "▾"; }
+.think.live .think-head { color: var(--accent-hi); }
+.think-body { display: none; margin: 4px 0 0 6px; padding: 2px 0 2px 10px; border-left: 2px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-style: italic; }
+.think.open .think-body { display: block; }
+.think.live .think-body { max-height: 9em; overflow-y: auto; }
 .team-wait { color: var(--muted); font-style: italic; }
 .tool.more { opacity: .7; font-style: italic; }
 .dots.small span { width: 4px; height: 4px; }

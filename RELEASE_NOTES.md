@@ -1,5 +1,11 @@
 ## What's new in 1.1.0-alpha.3
 
+- **See the agents' discussion as it happens.** Their messages to each other now appear in the answer, in order,
+  right where you're reading. Before, they sat inside the agent cards above the lead's text, out of sight.
+- **See the thinking.** Claude's thinking shows as a short summary ("Thought for 12 s", click to open). Each agent's
+  card shows what it's doing right now, its thinking, and its notes. This needs a recent Claude Code; older versions
+  simply don't show it.
+
 - **Removed the separate "Attach files" area** under the chat. Attach with **+**, paste a screenshot, or hold
   **Shift** and drag files from Kural's file explorer into the chat.
 

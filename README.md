@@ -102,6 +102,7 @@ Also in the chat:
 - **Model and intensity.** Opus / Sonnet / Haiku, and Low → Max. You can switch in the middle of an answer.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Teacher** explains the why.
 - **History.** Chats survive restarts. The clock button finds old ones.
+- **Thinking.** Claude's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
 
 ### Multiple agents
 
@@ -111,6 +112,9 @@ Monica…), each with a role you pick. They message each other on a shared board
 - **Split the work.** They work in parallel. For example, the Developer writes the code and hands it to the Tester.
 - **Discuss & decide.** Each forms their own view first. Then they argue it out and agree. The answer shows everyone's
   final position and any disagreement left.
+
+You see the discussion live: every message the agents send each other appears in the answer as it's sent. Each
+agent's card shows what it's doing right now, its thinking and its notes.
 
 | Pick roles and how they work | They discuss and decide |
 |---|---|

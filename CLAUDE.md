@@ -37,8 +37,14 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   reopens the answer. Only Stop ends a team answer early; `warm()` never restarts Claude while an agent works
   (that would kill background agents). If Claude doesn't wake the lead after the last report, `conclude()`
   asks it for the final answer. Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
+  Their board posts (`mcp__team__post`) go into the answer itself as bubbles (not the card), so the discussion is
+  where you read; cards hold tools, `task_progress` activity, and the agent's text/thinking.
   Same-model agents agree too easily: the prompts make each form its own position first, require evidence and
   earned agreement, and hand work between roles for review. Test changes with a real run before shipping.
+- **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
+  and `--forward-subagent-text`. Old Claude Code refuses unknown flags, so `supportedFlags()` probes once
+  (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. Debug raw output: start Kural with
+  `KURAL_RAW_LOG=/tmp/raw.jsonl`.
 - **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). There was a
   separate "Attach files" drop area for that; Adithya found it useless and it was removed (1.1.0-alpha.3). Attach
   with +, paste, or Shift+drag from the editor's own explorer.

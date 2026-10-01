@@ -535,7 +535,7 @@ class ChatView {
     // With your full setup, Claude can also use your skills.
     const tools = [...(editing ? AGENT_TOOLS : READ_TOOLS), ...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
     const proc = new ClaudeProcess({
-      name: `chat ${tab.id}`, model: tab.model, effort: tab.effort, partial: true,
+      name: `chat ${tab.id}`, model: tab.model, effort: tab.effort, partial: true, showThinking: true,
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
@@ -673,6 +673,11 @@ class ChatView {
       const end = m.subtype === "task_notification" ? m.status : m.subtype === "task_updated" && m.patch ? m.patch.status : null;
       if (m.subtype === "task_notification") r.lastNotifyAt = Date.now();
       const owner = a || (m.task_id && r.agents.get(r.tasks.get(m.task_id)));
+      // What the agent is doing right now ("Running the tests"), shown on its card.
+      if (m.subtype === "task_progress" && owner && owner.state === "running" && m.description) {
+        owner.activity = String(m.description).replace(/^Running /, "");
+        this.post({ type: "agentActivity", tabId: tab.id, agentId: owner.id, activity: owner.activity });
+      }
       const END = { completed: "done", failed: "failed", error: "failed", killed: "stopped", stopped: "stopped", cancelled: "stopped", canceled: "stopped" };
       if (end && !END[end] && end !== "running" && end !== "pending") log(`chat ${tab.id}: agent status "${end}" (still counted as working)`);
       if (owner && owner.state === "running" && END[end]) {
@@ -707,6 +712,26 @@ class ChatView {
     }
     if (m.type === "stream_event") {
       if (parent) return;   // helpers' own text stays inside their card; only the lead talks in the chat
+      const e = m.event;
+      // Claude's thinking, as short summaries (only when Claude Code supports --thinking-display).
+      if (e.type === "content_block_start") r.blockType = e.content_block && e.content_block.type;
+      if (e.type === "content_block_delta" && e.delta.type === "thinking_delta" && e.delta.thinking) {
+        let last = reply.blocks[reply.blocks.length - 1];
+        if (!last || last.k !== "think" || last.done) {
+          last = { k: "think", text: "", t0: Date.now() };
+          reply.blocks.push(last);
+          this.post({ type: "block", tabId: tab.id, block: last });
+        }
+        last.text += e.delta.thinking;
+        this.post({ type: "thinkDelta", tabId: tab.id, text: e.delta.thinking });
+      }
+      if (e.type === "content_block_stop" && r.blockType === "thinking") {
+        const last = reply.blocks[reply.blocks.length - 1];
+        if (last && last.k === "think" && !last.done) {
+          last.done = true; last.ms = Date.now() - last.t0;
+          this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
+        }
+      }
       if (m.event.type === "content_block_delta" && m.event.delta.type === "text_delta") {
         let last = reply.blocks[reply.blocks.length - 1];
         if (!last || last.k !== "text") { last = { k: "text", text: "" }; reply.blocks.push(last); }
@@ -719,7 +744,17 @@ class ChatView {
         const name = prettyModel(m.message.model);
         if (name !== tab.modelName) { tab.modelName = name; if (tab.id === this.activeId) this.post({ type: "modelName", tabId: tab.id, name }); }
       }
+      const from = parent && r.agents.get(parent);
       for (const b of m.message.content || []) {
+        // What an agent writes and thinks (needs --forward-subagent-text): into its card.
+        if (from && (b.type === "text" || b.type === "thinking")) {
+          const said = (b.type === "text" ? b.text : b.thinking || "").trim();
+          if (!said) continue;
+          const step = { k: b.type === "text" ? "say" : "think", text: said };
+          from.steps.push(step);
+          this.post({ type: "agentStep", tabId: tab.id, agentId: from.id, step });
+          continue;
+        }
         if (b.type !== "tool_use") continue;
         if (SUBAGENT_TOOLS.has(b.name)) {
           const n = r.agents.size + 1;
@@ -735,7 +770,13 @@ class ChatView {
         if (b.name === "AskUserQuestion") continue;   // shown as a question card instead
         const step = { k: "tool", name: b.name, detail: toolDetail(b.name, b.input, this.root()), id: b.id };
         const owner = parent && r.agents.get(parent);
-        if (owner) {
+        if (owner && b.name === "mcp__team__post") {
+          // The agents' discussion: shown in the answer itself, in order, where you're reading
+          // (inside the cards it ended up above the lead's text, out of sight).
+          step.agent = owner.name; step.role = owner.role;
+          reply.blocks.push(step);
+          this.post({ type: "block", tabId: tab.id, block: step });
+        } else if (owner) {
           owner.steps.push(step);
           this.post({ type: "agentStep", tabId: tab.id, agentId: owner.id, step });
         } else {

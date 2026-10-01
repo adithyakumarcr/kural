@@ -9,7 +9,7 @@
 //  - Starting `claude` costs 1–3 s, so processes are started ahead of time and reused.
 
 const vscode = require("vscode");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -76,11 +76,39 @@ function cleanEnv(extra) {
 
 const newSessionId = () => crypto.randomUUID();
 
+// Newer Claude Code can show what Claude is thinking (as short summaries: --thinking-display summarized)
+// and pass on what agents write and think (--forward-subagent-text). Older versions refuse to start with
+// "unknown option" when given a flag they don't know, so ask once (about half a second, no Claude request:
+// with no input, Claude stops right after checking its options) and only use the ones it knows.
+const OPTIONAL_FLAGS = { thinkingDisplay: ["--thinking-display", "summarized"], forwardSubagentText: ["--forward-subagent-text"] };
+let flagCache = null;
+function supportedFlags(bin) {
+  if (flagCache && flagCache.bin === bin) return flagCache;
+  const left = Object.keys(OPTIONAL_FLAGS);
+  const known = { bin };
+  for (let i = 0; i <= left.length; i++) {
+    const args = ["-p", "--output-format", "stream-json", "--verbose", ...left.flatMap((k) => OPTIONAL_FLAGS[k])];
+    const r = spawnSync(bin, args, { input: "", timeout: 8000, encoding: "utf8", env: cleanEnv({}), windowsHide: true });
+    if (r.error || r.status === null) break;                    // couldn't tell: use none of them
+    const bad = /unknown option '([^']+)'/.exec(`${r.stdout || ""}${r.stderr || ""}`);
+    if (!bad) { for (const k of left) known[k] = true; break; }
+    const k = left.find((x) => OPTIONAL_FLAGS[x][0] === bad[1]);
+    if (!k) break;
+    left.splice(left.indexOf(k), 1);
+  }
+  log(`claude options: thinking summaries ${known.thinkingDisplay ? "on" : "not supported"}, agents' text ${known.forwardSubagentText ? "on" : "not supported"}`);
+  flagCache = known;
+  return known;
+}
+
 // ---------- one running `claude` process ----------
 // opts: name, model, effort, systemPrompt, appendSystemPrompt, tools, allowedTools, cwd,
 //       partial, safeMode, noThinking, sessionId, resume, persist, hostPermissions,
 //       jsonSchema, mcpServers ({name: {command, args, env}}), addDirs (more folders Claude may use)
 // handlers: onMessage(msg), onPermission(req) -> Promise<{allow, message?}>, onExit(info)
+// Debugging: set KURAL_RAW_LOG=/some/file before starting Kural to save everything Claude sends.
+const RAW_LOG = process.env.KURAL_RAW_LOG || "";
+
 class ClaudeProcess {
   constructor(opts, handlers) {
     this.opts = opts;
@@ -100,6 +128,10 @@ class ClaudeProcess {
       "--model", o.model, ...(o.strictMcp === false ? [] : ["--strict-mcp-config"])];   // strict: no MCP servers but ours
     if (o.effort) args.push("--effort", o.effort);
     if (o.partial) args.push("--include-partial-messages");
+    if (o.showThinking) {   // the chat: show Claude's thinking and what its agents write
+      const f = supportedFlags(bin);
+      for (const k of Object.keys(OPTIONAL_FLAGS)) if (f[k]) args.push(...OPTIONAL_FLAGS[k]);
+    }
     // Safe mode skips your hooks, plugins, skills and MCP servers (faster, predictable), but it
     // also skips the MCP servers we pass ourselves. So when we need one (the agent team's message
     // board), turn those things off one by one instead.
@@ -145,6 +177,7 @@ class ClaudeProcess {
     while ((i = this.buf.indexOf("\n")) >= 0) {
       const line = this.buf.slice(0, i).replace(/\r$/, "");
       this.buf = this.buf.slice(i + 1);
+      if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `${this.opts.name} ${line}\n`); } catch { /* debugging only */ } }
       let msg;
       try { msg = JSON.parse(line); } catch { continue; }
       if (msg.type === "control_response" && msg.response && this.pending.has(msg.response.request_id)) {
@@ -327,4 +360,4 @@ function stripFence(text) {
   return m ? m[1] : text;
 }
 
-module.exports = { IS_WIN, initLog, log, findClaude, ClaudeProcess, ClaudeSession, stripFence, newSessionId, LOGIN_RE };
+module.exports = { supportedFlags, IS_WIN, initLog, log, findClaude, ClaudeProcess, ClaudeSession, stripFence, newSessionId, LOGIN_RE };

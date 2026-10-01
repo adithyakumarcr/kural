@@ -319,6 +319,7 @@
       else if (b.k === "perm") out.append(permNode(b));
       else if (b.k === "agent") out.append(agentNode(b));
       else if (b.k === "question") out.append(questionNode(b));
+      else if (b.k === "think") out.append(thinkNode(b, m.running && !b.done));
     }
     const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
     const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
@@ -375,6 +376,18 @@
         : b.name === "Bash" ? el("code", {}, b.detail) : el("span", {}, b.detail));
   }
 
+  // Claude's thinking (short summaries). Open while it thinks; afterwards one line you can click to open.
+  function thinkNode(b, live) {
+    const secs = b.ms ? Math.max(1, Math.round(b.ms / 1000)) : 0;
+    const node = el("div", { class: `think${live || b._open ? " open" : ""}${live ? " live" : ""}` });
+    node.append(
+      el("div", { class: "think-head", onclick: () => { b._open = !node.classList.contains("open"); node.classList.toggle("open", b._open); } },
+        el("span", { class: "think-caret" }), live ? "Thinking…" : secs ? `Thought for ${secs} s` : "Thought"),
+      el("div", { class: "think-body" }, b.text));
+    if (live) requestAnimationFrame(() => { const body = node.querySelector(".think-body"); if (body) body.scrollTop = body.scrollHeight; });
+    return node;
+  }
+
   function agentNode(b) {
     const label = { running: "working", done: "done", failed: "failed", stopped: "stopped" }[b.state] || b.state;
     return el("div", { class: `agent ${b.state}`, "data-agent": b.id },
@@ -383,17 +396,27 @@
         b.role ? el("span", { class: "agent-role" }, b.role) : null,
         el("span", { class: "agent-title" }, b.title),
         el("span", { class: "spacer" }),
+        b.state === "running" && b.activity ? el("span", { class: "agent-activity", title: b.activity }, b.activity) : null,
         b.state === "running" ? el("span", { class: "dots small" }, el("span"), el("span"), el("span")) : null,
         el("span", { class: "agent-state" }, label)),
       b.steps.length ? el("div", { class: "agent-steps" }, ...agentSteps(b)) : null);
   }
-  // All messages between agents, plus the agent's last 4 other steps.
+  // What the agent wrote (always), and its last 5 other steps: thinking and tools.
+  // (Messages between agents are shown in the answer itself; older chats kept them in the cards.)
   function agentSteps(b) {
-    const isMsg = (s) => s.name === "mcp__team__post";
-    const recent = new Set(b.steps.filter((s) => !isMsg(s)).slice(-4));
-    const shown = b.steps.filter((s) => isMsg(s) || recent.has(s));
+    const keep = (s) => s.k === "say" || s.name === "mcp__team__post";
+    const recent = new Set(b.steps.filter((s) => !keep(s)).slice(-5));
+    const shown = b.steps.filter((s) => keep(s) || recent.has(s));
     const hidden = b.steps.length - shown.length;
-    return [hidden ? el("div", { class: "tool more" }, `+${hidden} earlier steps`) : null, ...shown.map(toolNode)];
+    return [hidden ? el("div", { class: "tool more" }, `+${hidden} earlier steps`) : null, ...shown.map((s) =>
+      s.k === "say" ? clampNode("agent-say", s.text) :
+      s.k === "think" ? clampNode("agent-think", s.text) : toolNode(s))];
+  }
+  // Long text shows a few lines; click to see all of it.
+  function clampNode(cls, text) {
+    const node = el("div", { class: `${cls} clamp`, title: "Click to show all" }, text);
+    node.onclick = () => node.classList.toggle("clamp");
+    return node;
   }
 
   // Claude's multiple-choice question. Your picks live on the block (b._sel, b._other) so a
@@ -815,6 +838,12 @@
         b.text += m.text; scheduleRerender(i);
       } break;
       case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i].blocks.push(m.block); scheduleRerender(i); } } break;
+      case "thinkDelta": if (mine) {
+        const i = lastAssistant(); if (i < 0) break;
+        const blocks = S.tab.messages[i].blocks, b = blocks[blocks.length - 1];
+        if (b && b.k === "think") { b.text += m.text; scheduleRerender(i); }
+      } break;
+      case "agentActivity": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.activity = m.activity; scheduleRerender(i); } } break;
       case "agentStep": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.steps.push(m.step); scheduleRerender(i); } } break;
       case "agentState": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.state = m.state; scheduleRerender(i); } } break;
       case "questionState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) { b.state = m.state; b.answers = m.answers; } scheduleRerender(i); } } break;
