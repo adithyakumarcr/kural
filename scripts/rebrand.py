@@ -49,6 +49,8 @@ def main(app, platform):
         target = os.path.join(ext, dst)
         shutil.rmtree(target, ignore_errors=True)
         shutil.copytree(os.path.join(ROOT, src), target, ignore=shutil.ignore_patterns("README.md") if dst == "claudemeter" else None)
+    # Kural's license (MIT + Commons Clause) travels with every copy of the app, as the license requires.
+    shutil.copy(os.path.join(ROOT, "LICENSE"), os.path.join(ext, NAME, "LICENSE"))
 
     # 4. Ctrl+K / Cmd+K opens Kural's inline edit. Git's own Ctrl+K shortcuts would win,
     #    so move them to Ctrl+Alt+K (Cmd+Alt+K on a Mac).

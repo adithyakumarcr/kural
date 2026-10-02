@@ -313,4 +313,11 @@ By **Adithya Chinnakkonda**. Built on [VSCodium](https://github.com/VSCodium/vsc
 [Claudemeter](vendor/claudemeter) (MIT). Kural is an independent project. It is not made or endorsed by Anthropic or
 Microsoft. "Claude" is a trademark of Anthropic.
 
-MIT license, see [LICENSE](LICENSE).
+## License
+
+Kural is free to use and change, for hobby projects and at work. What you may not do is **sell** it: no selling Kural
+or a version of it, and no paid product or service whose value comes mainly from Kural (hosting, support, a rebrand).
+That's the MIT license with the [Commons Clause](https://commonsclause.com/), see [LICENSE](LICENSE). Kural is
+"source-available", not "open source" in the strict sense, because of this limit.
+
+The VSCodium/VS Code and Claudemeter parts inside Kural keep their own MIT licenses.

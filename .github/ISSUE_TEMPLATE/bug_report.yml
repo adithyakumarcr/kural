@@ -1,0 +1,77 @@
+name: Bug report
+description: Something in Kural doesn't work as it should.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! A bug can only be fixed if it can be seen and repeated, so the fields marked * are required.
+  - type: textarea
+    id: bug
+    attributes:
+      label: What's the bug?
+      description: What happened, in a few sentences.
+      placeholder: When I press Tab in the terminal after `git commit -m "`, nothing is suggested.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: The exact steps, so someone else sees the same bug.
+      placeholder: |
+        1. Open a folder that is a git repository
+        2. Change a file and run `git add .`
+        3. In Kural's terminal, type `git commit -m "`
+        4. Wait a few seconds: no suggestion appears
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+      placeholder: A suggested commit message in the terminal's list.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag and drop screenshots (or a screen recording) here. Show the whole Kural window if you can.
+      placeholder: Drop images here.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kural version
+      description: Help → About (or the version under the logo in the chat panel).
+      placeholder: 1.1.0-alpha.2
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: Computer
+      options:
+        - Mac (Apple Silicon)
+        - Ubuntu 24.04
+        - Ubuntu 22.04
+        - Windows
+        - Other (say which in the bug text)
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Kural log (optional)
+      description: View → Output → Kural. Paste the lines from around the time of the bug. Check them for anything private first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I searched the existing issues and this bug isn't reported yet.
+          required: true

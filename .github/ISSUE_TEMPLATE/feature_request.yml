@@ -1,0 +1,21 @@
+name: Idea for a feature
+description: Something Kural could do (better).
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What should Kural do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why? What would it help you with?
+    validations:
+      required: true
+  - type: textarea
+    id: pictures
+    attributes:
+      label: Sketches or screenshots (optional)

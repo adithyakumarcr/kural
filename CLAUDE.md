@@ -120,6 +120,12 @@ Never commit to `main` directly: GitHub rejects pushes to it (repo rules "Protec
 Work on a branch (`git checkout -b fix-something`), push the branch, open a pull request to `main`; Adithya
 reviews and merges it. Only he creates `v*` tags, and only on `main` (the workflow checks).
 
+## License and issues
+MIT + Commons Clause (`LICENSE`): free to use and change, also at work; nobody may sell Kural or a paid service built
+mainly on it. `rebrand.py` copies `LICENSE` into the built-in extension, so every release carries it. Bug reports use
+`.github/ISSUE_TEMPLATE/bug_report.yml` (what, how to reproduce, expected, screenshots, version, system: required);
+blank issues are off.
+
 ## Release
 **Version numbers:** don't bump the version (1.1.0-alpha.N) unless Adithya says so. If the current version isn't
 tagged yet, new changes go into its "What's new" block; if it's already released, they go under "## Not released yet"

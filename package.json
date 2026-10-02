@@ -2,7 +2,7 @@
   "name": "kural-code-editor",
   "private": true,
   "description": "Kural Code Editor: a code editor with Claude built in (VSCodium + the Kural extension).",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "test": "node test/diff.test.js && node test/edits.test.js && node test/tickets.test.js && node test/updates.test.js && node test/terminal-tab.test.js && node test/team.test.js && node test/activity.test.js && node test/pages.test.js",
     "test:live": "node test/completion.live.js",
