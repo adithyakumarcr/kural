@@ -1,4 +1,6 @@
-## What's new in 1.1.0-alpha.2
+## Not released yet
+
+These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
 - **Link a Jira ticket to a chat.** **+ → Link ticket** searches Jira (your recent tickets, a key like
   PROJ-123, or words) and links the epic, story or task to the chat. Every message then tells Claude which
@@ -10,6 +12,9 @@
   Click it to see each connector.
 - **Fixed: the dot of the chosen model sat off-centre.** It was a "●" text character, which fonts don't centre;
   it's now drawn as a circle.
+
+## What's new in 1.1.0-alpha.2
+
 - **See the agents' discussion as it happens.** Their messages to each other now appear in the answer, in order,
   right where you're reading. Before, they sat inside the agent cards above the lead's text, out of sight.
 - **See the thinking.** Claude's thinking shows as a short summary ("Thought for 12 s", click to open). Each agent's

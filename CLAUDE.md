@@ -83,8 +83,9 @@ Work on a branch (`git checkout -b fix-something`), push the branch, open a pull
 reviews and merges it. Only he creates `v*` tags, and only on `main` (the workflow checks).
 
 ## Release
-**Version numbers:** don't bump the alpha number (1.1.0-alpha.N) unless Adithya says so; new changes go into the
-current, untagged version and its "What's new" block.
+**Version numbers:** don't bump the version (1.1.0-alpha.N) unless Adithya says so. If the current version isn't
+tagged yet, new changes go into its "What's new" block; if it's already released, they go under "## Not released yet"
+at the top of `RELEASE_NOTES.md` until he picks the next version.
 Bump `extension/package.json` version, add a "What's new in X.Y.Z" block to `RELEASE_NOTES.md` (it becomes the release
 text, via `scripts/release-notes.sh`), merge it into `main` by pull request, then (Adithya) `git tag vX.Y.Z && git push origin vX.Y.Z` on `main`. The workflow
 checks the tag matches the version, builds all three, installs/starts them (Ubuntu 22.04 + 24.04, macOS, Windows),
