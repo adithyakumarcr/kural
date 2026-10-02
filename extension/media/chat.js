@@ -6,7 +6,7 @@
   // Text size follows the code editor's font (set by Kural; see lib/ui.js).
   const setFs = (v) => { if (v) document.documentElement.style.setProperty("--fs", v); };
   setFs(document.documentElement.dataset.fs);
-  // Tell Kural when the chat has the keyboard, so its shortcuts (Ctrl+S, Ctrl+P, …) apply only here.
+  // Tell Kural when the chat has the keyboard, so its shortcuts (Ctrl+M, Ctrl+P, …) apply only here.
   window.addEventListener("focus", () => vscode.postMessage({ type: "focusChanged", focused: true }));
   window.addEventListener("blur", () => vscode.postMessage({ type: "focusChanged", focused: false }));
   window.addEventListener("error", (e) => vscode.postMessage({ type: "log", message: `${e.message} (${e.filename}:${e.lineno})` }));
@@ -273,7 +273,7 @@
           tip("+", "add files, images, PDFs; or paste a screenshot"),
           tip("Ctrl+L", "send selected code as main.py (L10-20)"),
           tip("Team", "agents with roles (Developer, Tester, Critic…) split a task, or discuss and decide"),
-          tip("Control+S", keys("next model; Control+M / H / O intensity; Control+P plan")),
+          tip("Control+M", keys("/ H / O intensity; Control+P plan")),
           tip("Ctrl+K", "edit code in place in the file")),
         S.version ? el("div", { class: "version" }, `Kural v${S.version}`) : null));
     } else {
@@ -743,7 +743,7 @@
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
-      items = [el("div", { class: "mh" }, "Model", el("span", { class: "mh-key" }, keys("Control+S next"))), ...S.models.map((m) =>
+      items = [el("div", { class: "mh" }, "Model"), ...S.models.map((m) =>
         el("div", { class: `mi ${t.model === m.id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: m.id }); closeMenu(); } },
           el("span", { class: `check radio${t.model === m.id ? " on" : ""}` }),
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, m.hint))),

@@ -299,12 +299,6 @@
         "mac": "cmd+escape"
       },
       {
-        "command": "kural.chat.nextModel",
-        "key": "ctrl+s",
-        "mac": "ctrl+s",
-        "when": "kural.chatFocused || focusedView == 'kural.chat'"
-      },
-      {
         "command": "kural.chat.effortMedium",
         "key": "ctrl+m",
         "mac": "ctrl+m",

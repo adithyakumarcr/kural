@@ -5,6 +5,8 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
 - **Two chats at once.** The split button in the Kural panel's title bar opens a second chat beside your code.
   Each one has its own tab, input and answer, and both can work at the same time. You can drag it anywhere,
   even to another screen. It comes back after a restart.
+- **Ctrl+S (Cmd+S) always saves.** It no longer switches the model when the chat has focus; pick the model in the
+  model menu.
 - **Ask only.** The left "Ask & Search" panel is now just **Ask** (find code by describing it). For plain text search,
   use VS Code's own search (Ctrl+Shift+F).
 - **Help → Check for Updates…** Kural looks for the newest release on GitHub (also alpha, beta and rc test

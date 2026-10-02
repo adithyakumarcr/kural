@@ -180,7 +180,6 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 | **Ctrl+Alt+Space** | Tab completion on/off *(Ctrl on Mac too)* |
 | **Ctrl+Alt+A** | Ask |
 | **Ctrl+Esc** | Claude Code terminal |
-| In the chat: **Ctrl+S** | next model *(Ctrl on Mac too)* |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |
 | In the chat: **Ctrl+P** | Plan mode on/off *(Ctrl on Mac too)* |
 

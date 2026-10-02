@@ -249,7 +249,8 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
       vscode.commands.registerCommand("kural.chat.attach", async () => { this.reveal(); await this.onMessage({ type: "attachPick" }); }),
-      // Keyboard shortcuts while the chat has focus (Ctrl+S model, Ctrl+M/H/O intensity, Ctrl+P plan).
+      // Keyboard shortcuts while the chat has focus (Ctrl+M/H/O intensity, Ctrl+P plan). "Next model" has no
+      // shortcut (Ctrl+S is Save); it's in the command palette.
       vscode.commands.registerCommand("kural.chat.nextModel", () => this.shortcut((t) => {
         const i = MODELS.findIndex((x) => x.id === t.model);
         const next = MODELS[(i + 1) % MODELS.length];
