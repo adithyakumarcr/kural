@@ -474,10 +474,17 @@
         "label": "Kural Dark",
         "uiTheme": "vs-dark",
         "path": "./themes/kural-dark-color-theme.json"
+      },
+      {
+        "label": "Kural Light",
+        "uiTheme": "vs",
+        "path": "./themes/kural-light-color-theme.json"
       }
     ],
     "configurationDefaults": {
       "workbench.colorTheme": "Kural Dark",
+      "workbench.preferredDarkColorTheme": "Kural Dark",
+      "workbench.preferredLightColorTheme": "Kural Light",
       "workbench.secondarySideBar.defaultVisibility": "visible",
       "workbench.startupEditor": "none",
       "workbench.tips.enabled": false,

@@ -192,7 +192,10 @@ cursor.
 - **Claudemeter.** Your Claude plan usage in the status bar.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
   chat. When you add one, Kural reloads Claude in the same conversation.
-- **Kural Dark theme**, and the same text size in the menus, side bar and chat as in the code.
+- **Kural Dark and Kural Light themes** (pick one: Command Palette → *Preferences: Color Theme*), and the same
+  text size in the menus, side bar and chat as in the code. In Kural Light every text color is checked to be easy to
+  read (at least 4.5:1 contrast, the WCAG AA level). With *Window › Auto Detect Color Scheme* on, Kural follows your
+  computer's light/dark mode.
 
 ## Keyboard shortcuts
 
@@ -293,7 +296,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/team-mcp.js     the agents' message board (a tiny MCP server)
   lib/…               attachments, search, workspace folders, setup changes
   media/              the chat and search panels (HTML/CSS/JS)
-  themes/             Kural Dark
+  themes/             Kural Dark, Kural Light
 vendor/claudemeter/   Claudemeter (MIT), bundled as-is
 scripts/              shared rebranding, logo, icons, release notes
 installer/            the Windows installer (NSIS)
