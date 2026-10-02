@@ -2,6 +2,11 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Two chats at once.** The split button in the Kural panel's title bar opens a second chat beside your code.
+  Each one has its own tab, input and answer, and both can work at the same time. You can drag it anywhere,
+  even to another screen. It comes back after a restart.
+- **Ask only.** The left "Ask & Search" panel is now just **Ask** (find code by describing it). For plain text search,
+  use VS Code's own search (Ctrl+Shift+F).
 - **Help → Check for Updates…** Kural looks for the newest release on GitHub (also alpha, beta and rc test
   versions), and if there's a newer one, downloads it, installs it and restarts. On Ubuntu it asks for your
   password to install. On a Mac it replaces Kural.app; on Windows it runs the setup.

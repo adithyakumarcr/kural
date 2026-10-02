@@ -184,18 +184,23 @@ const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => Math.random().toString(36).slice(2, 9);
 const valid = (list, v) => list.some((x) => x.id === v);
 
+// Messages meant only for the pane you're using (see ChatView.post).
+const ONE_PANE = new Set(["full", "attached", "pasted", "insertPill", "focus", "showHistory", "flash"]);
+
 class ChatView {
   constructor(context, apply) {
     this.context = context;
     this.apply = apply;          // (code, uri) => Promise   (Apply button on code blocks)
     this.tickets = new Tickets(() => this.root());   // Jira search for "+ → Link ticket"
     this.version = context.extension.packageJSON.version;
-    this.view = null;
-    this.ready = false;
-    this.queue = [];
+    // Where chats are shown: the side panel, plus any chats opened beside the code (Split). Each pane
+    // shows one tab: { id, kind: "side" | "editor", webview, panel?, ready, queue, activeId }.
+    this.panes = [];
+    this.pane = null;            // the pane whose message is being handled right now
+    this.focusPane = null;       // the pane you used last (keyboard shortcuts and commands act on it)
+    this._activeId = null;       // the side panel's tab before the panel exists
     this.tabs = [];              // open tabs; see newTab() for the shape
     this.history = [];           // closed tabs (newest first)
-    this.activeId = null;
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.changes = new ChangeTracker();
     this.attachments = new Attachments();   // files added to the message you're writing
@@ -209,7 +214,7 @@ class ChatView {
   register() {
     const c = this.context;
     this.changes.register(c);
-    watchFontScale(c, (m) => this.view && this.view.webview.postMessage(m));
+    watchFontScale(c, (m) => this.post(m));
     watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (cfg().get("chat.fullClaudeCodeSetup")) this.setupChanged("changed"); });
     let lastFocusReload = Date.now();
     c.subscriptions.push(vscode.window.onDidChangeWindowState((st) => {
@@ -217,7 +222,7 @@ class ChatView {
       lastFocusReload = Date.now();
       this.setupChanged("may have changed while you were away");
     }));
-    const refreshFiles = debounce(() => { this.files = null; if (this.ready) this.sendFiles(); }, 1500);
+    const refreshFiles = debounce(() => { this.files = null; if (this.panes.some((p) => p.ready)) this.sendFiles(); }, 1500);
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
     watcher.onDidCreate(refreshFiles); watcher.onDidDelete(refreshFiles);
     c.subscriptions.push(
@@ -228,7 +233,7 @@ class ChatView {
       // and @ mentions list its files.
       vscode.workspace.onDidChangeWorkspaceFolders(() => {
         this.files = null;
-        if (this.ready) this.sendFiles();
+        if (this.panes.some((p) => p.ready)) this.sendFiles();
         for (const t of this.tabs) { const r = this.runtime.get(t.id); if (r && r.proc && t.status === "idle") this.warm(t); }
       }),
       vscode.window.onDidChangeTextEditorSelection((e) => {
@@ -236,6 +241,8 @@ class ChatView {
         if (s && !s.isEmpty && e.textEditor.document.uri.scheme === "file") this.lastSelection = { doc: e.textEditor.document, range: new vscode.Range(s.start, s.end) };
       }),
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
+      vscode.commands.registerCommand("kural.chat.split", () => this.openSplit()),
+      vscode.window.registerWebviewPanelSerializer("kural.chatEditor", { deserializeWebviewPanel: async (panel) => this.restoreSplit(panel) }),
       vscode.commands.registerCommand("kural.chat.newTab", () => { this.reveal(); this.newTab(true); }),
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
@@ -299,7 +306,9 @@ class ChatView {
   // ---------- tabs ----------
   newTab(activate) {
     // An empty chat is already there: use it instead of piling up empty tabs.
-    const blank = activate && this.tabs.find((t) => !t.messages.length && t.status === "idle");
+    // (Not one that's open in another pane: both would show the same chat.)
+    const here = this.cur();
+    const blank = activate && this.tabs.find((t) => !t.messages.length && t.status === "idle" && !this.panes.some((p) => p !== here && p.activeId === t.id));
     if (blank) { Object.assign(blank, this.lastChoices()); this.activate(blank.id); return blank; }
     const d = this.lastChoices();
     const tab = {
@@ -318,12 +327,20 @@ class ChatView {
   tab(id) { return this.tabs.find((t) => t.id === id); }
   active() { return this.tab(this.activeId); }
 
-  activate(id) {
+  // ---------- panes ----------
+  // The pane a command or reply is for: the one that sent the message being handled, else the one you used last.
+  cur() { return this.pane || this.focusPane || this.side() || null; }
+  side() { return this.panes.find((p) => p.kind === "side"); }
+  get activeId() { const p = this.cur(); return p ? p.activeId : this._activeId; }
+  set activeId(v) { const p = this.cur(); if (p) p.activeId = v; else this._activeId = v; }
+  shown(id) { return this.panes.some((p) => p.activeId === id); }   // is this tab on screen somewhere?
+
+  activate(id, pane = this.cur()) {
     const tab = this.tab(id);
     if (!tab) return;
-    this.activeId = id;
+    if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
-    this.post({ type: "full", tab: this.viewTab(tab) });
+    if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
     if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: tab.setup });
     this.warm(tab);
@@ -350,8 +367,10 @@ class ChatView {
       this.history = this.history.slice(0, MAX_HISTORY);
     }
     if (!this.tabs.length) this.newTab(true);
-    else if (this.activeId === id) this.activate(this.tabs[Math.max(0, i - 1)].id);
-    else this.postTabs();
+    // Every pane that showed it moves to the tab before it.
+    const showing = this.panes.filter((p) => p.activeId === id);
+    for (const p of showing) this.activate(this.tabs[Math.max(0, Math.min(i - 1, this.tabs.length - 1))].id, p);
+    if (!showing.length) this.postTabs();
     this.postHistory();
     this.save();
   }
@@ -385,7 +404,10 @@ class ChatView {
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null }; }
   viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll }; }
-  postTabs() { this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)), activeId: this.activeId }); }
+  postTabs() {
+    this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)) });   // each pane gets its own activeId (post)
+    for (const p of this.panes) if (p.panel) { const t = this.tab(p.activeId); p.panel.title = t ? t.title : "Kural chat"; }
+  }
 
   postHistory() {
     const item = (t, open) => {
@@ -416,11 +438,12 @@ class ChatView {
     this.history = saved && Array.isArray(saved.history) ? saved.history.map(clean) : [];
     if (saved && Array.isArray(saved.tabs) && saved.tabs.length) {
       this.tabs = saved.tabs.map(clean);
-      this.activeId = this.tab(saved.activeId) ? saved.activeId : this.tabs[0].id;
+      this._activeId = this.tab(saved.activeId) ? saved.activeId : this.tabs[0].id;
+      this.splitIds = (saved.splitIds || []).filter((id) => this.tab(id));   // reopened by restoreSplit()
     } else {
       this.tabs = [];
       const t = this.newTab(false);
-      this.activeId = t.id;
+      this._activeId = t.id;
     }
   }
 
@@ -434,30 +457,78 @@ class ChatView {
         return { ...t, messages: msgs, status: "idle" };
       };
       this.context.workspaceState.update(STORE_KEY, {
-        tabs: this.tabs.map((t) => trim(t, 150000)), history: this.history.map((t) => trim(t, 60000)), activeId: this.activeId,
+        tabs: this.tabs.map((t) => trim(t, 150000)), history: this.history.map((t) => trim(t, 60000)),
+        activeId: this.side() ? this.side().activeId : this._activeId, splitIds: this.panes.filter((p) => p.kind === "editor").map((p) => p.activeId),
       });
     }, 800);
   }
 
   // ---------- the panel ----------
   resolveWebviewView(view) {
-    this.view = view;
-    this.ready = false;
-    const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
-    view.webview.options = { enableScripts: true, localResourceRoots: [media] };
-    const nonce = shortId() + shortId();
-    const uri = (f) => view.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
-    view.webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${view.webview.cspSource} data:;">
-<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
-    view.webview.onDidReceiveMessage((m) => this.onMessage(m).catch((e) => log(`chat: ${e.stack}`)));
-    view.onDidDispose(() => { this.view = null; this.ready = false; });
+    const old = this.side();
+    if (old) this.panes.splice(this.panes.indexOf(old), 1);
+    const pane = this.attach(view.webview, "side", null, old ? old.activeId : this._activeId);
+    view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
   }
 
-  reveal() { return vscode.commands.executeCommand("kural.chat.focus"); }
+  // Show the chat page in a webview (the side panel or a panel beside the code) and track it as a pane.
+  attach(webview, kind, panel, activeId) {
+    const pane = { id: shortId(), kind, webview, panel, ready: false, queue: [], activeId };
+    this.panes.push(pane);
+    const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
+    webview.options = { enableScripts: true, localResourceRoots: [media] };
+    const nonce = shortId() + shortId();
+    const uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
+    webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("chat.css")}"></head>
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
+    webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
+    return pane;
+  }
 
-  post(msg) { if (this.view && this.ready) this.view.webview.postMessage(msg); else this.queue.push(msg); }
+  // Split: a chat beside the code (an editor panel you can move anywhere), next to the side panel.
+  // It starts with a new chat; its tab bar switches between all your chats, like the side panel's.
+  openSplit(tabId) {
+    const tab = tabId ? this.tab(tabId) : this.newTab(false);
+    const panel = vscode.window.createWebviewPanel("kural.chatEditor", tab.title, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
+      { enableScripts: true, retainContextWhenHidden: true });
+    this.adoptSplit(panel, tab.id);
+    this.save();
+  }
+  // After a restart VS Code brings the panel back; give it the chat it showed before.
+  restoreSplit(panel) {
+    const id = (this.splitIds || []).shift();
+    this.adoptSplit(panel, id && this.tab(id) ? id : (this.tabs[0] || this.newTab(false)).id);
+  }
+  adoptSplit(panel, tabId) {
+    panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "media", "chat-icon.svg");
+    const pane = this.attach(panel.webview, "editor", panel, tabId);
+    this.focusPane = pane;
+    panel.onDidChangeViewState((e) => { if (e.webviewPanel.active) this.focusPane = pane; });
+    panel.onDidDispose(() => {
+      this.panes.splice(this.panes.indexOf(pane), 1);
+      if (this.focusPane === pane) this.focusPane = null;
+      this.save();
+    });
+    this.postTabs();
+  }
+
+  // Show the chat you're working in: the panel beside the code, or the side panel.
+  reveal() {
+    const p = this.cur();
+    if (p && p.panel) { p.panel.reveal(); return Promise.resolve(); }
+    return vscode.commands.executeCommand("kural.chat.focus");
+  }
+
+  // Replies to one pane (the tab it opened, a file it picked, focus, short notices) go only to that pane.
+  // Everything else goes to all panes; each one keeps what's about the tab it shows.
+  post(msg) {
+    if (msg.type === "tabs") { for (const p of this.panes) this.postTo(p, { ...msg, activeId: p.activeId }); return; }
+    if (ONE_PANE.has(msg.type)) { const p = this.cur(); if (p) this.postTo(p, msg); return; }
+    for (const p of this.panes) this.postTo(p, msg);
+  }
+  postTo(pane, msg) { if (pane.ready) pane.webview.postMessage(msg); else pane.queue.push(msg); }
 
   postActive() {
     const ed = this.lastEditor;
@@ -660,7 +731,7 @@ class ChatView {
     const reply = turn && turn.reply;
     if (m.type === "system" && m.subtype === "init" && m.model) {
       tab.modelName = prettyModel(m.model);
-      if (tab.id === this.activeId) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
+      if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
       this.noteSetup(tab, r, m);
       return;
     }
@@ -744,7 +815,7 @@ class ChatView {
       // Show the model that's actually answering (it changes when you switch mid-answer).
       if (!parent && m.message.model) {
         const name = prettyModel(m.message.model);
-        if (name !== tab.modelName) { tab.modelName = name; if (tab.id === this.activeId) this.post({ type: "modelName", tabId: tab.id, name }); }
+        if (name !== tab.modelName) { tab.modelName = name; if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name }); }
       }
       const from = parent && r.agents.get(parent);
       for (const b of m.message.content || []) {
@@ -863,7 +934,7 @@ class ChatView {
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
     setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
-    if (tab.id !== this.activeId) return;
+    if (!this.shown(tab.id)) return;
     this.post({ type: "setup", tabId: tab.id, setup });
     if (added.length) this.post({ type: "flash", text: `Now connected: ${added.join(", ")}` });
   }
@@ -888,7 +959,7 @@ class ChatView {
     }
     if (reply.mode === "plan" && !reply.error) reply.planReady = true;
     tab.status = "idle";
-    if (tab.id !== this.activeId) tab.unread = true;
+    if (!this.shown(tab.id)) tab.unread = true;
     this.finishTurn(tab, r);
     this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
     this.postTabs(); this.save();
@@ -960,7 +1031,7 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (tab.id !== this.activeId) vscode.window.showInformationMessage(`Kural: "${tab.title}" is waiting for your OK to run a command.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" is waiting for your OK to run a command.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
     const allow = await new Promise((resolve) => r.perms.set(pid, resolve));
     block.state = allow ? "allowed" : "denied";
     // (After Stop the answer is already over: don't flip the tab back to "running".)
@@ -982,7 +1053,7 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (tab.id !== this.activeId) vscode.window.showInformationMessage(`Kural: "${tab.title}" has a question for you.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" has a question for you.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
     const answers = await new Promise((resolve) => r.perms.set(pid, resolve));
     const ok = answers && typeof answers === "object";
     block.state = ok ? "answered" : "skipped";
@@ -1010,26 +1081,36 @@ class ChatView {
   }
 
   // ---------- messages from the panel ----------
-  async onMessage(m) {
+  async onMessage(m, pane = this.cur()) {
+    this.pane = pane;                          // replies and "the current tab" mean this pane's
+    if (pane && m.type !== "ready" && m.type !== "log" && !(m.type === "focusChanged" && !m.focused)) this.focusPane = pane;
+    try { await this.handle(m, pane); } finally { if (this.pane === pane) this.pane = null; }
+  }
+
+  async handle(m, pane) {
     const tab = m.tabId ? this.tab(m.tabId) : this.active();
     switch (m.type) {
-      case "ready":
-        this.ready = true;
-        this.view.webview.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
+      case "ready": {
+        if (!pane) break;
+        if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
+        const w = pane.webview, t = this.tab(pane.activeId);
+        w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
           moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version });
-        this.view.webview.postMessage({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)), activeId: this.activeId });
-        this.view.webview.postMessage({ type: "full", tab: this.viewTab(this.active()) });
-        if (this.active() && this.active().setup) this.view.webview.postMessage({ type: "setup", tabId: this.activeId, setup: this.active().setup });
-        for (const q of this.queue.splice(0)) this.view.webview.postMessage(q);
+        w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
+        w.postMessage({ type: "full", tab: this.viewTab(t) });
+        if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
+        pane.ready = true;
+        for (const q of pane.queue.splice(0)) w.postMessage(q);
         this.postActive();
         this.postHistory();
         this.sendFiles();
-        this.warm(this.active());
+        this.warm(t);
         break;
+      }
       case "log": log(`chat panel: ${m.message}`); break;
       case "focusChanged": vscode.commands.executeCommand("setContext", "kural.chatFocused", !!m.focused); break;
       case "newTab": this.newTab(true); break;
-      case "switchTab": this.activate(m.id); break;
+      case "switchTab": this.activate(m.id, pane); break;
       case "closeTab": this.closeTab(m.id); break;
       case "renameTab": this.rename(m.id, m.title); break;
       case "history": this.postHistory(); break;
@@ -1039,13 +1120,13 @@ class ChatView {
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
-        if (items.length) this.post({ type: "attached", items });
+        if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
       case "openUrl": if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url)); break;
       case "ticketSearch": {
-        const out = await this.tickets.search(m.query || "", (text) => this.post({ type: "ticketStatus", id: m.id, text }));
-        if (!out.cancelled) this.post({ type: "ticketResults", id: m.id, ...out });
+        const out = await this.tickets.search(m.query || "", (text) => pane && this.postTo(pane, { type: "ticketStatus", id: m.id, text }));
+        if (!out.cancelled && pane) this.postTo(pane, { type: "ticketResults", id: m.id, ...out });
         break;
       }
       case "linkTicket": if (tab) {
@@ -1055,10 +1136,10 @@ class ChatView {
         this.save(); this.postTabs();
         break;
       }
-      case "attachData": { const a = this.attachments.addData(m.name, m.data); if (a) this.post({ type: "attached", items: [a] }); break; }
+      case "attachData": { const a = this.attachments.addData(m.name, m.data); if (a && pane) this.postTo(pane, { type: "attached", items: [a] }); break; }
       case "attachUris": {
         const items = (m.uris || []).map((u) => { try { return this.attachments.add(vscode.Uri.parse(u).fsPath); } catch { return null; } }).filter(Boolean);
-        if (items.length) this.post({ type: "attached", items });
+        if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
       case "buildPlan": if (tab) {

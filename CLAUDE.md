@@ -51,6 +51,12 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   once gave "Atlassian tools not available"). The helper is reused between searches, stopped after 5 idle minutes. `tab.ticket` is saved with the
   chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
   chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
+- **Panes** (`lib/chat.js`): a chat can show in several webviews: the side panel and split panels beside the code
+  (`openSplit`, WebviewPanel "kural.chatEditor", restored by a serializer from saved `splitIds`). Each pane has its own
+  `activeId`; `this.activeId` is a getter for the pane being handled (`this.pane`) or the one you used last
+  (`focusPane`). `post()` goes to every pane (each shows what's about its own tab), except `ONE_PANE` replies
+  (full, attached, flash…) to the current pane. A reply sent after an `await` uses `postTo(pane, …)`. Use
+  `shown(id)` for "is this tab on screen", never `tab.id === this.activeId`.
 - **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). There was a
   separate "Attach files" drop area for that; Adithya found it useless and it was removed (1.1.0-alpha.2). Attach
   with +, paste, or Shift+drag from the editor's own explorer.

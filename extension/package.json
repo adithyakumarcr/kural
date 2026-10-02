@@ -16,7 +16,8 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:kural.chat",
-    "onView:kural.search"
+    "onView:kural.search",
+    "onWebviewPanel:kural.chatEditor"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -129,6 +130,11 @@
         "command": "kural.checkForUpdates",
         "title": "Check for Updates...",
         "category": "Kural"
+      },
+      {
+        "command": "kural.chat.split",
+        "title": "Kural: Open a Chat Beside the Code",
+        "icon": "$(split-horizontal)"
       }
     ],
     "viewsContainers": {
@@ -184,6 +190,11 @@
           "command": "kural.chat.newTab",
           "when": "view == kural.chat",
           "group": "navigation@1"
+        },
+        {
+          "command": "kural.chat.split",
+          "when": "view == kural.chat",
+          "group": "navigation@2"
         },
         {
           "command": "kural.openClaudeCode",

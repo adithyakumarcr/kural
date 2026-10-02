@@ -111,6 +111,8 @@ Also in the chat:
 - **Questions with options.** When a choice is yours, Claude asks with options you can click.
 - **Model and intensity.** Opus / Sonnet / Haiku, and Low → Max. You can switch in the middle of an answer.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Teacher** explains the why.
+- **Two chats at once.** The split button (next to **+** in the Kural panel's title bar) opens a second chat beside
+  your code, with its own tabs and input. Both can work at the same time; drag it anywhere, even to another screen.
 - **History.** Chats survive restarts. The clock button finds old ones.
 - **Thinking.** Claude's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
 
