@@ -16,7 +16,7 @@
     models: [], efforts: [], modes: [], teamSizes: [2, 3, 4, 5], version: "",
     activeFile: null, includeActive: true, attachments: [], setups: {},
     files: [], popup: null, menu: null,
-    history: [], showHistory: false, historyQuery: "", renaming: null,
+    history: [], showHistory: false, historyQuery: "", historyScope: "all", hereName: "", confirmDelete: null, renaming: null,
   };
 
   // ---------- helpers ----------
@@ -52,6 +52,7 @@
   const ICON = {
     clock: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.4 1.6" stroke-linecap="round"/></svg>',
     plus: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
+    pin: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M9.8 2.2l4 4-2.1.7-2.4 2.4.3 3-1.3 1.3-2.4-2.4-3.2 3.2M5.3 8.6L2.9 6.2l1.3-1.3 3 .3 2.4-2.4z"/></svg>',
     trash: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>',
   };
   const icon = (name) => el("span", { class: "ic", html: ICON[name] });
@@ -180,8 +181,10 @@
   const composer = el("div", { class: "composer" }, popupEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }),
       sendBtn));   // (type @ to mention a project file; + attaches anything)
+  // A chat from another workspace: read it here; to go on, open its folder or continue it here.
+  const visitBar = el("div", { class: "visit hidden" });
   const body = el("div", { class: "body" }, listEl, historyEl);
-  app.replaceChildren(tabBar, body, composer, menuEl);
+  app.replaceChildren(tabBar, body, visitBar, composer, menuEl);
 
   // ---------- tabs ----------
   const lastClick = { id: null, at: 0 };
@@ -229,53 +232,62 @@
   // ---------- history (clock) ----------
   function toggleHistory() { S.showHistory ? closeHistory() : openHistory(); }
   function openHistory() { S.showHistory = true; post({ type: "history" }); renderHistory(); historyBtn.classList.add("on"); }
-  function closeHistory() { S.showHistory = false; historyEl.classList.add("hidden"); listEl.classList.remove("hidden"); historyBtn.classList.remove("on"); }
+  function closeHistory() { S.confirmDelete = null; S.showHistory = false; historyEl.classList.add("hidden"); listEl.classList.remove("hidden"); historyBtn.classList.remove("on"); }
 
+  // All chats from every workspace. Pinned ones first; then newest first.
   function renderHistory() {
     if (!S.showHistory) return;
     listEl.classList.add("hidden");
     historyEl.classList.remove("hidden");
     const q = S.historyQuery.toLowerCase();
-    const items = S.history.filter((h) => !q || `${h.title} ${h.preview}`.toLowerCase().includes(q));
+    const items = S.history.filter((h) => (S.historyScope === "all" || h.here) && (!q || `${h.title} ${h.preview} ${h.ws}`.toLowerCase().includes(q)));
     const search = el("input", { class: "h-search", placeholder: "Search chats…", value: S.historyQuery,
       oninput: (e) => { S.historyQuery = e.target.value; const pos = e.target.selectionStart; renderHistory(); const s = historyEl.querySelector(".h-search"); s.focus(); s.setSelectionRange(pos, pos); },
       onkeydown: (e) => { if (e.key === "Escape") closeHistory(); } });
+    const scope = el("div", { class: "seg h-scope" }, ...[["all", "All workspaces"], ["here", "This workspace"]].map(([v, label]) =>
+      el("button", { class: S.historyScope === v ? "on" : "", onclick: () => { S.historyScope = v; renderHistory(); } }, label)));
+    const pinned = items.filter((h) => h.pinned), rest = items.filter((h) => !h.pinned);
+    const group = (label, list) => list.length ? [el("div", { class: "h-group" }, label), ...list.map(historyItem)] : [];
     historyEl.replaceChildren(
-      el("div", { class: "h-head" }, el("span", { class: "h-title" }, "All chats"), el("span", { class: "spacer" }),
-        el("button", { class: "cb", onclick: () => closeHistory() }, "Back")),
-      search,
-      items.length ? el("div", { class: "h-list" }, items.map((h) => el("div", { class: `h-item ${h.open ? "open" : ""}`, onclick: () => { closeHistory(); S.focusNext = true; post({ type: "reopen", id: h.id }); } },
-        el("div", { class: "h-row" },
-          el("span", { class: "h-name" }, h.title),
-          h.open ? el("span", { class: "h-badge" }, "open") : null,
-          el("span", { class: "spacer" }),
-          el("span", { class: "h-when" }, ago(h.when)),
-          !h.open ? el("button", { class: "icon-btn small", title: "Delete from history", onclick: (e) => { e.stopPropagation(); post({ type: "forget", id: h.id }); } }, icon("trash")) : null),
-        el("div", { class: "h-meta" }, `${modelLabel(h.model)} · ${modeLabel(h.mode)} · ${h.count} message${h.count === 1 ? "" : "s"}`),
-        h.preview && h.preview !== h.title ? el("div", { class: "h-preview" }, h.preview) : null)))
-        : el("div", { class: "h-empty" }, S.history.length ? "No chats match." : "Closed chats show up here, so you can reopen them."));
+      el("div", { class: "h-head" }, el("span", { class: "h-title" }, "All chats"), el("span", { class: "h-count" }, S.history.length ? String(S.history.length) : ""),
+        el("span", { class: "spacer" }), el("button", { class: "cb", onclick: () => closeHistory() }, "Back")),
+      search, scope,
+      items.length ? el("div", { class: "h-list" }, ...group("Pinned", pinned), ...group(pinned.length ? "Chats" : "", rest))
+        : el("div", { class: "h-empty" }, S.history.length ? "No chats match." : "Your chats show up here, from every workspace."));
+  }
+
+  function historyItem(h) {
+    const confirming = S.confirmDelete === h.id;
+    return el("div", { class: `h-item ${h.open ? "open" : ""} ${h.pinned ? "pinned" : ""}`, onclick: () => { closeHistory(); S.focusNext = true; post({ type: "reopen", id: h.id }); } },
+      el("div", { class: "h-row" },
+        el("span", { class: "h-name" }, h.title),
+        el("span", { class: "spacer" }),
+        el("button", { class: `icon-btn small h-pin ${h.pinned ? "on" : ""}`, title: h.pinned ? "Unpin" : "Pin to the top",
+          onclick: (e) => { e.stopPropagation(); post({ type: "pin", id: h.id, value: !h.pinned }); } }, icon("pin")),
+        confirming
+          ? el("button", { class: "cb danger", title: "Delete this chat for good", onclick: (e) => { e.stopPropagation(); S.confirmDelete = null; post({ type: "forget", id: h.id }); } }, "Delete?")
+          : el("button", { class: "icon-btn small", title: "Delete", onclick: (e) => { e.stopPropagation(); S.confirmDelete = h.id; renderHistory(); } }, icon("trash"))),
+      el("div", { class: "h-meta" }, ...(h.open ? [el("span", { class: "h-badge" }, "open"), " "] : []),
+        ...(h.here ? [] : [el("span", { class: "h-ws", title: "From another workspace" }, h.ws), " · "]),
+        `${ago(h.when)} · ${modelLabel(h.model)} · ${h.count} message${h.count === 1 ? "" : "s"}`),
+      h.preview && h.preview !== h.title ? el("div", { class: "h-preview" }, h.preview) : null);
   }
 
   // ---------- messages ----------
-  const tip = (k, t) => el("div", { class: "tip" }, el("kbd", {}, keys(k)), el("span", {}, t));
 
   function renderAll() {
     listEl.replaceChildren();
     const t = S.tab;
     if (!t || !t.messages.length) {
+      // Home: the name, what it is, one line, three hints. The rest is in the menus.
+      const hint = (k, text) => el("span", { class: "hint" }, el("kbd", {}, keys(k)), text);
       listEl.append(el("div", { class: "empty" },
         el("div", { class: "logo" }, "{K}"),
-        el("div", { class: "empty-title" }, "What should we build?"),
-        el("div", { class: "tips" },
-          tip("Agent", "Claude edits files; you keep or undo each change"),
-          tip("Plan", "a plan first; click Build it when you like it"),
-          tip("@", "mention a file right in your sentence"),
-          tip("+", "add files, images, PDFs; or paste a screenshot"),
-          tip("Ctrl+L", "send selected code as main.py (L10-20)"),
-          tip("Team", "agents with roles (Developer, Tester, Critic…) split a task, or discuss and decide"),
-          tip("Control+M", keys("/ H / O intensity; Control+P plan")),
-          tip("Ctrl+K", "edit code in place in the file")),
-        S.version ? el("div", { class: "version" }, `Kural v${S.version}`) : null));
+        el("div", { class: "brand" }, "Kural"),
+        el("div", { class: "brand-sub" }, "AI-powered code editor"),
+        el("div", { class: "tagline" }, "Few words. Working code."),
+        el("div", { class: "hints" }, hint("@", "mention a file"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
+        S.version ? el("div", { class: "version" }, `v${S.version}`) : null));
     } else {
       t.messages.forEach((m, i) => listEl.append(messageNode(m, i)));
     }
@@ -538,6 +550,14 @@
   function renderFoot() {
     const t = S.tab;
     if (!t) return;
+    const v = t.visiting;
+    composer.classList.toggle("hidden", !!v);
+    visitBar.classList.toggle("hidden", !v);
+    if (v) visitBar.replaceChildren(
+      el("div", { class: "visit-text" }, "This chat is from the workspace ", el("b", {}, v.name), ". Claude keeps each conversation with its own folder."),
+      el("div", { class: "visit-actions" },
+        v.canOpen ? el("button", { class: "cb", title: "Open that folder in a new window and carry on there", onclick: () => post({ type: "openWorkspace", id: t.id }) }, "Open its folder") : null,
+        el("button", { class: "cb primary", title: "Start a new chat here that knows this conversation", onclick: () => { S.focusNext = true; post({ type: "continueHere", id: t.id }); } }, "Continue here")));
     const running = t.status !== "idle";
     modeBtn.replaceChildren(el("span", { class: `mode-dot m-${t.mode}` }), modeLabel(t.mode), el("span", { class: "chev" }, "▾"));
     const team = t.teamSize ? ` · ${t.teamStyle === "discuss" ? "discussion" : `${t.teamSize} agents`}` : "";
@@ -889,7 +909,7 @@
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
       case "full": S.tab = m.tab; renderAll(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
-      case "history": S.history = m.items; renderHistory(); break;
+      case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
       case "ticketStatus": { const U = S.ticketUI; if (U && U.id === m.id && U.searching) { U.status = m.text; if (S.menu === "ticket") openMenu.refresh(); } break; }
       case "ticketResults": {
         const U = S.ticketUI;
