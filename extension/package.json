@@ -28,6 +28,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "kural.tab.forget",
+        "title": "Kural: Forget What Tab Learned (This Workspace)"
+      },
+      {
         "command": "kural.chat.open",
         "title": "Kural: Open Chat",
         "icon": "$(comment-discussion)"
@@ -452,6 +456,11 @@
           "type": "string",
           "default": "http://127.0.0.1:11434",
           "description": "Where Ollama runs."
+        },
+        "kural.tabCompletion.learn": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Make Tab more personal: it's told what you've been doing in this workspace — what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted, suggestions you accepted, files you edited, commands you run (never ones with passwords or tokens). Commit messages then say why you changed things, in your own style. Kept only on this computer, per workspace. **Kural: Forget What Tab Learned** clears it."
         },
         "kural.tabCompletion.terminal": {
           "type": "boolean",

@@ -152,6 +152,20 @@ In **Auto**, the local model and Claude race, and the first good answer wins.
 
 ![The Tab panel](docs/screenshots/tab-panel.png)
 
+**Tab learns from your work.** The models themselves never change, so Kural tells them, with each suggestion, what
+you've been doing in this workspace:
+
+- what you asked the chat, and which files it changed for you,
+- Ctrl+K and Apply changes you accepted,
+- suggestions you accepted (your style),
+- the file you just edited,
+- the commands you run.
+
+So a suggestion in a new file follows what you just wrote in another one. A commit message says why you changed
+things ("params: reject zero speeds (controller crashed on 0)") in the style of your earlier commits. It's kept only
+on this computer, per workspace. Commands with passwords or tokens are never kept. The Tab panel shows what it has
+learned, with **Forget** to clear it and a switch to turn it off.
+
 ### Tab in the terminal
 
 In Kural's terminal, Kural suggests the whole command line in the terminal's suggestion list. **Tab** fills it in;
@@ -270,6 +284,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/claude.js       runs `claude` headless (sessions, permissions, speed)
   lib/chat.js         chat tabs, history, modes, models, agent teams, questions
   lib/completion.js   Tab completion (Claude), lib/local.js (local model via Ollama)
+  lib/activity.js     what Tab learns from your work (per workspace)
   lib/tabpanel.js     the Tab panel
   lib/edits.js        Ctrl+K and Apply, lib/review.js (red/green review)
   lib/team-mcp.js     the agents' message board (a tiny MCP server)

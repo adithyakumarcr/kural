@@ -2,6 +2,13 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Tab learns from your work.** With each suggestion, Kural now tells the model what you've been doing in this
+  workspace: what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted,
+  suggestions you accepted, the file you just edited, and the commands you run. Suggestions fit your current task and
+  style. Commit messages in the terminal say *why* you changed things, in the style of your earlier commits. It's kept
+  only on this computer, per workspace; commands with passwords or tokens are never kept. The Tab panel shows what it
+  has learned, with **Forget** and an off switch (also: **Kural: Forget What Tab Learned**).
+- **Tab in the terminal closes a commit message's quote** when the model forgets to.
 - **Multiple agents no longer get stuck.** An agent waiting for a message from a teammate who had already
   finished used to wait forever, so the lead never gave the final answer. Now agents are told when a teammate
   has finished, stop waiting after two empty waits, and end with their final position. An agent that shows no
