@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4" alt="Windows">
 </p>
 
-![Kural: the chat added a method and a test, ran the tests, and shows the change to keep or undo](docs/screenshots/editor.png)
+![Kural: you ask in the chat; Claude adds a method and a test, asks before running the tests, and shows the changes to keep or undo](docs/screenshots/hero.gif)
 
 ## What is Kural?
 
@@ -97,7 +97,7 @@ The chat sits on the right and has tabs. Pick how much freedom Claude gets:
 | **Plan** | writes a plan without changing anything; **Build it** carries it out |
 | **Ask** | only answers |
 
-![Claude asks before running a command](docs/screenshots/permission.png)
+![Claude asks before running a command; Run, and it carries on](docs/screenshots/permission.gif)
 
 Also in the chat:
 
@@ -116,6 +116,8 @@ Also in the chat:
 - **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
   need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
   its folder, or **Continue here** (a new chat here that knows the old conversation).
+
+  <img src="docs/screenshots/history.gif" alt="History: pin a chat, filter by workspace, search, open a chat from another project" width="300">
 - **Thinking.** Claude's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
 
 ### Multiple agents
@@ -135,14 +137,14 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
 | Pick roles and how they work | They discuss and decide |
 |---|---|
-| ![Multiple agents settings](docs/screenshots/agents-setup.png) | ![A Developer and a Critic discussing](docs/screenshots/agents-discussion.png) |
+| ![Turning on Multiple agents: Discuss & decide, with a Developer and a Critic](docs/screenshots/agents-setup.gif) | ![Rachel (Developer) and Ross (Critic) discuss and decide (sped up)](docs/screenshots/agents-discussion.gif) |
 
 ### Tab completion
 
 Suggestions appear as you type or when you place the cursor, also in the middle of a line. Write a comment, press
 Enter, and the suggestion implements it. **Tab** accepts.
 
-![A grey Tab suggestion](docs/screenshots/tab-completion.png)
+![Tab: a method's first line, and a comment, become code; Tab accepts](docs/screenshots/tab-completion.gif)
 
 Click **Tab** in the status bar for the Tab panel. There you can:
 
@@ -152,7 +154,7 @@ Click **Tab** in the status bar for the Tab panel. There you can:
 
 In **Auto**, the local model and Claude race, and the first good answer wins.
 
-![The Tab panel](docs/screenshots/tab-panel.png)
+![The Tab panel: speed, engine and model](docs/screenshots/tab-panel.gif)
 
 **Tab learns from your work.** The models themselves never change, so Kural tells them, with each suggestion, what
 you've been doing in this workspace:
@@ -176,13 +178,15 @@ staged changes (or the unstaged ones) and suggests a message that names what cha
 commands and `git status`. It uses the same engine and model as Tab in the editor (local model about 0.2 s, Claude
 about 1–2 s). Turn it off with the setting **Kural › Tab Completion: Terminal**.
 
+![Tab in the terminal: git commit -m " gets a message from your changes](docs/screenshots/terminal-tab.gif)
+
 ### Inline edit (Ctrl+K)
 
 Select code, press **Ctrl+K**, and say what to change. Then review the change in place and keep it
 (**Ctrl+Enter**) or reject it (**Ctrl+Shift+Backspace**). With nothing selected, Ctrl+K writes new code at the
 cursor.
 
-![Inline edit: green lines are what Claude adds](docs/screenshots/inline-edit.png)
+![Ctrl+K: select code, say what to change, review the green lines, accept](docs/screenshots/inline-edit.gif)
 
 ### More
 

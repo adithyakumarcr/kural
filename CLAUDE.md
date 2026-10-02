@@ -145,4 +145,5 @@ Bump `extension/package.json` version, add a "What's new in X.Y.Z" block to `REL
 text, via `scripts/release-notes.sh`), merge it into `main` by pull request, then (Adithya) `git tag vX.Y.Z && git push origin vX.Y.Z` on `main`. The workflow
 checks the tag matches the version, builds all three, installs/starts them (Ubuntu 22.04 + 24.04, macOS, Windows),
 and only then publishes the Release. A tag with a "-" (v1.2.0-alpha.1) becomes a GitHub Pre-release; the .deb
-version uses "~" (1.2.0~alpha.1) so the final 1.2.0 upgrades it. Repo: github.com/adithyakumarcr/kural. README screenshots: `docs/screenshots/`.
+version uses "~" (1.2.0~alpha.1) so the final 1.2.0 upgrades it. Repo: github.com/adithyakumarcr/kural. README pictures: GIFs in `docs/screenshots/`, recorded on a virtual screen (Xvfb + xdotool, `ffmpeg -f x11grab`),
+waits sped up, then `palettegen`/`paletteuse` at ~12 fps; keep each under ~2 MB.
