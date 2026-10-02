@@ -45,8 +45,10 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   and `--forward-subagent-text`. Old Claude Code refuses unknown flags, so `supportedFlags()` probes once
   (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. Debug raw output: start Kural with
   `KURAL_RAW_LOG=/tmp/raw.jsonl`.
-- **Jira tickets** (`lib/tickets.js`): no Jira login in Kural. Search = a one-off Haiku `claude` with the full setup
-  (so the Atlassian connector is there), only Atlassian tools allowed, JSON answer. `tab.ticket` is saved with the
+- **Jira tickets** (`lib/tickets.js`): no Jira login in Kural. Search = a Haiku `claude` helper with the full setup
+  (so the Atlassian connector is there), only Atlassian tools allowed, JSON answer. claude.ai connectors connect in the
+  background after Claude starts: `waitForAtlassian()` polls `mcp_status` until it's connected before asking (asking at
+  once gave "Atlassian tools not available"). The helper is reused between searches, stopped after 5 idle minutes. `tab.ticket` is saved with the
   chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
   chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
 - **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). There was a

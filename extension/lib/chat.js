@@ -1044,8 +1044,8 @@ class ChatView {
       }
       case "openUrl": if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url)); break;
       case "ticketSearch": {
-        const out = await this.tickets.search(m.query || "");
-        this.post({ type: "ticketResults", id: m.id, ...out });
+        const out = await this.tickets.search(m.query || "", (text) => this.post({ type: "ticketStatus", id: m.id, text }));
+        if (!out.cancelled) this.post({ type: "ticketResults", id: m.id, ...out });
         break;
       }
       case "linkTicket": if (tab) {

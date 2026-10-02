@@ -36,7 +36,10 @@ process.stdin.on("data", (d) => {
     const line = buf.slice(0, i); buf = buf.slice(i + 1);
     let m; try { m = JSON.parse(line); } catch { continue; }
     if (m.id === undefined) continue;
-    if (m.method === "initialize") send({ jsonrpc: "2.0", id: m.id, result: { protocolVersion: (m.params && m.params.protocolVersion) || "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "atlassian", version: "1.0.0" } } });
+    // FAKE_ATLASSIAN_DELAY=5000: answer the handshake late, like a remote claude.ai connector that is slow to connect
+    if (m.method === "initialize" && process.env.FAKE_ATLASSIAN_DELAY) { const id = m.id, v = m.params && m.params.protocolVersion;
+      setTimeout(() => send({ jsonrpc: "2.0", id, result: { protocolVersion: v || "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "atlassian", version: "1.0.0" } } }), +process.env.FAKE_ATLASSIAN_DELAY); }
+    else if (m.method === "initialize") send({ jsonrpc: "2.0", id: m.id, result: { protocolVersion: (m.params && m.params.protocolVersion) || "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "atlassian", version: "1.0.0" } } });
     else if (m.method === "tools/list") send({ jsonrpc: "2.0", id: m.id, result: { tools: TOOLS } });
     else if (m.method === "tools/call") send({ jsonrpc: "2.0", id: m.id, result: { content: [{ type: "text", text: call(m.params.name, m.params.arguments || {}) }] } });
     else send({ jsonrpc: "2.0", id: m.id, result: {} });
