@@ -9,8 +9,9 @@ const { LOCAL_MODELS, installOllama } = require("./local");
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
 class TabPanel {
-  constructor(context, speeds, local) {
+  constructor(context, speeds, local, activity = null) {
     this.context = context;
+    this.activity = activity;   // what Tab learned in this workspace (activity.js)
     this.speeds = speeds;
     this.local = local;
     this.view = null;
@@ -46,6 +47,7 @@ class TabPanel {
       local: this.local ? { running: this.local.state.running, hasModel: this.local.state.hasModel, pulling: this.local.pulling, last: this.local.last } : null,
       test: this.testResult || null,
       linux: process.platform === "linux",
+      learn: c.get("tabCompletion.learn") !== false, learned: this.activity ? this.activity.counts() : null,
     };
   }
 
@@ -65,6 +67,8 @@ class TabPanel {
       if (m.type === "onCursor") await set("tabCompletion.onCursorMove", !!m.value);
       if (m.type === "engine") { await set("tabCompletion.engine", m.value); if (this.local) this.local.status(true); }
       if (m.type === "localModel") { await set("tabCompletion.localModel", m.value); if (this.local) await this.local.status(true); }
+      if (m.type === "learn") await set("tabCompletion.learn", !!m.value);
+      if (m.type === "forget" && this.activity) { this.activity.forget(); this.push(); }
       if (m.type === "install") installOllama();
       if (m.type === "pull" && this.local) this.local.pull();
       if (m.type === "check" && this.local) { await this.local.status(true); this.push(); }
@@ -124,6 +128,9 @@ function page(nonce, csp) {
       <span class="muted" id="claudeText"></span></div>
     <div class="row"><span class="label">When I place the cursor</span>
       <label><input type="checkbox" id="onCursor"> also suggest (end of a line, empty line, before a closing bracket)</label></div>
+    <div class="row"><span class="label">Learn from my work</span>
+      <label><input type="checkbox" id="learn"> use what I do in this workspace (chat, Ctrl+K, accepted suggestions, edits, commands)</label>
+      <span id="learned" class="muted"></span><button class="btn ghost" id="forget" title="Clear what Tab learned in this workspace">Forget</button></div>
     <div class="row"><span class="label">Recent suggestions</span><span id="stats" class="muted">none yet</span></div>
   </div>
 </div>
@@ -172,6 +179,12 @@ function page(nonce, csp) {
         (T.ms > 1500 ? " — this computer runs the model slowly: try 0.5B · fastest (Auto still uses Claude meanwhile)" : " — see View → Output → Kural");
     $("claudeText").textContent = S.engine === "claude" ? "" : "used when the local model isn't available";
     $("onCursor").checked = !!S.onCursor;
+    $("learn").checked = !!S.learn;
+    const K = S.learned;
+    const n = (k, one, many) => k ? k + " " + (k === 1 ? one : many) : "";
+    const parts = K ? [n(K.work, "task", "tasks"), n(K.accepted, "accepted suggestion", "accepted suggestions"), n(K.commands, "command", "commands")].filter(Boolean) : [];
+    $("learned").textContent = !S.learn ? "off" : !K ? "" : parts.length ? "learned: " + parts.join(" · ") : "nothing yet";
+    $("forget").style.display = S.learn && K && (K.work + K.accepted + K.commands) ? "" : "none";
     $("stats").textContent = S.last ? "last " + S.last + " ms · typical " + S.median + " ms" + (S.lastEngine ? " (" + (S.lastEngine === "local" ? "local model" : "Claude") + ")" : "") : "none yet";
   }
   const send = (type, value) => vscode.postMessage({ type, value });
@@ -182,6 +195,8 @@ function page(nonce, csp) {
   for (const b of $("engine").children) b.onclick = () => send("engine", b.dataset.v);
   $("testBtn").onclick = () => send("test");
   $("onCursor").onchange = () => send("onCursor", $("onCursor").checked);
+  $("learn").onchange = () => send("learn", $("learn").checked);
+  $("forget").onclick = () => send("forget");
   window.addEventListener("message", (e) => { if (e.data.type === "state") { S = e.data; render(); } });
   send("ready");
 </script></body></html>`;

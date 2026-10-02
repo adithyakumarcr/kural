@@ -1,14 +1,11 @@
-// "Ask & Search" in the left sidebar.
-//   Ask:    a question in plain words ("where is the operator box pause variable?")
-//           → Claude searches the project and lists the exact places (file + line).
-//   Search: exact text or regex → instant results (ripgrep, the same engine VS Code uses).
-// Click a result to open the file at that line.
+// "Ask" in the left sidebar: a question in plain words ("where is the operator box pause variable?")
+// → Claude searches the project and lists the exact places (file + line). Click one to open it there.
+// (Plain text search is VS Code's own search, Ctrl+Shift+F.)
 
 const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("./ui");
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
 const { ClaudeProcess, log, findClaude, LOGIN_RE } = require("./claude");
 
 const SCHEMA = {
@@ -39,18 +36,6 @@ const ASK_PROMPT =
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
-function ripgrepPath() {
-  const root = vscode.env.appRoot;
-  const rg = process.platform === "win32" ? "rg.exe" : "rg";
-  const cands = [
-    path.join(root, "node_modules.asar.unpacked", "@vscode", "ripgrep-universal", "bin", `${process.platform}-${process.arch}`, rg),
-    path.join(root, "node_modules.asar.unpacked", "@vscode", "ripgrep", "bin", rg),
-    path.join(root, "node_modules", "@vscode", "ripgrep", "bin", rg),
-  ];
-  for (const c of cands) if (fs.existsSync(c)) return c;
-  return rg;
-}
-
 // "./src/a.py" or ".\\src\\a.py" (Windows) → "src/a.py"
 const ws = require("./workspace");
 const cleanRel = (p) => p.replace(/^\.[\\/]/, "").replace(/\\/g, "/");
@@ -61,7 +46,6 @@ class SearchView {
     this.view = null;
     this.spare = null;      // a Claude process started ahead of time, so asking starts instantly
     this.current = null;    // { proc, id }
-    this.rg = null;
   }
 
   register() {
@@ -105,7 +89,6 @@ class SearchView {
     switch (m.type) {
       case "ready": this.post({ type: "config", model: cfg().get("askSearch.model") }); this.prepare(); break;
       case "ask": this.ask(m.q, m.id); break;
-      case "search": this.search(m.q, m.opts || {}, m.id); break;
       case "cancel": this.cancel(); break;
       case "open": {
         const uri = ws.resolve(m.file);
@@ -194,52 +177,8 @@ class SearchView {
     setTimeout(() => this.prepare(), 500); // get the next one ready
   }
 
-  // ---------- Search (ripgrep) ----------
-  search(q, opts, id) {
-    if (this.rg) { this.rg.kill(); this.rg = null; }
-    const root = this.root();
-    if (!root || !q) { this.post({ type: "searchResult", id, files: [], total: 0 }); return; }
-    const args = ["--json", "--line-number", "--column", "--max-columns", "400", "--max-count", "200", "-g", "!.git"];
-    if (!opts.regex) args.push("--fixed-strings");
-    if (opts.word) args.push("--word-regexp");
-    args.push(opts.matchCase ? "--case-sensitive" : "--ignore-case");
-    // Several workspace folders: search them all (ripgrep then reports full paths).
-    const dirs = ws.folders().map((f) => f.path);
-    args.push("--", q, ...(dirs.length > 1 ? dirs : ["."]));
-    const t0 = Date.now();
-    const rg = spawn(ripgrepPath(), args, { cwd: root });
-    this.rg = rg;
-    const files = new Map();
-    let buf = "", total = 0, limited = false;
-    rg.stdout.on("data", (d) => {
-      buf += d;
-      let i;
-      while ((i = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, i); buf = buf.slice(i + 1);
-        let m; try { m = JSON.parse(line); } catch { continue; }
-        if (m.type !== "match") continue;
-        if (total >= 3000) { limited = true; rg.kill(); break; }
-        const file = dirs.length > 1 ? ws.label(m.data.path.text) : cleanRel(m.data.path.text);
-        const text = (m.data.lines.text || "").replace(/\r?\n$/, "");
-        const ranges = (m.data.submatches || []).map((s) => [byteToChar(text, s.start), byteToChar(text, s.end)]);
-        if (!files.has(file)) files.set(file, []);
-        files.get(file).push({ line: m.data.line_number, text, ranges });
-        total++;
-      }
-    });
-    let err = "";
-    rg.stderr.on("data", (d) => { err += d; });
-    rg.on("error", (e) => this.post({ type: "error", id, message: `Search failed: ${e.message}` }));
-    rg.on("close", (code) => {
-      if (this.rg === rg) this.rg = null;
-      if (code === 2 && !total && err) { this.post({ type: "error", id, message: err.split("\n")[0] }); return; }
-      this.post({ type: "searchResult", id, files: [...files].map(([file, matches]) => ({ file, matches })), total, limited, ms: Date.now() - t0 });
-    });
-  }
 }
 
-// ripgrep reports byte offsets; the page needs character offsets.
-function byteToChar(text, b) { return Buffer.from(text, "utf8").subarray(0, b).toString("utf8").length; }
 
 function safeJson(s) { try { return JSON.parse(s); } catch { return null; } }
 

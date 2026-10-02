@@ -6,7 +6,7 @@
   // Text size follows the code editor's font (set by Kural; see lib/ui.js).
   const setFs = (v) => { if (v) document.documentElement.style.setProperty("--fs", v); };
   setFs(document.documentElement.dataset.fs);
-  // Tell Kural when the chat has the keyboard, so its shortcuts (Ctrl+S, Ctrl+P, …) apply only here.
+  // Tell Kural when the chat has the keyboard, so its shortcuts (Ctrl+M, Ctrl+P, …) apply only here.
   window.addEventListener("focus", () => vscode.postMessage({ type: "focusChanged", focused: true }));
   window.addEventListener("blur", () => vscode.postMessage({ type: "focusChanged", focused: false }));
   window.addEventListener("error", (e) => vscode.postMessage({ type: "log", message: `${e.message} (${e.filename}:${e.lineno})` }));
@@ -176,7 +176,7 @@
   const modeBtn = el("button", { class: "pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
   const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
-  const attachBtn = el("button", { class: "attach", title: "Add files, images or PDFs. You can also paste a screenshot.", onclick: () => post({ type: "attachPick" }) }, icon("plus"));
+  const attachBtn = el("button", { class: "attach", title: "Add files or link a Jira ticket. You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const composer = el("div", { class: "composer" }, popupEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }),
       sendBtn));   // (type @ to mention a project file; + attaches anything)
@@ -273,7 +273,7 @@
           tip("+", "add files, images, PDFs; or paste a screenshot"),
           tip("Ctrl+L", "send selected code as main.py (L10-20)"),
           tip("Team", "agents with roles (Developer, Tester, Critic…) split a task, or discuss and decide"),
-          tip("Control+S", keys("next model; Control+M / H / O intensity; Control+P plan")),
+          tip("Control+M", keys("/ H / O intensity; Control+P plan")),
           tip("Ctrl+K", "edit code in place in the file")),
         S.version ? el("div", { class: "version" }, `Kural v${S.version}`) : null));
     } else {
@@ -325,7 +325,9 @@
     const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
     if (m.running && waiting) out.append(el("div", { class: "working" }, el("span", { class: "wait-dot" }), asking ? "Waiting for your answer above" : "Waiting for your OK above"));
     else if (m.running && (m.waitingFor || []).length) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
-      el("span", {}, `Waiting for ${listNames(m.waitingFor)} to finish — the answer comes when everyone has reported`)));
+      el("span", {}, `Waiting for ${listNames(m.waitingFor)} to finish — the answer comes when everyone has reported`),
+      // Agents that take too long (or got stuck): stop them and get the answer from what's there.
+      el("button", { class: "cb", title: "Stop the agents still working and have the lead answer with what it has", onclick: () => post({ type: "finishTeam", tabId: S.tab.id }) }, "Finish now")));
     else if (m.running) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
     if (m.note) out.append(el("div", { class: "note" }, m.note));
@@ -397,6 +399,7 @@
         el("span", { class: "agent-title" }, b.title),
         el("span", { class: "spacer" }),
         b.state === "running" && b.activity ? el("span", { class: "agent-activity", title: b.activity }, b.activity) : null,
+        b.state !== "running" && b.why ? el("span", { class: "agent-activity", title: b.why }, b.why) : null,
         b.state === "running" ? el("span", { class: "dots small" }, el("span"), el("span"), el("span")) : null,
         el("span", { class: "agent-state" }, label)),
       b.steps.length ? el("div", { class: "agent-steps" }, ...agentSteps(b)) : null);
@@ -512,6 +515,11 @@
   // ---------- composer ----------
   function renderChips() {
     chipsEl.replaceChildren();
+    const tk = S.tab && S.tab.ticket;
+    if (tk) chipsEl.append(el("span", { class: "chip ticket", title: `${tk.key}: ${tk.summary}${tk.status ? ` (${tk.status})` : ""}\nLinked to this chat: Claude knows about it in every message.${tk.url ? "\nClick to open it in Jira." : ""}`,
+      onclick: () => tk.url && post({ type: "openUrl", url: tk.url }) },
+      "🎫 ", el("b", {}, tk.key), el("span", { class: "chip-dim ticket-chip-sum" }, ` · ${tk.summary}`),
+      el("button", { class: "chip-x", title: "Unlink this ticket", onclick: (e) => { e.stopPropagation(); post({ type: "linkTicket", tabId: S.tab.id, ticket: null }); } }, "×")));
     if (S.activeFile && S.includeActive)
       chipsEl.append(el("span", { class: "chip", title: `${S.activeFile.path} is sent with your message` }, "▤ ", S.activeFile.name, el("span", { class: "chip-dim" }, " · current file"),
         el("button", { class: "chip-x", title: "Don't send this file", onclick: () => { S.includeActive = false; renderChips(); } }, "×")));
@@ -720,16 +728,27 @@
     S.menu = kind;
     const t = S.tab;
     let items;
-    if (kind === "mode") {
+    menuEl.classList.toggle("wide", kind === "ticket");
+    if (kind === "add") {
+      const jira = (S.setups[t.id] || {}).jira || { ok: true };
+      items = [
+        el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "attachPick" }); } },
+          el("span", { class: "mi-icon" }, "📎"), el("span", { class: "mi-label" }, "Add files"), el("span", { class: "mi-hint" }, "images, PDFs, code")),
+        el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
+          el("span", { class: "mi-icon" }, "🎫"), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
+          jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, "⚠ Atlassian not connected"))];
+    } else if (kind === "ticket") {
+      items = ticketItems(t);
+    } else if (kind === "mode") {
       items = [el("div", { class: "mh" }, "Mode", el("span", { class: "mh-key" }, keys("Control+P plan"))), ...S.modes.map((md) =>
         el("div", { class: `mi ${t.mode === md.id ? "on" : ""}`, onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
           el("span", { class: `mode-dot m-${md.id}` }), el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
-      items = [el("div", { class: "mh" }, "Model", el("span", { class: "mh-key" }, keys("Control+S next"))), ...S.models.map((m) =>
+      items = [el("div", { class: "mh" }, "Model"), ...S.models.map((m) =>
         el("div", { class: `mi ${t.model === m.id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: m.id }); closeMenu(); } },
-          el("span", { class: "check radio" }, t.model === m.id ? "●" : ""),
+          el("span", { class: `check radio${t.model === m.id ? " on" : ""}` }),
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, m.hint))),
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
@@ -753,6 +772,7 @@
     menuEl.style.left = Math.max(6, Math.min(a.left, window.innerWidth - menuEl.offsetWidth - 6)) + "px";
     menuEl.style.bottom = (window.innerHeight - a.top + 6) + "px";
     openMenu.anchor = anchor;
+    if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
   }
   // "Rachel (Developer) and Ross (Critic) talk it through and agree on a decision."
   function teamHint(t) {
@@ -765,6 +785,41 @@
     return `${list} split the work, run at the same time and message each other${editing ? "" : " (Agent and Auto modes)"}`;
   }
 
+  // "+ → Link ticket": search Jira (through your Atlassian connector) and link one ticket to this chat.
+  function ticketItems(t) {
+    const jira = (S.setups[t.id] || {}).jira || { ok: true };
+    if (!S.ticketUI) {
+      S.ticketUI = { query: "", id: 0, searching: false, issues: null, note: "", error: "" };
+      S.ticketUI.input = el("input", { class: "ticket-q", placeholder: "Key (PROJ-123) or words, then Enter", spellcheck: "false" });
+      S.ticketUI.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ticketSearch(S.ticketUI.input.value); } });
+      if (jira.ok) setTimeout(() => { ticketSearch(""); S.ticketUI && S.ticketUI.input.focus(); }, 0);   // start with your recent tickets
+    }
+    const U = S.ticketUI;
+    const out = [el("div", { class: "mh" }, "Link a Jira ticket to this chat")];
+    if (!jira.ok) {
+      out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, "⚠ "), jira.why));
+      return out;
+    }
+    out.push(el("div", { class: "ticket-search" }, U.input));
+    if (U.searching) out.push(el("div", { class: "ticket-status" }, el("span", { class: "dots small" }, el("span"), el("span"), el("span")),
+      " ", U.status || (U.query ? `Searching Jira for “${U.query}”…` : "Getting your recent tickets…")));
+    else if (U.error) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, "⚠ "), U.error));
+    else if (U.issues && !U.issues.length) out.push(el("div", { class: "ticket-status" }, U.note || "No tickets found. Try other words or the ticket's key."));
+    for (const i of (!U.searching && U.issues) || []) out.push(el("div", { class: `mi ticket-row${t.ticket && t.ticket.key === i.key ? " on" : ""}`, title: i.summary,
+      onclick: () => { post({ type: "linkTicket", tabId: t.id, ticket: i }); closeMenu(); input.focus(); } },
+      el("span", { class: "ticket-key" }, i.key), i.type ? el("span", { class: "ticket-type" }, i.type) : null,
+      el("span", { class: "ticket-sum" }, i.summary), i.status ? el("span", { class: "mi-hint" }, i.status) : null));
+    if (t.ticket) out.push(el("div", { class: "sep" }), el("div", { class: "mi", onclick: () => { post({ type: "linkTicket", tabId: t.id, ticket: null }); closeMenu(); } },
+      el("span", { class: "mi-icon" }, "✕"), el("span", { class: "mi-label" }, `Unlink ${t.ticket.key}`)));
+    return out;
+  }
+  function ticketSearch(q) {
+    const U = S.ticketUI; if (!U) return;
+    U.query = q.trim(); U.id = Date.now(); U.searching = true; U.error = ""; U.note = ""; U.status = "";
+    post({ type: "ticketSearch", tabId: S.tab.id, query: U.query, id: U.id });
+    if (S.menu === "ticket") openMenu.refresh();
+  }
+
   // What this chat's Claude has from your Claude Code setup (connectors, plugins, skills), with Reload.
   function setupItems(t) {
     const st = S.setups[t.id];
@@ -774,9 +829,17 @@
       el("div", { class: "setup-row" }, "Fast minimal setup: no connectors or plugins. ",
         el("button", { class: "cb primary", onclick: () => post({ type: "useFullSetup", on: true }) }, "Use my full setup"))];
     if (!st) return [el("div", { class: "sep" }), head, el("div", { class: "setup-row q-muted" }, "Loads with your first message.")];
-    const servers = st.servers.length ? st.servers.map((x) => el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name)) : [el("span", { class: "q-muted" }, "no connectors")];
-    const extra = [st.plugins.length ? `${st.plugins.length} plugin${st.plugins.length > 1 ? "s" : ""}` : "", st.skills ? `${st.skills} skills` : ""].filter(Boolean).join(" · ");
-    return [el("div", { class: "sep" }), head, el("div", { class: "setup-row" }, ...servers), extra ? el("div", { class: "setup-row q-muted" }, extra) : null];
+    // One short line ("10 connectors · 3 need attention · 30 skills"); click it to see each connector.
+    const n = st.servers.length, bad = st.servers.filter((x) => x.status !== "connected").length;
+    const plural = (k, w) => `${k} ${w}${k === 1 ? "" : "s"}`;
+    const summary = [n ? plural(n, "connector") : "no connectors", bad ? `${bad} need${bad === 1 ? "s" : ""} attention` : "",
+      st.plugins.length ? plural(st.plugins.length, "plugin") : "", st.skills ? plural(st.skills, "skill") : ""].filter(Boolean).join(" · ");
+    const line = el("div", { class: `setup-row setup-sum${S.setupOpen ? " open" : ""}`, title: n ? "Show connectors" : "",
+      onclick: (e) => { e.stopPropagation(); if (!n) return; S.setupOpen = !S.setupOpen; openMenu.refresh(); } },
+      n ? el("span", { class: "think-caret" }) : null, bad ? el("span", { class: "warn-tri", title: "Some connectors aren't connected" }, "⚠") : null, summary);
+    const servers = S.setupOpen && n ? el("div", { class: "setup-row" }, ...st.servers.map((x) =>
+      el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name))) : null;
+    return [el("div", { class: "sep" }), head, line, servers];
   }
   openMenu.refresh = () => { const k = S.menu; S.menu = null; if (k) openMenu(k, openMenu.anchor); };
   function closeMenu() { S.menu = null; menuEl.classList.add("hidden"); }
@@ -796,7 +859,7 @@
     if (i >= 0 && S.tabs.length > 1) { S.focusNext = true; post({ type: "switchTab", id: S.tabs[(i + d + S.tabs.length) % S.tabs.length].id }); }
   }
   document.addEventListener("mousedown", (e) => {
-    if (S.menu && !menuEl.contains(e.target) && !modeBtn.contains(e.target) && !modelBtn.contains(e.target)) closeMenu();
+    if (S.menu && !menuEl.contains(e.target) && !modeBtn.contains(e.target) && !modelBtn.contains(e.target) && !attachBtn.contains(e.target)) closeMenu();
   });
   listEl.addEventListener("click", (e) => {
     const r = e.target.closest && e.target.closest("code.ref");
@@ -821,12 +884,20 @@
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
-          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize }); }
-        renderTabs(); renderFoot(); if (S.menu) openMenu.refresh();
+          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket }); }
+        renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
       case "full": S.tab = m.tab; renderAll(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "history": S.history = m.items; renderHistory(); break;
+      case "ticketStatus": { const U = S.ticketUI; if (U && U.id === m.id && U.searching) { U.status = m.text; if (S.menu === "ticket") openMenu.refresh(); } break; }
+      case "ticketResults": {
+        const U = S.ticketUI;
+        if (!U || U.id !== m.id) break;            // an older search
+        U.searching = false; U.issues = m.issues || []; U.note = m.note || ""; U.error = m.error || "";
+        if (S.menu === "ticket") openMenu.refresh();
+        break;
+      }
       case "showHistory": openHistory(); break;
       case "modelName": if (mine) { S.tab.modelName = m.name; renderFoot(); } break;
       case "append": if (mine) { for (const x of m.msgs) S.tab.messages.push(x); renderAll(); } break;
@@ -845,7 +916,7 @@
       } break;
       case "agentActivity": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.activity = m.activity; scheduleRerender(i); } } break;
       case "agentStep": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.steps.push(m.step); scheduleRerender(i); } } break;
-      case "agentState": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.state = m.state; scheduleRerender(i); } } break;
+      case "agentState": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.state = m.state; if (m.why) a.why = m.why; scheduleRerender(i); } } break;
       case "questionState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) { b.state = m.state; b.answers = m.answers; } scheduleRerender(i); } } break;
       case "permState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) b.state = m.state; scheduleRerender(i); } } break;
       case "patch": if (mine) { const i = m.index != null ? m.index : lastAssistant(); if (i >= 0) { Object.assign(S.tab.messages[i], m.msg); rerender(i); } renderFoot(); } break;

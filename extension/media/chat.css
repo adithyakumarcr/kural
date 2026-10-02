@@ -157,6 +157,8 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mi-hint { color: var(--muted); font-size: calc(11px * var(--fs, 1)); margin-left: auto; padding-left: 10px; white-space: nowrap; }
 .check { width: 15px; height: 15px; display: grid; place-items: center; font-size: calc(10px * var(--fs, 1)); border: 1px solid var(--border); color: var(--accent); flex-shrink: 0; }
 .check.radio { border-radius: 50%; } .check.box { border-radius: 4px; }
+/* The chosen dot is drawn, not a "●" character: a font puts that character slightly off-centre. */
+.check.radio.on::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .mi.on .check { border-color: var(--accent); }
 .seg { display: flex; gap: 2px; margin: 2px 8px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
 .seg button { flex: 1; background: none; border: 0; border-radius: 5px; font-size: calc(11.5px * var(--fs, 1)); padding: 3px 0; color: var(--muted); }
@@ -298,6 +300,10 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 /* Claude Code setup in the model menu */
 .mh-btn { float: right; background: none; border: 0; color: var(--accent-hi); font-size: calc(10.5px * var(--fs, 1)); text-transform: none; letter-spacing: 0; padding: 0 2px; cursor: pointer; }
 .mh-btn:hover { text-decoration: underline; }
+.setup-sum { cursor: pointer; color: var(--muted); gap: 5px; }
+.setup-sum:hover { color: var(--vscode-foreground); }
+.setup-sum.open .think-caret::before { content: "▾"; }
+.warn-tri { color: var(--yellow); }
 .setup-row { padding: 2px 8px 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: calc(12px * var(--fs, 1)); }
 .srv { padding: 0 7px; border-radius: 10px; font-size: calc(11.5px * var(--fs, 1)); border: 1px solid var(--border); }
 .srv.ok::before { content: "● "; color: var(--green); }
@@ -309,3 +315,18 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .role:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
 .role.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .agent-role { font-size: calc(10.5px * var(--fs, 1)); padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-hi); white-space: nowrap; }
+
+/* + menu and "Link ticket" */
+.menu.wide { width: min(440px, calc(100vw - 12px)); }
+.mi-icon { width: 18px; text-align: center; flex-shrink: 0; }
+.ticket-search { padding: 2px 8px 6px; }
+.ticket-q { width: 100%; box-sizing: border-box; background: var(--surface); color: var(--vscode-foreground); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: calc(12.5px * var(--fs, 1)); outline: none; }
+.ticket-q:focus { border-color: var(--accent); }
+.ticket-status { padding: 4px 8px 6px; color: var(--muted); font-size: calc(12px * var(--fs, 1)); display: flex; align-items: center; gap: 6px; }
+.ticket-warn { padding: 4px 8px 8px; font-size: calc(12px * var(--fs, 1)); line-height: 1.45; max-width: 380px; }
+.ticket-row { min-width: 0; }
+.ticket-key { font-weight: 600; color: var(--accent-hi); white-space: nowrap; }
+.ticket-type { font-size: calc(10.5px * var(--fs, 1)); padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.ticket-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.chip.ticket { border-color: color-mix(in srgb, var(--accent) 60%, transparent); cursor: pointer; max-width: 100%; }
+.ticket-chip-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; display: inline-block; vertical-align: bottom; }

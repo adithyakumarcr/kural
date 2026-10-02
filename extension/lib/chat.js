@@ -6,12 +6,15 @@
 const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("./ui");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
 const { ClaudeProcess, log, newSessionId, LOGIN_RE, findClaude } = require("./claude");
 const { projectInstructions } = require("./project");
 const { ChangeTracker } = require("./changes");
 const ws = require("./workspace");
 const { Attachments } = require("./attachments");
 const { watchSetup } = require("./setup");
+const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -64,7 +67,10 @@ PROMPTS.auto = PROMPTS.agent;
 // model at once. The agents are named after the Friends cast and can message each other
 // through a small shared board (lib/team-mcp.js).
 const FRIENDS = ["Rachel", "Ross", "Monica", "Chandler", "Joey", "Phoebe"];
-const TEAM_TOOLS = ["mcp__team__post", "mcp__team__read"];
+const TEAM_TOOLS = ["mcp__team__post", "mcp__team__read", "mcp__team__finish"];
+// An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
+const BUILD_TEXT = "Go ahead and implement the plan above.";
+const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
 // Moods: how the chat (or the team's lead) works with you.
 const MOODS = [
   { id: "default", label: "Default", hint: "balanced" },
@@ -119,8 +125,10 @@ function teamMembers(n, roles) {
 const who = (m) => m.role ? `${m.name}, the ${m.role} (${m.desc})` : m.name;
 const opening = (m, team) => `"You are ${m.name}${m.role ? `, the ${m.role}` : ""}, on a team with ` +
   `${team.filter((x) => x !== m).map((x) => x.role ? `${x.name} (${x.role})` : x.name).join(", ")} and the lead."`;
-const BOARD = `The team can talk: tell each agent it has two tools, mcp__team__post (send a message to a teammate by name, to ` +
-  `"lead", or to "all") and mcp__team__read (read its messages; wait_seconds waits for a reply).`;
+const BOARD = `The team can talk: tell each agent it has three tools, mcp__team__post (send a message to a teammate by name, to ` +
+  `"lead", or to "all"), mcp__team__read (read its messages; wait_seconds waits for a reply) and mcp__team__finish (call ` +
+  `it once, with its final position, right before it ends; teammates then stop waiting for it). Tell them too: never ` +
+  `keep waiting for a teammate who has finished, and when mcp__team__read says to stop waiting, finish right away.`;
 
 function teamPrompt(n, roles = [], style = "split") {
   const team = teamMembers(n, roles);
@@ -143,8 +151,8 @@ function teamPrompt(n, roles = [], style = "split") {
       `something new or concede a point explicitly. Wait for replies with mcp__team__read (wait_seconds 90).\n` +
       `4. At least two rounds before any decision; at most four. ${first} then posts to "all": "DECISION: … / Agreed by: … / ` +
       `Still disagrees: … (why)". If you couldn't agree, ${first} makes the best call and records the dissent honestly.\n` +
-      `5. After the DECISION, don't wait for more messages: finish right away by reporting your final position, ` +
-      `whether you agree with the decision, and why.\n` +
+      `5. After the DECISION, don't wait for more messages: call mcp__team__finish with your final position (whether ` +
+      `you agree with the decision, and why), then end with the same as your report.\n` +
       `6. Don't change files during the discussion` + (roles.includes("developer") ? ` (only if the user asked the team to ` +
         `also carry out the decision: the Developer does it after the DECISION)` : ``) + `."\n` +
       `${BOARD} Refer to the agents by name. Don't take part and don't post progress updates. When all have reported, give ` +
@@ -159,7 +167,8 @@ function teamPrompt(n, roles = [], style = "split") {
     `author. They don't just approve: each sends at least one finding or test result.\n` +
     `- Authors answer every finding (fix it, or explain why not) and tell the checker when it's done. At most two review ` +
     `rounds. Nobody finishes until the checker has replied "OK" or two rounds have passed.\n` +
-    `- Each agent's final report: what it did, what its teammates found in its work, and what's still open.` : "";
+    `- Each agent's final report: what it did, what its teammates found in its work, and what's still open. Just before ` +
+    `ending, it calls mcp__team__finish with that report.` : "";
   return `\n\nYou lead a team of ${n} agents: ${team.map(who).join("; ")}. Your goal is to finish the user's task ` +
     (roles.length ? `well and fast, with every agent doing its own role. ` : `as FAST as possible by working in parallel. `) +
     `Split it into parts${roles.length ? ` that fit each agent's role` : ` (by file or feature)`}, so two agents never edit ` +
@@ -183,17 +192,24 @@ const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => Math.random().toString(36).slice(2, 9);
 const valid = (list, v) => list.some((x) => x.id === v);
 
+// Messages meant only for the pane you're using (see ChatView.post).
+const ONE_PANE = new Set(["full", "attached", "pasted", "insertPill", "focus", "showHistory", "flash"]);
+
 class ChatView {
   constructor(context, apply) {
     this.context = context;
-    this.apply = apply;          // (code, uri) => Promise   (Apply button on code blocks)
+    this.apply = apply;          // (code, uri, ask) => Promise   (Apply button on code blocks)
+    this.activity = null;        // what you've been doing, for Tab (activity.js); set by extension.js
+    this.tickets = new Tickets(() => this.root());   // Jira search for "+ → Link ticket"
     this.version = context.extension.packageJSON.version;
-    this.view = null;
-    this.ready = false;
-    this.queue = [];
+    // Where chats are shown: the side panel, plus any chats opened beside the code (Split). Each pane
+    // shows one tab: { id, kind: "side" | "editor", webview, panel?, ready, queue, activeId }.
+    this.panes = [];
+    this.pane = null;            // the pane whose message is being handled right now
+    this.focusPane = null;       // the pane you used last (keyboard shortcuts and commands act on it)
+    this._activeId = null;       // the side panel's tab before the panel exists
     this.tabs = [];              // open tabs; see newTab() for the shape
     this.history = [];           // closed tabs (newest first)
-    this.activeId = null;
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.changes = new ChangeTracker();
     this.attachments = new Attachments();   // files added to the message you're writing
@@ -207,7 +223,7 @@ class ChatView {
   register() {
     const c = this.context;
     this.changes.register(c);
-    watchFontScale(c, (m) => this.view && this.view.webview.postMessage(m));
+    watchFontScale(c, (m) => this.post(m));
     watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (cfg().get("chat.fullClaudeCodeSetup")) this.setupChanged("changed"); });
     let lastFocusReload = Date.now();
     c.subscriptions.push(vscode.window.onDidChangeWindowState((st) => {
@@ -215,7 +231,7 @@ class ChatView {
       lastFocusReload = Date.now();
       this.setupChanged("may have changed while you were away");
     }));
-    const refreshFiles = debounce(() => { this.files = null; if (this.ready) this.sendFiles(); }, 1500);
+    const refreshFiles = debounce(() => { this.files = null; if (this.panes.some((p) => p.ready)) this.sendFiles(); }, 1500);
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
     watcher.onDidCreate(refreshFiles); watcher.onDidDelete(refreshFiles);
     c.subscriptions.push(
@@ -226,7 +242,7 @@ class ChatView {
       // and @ mentions list its files.
       vscode.workspace.onDidChangeWorkspaceFolders(() => {
         this.files = null;
-        if (this.ready) this.sendFiles();
+        if (this.panes.some((p) => p.ready)) this.sendFiles();
         for (const t of this.tabs) { const r = this.runtime.get(t.id); if (r && r.proc && t.status === "idle") this.warm(t); }
       }),
       vscode.window.onDidChangeTextEditorSelection((e) => {
@@ -234,13 +250,16 @@ class ChatView {
         if (s && !s.isEmpty && e.textEditor.document.uri.scheme === "file") this.lastSelection = { doc: e.textEditor.document, range: new vscode.Range(s.start, s.end) };
       }),
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
+      vscode.commands.registerCommand("kural.chat.split", () => this.openSplit()),
+      vscode.window.registerWebviewPanelSerializer("kural.chatEditor", { deserializeWebviewPanel: async (panel) => this.restoreSplit(panel) }),
       vscode.commands.registerCommand("kural.chat.newTab", () => { this.reveal(); this.newTab(true); }),
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
       vscode.commands.registerCommand("kural.chat.attach", async () => { this.reveal(); await this.onMessage({ type: "attachPick" }); }),
-      // Keyboard shortcuts while the chat has focus (Ctrl+S model, Ctrl+M/H/O intensity, Ctrl+P plan).
+      // Keyboard shortcuts while the chat has focus (Ctrl+M/H/O intensity, Ctrl+P plan). "Next model" has no
+      // shortcut (Ctrl+S is Save); it's in the command palette.
       vscode.commands.registerCommand("kural.chat.nextModel", () => this.shortcut((t) => {
         const i = MODELS.findIndex((x) => x.id === t.model);
         const next = MODELS[(i + 1) % MODELS.length];
@@ -297,7 +316,9 @@ class ChatView {
   // ---------- tabs ----------
   newTab(activate) {
     // An empty chat is already there: use it instead of piling up empty tabs.
-    const blank = activate && this.tabs.find((t) => !t.messages.length && t.status === "idle");
+    // (Not one that's open in another pane: both would show the same chat.)
+    const here = this.cur();
+    const blank = activate && this.tabs.find((t) => !t.messages.length && t.status === "idle" && !this.panes.some((p) => p !== here && p.activeId === t.id));
     if (blank) { Object.assign(blank, this.lastChoices()); this.activate(blank.id); return blank; }
     const d = this.lastChoices();
     const tab = {
@@ -316,12 +337,20 @@ class ChatView {
   tab(id) { return this.tabs.find((t) => t.id === id); }
   active() { return this.tab(this.activeId); }
 
-  activate(id) {
+  // ---------- panes ----------
+  // The pane a command or reply is for: the one that sent the message being handled, else the one you used last.
+  cur() { return this.pane || this.focusPane || this.side() || null; }
+  side() { return this.panes.find((p) => p.kind === "side"); }
+  get activeId() { const p = this.cur(); return p ? p.activeId : this._activeId; }
+  set activeId(v) { const p = this.cur(); if (p) p.activeId = v; else this._activeId = v; }
+  shown(id) { return this.panes.some((p) => p.activeId === id); }   // is this tab on screen somewhere?
+
+  activate(id, pane = this.cur()) {
     const tab = this.tab(id);
     if (!tab) return;
-    this.activeId = id;
+    if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
-    this.post({ type: "full", tab: this.viewTab(tab) });
+    if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
     if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: tab.setup });
     this.warm(tab);
@@ -348,8 +377,10 @@ class ChatView {
       this.history = this.history.slice(0, MAX_HISTORY);
     }
     if (!this.tabs.length) this.newTab(true);
-    else if (this.activeId === id) this.activate(this.tabs[Math.max(0, i - 1)].id);
-    else this.postTabs();
+    // Every pane that showed it moves to the tab before it.
+    const showing = this.panes.filter((p) => p.activeId === id);
+    for (const p of showing) this.activate(this.tabs[Math.max(0, Math.min(i - 1, this.tabs.length - 1))].id, p);
+    if (!showing.length) this.postTabs();
     this.postHistory();
     this.save();
   }
@@ -381,9 +412,12 @@ class ChatView {
   }
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
-    mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t) }; }
+    mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null }; }
   viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll }; }
-  postTabs() { this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)), activeId: this.activeId }); }
+  postTabs() {
+    this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)) });   // each pane gets its own activeId (post)
+    for (const p of this.panes) if (p.panel) { const t = this.tab(p.activeId); p.panel.title = t ? t.title : "Kural chat"; }
+  }
 
   postHistory() {
     const item = (t, open) => {
@@ -414,11 +448,12 @@ class ChatView {
     this.history = saved && Array.isArray(saved.history) ? saved.history.map(clean) : [];
     if (saved && Array.isArray(saved.tabs) && saved.tabs.length) {
       this.tabs = saved.tabs.map(clean);
-      this.activeId = this.tab(saved.activeId) ? saved.activeId : this.tabs[0].id;
+      this._activeId = this.tab(saved.activeId) ? saved.activeId : this.tabs[0].id;
+      this.splitIds = (saved.splitIds || []).filter((id) => this.tab(id));   // reopened by restoreSplit()
     } else {
       this.tabs = [];
       const t = this.newTab(false);
-      this.activeId = t.id;
+      this._activeId = t.id;
     }
   }
 
@@ -432,30 +467,78 @@ class ChatView {
         return { ...t, messages: msgs, status: "idle" };
       };
       this.context.workspaceState.update(STORE_KEY, {
-        tabs: this.tabs.map((t) => trim(t, 150000)), history: this.history.map((t) => trim(t, 60000)), activeId: this.activeId,
+        tabs: this.tabs.map((t) => trim(t, 150000)), history: this.history.map((t) => trim(t, 60000)),
+        activeId: this.side() ? this.side().activeId : this._activeId, splitIds: this.panes.filter((p) => p.kind === "editor").map((p) => p.activeId),
       });
     }, 800);
   }
 
   // ---------- the panel ----------
   resolveWebviewView(view) {
-    this.view = view;
-    this.ready = false;
-    const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
-    view.webview.options = { enableScripts: true, localResourceRoots: [media] };
-    const nonce = shortId() + shortId();
-    const uri = (f) => view.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
-    view.webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${view.webview.cspSource} data:;">
-<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
-    view.webview.onDidReceiveMessage((m) => this.onMessage(m).catch((e) => log(`chat: ${e.stack}`)));
-    view.onDidDispose(() => { this.view = null; this.ready = false; });
+    const old = this.side();
+    if (old) this.panes.splice(this.panes.indexOf(old), 1);
+    const pane = this.attach(view.webview, "side", null, old ? old.activeId : this._activeId);
+    view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
   }
 
-  reveal() { return vscode.commands.executeCommand("kural.chat.focus"); }
+  // Show the chat page in a webview (the side panel or a panel beside the code) and track it as a pane.
+  attach(webview, kind, panel, activeId) {
+    const pane = { id: shortId(), kind, webview, panel, ready: false, queue: [], activeId };
+    this.panes.push(pane);
+    const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
+    webview.options = { enableScripts: true, localResourceRoots: [media] };
+    const nonce = shortId() + shortId();
+    const uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
+    webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("chat.css")}"></head>
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
+    webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
+    return pane;
+  }
 
-  post(msg) { if (this.view && this.ready) this.view.webview.postMessage(msg); else this.queue.push(msg); }
+  // Split: a chat beside the code (an editor panel you can move anywhere), next to the side panel.
+  // It starts with a new chat; its tab bar switches between all your chats, like the side panel's.
+  openSplit(tabId) {
+    const tab = tabId ? this.tab(tabId) : this.newTab(false);
+    const panel = vscode.window.createWebviewPanel("kural.chatEditor", tab.title, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
+      { enableScripts: true, retainContextWhenHidden: true });
+    this.adoptSplit(panel, tab.id);
+    this.save();
+  }
+  // After a restart VS Code brings the panel back; give it the chat it showed before.
+  restoreSplit(panel) {
+    const id = (this.splitIds || []).shift();
+    this.adoptSplit(panel, id && this.tab(id) ? id : (this.tabs[0] || this.newTab(false)).id);
+  }
+  adoptSplit(panel, tabId) {
+    panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "media", "chat-icon.svg");
+    const pane = this.attach(panel.webview, "editor", panel, tabId);
+    this.focusPane = pane;
+    panel.onDidChangeViewState((e) => { if (e.webviewPanel.active) this.focusPane = pane; });
+    panel.onDidDispose(() => {
+      this.panes.splice(this.panes.indexOf(pane), 1);
+      if (this.focusPane === pane) this.focusPane = null;
+      this.save();
+    });
+    this.postTabs();
+  }
+
+  // Show the chat you're working in: the panel beside the code, or the side panel.
+  reveal() {
+    const p = this.cur();
+    if (p && p.panel) { p.panel.reveal(); return Promise.resolve(); }
+    return vscode.commands.executeCommand("kural.chat.focus");
+  }
+
+  // Replies to one pane (the tab it opened, a file it picked, focus, short notices) go only to that pane.
+  // Everything else goes to all panes; each one keeps what's about the tab it shows.
+  post(msg) {
+    if (msg.type === "tabs") { for (const p of this.panes) this.postTo(p, { ...msg, activeId: p.activeId }); return; }
+    if (ONE_PANE.has(msg.type)) { const p = this.cur(); if (p) this.postTo(p, msg); return; }
+    for (const p of this.panes) this.postTo(p, msg);
+  }
+  postTo(pane, msg) { if (pane.ready) pane.webview.postMessage(msg); else pane.queue.push(msg); }
 
   postActive() {
     const ed = this.lastEditor;
@@ -530,6 +613,8 @@ class ChatView {
     const editing = tab.mode === "agent" || tab.mode === "auto";
     const team = this.teamSize(tab);
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map() };
+    // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
+    r.teamFile = team ? path.join(os.tmpdir(), `kural-team-${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
@@ -540,7 +625,7 @@ class ChatView {
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
       tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : [])],
-      mcpServers: team ? { team: teamServer() } : null,
+      mcpServers: team ? { team: teamServer(teamMembers(team, tab.roles || []).map((m) => m.name), r.teamFile) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
@@ -631,11 +716,16 @@ class ChatView {
     if (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab)) r = this.startProc(tab);
     if (!r) { reply.running = false; reply.error = "missing"; tab.status = "idle"; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); vscode.commands.executeCommand("kural.install"); return; }
     if (tab.pendingModel) { r.proc.setModel(tab.model); tab.pendingModel = false; }
-    r.turn = { snaps: {}, reply };
+    // (For "Build it", what the plan was for is the earlier question.)
+    const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
+    r.turn = { snaps: {}, reply, ask };
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = false;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
-    const { content: prompt, meta } = this.attachments.content(await this.buildPrompt(text, contexts), attachIds);
+    if (r.teamFile) { r.round = (r.round || 0) + 1; r.finished = []; this.writeTeamFile(r); }
+    clearInterval(r.watchdog);
+    if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
+    const { content: prompt, meta } = this.attachments.content(ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
     r.pendingSend = prompt;
     r.proc.send(prompt);
@@ -649,7 +739,7 @@ class ChatView {
     const last = this.context.globalState.get(LAST_KEY) || {};
     tab.mode = last.buildMode === "auto" ? "auto" : "agent";
     this.postTabs();
-    await this.send(tab, [{ t: "text", v: "Go ahead and implement the plan above." }], []);
+    await this.send(tab, [{ t: "text", v: BUILD_TEXT }], []);
   }
 
   // ---------- Claude's output ----------
@@ -658,7 +748,7 @@ class ChatView {
     const reply = turn && turn.reply;
     if (m.type === "system" && m.subtype === "init" && m.model) {
       tab.modelName = prettyModel(m.model);
-      if (tab.id === this.activeId) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
+      if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
       this.noteSetup(tab, r, m);
       return;
     }
@@ -673,6 +763,7 @@ class ChatView {
       const end = m.subtype === "task_notification" ? m.status : m.subtype === "task_updated" && m.patch ? m.patch.status : null;
       if (m.subtype === "task_notification") r.lastNotifyAt = Date.now();
       const owner = a || (m.task_id && r.agents.get(r.tasks.get(m.task_id)));
+      if (owner) owner.lastActive = Date.now();
       // What the agent is doing right now ("Running the tests"), shown on its card.
       if (m.subtype === "task_progress" && owner && owner.state === "running" && m.description) {
         owner.activity = String(m.description).replace(/^Running /, "");
@@ -682,6 +773,7 @@ class ChatView {
       if (end && !END[end] && end !== "running" && end !== "pending") log(`chat ${tab.id}: agent status "${end}" (still counted as working)`);
       if (owner && owner.state === "running" && END[end]) {
         owner.state = END[end];
+        this.teamFinished(r, owner);
         if (reply && (reply.waitingFor || []).length) {
           reply.waitingFor = reply.waitingFor.filter((n) => n !== (owner.name || `Agent ${owner.n}`));
           this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
@@ -742,9 +834,10 @@ class ChatView {
       // Show the model that's actually answering (it changes when you switch mid-answer).
       if (!parent && m.message.model) {
         const name = prettyModel(m.message.model);
-        if (name !== tab.modelName) { tab.modelName = name; if (tab.id === this.activeId) this.post({ type: "modelName", tabId: tab.id, name }); }
+        if (name !== tab.modelName) { tab.modelName = name; if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name }); }
       }
       const from = parent && r.agents.get(parent);
+      if (from) from.lastActive = Date.now();
       for (const b of m.message.content || []) {
         // What an agent writes and thinks (needs --forward-subagent-text): into its card.
         if (from && (b.type === "text" || b.type === "thinking")) {
@@ -761,7 +854,7 @@ class ChatView {
           const said = /\bYou are (\w+)(?:, the (\w+))?/.exec((b.input && b.input.prompt) || "");
           const name = said && FRIENDS.includes(said[1]) ? said[1] : FRIENDS[(n - 1) % FRIENDS.length];
           const role = said && said[2] && ROLES.some((x) => x.label === said[2]) ? said[2] : null;
-          const block = { k: "agent", id: b.id, n, name, role, title: (b.input && b.input.description) || name, steps: [], state: "running" };
+          const block = { k: "agent", id: b.id, n, name, role, title: (b.input && b.input.description) || name, steps: [], state: "running", lastActive: Date.now() };
           r.agents.set(b.id, block);
           reply.blocks.push(block);
           this.post({ type: "block", tabId: tab.id, block });
@@ -789,7 +882,7 @@ class ChatView {
       // a background agent's Task call returns at once with "Async agent launched".)
       for (const c of (m.message && Array.isArray(m.message.content) ? m.message.content : [])) {
         const a = c.type === "tool_result" && c.is_error && r.agents.get(c.tool_use_id);
-        if (a && a.state === "running") { a.state = "failed"; this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state }); }
+        if (a && a.state === "running") { a.state = "failed"; this.teamFinished(r, a); this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state }); }
       }
     } else if (m.type === "result") {
       r.pendingSend = null;
@@ -809,6 +902,14 @@ class ChatView {
         if (!working.length) r.idleTimer = setTimeout(() => this.conclude(tab, r, reply, m), 5000);
         return;
       }
+      if (r.agents.size && !m.is_error && Date.now() - r.lastNotifyAt < 4000) {
+        // The last agents reported while the lead was still talking: Claude wakes it once more for
+        // them in a moment. Hold the answer a few seconds instead of closing and reopening it.
+        r.betweenTurns = true;
+        clearTimeout(r.idleTimer);
+        r.idleTimer = setTimeout(() => { if (r.betweenTurns && reply.running && !r.stale) this.finishReply(tab, r, m); }, 4000);
+        return;
+      }
       if (r.agents.size && !r.concluded && m.is_error) {
         // The team finished but the lead's last turn failed: ask it for the conclusion.
         r.idleTimer = setTimeout(() => this.conclude(tab, r, reply, m), 500);
@@ -816,6 +917,59 @@ class ChatView {
       }
       this.finishReply(tab, r, m);
     }
+  }
+
+  // ---------- agents that get stuck ----------
+  // The board (team-mcp.js) reads this file to learn who has finished, so nobody waits for them.
+  writeTeamFile(r) {
+    try { fs.writeFileSync(r.teamFile, JSON.stringify({ round: r.round || 0, finished: r.finished || [] })); }
+    catch (e) { log(`team file: ${e.message}`); }
+  }
+  teamFinished(r, agent) {
+    if (!r.teamFile || !agent.name) return;
+    r.finished = r.finished || [];
+    if (!r.finished.includes(agent.name.toLowerCase())) { r.finished.push(agent.name.toLowerCase()); this.writeTeamFile(r); }
+  }
+
+  // Every 30 s while a team works: an agent with no sign of life for STUCK_MS is stuck (usually waiting
+  // for a teammate's message that never comes). Stop it, so the lead can answer with what it has.
+  // (Not while you're being asked something: an agent waiting for your OK isn't stuck.)
+  watchAgents(tab, r) {
+    if (r.stale || !r.turn || !r.turn.reply.running) { clearInterval(r.watchdog); return; }
+    const running = [...r.agents.values()].filter((a) => a.state === "running");
+    if (r.perms.size) { for (const a of running) a.lastActive = Date.now(); return; }
+    for (const a of running) {
+      if (Date.now() - (a.lastActive || 0) > STUCK_MS) this.stopAgent(tab, r, a, `stuck: nothing for ${Math.round(STUCK_MS / 60000)} min`);
+    }
+  }
+
+  // Stop one agent (Claude's stop_task control request) and carry on without it.
+  stopAgent(tab, r, a, why) {
+    if (a.state !== "running") return;
+    const taskId = [...r.tasks].find(([, use]) => use === a.id);
+    if (taskId && r.proc && !r.proc.exited) {
+      r.proc.request({ subtype: "stop_task", task_id: taskId[0] }).then((res) => log(`chat ${tab.id}: stop_task ${taskId[0]} → ${JSON.stringify(res)}`));
+    }
+    log(`chat ${tab.id}: stopping ${a.name || `Agent ${a.n}`} (${why})${taskId ? "" : " — no task id, marked stopped only"}`);
+    a.state = "stopped"; a.why = why;
+    this.teamFinished(r, a);
+    this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state, why });
+    const reply = r.turn && r.turn.reply;
+    if (!reply) return;
+    reply.waitingFor = (reply.waitingFor || []).filter((n) => n !== (a.name || `Agent ${a.n}`));
+    this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
+    // Nobody left and the lead is paused: ask it for the answer (if Claude doesn't wake it first).
+    if (r.betweenTurns && ![...r.agents.values()].some((x) => x.state === "running")) {
+      clearTimeout(r.idleTimer);
+      r.idleTimer = setTimeout(() => this.conclude(tab, r, reply), 5000);
+    }
+  }
+
+  // "Finish now": stop every agent still working; the lead answers with what it has.
+  finishTeam(tab) {
+    const r = this.runtime.get(tab.id);
+    if (!r || !r.turn || !r.turn.reply.running) return;
+    for (const a of r.agents.values()) this.stopAgent(tab, r, a, "stopped by you");
   }
 
   // Every agent has reported. Claude normally wakes the lead by itself; if it hasn't within a few
@@ -837,7 +991,7 @@ class ChatView {
   noteSetup(tab, r, m) {
     const prev = tab.setup || {};
     this.showSetup(tab, {
-      servers: (m.mcp_servers || []).filter((x) => x.name !== "team").map((x) => ({ name: prettyServer(x.name), status: x.status })),
+      servers: (m.mcp_servers || []).filter((x) => x.name !== "team").map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status })),
       plugins: (m.plugins || []).filter((x) => x.path !== "builtin").map((x) => x.name),
       skills: (m.skills || []).length || prev.skills || 0,
     });
@@ -848,7 +1002,7 @@ class ChatView {
     if (!res || !Array.isArray(res.mcpServers) || r.stale) return;
     const prev = tab.setup || {};
     this.showSetup(tab, {
-      servers: res.mcpServers.filter((x) => x.name !== "team").map((x) => ({ name: prettyServer(x.name), status: x.status, tools: (x.tools || []).length })),
+      servers: res.mcpServers.filter((x) => x.name !== "team").map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status, tools: (x.tools || []).length })),
       plugins: prev.plugins || [], skills: prev.skills || 0,
     });
   }
@@ -859,8 +1013,9 @@ class ChatView {
     const known = tab.knownServers ? new Set(tab.knownServers) : null;
     const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name)).map((x) => x.name) : [];
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
+    setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
-    if (tab.id !== this.activeId) return;
+    if (!this.shown(tab.id)) return;
     this.post({ type: "setup", tabId: tab.id, setup });
     if (added.length) this.post({ type: "flash", text: `Now connected: ${added.join(", ")}` });
   }
@@ -870,6 +1025,7 @@ class ChatView {
     const reply = r.turn.reply;
     reply.waitingFor = [];
     clearTimeout(r.idleTimer);
+    clearInterval(r.watchdog);
     r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
@@ -885,8 +1041,10 @@ class ChatView {
     }
     if (reply.mode === "plan" && !reply.error) reply.planReady = true;
     tab.status = "idle";
-    if (tab.id !== this.activeId) tab.unread = true;
+    if (!this.shown(tab.id)) tab.unread = true;
     this.finishTurn(tab, r);
+    // Tab learns what you're working on, and which files the chat changed for it.
+    if (this.activity && r.turn.ask && reply.error !== "stopped") this.activity.addWork("chat", r.turn.ask, (reply.changes || []).map((c) => c.rel));
     this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
     this.postTabs(); this.save();
     // If you changed mode/intensity while it was answering, get the new setup ready now.
@@ -896,6 +1054,8 @@ class ChatView {
   // Stop no matter what state Claude is in.
   forceStop(tab, r) {
     if (r) {
+      clearInterval(r.watchdog);
+      if (r.teamFile) fs.rm(r.teamFile, { force: true }, () => {});
       r.stale = true;
       if (r.proc) r.proc.kill();
       r.proc = null;
@@ -944,6 +1104,9 @@ class ChatView {
       return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
+    // Reading Jira (the linked ticket, a search) changes nothing, so it doesn't ask. Writing to Jira
+    // (comments, status changes, new issues) still asks below.
+    if (isAtlassianRead(req.tool_name)) return { allow: true };
     if (req.tool_name === "AskUserQuestion") return this.askUser(tab, r, req);
     if (tab.mode === "auto" || tab.allowAll) return { allow: true };
     // Agent mode: running commands, fetching web pages ask you first.
@@ -954,7 +1117,7 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (tab.id !== this.activeId) vscode.window.showInformationMessage(`Kural: "${tab.title}" is waiting for your OK to run a command.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" is waiting for your OK to run a command.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
     const allow = await new Promise((resolve) => r.perms.set(pid, resolve));
     block.state = allow ? "allowed" : "denied";
     // (After Stop the answer is already over: don't flip the tab back to "running".)
@@ -976,7 +1139,7 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (tab.id !== this.activeId) vscode.window.showInformationMessage(`Kural: "${tab.title}" has a question for you.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" has a question for you.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
     const answers = await new Promise((resolve) => r.perms.set(pid, resolve));
     const ok = answers && typeof answers === "object";
     block.state = ok ? "answered" : "skipped";
@@ -1004,26 +1167,36 @@ class ChatView {
   }
 
   // ---------- messages from the panel ----------
-  async onMessage(m) {
+  async onMessage(m, pane = this.cur()) {
+    this.pane = pane;                          // replies and "the current tab" mean this pane's
+    if (pane && m.type !== "ready" && m.type !== "log" && !(m.type === "focusChanged" && !m.focused)) this.focusPane = pane;
+    try { await this.handle(m, pane); } finally { if (this.pane === pane) this.pane = null; }
+  }
+
+  async handle(m, pane) {
     const tab = m.tabId ? this.tab(m.tabId) : this.active();
     switch (m.type) {
-      case "ready":
-        this.ready = true;
-        this.view.webview.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
+      case "ready": {
+        if (!pane) break;
+        if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
+        const w = pane.webview, t = this.tab(pane.activeId);
+        w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
           moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version });
-        this.view.webview.postMessage({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)), activeId: this.activeId });
-        this.view.webview.postMessage({ type: "full", tab: this.viewTab(this.active()) });
-        if (this.active() && this.active().setup) this.view.webview.postMessage({ type: "setup", tabId: this.activeId, setup: this.active().setup });
-        for (const q of this.queue.splice(0)) this.view.webview.postMessage(q);
+        w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
+        w.postMessage({ type: "full", tab: this.viewTab(t) });
+        if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
+        pane.ready = true;
+        for (const q of pane.queue.splice(0)) w.postMessage(q);
         this.postActive();
         this.postHistory();
         this.sendFiles();
-        this.warm(this.active());
+        this.warm(t);
         break;
+      }
       case "log": log(`chat panel: ${m.message}`); break;
       case "focusChanged": vscode.commands.executeCommand("setContext", "kural.chatFocused", !!m.focused); break;
       case "newTab": this.newTab(true); break;
-      case "switchTab": this.activate(m.id); break;
+      case "switchTab": this.activate(m.id, pane); break;
       case "closeTab": this.closeTab(m.id); break;
       case "renameTab": this.rename(m.id, m.title); break;
       case "history": this.postHistory(); break;
@@ -1033,13 +1206,26 @@ class ChatView {
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
-        if (items.length) this.post({ type: "attached", items });
+        if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
-      case "attachData": { const a = this.attachments.addData(m.name, m.data); if (a) this.post({ type: "attached", items: [a] }); break; }
+      case "openUrl": if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url)); break;
+      case "ticketSearch": {
+        const out = await this.tickets.search(m.query || "", (text) => pane && this.postTo(pane, { type: "ticketStatus", id: m.id, text }));
+        if (!out.cancelled && pane) this.postTo(pane, { type: "ticketResults", id: m.id, ...out });
+        break;
+      }
+      case "linkTicket": if (tab) {
+        const k = m.ticket || {};
+        tab.ticket = k.key ? { key: k.key, summary: k.summary || "", type: k.type || "", status: k.status || "", url: k.url || "" } : null;
+        log(`chat ${tab.id}: ${tab.ticket ? `linked ${tab.ticket.key}` : "ticket unlinked"}`);
+        this.save(); this.postTabs();
+        break;
+      }
+      case "attachData": { const a = this.attachments.addData(m.name, m.data); if (a && pane) this.postTo(pane, { type: "attached", items: [a] }); break; }
       case "attachUris": {
         const items = (m.uris || []).map((u) => { try { return this.attachments.add(vscode.Uri.parse(u).fsPath); } catch { return null; } }).filter(Boolean);
-        if (items.length) this.post({ type: "attached", items });
+        if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
       case "buildPlan": if (tab) {
@@ -1047,6 +1233,7 @@ class ChatView {
         if (msg) { msg.planBuilt = true; this.post({ type: "patch", tabId: tab.id, index: m.msgIndex, msg: this.patchOf(msg) }); }
         await this.buildPlan(tab);
       } break;
+      case "finishTeam": if (tab) this.finishTeam(tab); break;
       case "stop": {
         const r = this.runtime.get(tab.id);
         // Agents working in the background don't stop on an interrupt, and a paused lead has
@@ -1113,7 +1300,7 @@ class ChatView {
       case "apply": {
         const uri = this.resolvePath(m.path);
         if (!uri) { vscode.window.showWarningMessage("Kural: open the file you want to apply this to, then click Apply again."); return; }
-        await this.apply(m.code, uri);
+        await this.apply(m.code, uri, this.lastAsk(tab));
         break;
       }
       case "insert": {
@@ -1121,6 +1308,7 @@ class ChatView {
         if (!ed) { vscode.window.showWarningMessage("Kural: open a file first."); return; }
         await vscode.window.showTextDocument(ed.document, ed.viewColumn);
         await ed.edit((b) => b.replace(ed.selection, m.code));
+        if (this.activity) this.activity.addWork("chat Insert", this.lastAsk(tab), [vscode.workspace.asRelativePath(ed.document.uri)]);
         break;
       }
       case "copy": await vscode.env.clipboard.writeText(m.code); vscode.window.setStatusBarMessage("Copied", 1500); break;
@@ -1163,11 +1351,17 @@ class ChatView {
     const targets = m.id === "*" ? msg.changes.filter((c) => c.state === "pending") : msg.changes.filter((c) => c.id === m.id);
     for (const c of targets) {
       if (m.action === "review") { await this.changes.review(c.id); continue; }
-      if (m.action === "undo") { if (await this.changes.undo(c.id)) c.state = "undone"; }
+      if (m.action === "undo") { if (await this.changes.undo(c.id)) { c.state = "undone"; if (this.activity) this.activity.undone(c.rel); } }
       if (m.action === "keep") { this.changes.keep(c.id); c.state = "kept"; }
     }
     this.post({ type: "patch", tabId: tab.id, index: m.msgIndex, msg: this.patchOf(msg) });
     this.save();
+  }
+
+  // What you last asked in this chat (Apply / Insert of its code is for that).
+  lastAsk(tab) {
+    const u = [...tab.messages].reverse().find((x) => x.role === "user");
+    return u ? ChatView.textOf(u.segments || []) : "";
   }
 
   resolvePath(p) {
@@ -1211,8 +1405,9 @@ const lines = (s) => (s ? String(s).split("\n").length : 0);
 const cap = (s) => { s = String(s || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) : "?"; };
 
 // The team's message board, run by Kural's own executable as plain Node.
-function teamServer() {
-  return { command: process.execPath, args: [path.join(__dirname, "team-mcp.js")], env: { ELECTRON_RUN_AS_NODE: "1" } };
+function teamServer(names, file) {
+  return { command: process.execPath, args: [path.join(__dirname, "team-mcp.js")],
+    env: { ELECTRON_RUN_AS_NODE: "1", KURAL_TEAM: names.join(","), KURAL_TEAM_FILE: file || "" } };
 }
 
 function permDetail(tool, input) {
