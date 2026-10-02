@@ -113,7 +113,9 @@ Also in the chat:
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Teacher** explains the why.
 - **Two chats at once.** The split button (next to **+** in the Kural panel's title bar) opens a second chat beside
   your code, with its own tabs and input. Both can work at the same time; drag it anywhere, even to another screen.
-- **History.** Chats survive restarts. The clock button finds old ones.
+- **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
+  need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
+  its folder, or **Continue here** (a new chat here that knows the old conversation).
 - **Thinking.** Claude's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
 
 ### Multiple agents
@@ -283,6 +285,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
   extension.js        wires everything together
   lib/claude.js       runs `claude` headless (sessions, permissions, speed)
   lib/chat.js         chat tabs, history, modes, models, agent teams, questions
+  lib/archive.js      every chat from every workspace (History)
   lib/completion.js   Tab completion (Claude), lib/local.js (local model via Ollama)
   lib/activity.js     what Tab learns from your work (per workspace)
   lib/tabpanel.js     the Tab panel

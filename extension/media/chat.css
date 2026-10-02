@@ -106,7 +106,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* empty state */
 .empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
 .logo { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); color: var(--on-accent); font-weight: 700; display: grid; place-items: center; font-family: var(--vscode-editor-font-family); }
-.empty-title { margin: 12px 0 16px; font-size: calc(14px * var(--fs, 1)); font-weight: 600; }
+.brand { margin-top: 14px; font-size: calc(22px * var(--fs, 1)); font-weight: 650; letter-spacing: .01em; }
+.brand-sub { margin-top: 2px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+.tagline { margin-top: 18px; font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); opacity: .85; font-style: italic; }
+.hints { margin-top: 26px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); }
+.hint { display: inline-flex; align-items: center; gap: 6px; }
+.hint kbd { min-width: 0; font-family: var(--vscode-editor-font-family); font-size: calc(10.5px * var(--fs, 1)); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface); color: var(--vscode-foreground); }
 .tips { display: grid; gap: 7px; text-align: left; color: var(--muted); font-size: calc(12px * var(--fs, 1)); }
 .tip { display: flex; gap: 8px; align-items: baseline; }
 kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(--fs, 1)); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--vscode-foreground); min-width: 64px; text-align: center; }
@@ -212,8 +217,20 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .h-name { font-size: calc(12.5px * var(--fs, 1)); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h-badge { font-size: calc(10px * var(--fs, 1)); padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-hi); }
 .h-when { font-size: calc(11px * var(--fs, 1)); color: var(--muted); white-space: nowrap; }
-.h-meta { font-size: calc(11px * var(--fs, 1)); color: var(--muted); margin-top: 1px; }
+.h-meta { font-size: calc(11px * var(--fs, 1)); color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .h-preview { font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); opacity: .8; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h-count { margin-left: 6px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); }
+.h-scope { display: flex; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.h-scope button { flex: 1; background: none; border: 0; padding: 3px 8px; font: inherit; font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); cursor: pointer; }
+.h-scope button.on { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--vscode-foreground); }
+.h-group { font-size: calc(10.5px * var(--fs, 1)); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 10px 2px 4px; }
+.h-group:empty { display: none; }
+.h-ws { color: var(--accent-hi); }
+.h-item .icon-btn.small.h-pin.on { opacity: 1; color: var(--accent-hi); }
+.cb.danger { color: var(--red, #e5534b); border-color: color-mix(in srgb, var(--red, #e5534b) 50%, transparent); }
+.visit { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; font-size: calc(12px * var(--fs, 1)); color: var(--muted); }
+.visit b { color: var(--vscode-foreground); font-weight: 600; }
+.visit-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .h-empty { color: var(--muted); font-size: calc(12px * var(--fs, 1)); padding: 16px 4px; text-align: center; }
 
 /* modes, plan, team */
@@ -262,7 +279,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .team-wait { color: var(--muted); font-style: italic; }
 .tool.more { opacity: .7; font-style: italic; }
 .dots.small span { width: 4px; height: 4px; }
-.version { margin-top: 18px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); opacity: .7; }
+.version { margin-top: 30px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); opacity: .7; }
 .seg.team button { font-size: calc(11px * var(--fs, 1)); }
 
 /* Claude's questions with options */

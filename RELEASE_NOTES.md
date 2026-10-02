@@ -2,6 +2,12 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **A simpler home screen.** Kural, *AI-powered code editor*, the tagline "Few words. Working code.", and three hints.
+  Everything else is in the menus.
+- **Full chat history, from every workspace.** The clock button lists all your chats (before: only this workspace's
+  last 100, shortened). Search, filter *All workspaces / This workspace*, **pin** chats to the top, **delete** chats
+  (it asks once). A chat from another workspace opens to read; **Open its folder** or **Continue here** (a new chat
+  that knows the old conversation). Your existing closed chats move into History by themselves.
 - **Tab learns from your work.** With each suggestion, Kural now tells the model what you've been doing in this
   workspace: what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted,
   suggestions you accepted, the file you just edited, and the commands you run. Suggestions fit your current task and

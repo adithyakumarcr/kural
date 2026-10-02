@@ -13,6 +13,7 @@ const { projectInstructions } = require("./project");
 const { ChangeTracker } = require("./changes");
 const ws = require("./workspace");
 const { Attachments } = require("./attachments");
+const { ChatArchive } = require("./archive");
 const { watchSetup } = require("./setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 
@@ -186,7 +187,6 @@ function teamPrompt(n, roles = [], style = "split") {
 const MAX_INLINE = 60000;       // files bigger than this are read by Claude instead of pasted in
 const STORE_KEY = "kural.chat.v4";
 const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / team, for new tabs
-const MAX_HISTORY = 100;
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => Math.random().toString(36).slice(2, 9);
@@ -209,7 +209,9 @@ class ChatView {
     this.focusPane = null;       // the pane you used last (keyboard shortcuts and commands act on it)
     this._activeId = null;       // the side panel's tab before the panel exists
     this.tabs = [];              // open tabs; see newTab() for the shape
-    this.history = [];           // closed tabs (newest first)
+    // Every chat from every workspace, in full (History). this.here: which workspace this window is.
+    this.archive = new ChatArchive(path.join(context.globalStorageUri.fsPath, "chats"));
+    this.here = ChatView.workspaceInfo();
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.changes = new ChangeTracker();
     this.attachments = new Attachments();   // files added to the message you're writing
@@ -310,6 +312,7 @@ class ChatView {
     if (!valid(TEAM_STYLES, tab.teamStyle)) tab.teamStyle = d.teamStyle;
     tab.createdAt = tab.createdAt || Date.now();
     tab.updatedAt = tab.updatedAt || tab.createdAt;
+    tab.workspace = tab.workspace || this.here;   // older chats: from this workspace
     return tab;
   }
 
@@ -324,7 +327,7 @@ class ChatView {
     const tab = {
       id: shortId(), title: "New chat", renamed: false,
       model: d.model, effort: d.effort, mode: d.mode, team: d.team, mood: d.mood, roles: d.roles, teamStyle: d.teamStyle,
-      sessionId: newSessionId(), started: false,
+      sessionId: newSessionId(), started: false, workspace: this.here,
       messages: [], status: "idle", unread: false, allowAll: false, modelName: null,
       createdAt: Date.now(), updatedAt: Date.now(),
     };
@@ -363,8 +366,8 @@ class ChatView {
     this.activate(this.tabs[(i + dir + this.tabs.length) % this.tabs.length].id);
   }
 
-  // Closing a tab keeps it in History (clock button), unless it was never used.
-  closeTab(id) {
+  // Closing a tab keeps it in History (clock button), unless it was never used (or you deleted it: keep = false).
+  closeTab(id, keep = true) {
     const tab = this.tab(id);
     if (!tab) return;
     const r = this.runtime.get(id);
@@ -372,10 +375,7 @@ class ChatView {
     this.runtime.delete(id);
     const i = this.tabs.indexOf(tab);
     this.tabs.splice(i, 1);
-    if (tab.messages.length) {
-      this.history.unshift({ ...tab, status: "idle", closedAt: Date.now() });
-      this.history = this.history.slice(0, MAX_HISTORY);
-    }
+    if (keep && tab.messages.length) this.archive.save(tab, this.card(tab));
     if (!this.tabs.length) this.newTab(true);
     // Every pane that showed it moves to the tab before it.
     const showing = this.panes.filter((p) => p.activeId === id);
@@ -385,15 +385,16 @@ class ChatView {
     this.save();
   }
 
-  // Reopen a chat from History; Claude continues the same conversation.
+  // Reopen a chat from History. From this workspace, Claude continues the same conversation. From another
+  // workspace it opens to read ("visiting"): Claude keeps conversations per folder, so to go on you open that
+  // folder, or Continue here (a new conversation that's given the old one).
   reopen(id) {
     const open = this.tab(id);
     if (open) { this.activate(id); return; }
-    const i = this.history.findIndex((h) => h.id === id);
-    if (i < 0) return;
-    const [tab] = this.history.splice(i, 1);
-    delete tab.closedAt;
-    this.fix(tab);
+    const tab = this.archive.read(id);
+    if (!tab) { this.postHistory(true); return; }
+    this.clean(tab);
+    tab.visiting = !!(tab.workspace && tab.workspace.key !== this.here.key);
     // A fresh, unused tab gets replaced instead of piling up.
     const blank = this.tabs.find((t) => !t.messages.length && t.status === "idle");
     if (blank) this.tabs.splice(this.tabs.indexOf(blank), 1, tab); else this.tabs.push(tab);
@@ -403,51 +404,128 @@ class ChatView {
   }
 
   rename(id, title) {
-    const t = this.tab(id) || this.history.find((h) => h.id === id);
+    const t = this.tab(id) || this.archive.read(id);
     if (!t) return;
     const clean = String(title || "").replace(/\s+/g, " ").trim().slice(0, 60);
     if (!clean) return;
     t.title = clean; t.renamed = true;
+    if (!this.tab(id)) this.archive.save(t, this.card(t));
     this.postTabs(); this.postHistory(); this.save();
   }
 
+  // A chat from another workspace, carried on here: a new conversation that starts with the old one.
+  continueHere(id) {
+    const old = this.tab(id);
+    if (!old || !old.visiting) return;
+    const tab = { ...old, id: shortId(), sessionId: newSessionId(), started: false, visiting: false, workspace: this.here,
+      carryOver: { from: old.workspace.name, text: ChatView.transcript(old) }, createdAt: Date.now(), updatedAt: Date.now(),
+      messages: JSON.parse(JSON.stringify(old.messages)) };
+    this.tabs.splice(this.tabs.indexOf(old), 1, tab);
+    this.runtime.delete(old.id);
+    for (const p of this.panes) if (p.activeId === old.id) this.activate(tab.id, p);
+    this.save();
+  }
+
+  // Open the folder a visiting chat came from, in a new window.
+  openWorkspaceOf(id) {
+    const t = this.tab(id);
+    const where = t && t.workspace && t.workspace.open;
+    if (!where || !fs.existsSync(where)) { vscode.window.showWarningMessage(`Kural: the folder of "${t ? t.workspace.name : "this chat"}" isn't on this computer anymore.`); return; }
+    vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(where), { forceNewWindow: true });
+  }
+
+  // Delete a chat for good: from this window, History, and every workspace.
+  deleteChat(id) {
+    if (this.tab(id)) this.closeTab(id, false);
+    this.archive.remove(id);
+    this.postHistory();
+  }
+
+  // The chat as plain text (for Continue here). The newest part if it's long.
+  static transcript(t, max = 30000) {
+    const lines = [];
+    for (const m of t.messages) {
+      if (m.role === "user") lines.push(`User: ${ChatView.textOf(m.segments || [])}`);
+      else {
+        const text = (m.blocks || []).filter((b) => b.k === "text").map((b) => b.text).join("").trim();
+        if (text) lines.push(`Claude: ${text}`);
+      }
+    }
+    const all = lines.join("\n\n");
+    return all.length > max ? "…" + all.slice(-max) : all;
+  }
+
+  static workspaceInfo() {
+    const f = ws.folders();
+    const file = vscode.workspace.workspaceFile;
+    return {
+      key: ws.key() || "",
+      name: vscode.workspace.name || (f.length ? f.map((x) => x.name).join(", ") : "No folder"),
+      open: file && file.scheme === "file" ? file.fsPath : f.length ? f[0].path : null,
+    };
+  }
+
+  // What History shows about a chat.
+  card(t) {
+    const firstUser = t.messages.find((m) => m.role === "user");
+    return { title: t.title, preview: firstUser ? ChatView.titleOf(firstUser.segments || []).slice(0, 90) : "",
+      when: t.updatedAt || t.createdAt, count: t.messages.filter((m) => m.role === "user").length,
+      model: t.model, mode: t.mode, workspace: t.workspace || this.here };
+  }
+
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
-    mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null }; }
+    mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
+    visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
   viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll }; }
   postTabs() {
     this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)) });   // each pane gets its own activeId (post)
     for (const p of this.panes) if (p.panel) { const t = this.tab(p.activeId); p.panel.title = t ? t.title : "Kural chat"; }
   }
 
-  postHistory() {
-    const item = (t, open) => {
-      const firstUser = t.messages.find((m) => m.role === "user");
-      const preview = firstUser ? ChatView.titleOf(firstUser.segments || []).slice(0, 90) : "";
-      return { id: t.id, title: t.title, open, model: t.model, mode: t.mode, when: t.updatedAt || t.createdAt,
-        count: t.messages.filter((m) => m.role === "user").length, preview };
-    };
-    this.post({ type: "history", items: [...this.tabs.filter((t) => t.messages.length).map((t) => item(t, true)), ...this.history.map((t) => item(t, false))]
-      .sort((a, b) => b.when - a.when) });
+  // History: every saved chat (all workspaces), with this window's open tabs as they are right now.
+  // fromDisk: read the cards again (other windows may have saved chats).
+  postHistory(fromDisk = false) {
+    if (fromDisk) this.archive.refresh();
+    const byId = new Map(this.archive.list().map((m) => [m.id, { ...m, open: false }]));
+    for (const t of this.tabs) if (t.messages.length) byId.set(t.id, { ...this.card(t), id: t.id, open: true, pinned: !!(byId.get(t.id) || {}).pinned });
+    const items = [...byId.values()].map((m) => {
+      const w = m.workspace || {};
+      return { id: m.id, title: m.title, open: m.open, pinned: !!m.pinned, model: m.model, mode: m.mode, when: m.when, count: m.count,
+        preview: m.preview, ws: w.name || "", here: !w.key || w.key === this.here.key };
+    }).sort((a, b) => (b.pinned - a.pinned) || (b.when - a.when));
+    this.post({ type: "history", items, here: this.here.name });
   }
 
   // ---------- saving across restarts ----------
+  // A saved chat, ready to show again: nothing half-running or waiting.
+  clean(t) {
+    this.fix(t);
+    t.status = "idle"; t.pendingModel = false; delete t.worktree; delete t.closedAt;
+    for (const m of t.messages) if (m.role === "assistant") {
+      if (m.running) { m.running = false; m.error = m.error || "stopped"; }
+      for (const b of m.blocks || []) {
+        if (b.k === "perm" && b.state === "pending") b.state = "denied";
+        if (b.k === "question" && b.state === "pending") b.state = "skipped";
+      }
+    }
+    return t;
+  }
+
   load() {
     const saved = this.context.workspaceState.get(STORE_KEY) || this.context.workspaceState.get("kural.chat.v3");
-    const clean = (t) => {
-      this.fix(t);
-      t.status = "idle"; t.pendingModel = false; delete t.worktree;
-      for (const m of t.messages) if (m.role === "assistant") {
-        if (m.running) { m.running = false; m.error = m.error || "stopped"; }
-        for (const b of m.blocks || []) {
-          if (b.k === "perm" && b.state === "pending") b.state = "denied";
-          if (b.k === "question" && b.state === "pending") b.state = "skipped";
-        }
-      }
-      return t;
-    };
-    this.history = saved && Array.isArray(saved.history) ? saved.history.map(clean) : [];
+    const clean = (t) => this.clean(t);
+    // Closed chats used to be kept per workspace (up to 100): move them into the shared History once.
+    if (saved && Array.isArray(saved.history) && saved.history.length) {
+      for (const h of saved.history) if (!this.archive.has(h.id)) { clean(h); this.archive.save(h, this.card(h)); }
+      log(`chat: moved ${saved.history.length} closed chats of this workspace into History`);
+    }
     if (saved && Array.isArray(saved.tabs) && saved.tabs.length) {
-      this.tabs = saved.tabs.map(clean);
+      // The window keeps a shortened copy of its open tabs; History has them in full.
+      this.tabs = saved.tabs.map((t) => {
+        const full = this.archive.read(t.id);
+        if (full && full.messages && full.messages.length >= t.messages.length) t.messages = full.messages;
+        return clean(t);
+      });
       this._activeId = this.tab(saved.activeId) ? saved.activeId : this.tabs[0].id;
       this.splitIds = (saved.splitIds || []).filter((id) => this.tab(id));   // reopened by restoreSplit()
     } else {
@@ -466,8 +544,9 @@ class ChatView {
         while (size > max && msgs.length > 2) { msgs = msgs.slice(2); size = JSON.stringify(msgs).length; }
         return { ...t, messages: msgs, status: "idle" };
       };
+      for (const t of this.tabs) if (t.messages.length) this.archive.save(t, this.card(t));   // History: in full
       this.context.workspaceState.update(STORE_KEY, {
-        tabs: this.tabs.map((t) => trim(t, 150000)), history: this.history.map((t) => trim(t, 60000)),
+        tabs: this.tabs.map((t) => trim(t, 150000)),
         activeId: this.side() ? this.side().activeId : this._activeId, splitIds: this.panes.filter((p) => p.kind === "editor").map((p) => p.activeId),
       });
     }, 800);
@@ -701,7 +780,7 @@ class ChatView {
   async send(tab, segments, contexts, attachIds = []) {
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
-    if (tab.status !== "idle") return;
+    if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
@@ -725,7 +804,11 @@ class ChatView {
     if (r.teamFile) { r.round = (r.round || 0) + 1; r.finished = []; this.writeTeamFile(r); }
     clearInterval(r.watchdog);
     if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
-    const { content: prompt, meta } = this.attachments.content(ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
+    // Continued from another workspace: the first message carries the earlier conversation.
+    const carry = tab.carryOver && !tab.started ? `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
+      "That's our earlier conversation, from another workspace. Carry on from it here.\n\n" : "";
+    delete tab.carryOver;
+    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
     r.pendingSend = prompt;
     r.proc.send(prompt);
@@ -1199,9 +1282,18 @@ class ChatView {
       case "switchTab": this.activate(m.id, pane); break;
       case "closeTab": this.closeTab(m.id); break;
       case "renameTab": this.rename(m.id, m.title); break;
-      case "history": this.postHistory(); break;
+      case "history": this.postHistory(true); break;
       case "reopen": this.reopen(m.id); break;
-      case "forget": this.history = this.history.filter((h) => h.id !== m.id); this.postHistory(); this.save(); break;
+      case "forget": this.deleteChat(m.id); this.save(); break;
+      case "pin": {
+        const t = this.tab(m.id);
+        if (t && t.messages.length) this.archive.save(t, this.card(t));   // an open chat may not be saved yet
+        this.archive.pin(m.id, !!m.value);
+        this.postHistory();
+        break;
+      }
+      case "continueHere": this.continueHere(m.id); break;
+      case "openWorkspace": this.openWorkspaceOf(m.id); break;
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || []); break;
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });

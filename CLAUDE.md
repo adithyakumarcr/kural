@@ -65,6 +65,14 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   (`focusPane`). `post()` goes to every pane (each shows what's about its own tab), except `ONE_PANE` replies
   (full, attached, flash…) to the current pane. A reply sent after an `await` uses `postTo(pane, …)`. Use
   `shown(id)` for "is this tab on screen", never `tab.id === this.activeId`.
+- **History** (`lib/archive.js`, no vscode inside): every chat in full, all workspaces, in
+  `globalStorage/kural.kural/chats/`: `<id>.json` + `<id>.meta.json` (one file per chat, so several windows can save at
+  once; `deleted.json` keeps deleted ids so a window that still has one open can't bring it back; pinned is re-read
+  from disk before a save). `save()` archives open tabs (only if changed); workspaceState keeps only this window's open
+  tabs (shortened; `load()` takes the full messages from the archive). Old per-workspace `history` moves in on `load()`.
+  `tab.workspace` = `{key, name, open}`; a chat from another workspace opens with `visiting` (read only: Claude keeps
+  sessions per folder, so `--resume` from here would fail). "Continue here" copies it with a new id/session and
+  `carryOver` (the transcript) that `send()` puts before the first message.
 - **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). There was a
   separate "Attach files" drop area for that; Adithya found it useless and it was removed (1.1.0-alpha.2). Attach
   with +, paste, or Shift+drag from the editor's own explorer.
