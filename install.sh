@@ -21,6 +21,13 @@ for a in "$@"; do
 done
 die() { echo "Error: $*" >&2; exit 1; }
 
+# VS Code keeps a cache of its built-in extensions' descriptions (Kural's buttons, commands, settings) and
+# refreshes it only in the background after starting. Kural's updates keep the same VSCodium inside, so the
+# old description would stay: new buttons wouldn't appear. Deleting the cache makes Kural read the new one.
+clear_cache() {   # clear_cache <Kural's user data folder>
+  rm -f "$1"/CachedProfilesData/*/extensions.builtin.cache 2>/dev/null || true
+}
+
 # ---------- Mac ----------
 mac() {
   local APPDIR=/Applications/Kural.app
@@ -35,6 +42,7 @@ mac() {
   if [ "$MODE" = ext ]; then
     [ -d "$APPDIR" ] || die "Kural isn't installed yet. Run ./install.sh first."
     quit_kural
+    clear_cache "$HOME/Library/Application Support/Kural"
     rm -rf "$APPDIR/Contents/Resources/app/extensions/kural"
     ditto extension "$APPDIR/Contents/Resources/app/extensions/kural"
     # Changed files inside an app break its signature, so sign it again (ad-hoc, like the build does).
@@ -52,6 +60,7 @@ mac() {
     fi
     ./build-mac.sh
     quit_kural
+    clear_cache "$HOME/Library/Application Support/Kural"
     echo "Installing into $APPDIR ..."
     rm -rf "$APPDIR"
     ditto build/mac/Kural.app "$APPDIR"
@@ -67,7 +76,8 @@ linux() {
     local d=/usr/share/kural/resources/app/extensions/kural
     [ -d "$d" ] || die "Kural isn't installed yet. Run ./install.sh first."
     sudo rm -rf "$d" && sudo cp -r extension "$d"
-    echo "Updated the Kural extension. In Kural: Ctrl+Shift+P → Developer: Reload Window (or restart Kural)."
+    clear_cache "${XDG_CONFIG_HOME:-$HOME/.config}/Kural"
+    echo "Updated the Kural extension. Quit Kural and open it again (new buttons need a restart, not just Reload Window)."
     return
   fi
   local need=()
@@ -81,6 +91,7 @@ linux() {
   local deb; deb=$(ls -t dist/kural_*_amd64.deb | head -1)
   echo "Installing $deb ..."
   sudo apt install -y "./$deb"
+  clear_cache "${XDG_CONFIG_HOME:-$HOME/.config}/Kural"
   echo "Done. Open Kural Code Editor from your apps menu (or run: kural)."
 }
 

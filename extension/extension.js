@@ -2,7 +2,7 @@
 //   Tab          grey suggestions as you type or place the cursor; Tab accepts
 //   Ctrl+L       chat on the right: tabs, Agent/Ask, model + intensity, multiple agents
 //   Ctrl+K       edit the selected code in place, review it red/green
-//   Ctrl+Alt+A   Ask & Search on the left: find code by describing it, or by text
+//   Ctrl+Alt+A   Ask on the left: find code by describing it
 //   Ctrl+Esc     full Claude Code in a terminal beside your file
 // Each feature lives in lib/; this file connects them.
 
@@ -10,11 +10,14 @@ const vscode = require("vscode");
 const { initLog, log, findClaude, ClaudeSession } = require("./lib/claude");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edits");
+const { Updater } = require("./lib/updates");
+const { terminalTab, TERMINAL_SYSTEM_PROMPT } = require("./lib/terminal-tab");
 const { ReviewManager } = require("./lib/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
 const { TabPanel } = require("./lib/tabpanel");
 const { LocalEngine } = require("./lib/local");
+const { Activity } = require("./lib/activity");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
@@ -54,6 +57,7 @@ async function offerInstall() {
 function activate(context) {
   const output = initLog();
   context.subscriptions.push(output);
+  const updater = new Updater(context);   // Help → Check for Updates…
   log(`Kural ${context.extension.packageJSON.version} starting; claude at ${findClaude() || "(not found)"}`);
 
   // ---------- status bar ----------
@@ -92,22 +96,38 @@ function activate(context) {
     systemPrompt: COMPLETION_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true,
     pool: 2, earlyStop: "</insert>",   // two warm processes; answer as soon as the suggestion is written
   }, setState);
+  // Tab in the terminal: the same model as Tab, its own helper and instructions (one command line).
+  const terminalSession = new ClaudeSession({
+    name: "terminal", model: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
+    systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true, pool: 2, earlyStop: "</cmd>",
+  }, () => {});
   const editSession = new ClaudeSession({
     name: "edit", model: () => cfg().get("editModel"), effort: "medium", systemPrompt: EDIT_SYSTEM_PROMPT,
     restartAfter: 10, timeoutMs: 180000, clearEach: true,
   }, (s) => { if (s === "login" || s === "missing") setState(s); });
+
+  // What you've been doing in this workspace: makes Tab's suggestions fit you (lib/activity.js).
+  const activity = new Activity(context.workspaceState, () => cfg().get("tabCompletion.learn") !== false);
+  watchEdits(context, activity);
 
   // Tab's local engine (Ollama): checked now and every 15 s, so it's used as soon as it's there.
   const local = new LocalEngine();
   local.status(true);
   const localTimer = setInterval(() => { if (cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status(); }, 15000);
   context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
-  const tabPanel = new TabPanel(context, SPEEDS, local);
+  terminalTab(context, terminalSession, local, activity);   // Tab in the terminal (same engine and model)
+  const tabPanel = new TabPanel(context, SPEEDS, local, activity);
+  activity.onChange = () => tabPanel.push();
   tabPanel.register();
   const review = new ReviewManager();
   review.register(context);
+  // A Ctrl+K or Apply change you accepted: Tab learns what you asked for and where.
+  review.onDone = (meta, accepted, uri) => {
+    if (accepted) activity.addWork(meta.source, meta.ask, [vscode.workspace.asRelativePath(vscode.Uri.parse(uri))]);
+  };
   const getState = () => state;
-  const chat = new ChatView(context, (code, uri) => applyCode(editSession, review, getState, code, uri));
+  const chat = new ChatView(context, (code, uri, ask) => applyCode(editSession, review, getState, code, uri, ask));
+  chat.activity = activity;
   chat.register();
   new SearchView(context).register();
   triggerOnCursor(context);
@@ -115,7 +135,13 @@ function activate(context) {
   context.subscriptions.push(
     status,
     { dispose: () => { tabSession.stop(); editSession.stop(); } },
-    vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local)),
+    vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity)),
+    vscode.commands.registerCommand("kural.tab.accepted", (a) => { if (a) activity.tabAccepted(a.file, a.lang, a.before, a.text); }),
+    vscode.commands.registerCommand("kural.tab.forget", () => {
+      activity.forget();
+      tabPanel.push();
+      vscode.window.showInformationMessage("Kural Tab forgot what it learned in this workspace.");
+    }),
     vscode.commands.registerCommand("kural.inlineEdit", () => inlineEdit(editSession, review, getState)),
     vscode.commands.registerCommand("kural.toggleTab", async () => {
       const on = !cfg().get("tabCompletion.enabled");
@@ -144,8 +170,9 @@ function activate(context) {
     }),
     vscode.commands.registerCommand("kural.install", offerInstall),
     vscode.commands.registerCommand("kural.showLog", () => output.show(true)),
+    vscode.commands.registerCommand("kural.checkForUpdates", () => updater.check()),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("kural.tabCompletion.model")) tabSession.stop();
+      if (e.affectsConfiguration("kural.tabCompletion.model")) { tabSession.stop(); terminalSession.stop(); }
       if (e.affectsConfiguration("kural.tabCompletion.localModel") || e.affectsConfiguration("kural.tabCompletion.ollamaUrl")) local.status(true);
       // Turned on (shortcut or the Tab panel): start Claude now so the first suggestion is quick.
       if (e.affectsConfiguration("kural.tabCompletion") && cfg().get("tabCompletion.enabled")) tabSession.start();
@@ -182,6 +209,18 @@ function activate(context) {
   // Warm up in the background so the first suggestion is quick.
   if (state === "missing") offerInstall();
   else if (cfg().get("tabCompletion.enabled")) tabSession.start();
+}
+
+// Which files you edit, and the lines around your last edit in each (for Tab in other files).
+function watchEdits(context, activity) {
+  context.subscriptions.push(vscode.workspace.onDidChangeTextDocument((e) => {
+    const doc = e.document;
+    if (doc.uri.scheme !== "file" || !e.contentChanges.length) return;
+    const line = e.contentChanges[0].range.start.line;
+    const lines = [];
+    for (let l = Math.max(0, line - 3); l <= Math.min(doc.lineCount - 1, line + 3); l++) lines.push(doc.lineAt(l).text);
+    activity.edited(vscode.workspace.asRelativePath(doc.uri), doc.languageId, line, lines.join("\n"));
+  }));
 }
 
 function deactivate() {}

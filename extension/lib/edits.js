@@ -72,11 +72,12 @@ async function inlineEdit(session, review, state) {
 
   if (reply == null) { notReady(state); return; }
   if (doc.version !== version) { vscode.window.showWarningMessage("Kural: the file changed while Claude was working, so the edit was not applied. Try again."); return; }
-  await review.propose(doc, start, end, unwrap(reply));
+  await review.propose(doc, start, end, unwrap(reply), { source: "Ctrl+K", ask: instruction });
 }
 
 // ---------- Apply (from a chat code block) ----------
-async function applyCode(session, review, state, code, targetUri) {
+// ask: what you asked the chat for (so Tab knows why the code changed), or "".
+async function applyCode(session, review, state, code, targetUri, ask = "") {
   if (review.busy()) { vscode.window.showInformationMessage("Kural: accept or reject the current change first."); return; }
   let doc;
   try { doc = await vscode.workspace.openTextDocument(targetUri); }
@@ -85,6 +86,7 @@ async function applyCode(session, review, state, code, targetUri) {
     await vscode.workspace.fs.writeFile(targetUri, Buffer.from(code.endsWith("\n") ? code : code + "\n"));
     await vscode.window.showTextDocument(targetUri);
     vscode.window.showInformationMessage(`Kural created ${vscode.workspace.asRelativePath(targetUri)}.`);
+    if (review.onDone) review.onDone({ source: "chat Apply", ask }, true, targetUri.toString());
     return;
   }
   await vscode.window.showTextDocument(doc, { preview: false });
@@ -102,7 +104,7 @@ async function applyCode(session, review, state, code, targetUri) {
   // Most files end with a line break, which shows up as an empty last line. Leave it alone.
   let end = doc.lineCount;
   if (end > 1 && doc.lineAt(end - 1).text === "") end--;
-  await review.propose(doc, 0, end, unwrap(reply));
+  await review.propose(doc, 0, end, unwrap(reply), { source: "chat Apply", ask });
 }
 
 module.exports = { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode };

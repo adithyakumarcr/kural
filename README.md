@@ -71,6 +71,12 @@ Open **Kural Code Editor** from your apps, or type `kural` in a terminal (`kural
 **Windows.** Run the setup. If Windows says "Windows protected your PC", click **More info → Run anyway** (Kural isn't
 code-signed). It installs for your user only, so you don't need admin rights.
 
+### Updates
+
+**Help → Check for Updates…** finds the newest release here on GitHub, including the alpha, beta and rc test
+versions. If it's newer than yours, Kural downloads it, installs it and restarts. On Ubuntu it asks for your
+password; on a Mac it replaces Kural.app in place; on Windows it runs the setup.
+
 ### 3. Optional: a local model for faster Tab completion
 
 Tab completion with Claude takes about 0.6–0.9 s. For suggestions in about 150–300 ms, Kural can use a small code model
@@ -105,6 +111,8 @@ Also in the chat:
 - **Questions with options.** When a choice is yours, Claude asks with options you can click.
 - **Model and intensity.** Opus / Sonnet / Haiku, and Low → Max. You can switch in the middle of an answer.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Teacher** explains the why.
+- **Two chats at once.** The split button (next to **+** in the Kural panel's title bar) opens a second chat beside
+  your code, with its own tabs and input. Both can work at the same time; drag it anywhere, even to another screen.
 - **History.** Chats survive restarts. The clock button finds old ones.
 - **Thinking.** Claude's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
 
@@ -119,6 +127,9 @@ Monica…), each with a role you pick. They message each other on a shared board
 
 You see the discussion live: every message the agents send each other appears in the answer as it's sent. Each
 agent's card shows what it's doing right now, its thinking and its notes.
+
+If agents take too long, **Finish now** (next to "Waiting for …") stops them and the lead answers with what it
+has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
 | Pick roles and how they work | They discuss and decide |
 |---|---|
@@ -141,6 +152,28 @@ In **Auto**, the local model and Claude race, and the first good answer wins.
 
 ![The Tab panel](docs/screenshots/tab-panel.png)
 
+**Tab learns from your work.** The models themselves never change, so Kural tells them, with each suggestion, what
+you've been doing in this workspace:
+
+- what you asked the chat, and which files it changed for you,
+- Ctrl+K and Apply changes you accepted,
+- suggestions you accepted (your style),
+- the file you just edited,
+- the commands you run.
+
+So a suggestion in a new file follows what you just wrote in another one. A commit message says why you changed
+things ("params: reject zero speeds (controller crashed on 0)") in the style of your earlier commits. It's kept only
+on this computer, per workspace. Commands with passwords or tokens are never kept. The Tab panel shows what it has
+learned, with **Forget** to clear it and a switch to turn it off.
+
+### Tab in the terminal
+
+In Kural's terminal, Kural suggests the whole command line in the terminal's suggestion list. **Tab** fills it in;
+nothing runs until you press Enter. It's made for commit messages: type `git commit -m "` and Kural reads your
+staged changes (or the unstaged ones) and suggests a message that names what changed. It also knows your recent
+commands and `git status`. It uses the same engine and model as Tab in the editor (local model about 0.2 s, Claude
+about 1–2 s). Turn it off with the setting **Kural › Tab Completion: Terminal**.
+
 ### Inline edit (Ctrl+K)
 
 Select code, press **Ctrl+K**, and say what to change. Then review the change in place and keep it
@@ -151,8 +184,8 @@ cursor.
 
 ### More
 
-- **Ask & Search (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get exact `file:line` places. It also does
-  fast text and regex search.
+- **Ask (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get the exact `file:line` places. (For plain text
+  search, use VS Code's own search, Ctrl+Shift+F.)
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **Claudemeter.** Your Claude plan usage in the status bar.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
@@ -170,9 +203,8 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 | **Ctrl+K** | inline edit |
 | **Ctrl+Enter** / **Ctrl+Shift+Backspace** | keep / reject an inline edit |
 | **Ctrl+Alt+Space** | Tab completion on/off *(Ctrl on Mac too)* |
-| **Ctrl+Alt+A** | Ask & Search |
+| **Ctrl+Alt+A** | Ask |
 | **Ctrl+Esc** | Claude Code terminal |
-| In the chat: **Ctrl+S** | next model *(Ctrl on Mac too)* |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |
 | In the chat: **Ctrl+P** | Plan mode on/off *(Ctrl on Mac too)* |
 
@@ -252,6 +284,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/claude.js       runs `claude` headless (sessions, permissions, speed)
   lib/chat.js         chat tabs, history, modes, models, agent teams, questions
   lib/completion.js   Tab completion (Claude), lib/local.js (local model via Ollama)
+  lib/activity.js     what Tab learns from your work (per workspace)
   lib/tabpanel.js     the Tab panel
   lib/edits.js        Ctrl+K and Apply, lib/review.js (red/green review)
   lib/team-mcp.js     the agents' message board (a tiny MCP server)
