@@ -44,6 +44,10 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
   Click it to see each connector.
 - **Fixed: the dot of the chosen model sat off-centre.** It was a "●" text character, which fonts don't centre;
   it's now drawn as a circle.
+- **Kural Light theme.** A light theme with the same look as Kural Dark. Every text color, in the code, the
+  menus, the terminal and Kural's panels, has at least 4.5:1 contrast with its background, so it's easy to read. Tab's
+  grey suggestions stay readable too. In the chat, code blocks use the normal text color. Pick it with
+  *Preferences: Color Theme*; with *Auto Detect Color Scheme* on, Kural follows your computer's light/dark mode.
 
 ## What's new in 1.1.0-alpha.2
 

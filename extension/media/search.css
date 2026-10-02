@@ -45,3 +45,6 @@ mark { background: var(--vscode-editor-findMatchHighlightBackground, rgba(234,17
 .why { white-space: normal; color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); padding: 0 0 3px 28px; line-height: 1.4; }
 .meta { color: var(--muted); font-size: calc(11px * var(--fs, 1)); opacity: .7; padding: 6px 12px; }
 .answer code { font-family: var(--vscode-editor-font-family); font-size: calc(11.5px * var(--fs, 1)); background: var(--vscode-textCodeBlock-background, rgba(0,0,0,.25)); padding: 0 3px; border-radius: 3px; }
+
+/* Light themes: a darker accent, readable on white. */
+body.vscode-light { --accent: #6447d6; }

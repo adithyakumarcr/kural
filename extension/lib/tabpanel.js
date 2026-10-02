@@ -88,6 +88,7 @@ function page(nonce, csp) {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <style nonce="${nonce}">
   :root { --accent: #8b6cef; --accent-hi: #a68af9; --muted: var(--vscode-descriptionForeground); --border: var(--vscode-widget-border, rgba(128,128,128,.25)); }
+  body.vscode-light { --accent: #6447d6; --accent-hi: #5a3cc8; }   /* light themes: readable on white */
   body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); padding: 10px 16px; }
   .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
   .label { font-weight: 600; min-width: 150px; }
@@ -107,6 +108,7 @@ function page(nonce, csp) {
   .btn { background: var(--accent); color: #fff; border: 0; border-radius: 5px; padding: 3px 10px; cursor: pointer; font: inherit; margin-right: 6px; }
   .btn.ghost { background: none; color: var(--accent-hi); border: 1px solid var(--accent); }
   .ok { color: #6cc490; } .warn { color: #e0b45c; }
+  body.vscode-light .ok { color: #2c7a34; } body.vscode-light .warn { color: #8a5d00; }
   progress { width: 160px; accent-color: var(--accent); vertical-align: middle; }
 </style></head><body>
 <div id="app">

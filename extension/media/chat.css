@@ -347,3 +347,15 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .ticket-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 .chip.ticket { border-color: color-mix(in srgb, var(--accent) 60%, transparent); cursor: pointer; max-width: 100%; }
 .ticket-chip-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; display: inline-block; vertical-align: bottom; }
+
+/* Light themes (Kural Light): VS Code puts "vscode-light" on <body>. The dark theme's pastel accents are too
+   pale on white, so text colors get darker versions here (all at least 4.5:1 against the panel). */
+body.vscode-light {
+  --accent: #6447d6; --accent-hi: #5a3cc8;
+  --green: #2c7a34; --red: #c02a3a; --yellow: #8a5d00; --blue: #1d5bbf;
+  --code-bg: var(--vscode-textCodeBlock-background, #efedf5);
+}
+/* Whole code blocks in the normal text color (15:1) instead of purple: easier to read on white. */
+body.vscode-light .code pre code { color: var(--vscode-editor-foreground); }
+body.vscode-light .popup { box-shadow: 0 6px 24px rgba(36,35,43,.14); }
+body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
