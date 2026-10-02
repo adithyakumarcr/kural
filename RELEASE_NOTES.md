@@ -1,5 +1,15 @@
 ## What's new in 1.1.0-alpha.2
 
+- **Link a Jira ticket to a chat.** **+ → Link ticket** searches Jira (your recent tickets, a key like
+  PROJ-123, or words) and links the epic, story or task to the chat. Every message then tells Claude which
+  ticket you're working on, and Claude reads its details from Jira when it needs them. This uses your
+  Atlassian connector; if that isn't connected, the menu shows ⚠ and how to connect it. Reading Jira doesn't
+  ask for permission; writing to it (comments, status changes) still does.
+- **+ is now a small menu:** Add files, or Link ticket.
+- **"Your Claude Code setup" takes one line** in the model menu ("10 connectors · 3 need attention · 30 skills").
+  Click it to see each connector.
+- **Fixed: the dot of the chosen model sat off-centre.** It was a "●" text character, which fonts don't centre;
+  it's now drawn as a circle.
 - **See the agents' discussion as it happens.** Their messages to each other now appear in the answer, in order,
   right where you're reading. Before, they sat inside the agent cards above the lead's text, out of sight.
 - **See the thinking.** Claude's thinking shows as a short summary ("Thought for 12 s", click to open). Each agent's

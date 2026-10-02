@@ -18,7 +18,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
     permissions, setup reload. `media/chat.js` + `media/chat.css` — the panel UI (a webview).
   - `lib/completion.js` — tab completion. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
-  - `lib/attachments.js`, `lib/workspace.js` (multi-root),
+  - `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask & Search), `lib/ui.js` (font size).
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
   `make-deb.sh` (Ubuntu), `build-mac.sh` (Apple Silicon), `build-win.sh` (Windows, runs on Linux).
@@ -45,6 +45,10 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   and `--forward-subagent-text`. Old Claude Code refuses unknown flags, so `supportedFlags()` probes once
   (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. Debug raw output: start Kural with
   `KURAL_RAW_LOG=/tmp/raw.jsonl`.
+- **Jira tickets** (`lib/tickets.js`): no Jira login in Kural. Search = a one-off Haiku `claude` with the full setup
+  (so the Atlassian connector is there), only Atlassian tools allowed, JSON answer. `tab.ticket` is saved with the
+  chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
+  chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
 - **Webviews can't receive file drops from outside VS Code** (VS Code shields them during a drag). There was a
   separate "Attach files" drop area for that; Adithya found it useless and it was removed (1.1.0-alpha.2). Attach
   with +, paste, or Shift+drag from the editor's own explorer.
@@ -66,7 +70,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
 - product.json `checksums` cover VS Code's core JS files: never edit those; media files are fine.
 
 ## Test
-- `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, team board, Tab panel page script).
+- `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, Tab panel page script).
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts
   Kural; on Ubuntu run "Developer: Reload Window"). View → Output → Kural shows every request with timings.

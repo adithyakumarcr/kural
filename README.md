@@ -96,7 +96,11 @@ The chat sits on the right and has tabs. Pick how much freedom Claude gets:
 Also in the chat:
 
 - **@ mentions.** Type `@` to mention a file in your sentence.
-- **Attachments.** **+** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
+- **Jira tickets.** **+ → Link ticket** links a Jira epic, story or task to the chat. Search your recent tickets,
+  a key like `PROJ-123`, or words. Claude then knows in every message which ticket you're working on, and reads
+  its details (acceptance criteria, comments) from Jira when needed. This needs the Atlassian connector in Claude
+  (claude.ai → Settings → Connectors); without it, the menu shows ⚠ and how to connect it.
+- **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
 - **Questions with options.** When a choice is yours, Claude asks with options you can click.
 - **Model and intensity.** Opus / Sonnet / Haiku, and Low → Max. You can switch in the middle of an answer.

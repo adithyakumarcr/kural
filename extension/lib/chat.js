@@ -12,6 +12,7 @@ const { ChangeTracker } = require("./changes");
 const ws = require("./workspace");
 const { Attachments } = require("./attachments");
 const { watchSetup } = require("./setup");
+const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -187,6 +188,7 @@ class ChatView {
   constructor(context, apply) {
     this.context = context;
     this.apply = apply;          // (code, uri) => Promise   (Apply button on code blocks)
+    this.tickets = new Tickets(() => this.root());   // Jira search for "+ → Link ticket"
     this.version = context.extension.packageJSON.version;
     this.view = null;
     this.ready = false;
@@ -381,7 +383,7 @@ class ChatView {
   }
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
-    mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t) }; }
+    mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null }; }
   viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll }; }
   postTabs() { this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)), activeId: this.activeId }); }
 
@@ -635,7 +637,7 @@ class ChatView {
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = false;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
-    const { content: prompt, meta } = this.attachments.content(await this.buildPrompt(text, contexts), attachIds);
+    const { content: prompt, meta } = this.attachments.content(ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
     r.pendingSend = prompt;
     r.proc.send(prompt);
@@ -837,7 +839,7 @@ class ChatView {
   noteSetup(tab, r, m) {
     const prev = tab.setup || {};
     this.showSetup(tab, {
-      servers: (m.mcp_servers || []).filter((x) => x.name !== "team").map((x) => ({ name: prettyServer(x.name), status: x.status })),
+      servers: (m.mcp_servers || []).filter((x) => x.name !== "team").map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status })),
       plugins: (m.plugins || []).filter((x) => x.path !== "builtin").map((x) => x.name),
       skills: (m.skills || []).length || prev.skills || 0,
     });
@@ -848,7 +850,7 @@ class ChatView {
     if (!res || !Array.isArray(res.mcpServers) || r.stale) return;
     const prev = tab.setup || {};
     this.showSetup(tab, {
-      servers: res.mcpServers.filter((x) => x.name !== "team").map((x) => ({ name: prettyServer(x.name), status: x.status, tools: (x.tools || []).length })),
+      servers: res.mcpServers.filter((x) => x.name !== "team").map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status, tools: (x.tools || []).length })),
       plugins: prev.plugins || [], skills: prev.skills || 0,
     });
   }
@@ -859,6 +861,7 @@ class ChatView {
     const known = tab.knownServers ? new Set(tab.knownServers) : null;
     const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name)).map((x) => x.name) : [];
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
+    setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
     if (tab.id !== this.activeId) return;
     this.post({ type: "setup", tabId: tab.id, setup });
@@ -944,6 +947,9 @@ class ChatView {
       return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
+    // Reading Jira (the linked ticket, a search) changes nothing, so it doesn't ask. Writing to Jira
+    // (comments, status changes, new issues) still asks below.
+    if (isAtlassianRead(req.tool_name)) return { allow: true };
     if (req.tool_name === "AskUserQuestion") return this.askUser(tab, r, req);
     if (tab.mode === "auto" || tab.allowAll) return { allow: true };
     // Agent mode: running commands, fetching web pages ask you first.
@@ -1034,6 +1040,19 @@ class ChatView {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
         if (items.length) this.post({ type: "attached", items });
+        break;
+      }
+      case "openUrl": if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url)); break;
+      case "ticketSearch": {
+        const out = await this.tickets.search(m.query || "");
+        this.post({ type: "ticketResults", id: m.id, ...out });
+        break;
+      }
+      case "linkTicket": if (tab) {
+        const k = m.ticket || {};
+        tab.ticket = k.key ? { key: k.key, summary: k.summary || "", type: k.type || "", status: k.status || "", url: k.url || "" } : null;
+        log(`chat ${tab.id}: ${tab.ticket ? `linked ${tab.ticket.key}` : "ticket unlinked"}`);
+        this.save(); this.postTabs();
         break;
       }
       case "attachData": { const a = this.attachments.addData(m.name, m.data); if (a) this.post({ type: "attached", items: [a] }); break; }
