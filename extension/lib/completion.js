@@ -20,6 +20,8 @@ Rules:
 - If the line(s) just above the cursor are a comment describing what to do (e.g. "# convert mm/s to m/min",
   "// TODO: validate input"), write the code that does it, right below the comment.
 - If nothing sensible fits: <insert></insert>
+- You may get notes about the user's recent work (their current task, recent edits, suggestions they accepted).
+  Use them to guess what they want here and to match their style; never write the notes into the file.
 
 Examples:
 Cursor: line 2, at the end of the line. Text before the cursor on this line: "    total = sum("
@@ -80,7 +82,8 @@ function trimOverlap(insert, after) {
 
 // The request for one suggestion. The cursor line is spelled out separately, which
 // keeps small, fast models from "completing" some other unfinished line in the file.
-function completionPrompt(text, offset, languageId, file) {
+// note: what the user has been doing (activity.js), or "".
+function completionPrompt(text, offset, languageId, file, note = "") {
   const prefix = text.slice(Math.max(0, offset - 3000), offset);
   const suffix = text.slice(offset, offset + 1000);
   const lineStart = text.lastIndexOf("\n", offset - 1) + 1;
@@ -90,7 +93,7 @@ function completionPrompt(text, offset, languageId, file) {
   const lineNo = text.slice(0, offset).split("\n").length;
   const where = !before.trim() && !after.trim() ? "on an empty line"
     : !after.trim() ? "at the end of the line" : "in the middle of the line";
-  return `File: ${file} (${languageId})\n` +
+  return note + `File: ${file} (${languageId})\n` +
     `Cursor: line ${lineNo}, ${where}. Text before the cursor on this line: ${JSON.stringify(before)}` +
     (after.trim() ? `, after it: ${JSON.stringify(after)}` : "") + "\n\n" +
     `${prefix}<CURSOR>${suffix}`;
@@ -127,7 +130,7 @@ const SPEEDS = [
 
 // engine "auto": the local model when Ollama has it, else Claude. "local" / "claude": that one
 // (local still falls back to Claude if Ollama isn't there, so Tab keeps working).
-function completionProvider(session, review, onTiming = () => {}, local = null) {
+function completionProvider(session, review, onTiming = () => {}, local = null, activity = null) {
   return {
     async provideInlineCompletionItems(document, position, ctx, token) {
       const cfg = vscode.workspace.getConfiguration("kural");
@@ -136,9 +139,10 @@ function completionProvider(session, review, onTiming = () => {}, local = null) 
 
       const offset = document.offsetAt(position);
       const key = cacheKey(document, offset);
-      if (cache.has(key)) return [item(document, position, cache.get(key))];
+      const rel = vscode.workspace.asRelativePath(document.uri);
+      if (cache.has(key)) return [item(document, position, cache.get(key), rel)];
       const rest = typeThrough(document, offset, document.getText());
-      if (rest) return [item(document, position, rest)];
+      if (rest) return [item(document, position, rest, rel)];
 
       // While typing, wait for a short pause. When you just placed the cursor, go right away.
       const typing = ctx.triggerKind === vscode.InlineCompletionTriggerKind.Automatic;
@@ -155,7 +159,8 @@ function completionProvider(session, review, onTiming = () => {}, local = null) 
       const engineSetting = cfg.get("tabCompletion.engine");
       const useLocal = local && engineSetting !== "claude" && await local.ready();
       const viaClaude = async (tok = token) => {
-        const text = await session.ask(completionPrompt(all, offset, document.languageId, vscode.workspace.asRelativePath(document.uri)), tok);
+        const note = activity ? activity.tabNote(rel, document.languageId) : "";
+        const text = await session.ask(completionPrompt(all, offset, document.languageId, rel, note), tok);
         return text ? trimOverlap(extractInsert(text), after) : "";
       };
       const viaLocal = async () => {
@@ -172,7 +177,7 @@ function completionProvider(session, review, onTiming = () => {}, local = null) 
       if (cache.size > 200) cache.delete(cache.keys().next().value);
       log(`tab: suggestion shown after ${Date.now() - started} ms (${engine})`);
       onTiming(Date.now() - started, engine);
-      return [item(document, position, insert)];
+      return [item(document, position, insert, rel)];
     },
   };
 }
@@ -208,11 +213,15 @@ function race(viaLocal, viaClaude, token) {
 // The editor only shows grey text in the middle of a line (e.g. inside print(|)) when the
 // suggestion covers the rest of the line. So: replace "cursor → end of line" with
 // "suggestion + the rest of the line"; on screen only the suggestion appears in grey.
-function item(document, position, insert) {
+// Accepting it (Tab) runs kural.tab.accepted, which remembers it (activity.js: your style).
+function item(document, position, insert, rel) {
   const lineEnd = document.lineAt(position.line).range.end;
   const rest = document.getText(new vscode.Range(position, lineEnd));
-  if (!rest) return new vscode.InlineCompletionItem(insert, new vscode.Range(position, position));
-  return new vscode.InlineCompletionItem(insert + rest, new vscode.Range(position, lineEnd));
+  const it = rest ? new vscode.InlineCompletionItem(insert + rest, new vscode.Range(position, lineEnd))
+    : new vscode.InlineCompletionItem(insert, new vscode.Range(position, position));
+  const before = document.lineAt(position.line).text.slice(0, position.character);
+  it.command = { command: "kural.tab.accepted", title: "", arguments: [{ file: rel, lang: document.languageId, before, text: insert }] };
+  return it;
 }
 
 // Ask for a suggestion when you click or move to the end of a line, an empty line,

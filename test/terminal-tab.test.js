@@ -11,6 +11,8 @@ const typed = 'git commit -m "';
 
 check("Claude's <cmd> answer", () => assert.strictEqual(tidy('<cmd>git commit -m "Add low_stock() and its test"</cmd>', typed), 'git commit -m "Add low_stock() and its test"'));
 check("only the first line", () => assert.strictEqual(tidy('<cmd>git add -A\ngit commit</cmd>', "git a"), "git add -A"));
+check("a forgotten closing quote is added", () => assert.strictEqual(tidy('<cmd>git commit -m "params: require positive speed</cmd>', typed), 'git commit -m "params: require positive speed"'));
+check("closed quotes stay as they are", () => assert.strictEqual(tidy('<cmd>echo "a \\"b\\" c"</cmd>', "echo"), 'echo "a \\"b\\" c"'));
 check("a leading $ is dropped", () => assert.strictEqual(tidy("<cmd>$ ls -la</cmd>", "ls"), "ls -la"));
 check("local model: just the rest of the line", () => assert.strictEqual(tidy(typed + 'Fix negative quantities in remove()"', typed), 'git commit -m "Fix negative quantities in remove()"'));
 check("the local model's end marker is dropped", () => assert.strictEqual(tidy(typed + 'Add restock()"<|endoftext|>', typed), 'git commit -m "Add restock()"'));
