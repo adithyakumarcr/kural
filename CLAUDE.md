@@ -18,7 +18,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
     permissions, setup reload. `media/chat.js` + `media/chat.css` — the panel UI (a webview).
   - `lib/completion.js` — tab completion. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
-  - `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
+  - `lib/updates.js` (Help → Check for Updates), `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask & Search), `lib/ui.js` (font size).
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
   `make-deb.sh` (Ubuntu), `build-mac.sh` (Apple Silicon), `build-win.sh` (Windows, runs on Linux).
@@ -69,7 +69,15 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
   renames the program, the 4 helpers and `bin/kural` together; a mismatch crashes the app at launch. CI opens the real
   app on all three systems (not just `--version`, which never starts the helpers).
-- product.json `checksums` cover VS Code's core JS files: never edit those; media files are fine.
+- product.json `checksums` cover VS Code's core JS files (VS Code calls the install "corrupt" if they change).
+  The one exception: `rebrand.py` `add_update_menu()` adds Help → Check for Updates to workbench.desktop.main.js
+  (extensions can't add to the Help menu) and rewrites that file's checksum (sha256, base64, no "="). It only patches
+  if the old checksum matches and the anchor ("Ask @vscode" Help item) is found; otherwise it skips with a warning.
+- **Updates** (`lib/updates.js`): newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
+  (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then restart.
+  Mac/Windows: a detached script waits for Kural's main process (`process.ppid`) to quit, swaps the app / runs the setup,
+  starts Kural. The script clears `CachedProfilesData/*/extensions.builtin.cache` (else the restarted Kural shows the
+  old extension description) and drops ELECTRON_*/VSCODE_* env vars. Tested end to end on Ubuntu only.
 
 ## Test
 - `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, Tab panel page script).

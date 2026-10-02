@@ -124,6 +124,11 @@
       {
         "command": "kural.reloadSetup",
         "title": "Kural: Reload Claude Code Setup (connectors, MCP, plugins)"
+      },
+      {
+        "command": "kural.checkForUpdates",
+        "title": "Check for Updates...",
+        "category": "Kural"
       }
     ],
     "viewsContainers": {

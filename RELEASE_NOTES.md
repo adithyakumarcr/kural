@@ -2,6 +2,9 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Help → Check for Updates…** Kural looks for the newest release on GitHub (also alpha, beta and rc test
+  versions), and if there's a newer one, downloads it, installs it and restarts. On Ubuntu it asks for your
+  password to install. On a Mac it replaces Kural.app; on Windows it runs the setup.
 - **Link a Jira ticket to a chat.** **+ → Link ticket** searches Jira (your recent tickets, a key like
   PROJ-123, or words) and links the epic, story or task to the chat. Every message then tells Claude which
   ticket you're working on, and Claude reads its details from Jira when it needs them. This uses your

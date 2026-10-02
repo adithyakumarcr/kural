@@ -71,6 +71,12 @@ Open **Kural Code Editor** from your apps, or type `kural` in a terminal (`kural
 **Windows.** Run the setup. If Windows says "Windows protected your PC", click **More info → Run anyway** (Kural isn't
 code-signed). It installs for your user only, so you don't need admin rights.
 
+### Updates
+
+**Help → Check for Updates…** finds the newest release here on GitHub, including the alpha, beta and rc test
+versions. If it's newer than yours, Kural downloads it, installs it and restarts. On Ubuntu it asks for your
+password; on a Mac it replaces Kural.app in place; on Windows it runs the setup.
+
 ### 3. Optional: a local model for faster Tab completion
 
 Tab completion with Claude takes about 0.6–0.9 s. For suggestions in about 150–300 ms, Kural can use a small code model

@@ -4,7 +4,7 @@
 Usage: rebrand.py <app-dir> <linux|mac|win>
   <app-dir> is VSCodium's resources/app folder (the one containing product.json).
 """
-import json, os, shutil, sys, uuid
+import base64, hashlib, json, os, re, shutil, sys, uuid
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NAME, TITLE, LONG = "kural", "Kural", "Kural Code Editor"
@@ -78,7 +78,47 @@ def main(app, platform):
                     Image.open(icon).resize((size, size), Image.LANCZOS).save(tile)
         except ImportError:
             pass
+    # 6. Help → Check for Updates… (Kural's own updater, from GitHub releases).
+    add_update_menu(app)
     print(f"rebranded {app} for {platform}")
+
+
+# Extensions can't add items to the Help menu, so the item goes into VS Code's own code, next to its
+# "Ask @vscode" Help item. VS Code checks that file against a fingerprint in product.json ("checksums")
+# and calls the install "corrupt" if it changed, so the fingerprint is updated too. If VS Code's code
+# looks different (another VSCodium version), the menu item is skipped; the command palette still has it.
+HELP_ITEM = re.compile(r'(\w+)\.appendMenuItem\((\w+)\.MenubarHelpMenu,\{command:\{id:\w+\.ID,title:\w+\(\d+,"Ask @vscode"\)')
+
+
+def fingerprint(data):
+    return base64.b64encode(hashlib.sha256(data).digest()).decode().rstrip("=")
+
+
+def add_update_menu(app):
+    rel = "vs/workbench/workbench.desktop.main.js"
+    js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
+    with open(js_path, "rb") as f:
+        data = f.read()
+    product = load(pj_path)
+    sums = product.get("checksums", {})
+    if b"kural.checkForUpdates" in data:
+        return
+    if sums.get(rel) != fingerprint(data):
+        print("warning: unexpected workbench fingerprint; Help → Check for Updates not added")
+        return
+    text = data.decode("utf-8")
+    m = HELP_ITEM.search(text)
+    if not m:
+        print("warning: Help menu code not found; Help → Check for Updates not added")
+        return
+    registry, ids = m.group(1), m.group(2)
+    item = (f'{registry}.appendMenuItem({ids}.MenubarHelpMenu,{{command:{{id:"kural.checkForUpdates",'
+            f'title:"Check for Updates..."}},group:"7_update",order:1}}),')
+    data = (text[:m.start()] + item + text[m.start():]).encode("utf-8")
+    with open(js_path, "wb") as f:
+        f.write(data)
+    sums[rel] = fingerprint(data)
+    save(pj_path, product)
 
 
 if __name__ == "__main__":

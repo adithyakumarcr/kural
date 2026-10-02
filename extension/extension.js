@@ -10,6 +10,7 @@ const vscode = require("vscode");
 const { initLog, log, findClaude, ClaudeSession } = require("./lib/claude");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edits");
+const { Updater } = require("./lib/updates");
 const { ReviewManager } = require("./lib/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
@@ -54,6 +55,7 @@ async function offerInstall() {
 function activate(context) {
   const output = initLog();
   context.subscriptions.push(output);
+  const updater = new Updater(context);   // Help → Check for Updates…
   log(`Kural ${context.extension.packageJSON.version} starting; claude at ${findClaude() || "(not found)"}`);
 
   // ---------- status bar ----------
@@ -144,6 +146,7 @@ function activate(context) {
     }),
     vscode.commands.registerCommand("kural.install", offerInstall),
     vscode.commands.registerCommand("kural.showLog", () => output.show(true)),
+    vscode.commands.registerCommand("kural.checkForUpdates", () => updater.check()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.tabCompletion.model")) tabSession.stop();
       if (e.affectsConfiguration("kural.tabCompletion.localModel") || e.affectsConfiguration("kural.tabCompletion.ollamaUrl")) local.status(true);
