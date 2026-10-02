@@ -6,6 +6,8 @@
 const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("./ui");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
 const { ClaudeProcess, log, newSessionId, LOGIN_RE, findClaude } = require("./claude");
 const { projectInstructions } = require("./project");
 const { ChangeTracker } = require("./changes");
@@ -65,7 +67,9 @@ PROMPTS.auto = PROMPTS.agent;
 // model at once. The agents are named after the Friends cast and can message each other
 // through a small shared board (lib/team-mcp.js).
 const FRIENDS = ["Rachel", "Ross", "Monica", "Chandler", "Joey", "Phoebe"];
-const TEAM_TOOLS = ["mcp__team__post", "mcp__team__read"];
+const TEAM_TOOLS = ["mcp__team__post", "mcp__team__read", "mcp__team__finish"];
+// An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
+const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
 // Moods: how the chat (or the team's lead) works with you.
 const MOODS = [
   { id: "default", label: "Default", hint: "balanced" },
@@ -120,8 +124,10 @@ function teamMembers(n, roles) {
 const who = (m) => m.role ? `${m.name}, the ${m.role} (${m.desc})` : m.name;
 const opening = (m, team) => `"You are ${m.name}${m.role ? `, the ${m.role}` : ""}, on a team with ` +
   `${team.filter((x) => x !== m).map((x) => x.role ? `${x.name} (${x.role})` : x.name).join(", ")} and the lead."`;
-const BOARD = `The team can talk: tell each agent it has two tools, mcp__team__post (send a message to a teammate by name, to ` +
-  `"lead", or to "all") and mcp__team__read (read its messages; wait_seconds waits for a reply).`;
+const BOARD = `The team can talk: tell each agent it has three tools, mcp__team__post (send a message to a teammate by name, to ` +
+  `"lead", or to "all"), mcp__team__read (read its messages; wait_seconds waits for a reply) and mcp__team__finish (call ` +
+  `it once, with its final position, right before it ends; teammates then stop waiting for it). Tell them too: never ` +
+  `keep waiting for a teammate who has finished, and when mcp__team__read says to stop waiting, finish right away.`;
 
 function teamPrompt(n, roles = [], style = "split") {
   const team = teamMembers(n, roles);
@@ -144,8 +150,8 @@ function teamPrompt(n, roles = [], style = "split") {
       `something new or concede a point explicitly. Wait for replies with mcp__team__read (wait_seconds 90).\n` +
       `4. At least two rounds before any decision; at most four. ${first} then posts to "all": "DECISION: … / Agreed by: … / ` +
       `Still disagrees: … (why)". If you couldn't agree, ${first} makes the best call and records the dissent honestly.\n` +
-      `5. After the DECISION, don't wait for more messages: finish right away by reporting your final position, ` +
-      `whether you agree with the decision, and why.\n` +
+      `5. After the DECISION, don't wait for more messages: call mcp__team__finish with your final position (whether ` +
+      `you agree with the decision, and why), then end with the same as your report.\n` +
       `6. Don't change files during the discussion` + (roles.includes("developer") ? ` (only if the user asked the team to ` +
         `also carry out the decision: the Developer does it after the DECISION)` : ``) + `."\n` +
       `${BOARD} Refer to the agents by name. Don't take part and don't post progress updates. When all have reported, give ` +
@@ -160,7 +166,8 @@ function teamPrompt(n, roles = [], style = "split") {
     `author. They don't just approve: each sends at least one finding or test result.\n` +
     `- Authors answer every finding (fix it, or explain why not) and tell the checker when it's done. At most two review ` +
     `rounds. Nobody finishes until the checker has replied "OK" or two rounds have passed.\n` +
-    `- Each agent's final report: what it did, what its teammates found in its work, and what's still open.` : "";
+    `- Each agent's final report: what it did, what its teammates found in its work, and what's still open. Just before ` +
+    `ending, it calls mcp__team__finish with that report.` : "";
   return `\n\nYou lead a team of ${n} agents: ${team.map(who).join("; ")}. Your goal is to finish the user's task ` +
     (roles.length ? `well and fast, with every agent doing its own role. ` : `as FAST as possible by working in parallel. `) +
     `Split it into parts${roles.length ? ` that fit each agent's role` : ` (by file or feature)`}, so two agents never edit ` +
@@ -604,6 +611,8 @@ class ChatView {
     const editing = tab.mode === "agent" || tab.mode === "auto";
     const team = this.teamSize(tab);
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map() };
+    // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
+    r.teamFile = team ? path.join(os.tmpdir(), `kural-team-${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
@@ -614,7 +623,7 @@ class ChatView {
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
       tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : [])],
-      mcpServers: team ? { team: teamServer() } : null,
+      mcpServers: team ? { team: teamServer(teamMembers(team, tab.roles || []).map((m) => m.name), r.teamFile) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
@@ -709,6 +718,9 @@ class ChatView {
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = false;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
+    if (r.teamFile) { r.round = (r.round || 0) + 1; r.finished = []; this.writeTeamFile(r); }
+    clearInterval(r.watchdog);
+    if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
     const { content: prompt, meta } = this.attachments.content(ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
     r.pendingSend = prompt;
@@ -747,6 +759,7 @@ class ChatView {
       const end = m.subtype === "task_notification" ? m.status : m.subtype === "task_updated" && m.patch ? m.patch.status : null;
       if (m.subtype === "task_notification") r.lastNotifyAt = Date.now();
       const owner = a || (m.task_id && r.agents.get(r.tasks.get(m.task_id)));
+      if (owner) owner.lastActive = Date.now();
       // What the agent is doing right now ("Running the tests"), shown on its card.
       if (m.subtype === "task_progress" && owner && owner.state === "running" && m.description) {
         owner.activity = String(m.description).replace(/^Running /, "");
@@ -756,6 +769,7 @@ class ChatView {
       if (end && !END[end] && end !== "running" && end !== "pending") log(`chat ${tab.id}: agent status "${end}" (still counted as working)`);
       if (owner && owner.state === "running" && END[end]) {
         owner.state = END[end];
+        this.teamFinished(r, owner);
         if (reply && (reply.waitingFor || []).length) {
           reply.waitingFor = reply.waitingFor.filter((n) => n !== (owner.name || `Agent ${owner.n}`));
           this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
@@ -819,6 +833,7 @@ class ChatView {
         if (name !== tab.modelName) { tab.modelName = name; if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name }); }
       }
       const from = parent && r.agents.get(parent);
+      if (from) from.lastActive = Date.now();
       for (const b of m.message.content || []) {
         // What an agent writes and thinks (needs --forward-subagent-text): into its card.
         if (from && (b.type === "text" || b.type === "thinking")) {
@@ -835,7 +850,7 @@ class ChatView {
           const said = /\bYou are (\w+)(?:, the (\w+))?/.exec((b.input && b.input.prompt) || "");
           const name = said && FRIENDS.includes(said[1]) ? said[1] : FRIENDS[(n - 1) % FRIENDS.length];
           const role = said && said[2] && ROLES.some((x) => x.label === said[2]) ? said[2] : null;
-          const block = { k: "agent", id: b.id, n, name, role, title: (b.input && b.input.description) || name, steps: [], state: "running" };
+          const block = { k: "agent", id: b.id, n, name, role, title: (b.input && b.input.description) || name, steps: [], state: "running", lastActive: Date.now() };
           r.agents.set(b.id, block);
           reply.blocks.push(block);
           this.post({ type: "block", tabId: tab.id, block });
@@ -863,7 +878,7 @@ class ChatView {
       // a background agent's Task call returns at once with "Async agent launched".)
       for (const c of (m.message && Array.isArray(m.message.content) ? m.message.content : [])) {
         const a = c.type === "tool_result" && c.is_error && r.agents.get(c.tool_use_id);
-        if (a && a.state === "running") { a.state = "failed"; this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state }); }
+        if (a && a.state === "running") { a.state = "failed"; this.teamFinished(r, a); this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state }); }
       }
     } else if (m.type === "result") {
       r.pendingSend = null;
@@ -883,6 +898,14 @@ class ChatView {
         if (!working.length) r.idleTimer = setTimeout(() => this.conclude(tab, r, reply, m), 5000);
         return;
       }
+      if (r.agents.size && !m.is_error && Date.now() - r.lastNotifyAt < 4000) {
+        // The last agents reported while the lead was still talking: Claude wakes it once more for
+        // them in a moment. Hold the answer a few seconds instead of closing and reopening it.
+        r.betweenTurns = true;
+        clearTimeout(r.idleTimer);
+        r.idleTimer = setTimeout(() => { if (r.betweenTurns && reply.running && !r.stale) this.finishReply(tab, r, m); }, 4000);
+        return;
+      }
       if (r.agents.size && !r.concluded && m.is_error) {
         // The team finished but the lead's last turn failed: ask it for the conclusion.
         r.idleTimer = setTimeout(() => this.conclude(tab, r, reply, m), 500);
@@ -890,6 +913,59 @@ class ChatView {
       }
       this.finishReply(tab, r, m);
     }
+  }
+
+  // ---------- agents that get stuck ----------
+  // The board (team-mcp.js) reads this file to learn who has finished, so nobody waits for them.
+  writeTeamFile(r) {
+    try { fs.writeFileSync(r.teamFile, JSON.stringify({ round: r.round || 0, finished: r.finished || [] })); }
+    catch (e) { log(`team file: ${e.message}`); }
+  }
+  teamFinished(r, agent) {
+    if (!r.teamFile || !agent.name) return;
+    r.finished = r.finished || [];
+    if (!r.finished.includes(agent.name.toLowerCase())) { r.finished.push(agent.name.toLowerCase()); this.writeTeamFile(r); }
+  }
+
+  // Every 30 s while a team works: an agent with no sign of life for STUCK_MS is stuck (usually waiting
+  // for a teammate's message that never comes). Stop it, so the lead can answer with what it has.
+  // (Not while you're being asked something: an agent waiting for your OK isn't stuck.)
+  watchAgents(tab, r) {
+    if (r.stale || !r.turn || !r.turn.reply.running) { clearInterval(r.watchdog); return; }
+    const running = [...r.agents.values()].filter((a) => a.state === "running");
+    if (r.perms.size) { for (const a of running) a.lastActive = Date.now(); return; }
+    for (const a of running) {
+      if (Date.now() - (a.lastActive || 0) > STUCK_MS) this.stopAgent(tab, r, a, `stuck: nothing for ${Math.round(STUCK_MS / 60000)} min`);
+    }
+  }
+
+  // Stop one agent (Claude's stop_task control request) and carry on without it.
+  stopAgent(tab, r, a, why) {
+    if (a.state !== "running") return;
+    const taskId = [...r.tasks].find(([, use]) => use === a.id);
+    if (taskId && r.proc && !r.proc.exited) {
+      r.proc.request({ subtype: "stop_task", task_id: taskId[0] }).then((res) => log(`chat ${tab.id}: stop_task ${taskId[0]} → ${JSON.stringify(res)}`));
+    }
+    log(`chat ${tab.id}: stopping ${a.name || `Agent ${a.n}`} (${why})${taskId ? "" : " — no task id, marked stopped only"}`);
+    a.state = "stopped"; a.why = why;
+    this.teamFinished(r, a);
+    this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state, why });
+    const reply = r.turn && r.turn.reply;
+    if (!reply) return;
+    reply.waitingFor = (reply.waitingFor || []).filter((n) => n !== (a.name || `Agent ${a.n}`));
+    this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
+    // Nobody left and the lead is paused: ask it for the answer (if Claude doesn't wake it first).
+    if (r.betweenTurns && ![...r.agents.values()].some((x) => x.state === "running")) {
+      clearTimeout(r.idleTimer);
+      r.idleTimer = setTimeout(() => this.conclude(tab, r, reply), 5000);
+    }
+  }
+
+  // "Finish now": stop every agent still working; the lead answers with what it has.
+  finishTeam(tab) {
+    const r = this.runtime.get(tab.id);
+    if (!r || !r.turn || !r.turn.reply.running) return;
+    for (const a of r.agents.values()) this.stopAgent(tab, r, a, "stopped by you");
   }
 
   // Every agent has reported. Claude normally wakes the lead by itself; if it hasn't within a few
@@ -945,6 +1021,7 @@ class ChatView {
     const reply = r.turn.reply;
     reply.waitingFor = [];
     clearTimeout(r.idleTimer);
+    clearInterval(r.watchdog);
     r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
@@ -971,6 +1048,8 @@ class ChatView {
   // Stop no matter what state Claude is in.
   forceStop(tab, r) {
     if (r) {
+      clearInterval(r.watchdog);
+      if (r.teamFile) fs.rm(r.teamFile, { force: true }, () => {});
       r.stale = true;
       if (r.proc) r.proc.kill();
       r.proc = null;
@@ -1148,6 +1227,7 @@ class ChatView {
         if (msg) { msg.planBuilt = true; this.post({ type: "patch", tabId: tab.id, index: m.msgIndex, msg: this.patchOf(msg) }); }
         await this.buildPlan(tab);
       } break;
+      case "finishTeam": if (tab) this.finishTeam(tab); break;
       case "stop": {
         const r = this.runtime.get(tab.id);
         // Agents working in the background don't stop on an interrupt, and a paused lead has
@@ -1312,8 +1392,9 @@ const lines = (s) => (s ? String(s).split("\n").length : 0);
 const cap = (s) => { s = String(s || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) : "?"; };
 
 // The team's message board, run by Kural's own executable as plain Node.
-function teamServer() {
-  return { command: process.execPath, args: [path.join(__dirname, "team-mcp.js")], env: { ELECTRON_RUN_AS_NODE: "1" } };
+function teamServer(names, file) {
+  return { command: process.execPath, args: [path.join(__dirname, "team-mcp.js")],
+    env: { ELECTRON_RUN_AS_NODE: "1", KURAL_TEAM: names.join(","), KURAL_TEAM_FILE: file || "" } };
 }
 
 function permDetail(tool, input) {

@@ -128,6 +128,9 @@ Monica…), each with a role you pick. They message each other on a shared board
 You see the discussion live: every message the agents send each other appears in the answer as it's sent. Each
 agent's card shows what it's doing right now, its thinking and its notes.
 
+If agents take too long, **Finish now** (next to "Waiting for …") stops them and the lead answers with what it
+has. An agent that shows no sign of life for 6 minutes is stopped by itself.
+
 | Pick roles and how they work | They discuss and decide |
 |---|---|
 | ![Multiple agents settings](docs/screenshots/agents-setup.png) | ![A Developer and a Critic discussing](docs/screenshots/agents-discussion.png) |

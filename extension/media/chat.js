@@ -325,7 +325,9 @@
     const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
     if (m.running && waiting) out.append(el("div", { class: "working" }, el("span", { class: "wait-dot" }), asking ? "Waiting for your answer above" : "Waiting for your OK above"));
     else if (m.running && (m.waitingFor || []).length) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
-      el("span", {}, `Waiting for ${listNames(m.waitingFor)} to finish — the answer comes when everyone has reported`)));
+      el("span", {}, `Waiting for ${listNames(m.waitingFor)} to finish — the answer comes when everyone has reported`),
+      // Agents that take too long (or got stuck): stop them and get the answer from what's there.
+      el("button", { class: "cb", title: "Stop the agents still working and have the lead answer with what it has", onclick: () => post({ type: "finishTeam", tabId: S.tab.id }) }, "Finish now")));
     else if (m.running) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
     if (m.note) out.append(el("div", { class: "note" }, m.note));
@@ -397,6 +399,7 @@
         el("span", { class: "agent-title" }, b.title),
         el("span", { class: "spacer" }),
         b.state === "running" && b.activity ? el("span", { class: "agent-activity", title: b.activity }, b.activity) : null,
+        b.state !== "running" && b.why ? el("span", { class: "agent-activity", title: b.why }, b.why) : null,
         b.state === "running" ? el("span", { class: "dots small" }, el("span"), el("span"), el("span")) : null,
         el("span", { class: "agent-state" }, label)),
       b.steps.length ? el("div", { class: "agent-steps" }, ...agentSteps(b)) : null);
@@ -913,7 +916,7 @@
       } break;
       case "agentActivity": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.activity = m.activity; scheduleRerender(i); } } break;
       case "agentStep": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.steps.push(m.step); scheduleRerender(i); } } break;
-      case "agentState": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.state = m.state; scheduleRerender(i); } } break;
+      case "agentState": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.state = m.state; if (m.why) a.why = m.why; scheduleRerender(i); } } break;
       case "questionState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) { b.state = m.state; b.answers = m.answers; } scheduleRerender(i); } } break;
       case "permState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) b.state = m.state; scheduleRerender(i); } } break;
       case "patch": if (mine) { const i = m.index != null ? m.index : lastAssistant(); if (i >= 0) { Object.assign(S.tab.messages[i], m.msg); rerender(i); } renderFoot(); } break;

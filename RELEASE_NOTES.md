@@ -2,6 +2,11 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Multiple agents no longer get stuck.** An agent waiting for a message from a teammate who had already
+  finished used to wait forever, so the lead never gave the final answer. Now agents are told when a teammate
+  has finished, stop waiting after two empty waits, and end with their final position. An agent that shows no
+  sign of life for 6 minutes is stopped, and the lead answers with what it has. A **Finish now** button next to
+  "Waiting for …" stops the agents still working and gets the answer right away.
 - **Tab in the terminal.** Type in Kural's terminal and Kural suggests the whole command line in the terminal's
   suggestion list; Tab fills it in, and you still press Enter yourself. Made for commit messages: for
   `git commit -m "` it reads your staged changes (or unstaged, if nothing is staged) and names the commit. It uses

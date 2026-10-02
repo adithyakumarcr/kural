@@ -28,7 +28,8 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
 - **Claude CLI flags** (see `ClaudeProcess.start`): `--safe-mode` skips the user's setup *and* any
   `--mcp-config` we pass; with a team in safe mode we use `--setting-sources "" --disable-slash-commands`
   instead. Full setup (default) = no safe mode, no `--strict-mcp-config`.
-- **Control requests** over stdin: `interrupt`, `set_model` (works mid-answer), `mcp_status`.
+- **Control requests** over stdin: `interrupt`, `set_model` (works mid-answer), `mcp_status`, `stop_task` {task_id}
+  (stops one background agent; it ends with status "killed"/"stopped").
   Permission requests (`can_use_tool`) are answered by `onPermission`; `AskUserQuestion` is answered by
   returning `updatedInput: { questions, answers }`.
 - **Agent teams**: Opus often runs agents in the background. The lead's turn ends ("result") while agents
@@ -39,6 +40,13 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   asks it for the final answer. Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
   Their board posts (`mcp__team__post`) go into the answer itself as bubbles (not the card), so the discussion is
   where you read; cards hold tools, `task_progress` activity, and the agent's text/thinking.
+  **Stuck agents** (an agent waiting on the board for a teammate who already ended): the board has `finish`
+  (final position; wakes everyone waiting) and tells a reader to stop after 2 empty waits; Kural writes who has
+  ended to `KURAL_TEAM_FILE` (`{round, finished}`, new round per question), so agents that end without `finish`
+  count too. Watchdog (`watchAgents`, every 30 s): an agent with no event for `STUCK_MS` (6 min; env
+  `KURAL_STUCK_MS` for tests; not while you're being asked something) is stopped with the `stop_task` control
+  request; "Finish now" (`finishTeam`) stops all. A result within 4 s of an agent's report holds the answer open
+  (Claude wakes the lead once more) instead of closing and reopening it.
   Same-model agents agree too easily: the prompts make each form its own position first, require evidence and
   earned agreement, and hand work between roles for review. Test changes with a real run before shipping.
 - **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
