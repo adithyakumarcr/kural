@@ -97,9 +97,9 @@ The chat sits on the right and has tabs. Pick how much freedom Claude gets:
 | **Plan** | writes a plan without changing anything; **Build it** carries it out |
 | **Ask** | only answers |
 
-![Claude asks before running a command; Run, and it carries on](docs/screenshots/permission.gif)
-
 Also in the chat:
+
+<img src="docs/screenshots/history.gif" align="right" width="270" hspace="12" alt="History: pin a chat, filter by workspace, search, and open a chat from another project">
 
 - **@ mentions.** Type `@` to mention a file in your sentence.
 - **Jira tickets.** **+ → Link ticket** links a Jira epic, story or task to the chat. Search your recent tickets,
@@ -116,9 +116,9 @@ Also in the chat:
 - **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
   need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
   its folder, or **Continue here** (a new chat here that knows the old conversation).
-
-  <img src="docs/screenshots/history.gif" alt="History: pin a chat, filter by workspace, search, open a chat from another project" width="300">
 - **Thinking.** Claude's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
+
+<br clear="right">
 
 ### Multiple agents
 
@@ -135,9 +135,13 @@ agent's card shows what it's doing right now, its thinking and its notes.
 If agents take too long, **Finish now** (next to "Waiting for …") stops them and the lead answers with what it
 has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
-| Pick roles and how they work | They discuss and decide |
-|---|---|
-| ![Turning on Multiple agents: Discuss & decide, with a Developer and a Critic](docs/screenshots/agents-setup.gif) | ![Rachel (Developer) and Ross (Critic) discuss and decide (sped up)](docs/screenshots/agents-discussion.gif) |
+<p align="center">
+  <img src="docs/screenshots/agents-setup.gif" width="300" alt="Turning on Multiple agents: Discuss & decide, with a Developer and a Critic">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/agents-discussion.gif" width="300" alt="Rachel (Developer) and Ross (Critic) discuss and decide (sped up)">
+  <br>
+  <sub>Pick the roles and how they work &nbsp;·&nbsp; Then they discuss and decide (sped up)</sub>
+</p>
 
 ### Tab completion
 
