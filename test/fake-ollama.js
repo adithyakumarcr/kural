@@ -33,6 +33,7 @@ http.createServer((req, res) => {
       // Mode from /tmp/rec/fake-mode: {"delay": ms, "empty": true} — to imitate a slow computer or an empty answer.
       let mode = {}; try { mode = JSON.parse(require("fs").readFileSync("/tmp/rec/fake-mode", "utf8")); } catch {}
       if (/def area/.test(pre)) out = "return w * h";
+      if (/^\$ git commit -m "$/.test(line)) out = 'Add restock() to Inventory"';   // Tab in the terminal
       log("  num_predict", (j.options || {}).num_predict, "stop has \\n:", ((j.options || {}).stop || []).includes("\n"), "mode", JSON.stringify(mode));
       setTimeout(() => { if (!aborted) res.end(JSON.stringify({ response: mode.empty ? "" : out + "<|endoftext|>" })); }, mode.delay || 120);
       return;

@@ -1,7 +1,7 @@
 {
   "name": "kural",
   "displayName": "Kural",
-  "description": "Kural Code Editor's Claude features: fast tab completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask & Search — using your Claude login.",
+  "description": "Kural Code Editor's Claude features: fast tab completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask — using your Claude login.",
   "version": "1.1.0-alpha.2",
   "publisher": "kural",
   "license": "MIT",
@@ -16,7 +16,8 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:kural.chat",
-    "onView:kural.search"
+    "onView:kural.search",
+    "onWebviewPanel:kural.chatEditor"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -26,6 +27,10 @@
   "main": "./extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "kural.tab.forget",
+        "title": "Kural: Forget What Tab Learned (This Workspace)"
+      },
       {
         "command": "kural.chat.open",
         "title": "Kural: Open Chat",
@@ -50,7 +55,7 @@
       },
       {
         "command": "kural.askSearch",
-        "title": "Kural: Ask & Search",
+        "title": "Kural: Ask",
         "icon": "$(search)"
       },
       {
@@ -129,13 +134,18 @@
         "command": "kural.checkForUpdates",
         "title": "Check for Updates...",
         "category": "Kural"
+      },
+      {
+        "command": "kural.chat.split",
+        "title": "Kural: Open a Chat Beside the Code",
+        "icon": "$(split-horizontal)"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "kural-search",
-          "title": "Ask & Search",
+          "title": "Ask",
           "icon": "media/search-icon.svg"
         }
       ],
@@ -159,7 +169,7 @@
         {
           "type": "webview",
           "id": "kural.search",
-          "name": "Ask & Search"
+          "name": "Ask"
         }
       ],
       "kural": [
@@ -184,6 +194,11 @@
           "command": "kural.chat.newTab",
           "when": "view == kural.chat",
           "group": "navigation@1"
+        },
+        {
+          "command": "kural.chat.split",
+          "when": "view == kural.chat",
+          "group": "navigation@2"
         },
         {
           "command": "kural.openClaudeCode",
@@ -286,12 +301,6 @@
         "command": "kural.openClaudeCode",
         "key": "ctrl+escape",
         "mac": "cmd+escape"
-      },
-      {
-        "command": "kural.chat.nextModel",
-        "key": "ctrl+s",
-        "mac": "ctrl+s",
-        "when": "kural.chatFocused || focusedView == 'kural.chat'"
       },
       {
         "command": "kural.chat.effortMedium",
@@ -414,14 +423,14 @@
             "haiku",
             "opus"
           ],
-          "description": "Model for Ask & Search questions."
+          "description": "Model for Ask questions."
         },
         "kural.fontSize": {
           "type": "number",
           "default": 0,
           "minimum": 0,
           "maximum": 32,
-          "markdownDescription": "Text size in the Kural chat and Ask & Search panels, in pixels. `0` = the same as your code editor (`editor.fontSize`)."
+          "markdownDescription": "Text size in the Kural chat and Ask panels, in pixels. `0` = the same as your code editor (`editor.fontSize`)."
         },
         "kural.tabCompletion.engine": {
           "type": "string",
@@ -447,6 +456,16 @@
           "type": "string",
           "default": "http://127.0.0.1:11434",
           "description": "Where Ollama runs."
+        },
+        "kural.tabCompletion.learn": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Make Tab more personal: it's told what you've been doing in this workspace — what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted, suggestions you accepted, files you edited, commands you run (never ones with passwords or tokens). Commit messages then say why you changed things, in your own style. Kept only on this computer, per workspace. **Kural: Forget What Tab Learned** clears it."
+        },
+        "kural.tabCompletion.terminal": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
         }
       }
     },
@@ -481,8 +500,24 @@
       "workbench.sideBar.experimental.fontSize": 14,
       "workbench.tabs.experimental.fontSize": 14,
       "workbench.bottomPane.experimental.fontSize": 14,
-      "workbench.statusBar.experimental.fontSize": 13
+      "workbench.statusBar.experimental.fontSize": 13,
+      "terminal.integrated.suggest.quickSuggestions": {
+        "commands": "on",
+        "arguments": "on",
+        "unknown": "on"
+      },
+      "terminal.integrated.suggest.suggestOnTriggerCharacters": true
+    },
+    "terminal": {
+      "completionProviders": [
+        {
+          "description": "Kural Tab: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
+        }
+      ]
     }
   },
-  "author": "Adithya Chinnakkonda"
+  "author": "Adithya Chinnakkonda",
+  "enabledApiProposals": [
+    "terminalCompletionProvider"
+  ]
 }
