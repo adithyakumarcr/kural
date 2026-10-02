@@ -452,6 +452,11 @@
           "type": "string",
           "default": "http://127.0.0.1:11434",
           "description": "Where Ollama runs."
+        },
+        "kural.tabCompletion.terminal": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
         }
       }
     },
@@ -486,8 +491,24 @@
       "workbench.sideBar.experimental.fontSize": 14,
       "workbench.tabs.experimental.fontSize": 14,
       "workbench.bottomPane.experimental.fontSize": 14,
-      "workbench.statusBar.experimental.fontSize": 13
+      "workbench.statusBar.experimental.fontSize": 13,
+      "terminal.integrated.suggest.quickSuggestions": {
+        "commands": "on",
+        "arguments": "on",
+        "unknown": "on"
+      },
+      "terminal.integrated.suggest.suggestOnTriggerCharacters": true
+    },
+    "terminal": {
+      "completionProviders": [
+        {
+          "description": "Kural Tab: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
+        }
+      ]
     }
   },
-  "author": "Adithya Chinnakkonda"
+  "author": "Adithya Chinnakkonda",
+  "enabledApiProposals": [
+    "terminalCompletionProvider"
+  ]
 }

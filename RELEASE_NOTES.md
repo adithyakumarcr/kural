@@ -2,6 +2,10 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Tab in the terminal.** Type in Kural's terminal and Kural suggests the whole command line in the terminal's
+  suggestion list; Tab fills it in, and you still press Enter yourself. Made for commit messages: for
+  `git commit -m "` it reads your staged changes (or unstaged, if nothing is staged) and names the commit. It uses
+  the same engine and model as Tab in the editor. Kural turns on the terminal's "suggest while typing" for this.
 - **Two chats at once.** The split button in the Kural panel's title bar opens a second chat beside your code.
   Each one has its own tab, input and answer, and both can work at the same time. You can drag it anywhere,
   even to another screen. It comes back after a restart.

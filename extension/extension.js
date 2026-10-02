@@ -11,6 +11,7 @@ const { initLog, log, findClaude, ClaudeSession } = require("./lib/claude");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edits");
 const { Updater } = require("./lib/updates");
+const { terminalTab, TERMINAL_SYSTEM_PROMPT } = require("./lib/terminal-tab");
 const { ReviewManager } = require("./lib/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
@@ -94,6 +95,11 @@ function activate(context) {
     systemPrompt: COMPLETION_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true,
     pool: 2, earlyStop: "</insert>",   // two warm processes; answer as soon as the suggestion is written
   }, setState);
+  // Tab in the terminal: the same model as Tab, its own helper and instructions (one command line).
+  const terminalSession = new ClaudeSession({
+    name: "terminal", model: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
+    systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true, pool: 2, earlyStop: "</cmd>",
+  }, () => {});
   const editSession = new ClaudeSession({
     name: "edit", model: () => cfg().get("editModel"), effort: "medium", systemPrompt: EDIT_SYSTEM_PROMPT,
     restartAfter: 10, timeoutMs: 180000, clearEach: true,
@@ -104,6 +110,7 @@ function activate(context) {
   local.status(true);
   const localTimer = setInterval(() => { if (cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status(); }, 15000);
   context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
+  terminalTab(context, terminalSession, local);   // Tab in the terminal (same engine and model)
   const tabPanel = new TabPanel(context, SPEEDS, local);
   tabPanel.register();
   const review = new ReviewManager();
@@ -148,7 +155,7 @@ function activate(context) {
     vscode.commands.registerCommand("kural.showLog", () => output.show(true)),
     vscode.commands.registerCommand("kural.checkForUpdates", () => updater.check()),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("kural.tabCompletion.model")) tabSession.stop();
+      if (e.affectsConfiguration("kural.tabCompletion.model")) { tabSession.stop(); terminalSession.stop(); }
       if (e.affectsConfiguration("kural.tabCompletion.localModel") || e.affectsConfiguration("kural.tabCompletion.ollamaUrl")) local.status(true);
       // Turned on (shortcut or the Tab panel): start Claude now so the first suggestion is quick.
       if (e.affectsConfiguration("kural.tabCompletion") && cfg().get("tabCompletion.enabled")) tabSession.start();

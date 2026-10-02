@@ -149,6 +149,14 @@ In **Auto**, the local model and Claude race, and the first good answer wins.
 
 ![The Tab panel](docs/screenshots/tab-panel.png)
 
+### Tab in the terminal
+
+In Kural's terminal, Kural suggests the whole command line in the terminal's suggestion list. **Tab** fills it in;
+nothing runs until you press Enter. It's made for commit messages: type `git commit -m "` and Kural reads your
+staged changes (or the unstaged ones) and suggests a message that names what changed. It also knows your recent
+commands and `git status`. It uses the same engine and model as Tab in the editor (local model about 0.2 s, Claude
+about 1–2 s). Turn it off with the setting **Kural › Tab Completion: Terminal**.
+
 ### Inline edit (Ctrl+K)
 
 Select code, press **Ctrl+K**, and say what to change. Then review the change in place and keep it

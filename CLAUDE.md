@@ -17,7 +17,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
     `ClaudeSession` (pool of warm processes for one-shot questions: tab completion, Ctrl+K).
   - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
     permissions, setup reload. `media/chat.js` + `media/chat.css` — the panel UI (a webview).
-  - `lib/completion.js` — tab completion. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
+  - `lib/completion.js` — tab completion; `lib/terminal-tab.js` — Tab in the terminal. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
   - `lib/updates.js` (Help → Check for Updates), `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask), `lib/ui.js` (font size).
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
@@ -70,6 +70,13 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   (modes via /tmp/rec/fake-mode: {"delay": ms} or {"empty": true}).
 - **Tab completion speed (Claude)**: model time (~0.6 s, Haiku, thinking off) dominates. Don't add work before the
   request. Two warm processes (`pool: 2`), early return on `</insert>`, type-through reuse.
+- **Tab in the terminal** (`lib/terminal-tab.js`): a terminal completion provider (proposed API
+  `terminalCompletionProvider`, in package.json `enabledApiProposals`; fine for a built-in extension). The terminal
+  waits for every provider before showing its list (up to 5 s), so Kural never waits: cache or nothing, then asks the
+  model after a pause (Tab speed slider), cancels stale asks, and reopens the list
+  (`workbench.action.terminal.triggerSuggest`) when the answer comes. Same engine/model as editor Tab; own Claude
+  session ("terminal", `<cmd>…</cmd>`). For `git commit` it adds the staged (else unstaged) diff. package.json
+  `configurationDefaults` turns on the terminal's suggest-while-typing (VS Code's default is off).
 - **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
