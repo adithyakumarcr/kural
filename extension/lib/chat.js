@@ -69,6 +69,7 @@ PROMPTS.auto = PROMPTS.agent;
 const FRIENDS = ["Rachel", "Ross", "Monica", "Chandler", "Joey", "Phoebe"];
 const TEAM_TOOLS = ["mcp__team__post", "mcp__team__read", "mcp__team__finish"];
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
+const BUILD_TEXT = "Go ahead and implement the plan above.";
 const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
 // Moods: how the chat (or the team's lead) works with you.
 const MOODS = [
@@ -197,7 +198,8 @@ const ONE_PANE = new Set(["full", "attached", "pasted", "insertPill", "focus", "
 class ChatView {
   constructor(context, apply) {
     this.context = context;
-    this.apply = apply;          // (code, uri) => Promise   (Apply button on code blocks)
+    this.apply = apply;          // (code, uri, ask) => Promise   (Apply button on code blocks)
+    this.activity = null;        // what you've been doing, for Tab (activity.js); set by extension.js
     this.tickets = new Tickets(() => this.root());   // Jira search for "+ → Link ticket"
     this.version = context.extension.packageJSON.version;
     // Where chats are shown: the side panel, plus any chats opened beside the code (Split). Each pane
@@ -714,7 +716,9 @@ class ChatView {
     if (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab)) r = this.startProc(tab);
     if (!r) { reply.running = false; reply.error = "missing"; tab.status = "idle"; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); vscode.commands.executeCommand("kural.install"); return; }
     if (tab.pendingModel) { r.proc.setModel(tab.model); tab.pendingModel = false; }
-    r.turn = { snaps: {}, reply };
+    // (For "Build it", what the plan was for is the earlier question.)
+    const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
+    r.turn = { snaps: {}, reply, ask };
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = false;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
@@ -735,7 +739,7 @@ class ChatView {
     const last = this.context.globalState.get(LAST_KEY) || {};
     tab.mode = last.buildMode === "auto" ? "auto" : "agent";
     this.postTabs();
-    await this.send(tab, [{ t: "text", v: "Go ahead and implement the plan above." }], []);
+    await this.send(tab, [{ t: "text", v: BUILD_TEXT }], []);
   }
 
   // ---------- Claude's output ----------
@@ -1039,6 +1043,8 @@ class ChatView {
     tab.status = "idle";
     if (!this.shown(tab.id)) tab.unread = true;
     this.finishTurn(tab, r);
+    // Tab learns what you're working on, and which files the chat changed for it.
+    if (this.activity && r.turn.ask && reply.error !== "stopped") this.activity.addWork("chat", r.turn.ask, (reply.changes || []).map((c) => c.rel));
     this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
     this.postTabs(); this.save();
     // If you changed mode/intensity while it was answering, get the new setup ready now.
@@ -1294,7 +1300,7 @@ class ChatView {
       case "apply": {
         const uri = this.resolvePath(m.path);
         if (!uri) { vscode.window.showWarningMessage("Kural: open the file you want to apply this to, then click Apply again."); return; }
-        await this.apply(m.code, uri);
+        await this.apply(m.code, uri, this.lastAsk(tab));
         break;
       }
       case "insert": {
@@ -1302,6 +1308,7 @@ class ChatView {
         if (!ed) { vscode.window.showWarningMessage("Kural: open a file first."); return; }
         await vscode.window.showTextDocument(ed.document, ed.viewColumn);
         await ed.edit((b) => b.replace(ed.selection, m.code));
+        if (this.activity) this.activity.addWork("chat Insert", this.lastAsk(tab), [vscode.workspace.asRelativePath(ed.document.uri)]);
         break;
       }
       case "copy": await vscode.env.clipboard.writeText(m.code); vscode.window.setStatusBarMessage("Copied", 1500); break;
@@ -1344,11 +1351,17 @@ class ChatView {
     const targets = m.id === "*" ? msg.changes.filter((c) => c.state === "pending") : msg.changes.filter((c) => c.id === m.id);
     for (const c of targets) {
       if (m.action === "review") { await this.changes.review(c.id); continue; }
-      if (m.action === "undo") { if (await this.changes.undo(c.id)) c.state = "undone"; }
+      if (m.action === "undo") { if (await this.changes.undo(c.id)) { c.state = "undone"; if (this.activity) this.activity.undone(c.rel); } }
       if (m.action === "keep") { this.changes.keep(c.id); c.state = "kept"; }
     }
     this.post({ type: "patch", tabId: tab.id, index: m.msgIndex, msg: this.patchOf(msg) });
     this.save();
+  }
+
+  // What you last asked in this chat (Apply / Insert of its code is for that).
+  lastAsk(tab) {
+    const u = [...tab.messages].reverse().find((x) => x.role === "user");
+    return u ? ChatView.textOf(u.segments || []) : "";
   }
 
   resolvePath(p) {

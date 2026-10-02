@@ -5,6 +5,8 @@
 //
 // What the model sees: the shell and folder, your last commands in this terminal, git status, and for
 // `git commit -m "…` the actual staged changes (or the unstaged ones), so it can name the commit.
+// Plus your own activity (activity.js): commands you often run here; for a commit, your recent commit
+// messages (to match your style) and what you asked Kural to do since the last commit (the *why*).
 //
 // Speed: the terminal waits for every suggestion source before showing its list, so Kural never makes it
 // wait: it answers from its cache, and opens the list again when a new answer arrives (see the provider).
@@ -21,7 +23,9 @@ the COMPLETE command line the user most likely wants: it must start with exactly
 never several commands on separate lines, never explanations.
 For git commit messages (e.g. git commit -m "): write a short, specific message in the imperative mood
 (max ~65 characters) that names what the changes actually do, based on the staged diff (or, if nothing is
-staged, the unstaged diff). Close the quote.
+staged, the unstaged diff). Close the quote. Match the style of their recent commit messages (prefixes, case,
+wording). If you're told what they asked the editor to do since the last commit and it gives a reason (a bug, a crash,
+a request), name the reason briefly, e.g. "cart: reject empty orders (checkout crashed on submit)".
 If nothing sensible fits, reply <cmd></cmd>.`;
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
@@ -34,29 +38,35 @@ function run(cmd, args, cwd, timeout = 1500) {
 }
 
 // What the model needs to know besides the line itself. Git is asked at most every few seconds per folder.
-const gitCache = new Map();   // cwd + kind -> { at, text }
+// For a commit also: when the last commit was and which files changed (to pick your activity since then).
+const gitCache = new Map();   // cwd + kind -> { at, text, since, files }
 async function gitContext(cwd, wantDiff) {
   const key = `${cwd}|${wantDiff}`;
   const hit = gitCache.get(key);
-  if (hit && Date.now() - hit.at < 4000) return hit.text;
-  let text = "";
+  if (hit && Date.now() - hit.at < 4000) return hit;
+  let text = "", since = 0, files = [];
   const status = await run("git", ["status", "--short", "--branch"], cwd);
   if (status) {
     text = `git status:\n${status.split("\n").slice(0, 25).join("\n")}`;
     if (wantDiff) {
-      let diff = await run("git", ["diff", "--cached", "--stat"], cwd), which = "staged";
+      let diff = await run("git", ["diff", "--cached", "--stat"], cwd), which = "staged", names = ["--cached"];
       let body = diff ? await run("git", ["diff", "--cached", "-U1"], cwd) : "";
-      if (!diff) { which = "not staged yet"; diff = await run("git", ["diff", "--stat"], cwd); body = await run("git", ["diff", "-U1"], cwd); }
+      if (!diff) { which = "not staged yet"; names = []; diff = await run("git", ["diff", "--stat"], cwd); body = await run("git", ["diff", "-U1"], cwd); }
       if (diff) text += `\n\nChanges (${which}):\n${diff}\n${body.slice(0, DIFF_CHARS)}${body.length > DIFF_CHARS ? "\n… (more changes)" : ""}`;
+      files = (await run("git", ["diff", "--name-only", ...names], cwd)).split("\n").filter(Boolean);
+      const log = (await run("git", ["log", "-8", "--format=%s"], cwd)).trim();
+      if (log) text += `\n\nTheir recent commit messages (match this style):\n${log}`;
+      since = Number((await run("git", ["log", "-1", "--format=%ct"], cwd)).trim()) * 1000 || 0;
     }
   }
-  gitCache.set(key, { at: Date.now(), text });
-  return text;
+  const out = { at: Date.now(), text, since, files };
+  gitCache.set(key, out);
+  return out;
 }
 
 // The last commands run in each terminal (needs shell integration, which VS Code sets up for bash/zsh/fish/pwsh).
 const recent = new Map();   // terminal -> [command lines]
-function trackCommands(context) {
+function trackCommands(context, activity) {
   if (!vscode.window.onDidEndTerminalShellExecution) return;
   context.subscriptions.push(vscode.window.onDidEndTerminalShellExecution((e) => {
     const line = e.execution && e.execution.commandLine && e.execution.commandLine.value;
@@ -64,7 +74,13 @@ function trackCommands(context) {
     const list = recent.get(e.terminal) || [];
     list.push(line.trim());
     recent.set(e.terminal, list.slice(-8));
+    if (activity) activity.ranCommand(line);
   }), vscode.window.onDidCloseTerminal((t) => recent.delete(t)));
+}
+
+// What Claude is asked (the instructions are TERMINAL_SYSTEM_PROMPT).
+function claudePrompt({ shell, cwd, history, git, note, typed }) {
+  return `Shell: ${shell}\nFolder: ${cwd}\n${history ? `Recent commands:\n${history}\n` : ""}${git ? `\n${git}\n` : ""}${note ? `\n${note}` : ""}\nTyped so far:\n${typed}`;
 }
 
 // The model's answer → the full command line, or "" if it doesn't continue what was typed.
@@ -74,7 +90,10 @@ function tidy(answer, typed) {
   if (m) s = m[1];
   s = s.replace(/^\s*\$\s/, "").split(/\r?\n/)[0].replace(/\s+$/, "");
   // (The local model writes only what comes after the cursor; viaLocal puts the typed part in front.)
-  return s.startsWith(typed) && s.length > typed.length ? s : "";
+  if (!s.startsWith(typed) || s.length <= typed.length) return "";
+  // The model sometimes forgets the closing quote of a commit message: an odd number of " means one is open.
+  if ((s.replace(/\\"/g, "").match(/"/g) || []).length % 2) s += '"';
+  return s;
 }
 
 // The first [text, engine] with text in it, or ["", ""] when none has any.
@@ -85,8 +104,8 @@ function firstAnswer(promises) {
   });
 }
 
-function terminalTab(context, session, local) {
-  trackCommands(context);
+function terminalTab(context, session, local, activity = null) {
+  trackCommands(context, activity);
   const cache = new Map();   // typed line -> suggested line
 
   async function suggest(terminal, typed, token) {
@@ -94,19 +113,20 @@ function terminalTab(context, session, local) {
       || (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0].uri.fsPath) || process.cwd();
     const shell = (terminal.state && terminal.state.shell) || (process.platform === "win32" ? "pwsh" : "bash");
     const commit = /^\s*git\s+commit\b/.test(typed);
-    const git = await gitContext(cwd, commit);
+    const g = await gitContext(cwd, commit);
+    const git = g.text;
+    const note = activity ? activity.terminalNote(typed, commit ? { since: g.since, files: g.files } : null) : "";
     const history = (recent.get(terminal) || []).map((c) => `$ ${c}`).join("\n");
     const engineSetting = cfg().get("tabCompletion.engine");
     const useLocal = local && engineSetting !== "claude" && await local.ready();
 
     const viaClaude = async (tok = token) => {
-      const prompt = `Shell: ${shell}\nFolder: ${cwd}\n${history ? `Recent commands:\n${history}\n` : ""}${git ? `\n${git}\n` : ""}\nTyped so far:\n${typed}`;
-      return tidy(await session.ask(prompt, tok), typed);
+      return tidy(await session.ask(claudePrompt({ shell, cwd, history, git, note, typed }), tok), typed);
     };
     const viaLocal = async () => {
       // A fill-in-the-middle prompt for the code model: the context as shell comments, then the line.
       const comment = (t) => t.split("\n").map((l) => `# ${l}`).join("\n");
-      const prefix = `# ${shell} terminal in ${cwd}\n${git ? `${comment(git.slice(0, 1500))}\n` : ""}${history ? `${history}\n` : ""}$ ${typed}`;
+      const prefix = `# ${shell} terminal in ${cwd}\n${git ? `${comment(git.slice(0, 1500))}\n` : ""}${note ? `${comment(note.trim().slice(0, 600))}\n` : ""}${history ? `${history}\n` : ""}$ ${typed}`;
       const raw = await local.complete(prefix, "\n", token, true);
       return raw == null ? "" : tidy(typed + raw, typed);
     };
@@ -178,4 +198,4 @@ function terminalTab(context, session, local) {
   log("terminal tab: ready");
 }
 
-module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT };
+module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, _test: { gitContext, claudePrompt } };

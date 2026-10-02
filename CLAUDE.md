@@ -17,7 +17,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
     `ClaudeSession` (pool of warm processes for one-shot questions: tab completion, Ctrl+K).
   - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
     permissions, setup reload. `media/chat.js` + `media/chat.css` — the panel UI (a webview).
-  - `lib/completion.js` — tab completion; `lib/terminal-tab.js` — Tab in the terminal. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
+  - `lib/completion.js` — tab completion; `lib/terminal-tab.js` — Tab in the terminal; `lib/activity.js` — what Tab learns from your work. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
   - `lib/updates.js` (Help → Check for Updates), `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask), `lib/ui.js` (font size).
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
@@ -85,6 +85,14 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   (`workbench.action.terminal.triggerSuggest`) when the answer comes. Same engine/model as editor Tab; own Claude
   session ("terminal", `<cmd>…</cmd>`). For `git commit` it adds the staged (else unstaged) diff. package.json
   `configurationDefaults` turns on the terminal's suggest-while-typing (VS Code's default is off).
+- **Tab learns from your work** (`lib/activity.js`, no vscode inside; fed by extension.js and chat.js): per workspace
+  (`workspaceState` "kural.activity.v1"): chat asks + changed files (`finishReply`; Undo removes the file; "Build it"
+  uses the plan's question), Ctrl+K/Apply you accepted (`review.onDone(meta)`), accepted Tab suggestions (the inline item's
+  `command` "kural.tab.accepted"), terminal commands (never ones matching `SECRET`); this session only: recent edits.
+  `tabNote()` goes before the editor Tab prompt (Claude only; keep it short, it costs speed); `terminalNote()` into the
+  terminal prompt: usual commands, or for a commit the work since the last commit on the changed files, plus
+  `git log -8` subjects for style. Setting `kural.tabCompletion.learn`; Forget in the Tab panel / command.
+  Live check: `node test/personal.live.js` (same request with and without the note, real Haiku).
 - **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
@@ -101,8 +109,9 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   old extension description) and drops ELECTRON_*/VSCODE_* env vars. Tested end to end on Ubuntu only.
 
 ## Test
-- `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, Tab panel page script).
+- `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script).
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
+- `node test/personal.live.js` — Tab and commit messages with vs without what you've been doing (real Haiku).
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts
   Kural; on Ubuntu run "Developer: Reload Window"). View → Output → Kural shows every request with timings.
 
