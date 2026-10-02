@@ -17,7 +17,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
     `ClaudeSession` (pool of warm processes for one-shot questions: tab completion, Ctrl+K).
   - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
     permissions, setup reload. `media/chat.js` + `media/chat.css` — the panel UI (a webview).
-  - `lib/completion.js` — tab completion. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
+  - `lib/completion.js` — tab completion; `lib/terminal-tab.js` — Tab in the terminal; `lib/activity.js` — what Tab learns from your work. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
   - `lib/updates.js` (Help → Check for Updates), `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask), `lib/ui.js` (font size).
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
@@ -28,7 +28,8 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
 - **Claude CLI flags** (see `ClaudeProcess.start`): `--safe-mode` skips the user's setup *and* any
   `--mcp-config` we pass; with a team in safe mode we use `--setting-sources "" --disable-slash-commands`
   instead. Full setup (default) = no safe mode, no `--strict-mcp-config`.
-- **Control requests** over stdin: `interrupt`, `set_model` (works mid-answer), `mcp_status`.
+- **Control requests** over stdin: `interrupt`, `set_model` (works mid-answer), `mcp_status`, `stop_task` {task_id}
+  (stops one background agent; it ends with status "killed"/"stopped").
   Permission requests (`can_use_tool`) are answered by `onPermission`; `AskUserQuestion` is answered by
   returning `updatedInput: { questions, answers }`.
 - **Agent teams**: Opus often runs agents in the background. The lead's turn ends ("result") while agents
@@ -39,6 +40,13 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   asks it for the final answer. Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
   Their board posts (`mcp__team__post`) go into the answer itself as bubbles (not the card), so the discussion is
   where you read; cards hold tools, `task_progress` activity, and the agent's text/thinking.
+  **Stuck agents** (an agent waiting on the board for a teammate who already ended): the board has `finish`
+  (final position; wakes everyone waiting) and tells a reader to stop after 2 empty waits; Kural writes who has
+  ended to `KURAL_TEAM_FILE` (`{round, finished}`, new round per question), so agents that end without `finish`
+  count too. Watchdog (`watchAgents`, every 30 s): an agent with no event for `STUCK_MS` (6 min; env
+  `KURAL_STUCK_MS` for tests; not while you're being asked something) is stopped with the `stop_task` control
+  request; "Finish now" (`finishTeam`) stops all. A result within 4 s of an agent's report holds the answer open
+  (Claude wakes the lead once more) instead of closing and reopening it.
   Same-model agents agree too easily: the prompts make each form its own position first, require evidence and
   earned agreement, and hand work between roles for review. Test changes with a real run before shipping.
 - **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
@@ -70,6 +78,21 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   (modes via /tmp/rec/fake-mode: {"delay": ms} or {"empty": true}).
 - **Tab completion speed (Claude)**: model time (~0.6 s, Haiku, thinking off) dominates. Don't add work before the
   request. Two warm processes (`pool: 2`), early return on `</insert>`, type-through reuse.
+- **Tab in the terminal** (`lib/terminal-tab.js`): a terminal completion provider (proposed API
+  `terminalCompletionProvider`, in package.json `enabledApiProposals`; fine for a built-in extension). The terminal
+  waits for every provider before showing its list (up to 5 s), so Kural never waits: cache or nothing, then asks the
+  model after a pause (Tab speed slider), cancels stale asks, and reopens the list
+  (`workbench.action.terminal.triggerSuggest`) when the answer comes. Same engine/model as editor Tab; own Claude
+  session ("terminal", `<cmd>…</cmd>`). For `git commit` it adds the staged (else unstaged) diff. package.json
+  `configurationDefaults` turns on the terminal's suggest-while-typing (VS Code's default is off).
+- **Tab learns from your work** (`lib/activity.js`, no vscode inside; fed by extension.js and chat.js): per workspace
+  (`workspaceState` "kural.activity.v1"): chat asks + changed files (`finishReply`; Undo removes the file; "Build it"
+  uses the plan's question), Ctrl+K/Apply you accepted (`review.onDone(meta)`), accepted Tab suggestions (the inline item's
+  `command` "kural.tab.accepted"), terminal commands (never ones matching `SECRET`); this session only: recent edits.
+  `tabNote()` goes before the editor Tab prompt (Claude only; keep it short, it costs speed); `terminalNote()` into the
+  terminal prompt: usual commands, or for a commit the work since the last commit on the changed files, plus
+  `git log -8` subjects for style. Setting `kural.tabCompletion.learn`; Forget in the Tab panel / command.
+  Live check: `node test/personal.live.js` (same request with and without the note, real Haiku).
 - **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
@@ -86,8 +109,9 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   old extension description) and drops ELECTRON_*/VSCODE_* env vars. Tested end to end on Ubuntu only.
 
 ## Test
-- `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, Tab panel page script).
+- `npm test` — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script).
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
+- `node test/personal.live.js` — Tab and commit messages with vs without what you've been doing (real Haiku).
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts
   Kural; on Ubuntu run "Developer: Reload Window"). View → Output → Kural shows every request with timings.
 

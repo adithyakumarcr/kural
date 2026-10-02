@@ -28,6 +28,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "kural.tab.forget",
+        "title": "Kural: Forget What Tab Learned (This Workspace)"
+      },
+      {
         "command": "kural.chat.open",
         "title": "Kural: Open Chat",
         "icon": "$(comment-discussion)"
@@ -452,6 +456,16 @@
           "type": "string",
           "default": "http://127.0.0.1:11434",
           "description": "Where Ollama runs."
+        },
+        "kural.tabCompletion.learn": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Make Tab more personal: it's told what you've been doing in this workspace — what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted, suggestions you accepted, files you edited, commands you run (never ones with passwords or tokens). Commit messages then say why you changed things, in your own style. Kept only on this computer, per workspace. **Kural: Forget What Tab Learned** clears it."
+        },
+        "kural.tabCompletion.terminal": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
         }
       }
     },
@@ -486,8 +500,24 @@
       "workbench.sideBar.experimental.fontSize": 14,
       "workbench.tabs.experimental.fontSize": 14,
       "workbench.bottomPane.experimental.fontSize": 14,
-      "workbench.statusBar.experimental.fontSize": 13
+      "workbench.statusBar.experimental.fontSize": 13,
+      "terminal.integrated.suggest.quickSuggestions": {
+        "commands": "on",
+        "arguments": "on",
+        "unknown": "on"
+      },
+      "terminal.integrated.suggest.suggestOnTriggerCharacters": true
+    },
+    "terminal": {
+      "completionProviders": [
+        {
+          "description": "Kural Tab: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
+        }
+      ]
     }
   },
-  "author": "Adithya Chinnakkonda"
+  "author": "Adithya Chinnakkonda",
+  "enabledApiProposals": [
+    "terminalCompletionProvider"
+  ]
 }

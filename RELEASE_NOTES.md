@@ -2,6 +2,22 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Tab learns from your work.** With each suggestion, Kural now tells the model what you've been doing in this
+  workspace: what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted,
+  suggestions you accepted, the file you just edited, and the commands you run. Suggestions fit your current task and
+  style. Commit messages in the terminal say *why* you changed things, in the style of your earlier commits. It's kept
+  only on this computer, per workspace; commands with passwords or tokens are never kept. The Tab panel shows what it
+  has learned, with **Forget** and an off switch (also: **Kural: Forget What Tab Learned**).
+- **Tab in the terminal closes a commit message's quote** when the model forgets to.
+- **Multiple agents no longer get stuck.** An agent waiting for a message from a teammate who had already
+  finished used to wait forever, so the lead never gave the final answer. Now agents are told when a teammate
+  has finished, stop waiting after two empty waits, and end with their final position. An agent that shows no
+  sign of life for 6 minutes is stopped, and the lead answers with what it has. A **Finish now** button next to
+  "Waiting for …" stops the agents still working and gets the answer right away.
+- **Tab in the terminal.** Type in Kural's terminal and Kural suggests the whole command line in the terminal's
+  suggestion list; Tab fills it in, and you still press Enter yourself. Made for commit messages: for
+  `git commit -m "` it reads your staged changes (or unstaged, if nothing is staged) and names the commit. It uses
+  the same engine and model as Tab in the editor. Kural turns on the terminal's "suggest while typing" for this.
 - **Two chats at once.** The split button in the Kural panel's title bar opens a second chat beside your code.
   Each one has its own tab, input and answer, and both can work at the same time. You can drag it anywhere,
   even to another screen. It comes back after a restart.

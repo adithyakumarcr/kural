@@ -53,6 +53,7 @@ class ReviewManager {
       vscode.workspace.onWillSaveTextDocument((e) => {
         if (!this.pending || e.document.uri.toString() !== this.pending.uri) return;
         log("review: file saved, accepting the change");
+        this.done(true);
         const edits = this.deletions(e.document, "del").map((r) => vscode.TextEdit.delete(r));
         this.clear();
         e.waitUntil(Promise.resolve(edits));
@@ -65,7 +66,8 @@ class ReviewManager {
   busy() { return !!this.pending; }
 
   // Replace lines [startLine, endLine) of `doc` with `newText`, shown as a reviewable diff.
-  async propose(doc, startLine, endLine, newText) {
+  // meta: { source, ask } — what it was for; told to onDone(meta, accepted, uri) when you decide.
+  async propose(doc, startLine, endLine, newText, meta = null) {
     const eol = doc.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n";
     const oldLines = [];
     for (let l = startLine; l < endLine; l++) oldLines.push(doc.lineAt(l).text);
@@ -89,7 +91,7 @@ class ReviewManager {
     this.selfEdit = false;
     if (!ok) return false;
 
-    this.pending = { uri: doc.uri.toString(), start: blockStart, ops };
+    this.pending = { uri: doc.uri.toString(), start: blockStart, ops, meta };
     vscode.commands.executeCommand("setContext", "kural.reviewPending", true);
     this.paint();
     this.lensEmitter.fire();
@@ -160,7 +162,13 @@ class ReviewManager {
     await vscode.workspace.applyEdit(edit);
     this.selfEdit = false;
     log(`review: ${accept ? "accepted" : "rejected"}`);
+    this.done(accept);
     this.clear();
+  }
+
+  done(accept) {
+    const p = this.pending;
+    if (p && p.meta && this.onDone) { try { this.onDone(p.meta, accept, p.uri); } catch (e) { log(`review: ${e.message}`); } }
   }
 
   clear() {
