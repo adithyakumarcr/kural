@@ -2,7 +2,7 @@
 //   Tab          grey suggestions as you type or place the cursor; Tab accepts
 //   Ctrl+L       chat on the right: tabs, Agent/Ask, model + intensity, multiple agents
 //   Ctrl+K       edit the selected code in place, review it red/green
-//   Ctrl+Alt+A   Ask & Search on the left: find code by describing it, or by text
+//   Ctrl+Alt+A   Ask on the left: find code by describing it
 //   Ctrl+Esc     full Claude Code in a terminal beside your file
 // Each feature lives in lib/; this file connects them.
 

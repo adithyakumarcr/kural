@@ -1,7 +1,7 @@
 {
   "name": "kural",
   "displayName": "Kural",
-  "description": "Kural Code Editor's Claude features: fast tab completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask & Search — using your Claude login.",
+  "description": "Kural Code Editor's Claude features: fast tab completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask — using your Claude login.",
   "version": "1.1.0-alpha.2",
   "publisher": "kural",
   "license": "MIT",
@@ -50,7 +50,7 @@
       },
       {
         "command": "kural.askSearch",
-        "title": "Kural: Ask & Search",
+        "title": "Kural: Ask",
         "icon": "$(search)"
       },
       {
@@ -135,7 +135,7 @@
       "activitybar": [
         {
           "id": "kural-search",
-          "title": "Ask & Search",
+          "title": "Ask",
           "icon": "media/search-icon.svg"
         }
       ],
@@ -159,7 +159,7 @@
         {
           "type": "webview",
           "id": "kural.search",
-          "name": "Ask & Search"
+          "name": "Ask"
         }
       ],
       "kural": [
@@ -414,14 +414,14 @@
             "haiku",
             "opus"
           ],
-          "description": "Model for Ask & Search questions."
+          "description": "Model for Ask questions."
         },
         "kural.fontSize": {
           "type": "number",
           "default": 0,
           "minimum": 0,
           "maximum": 32,
-          "markdownDescription": "Text size in the Kural chat and Ask & Search panels, in pixels. `0` = the same as your code editor (`editor.fontSize`)."
+          "markdownDescription": "Text size in the Kural chat and Ask panels, in pixels. `0` = the same as your code editor (`editor.fontSize`)."
         },
         "kural.tabCompletion.engine": {
           "type": "string",

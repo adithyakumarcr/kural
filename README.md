@@ -157,8 +157,8 @@ cursor.
 
 ### More
 
-- **Ask & Search (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get exact `file:line` places. It also does
-  fast text and regex search.
+- **Ask (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get the exact `file:line` places. (For plain text
+  search, use VS Code's own search, Ctrl+Shift+F.)
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **Claudemeter.** Your Claude plan usage in the status bar.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
@@ -176,7 +176,7 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 | **Ctrl+K** | inline edit |
 | **Ctrl+Enter** / **Ctrl+Shift+Backspace** | keep / reject an inline edit |
 | **Ctrl+Alt+Space** | Tab completion on/off *(Ctrl on Mac too)* |
-| **Ctrl+Alt+A** | Ask & Search |
+| **Ctrl+Alt+A** | Ask |
 | **Ctrl+Esc** | Claude Code terminal |
 | In the chat: **Ctrl+S** | next model *(Ctrl on Mac too)* |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |
