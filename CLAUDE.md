@@ -103,6 +103,16 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   Live check: `node test/personal.live.js` (same request with and without the note, real Haiku).
 - **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
+- **Local models in the chat** (`lib/ollama.js`, no vscode inside): Ollama ≥ 0.14 speaks Claude's API, so a local chat
+  is the same Claude Code with env `ANTHROPIC_BASE_URL` = Ollama, `ANTHROPIC_AUTH_TOKEN=ollama`, all model aliases and
+  `CLAUDE_CODE_SUBAGENT_MODEL` = the model (agents too), `CLAUDE_CODE_MAX_CONTEXT_TOKENS` = its window (else Claude Code
+  assumes 200k and never compacts), `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, and `NO_PROXY` for Ollama's host
+  (a proxy in the environment would otherwise get even localhost requests). `tab.model` = `"ollama:<name>"`; its own
+  process (`procKey`), prepared first (`prepareLocal`: running, version, downloaded, has "tools"), then a copy with
+  `num_ctx` (`kural-<model>-32k`, `/api/create`, shares the files; setting `kural.localModels.contextLength`).
+  Search reads ollama.com/search?c=tools (no API; `parseSearch` reads list items loosely), falling back to `SUGGESTED`.
+  Test without Ollama: `node test/fake-ollama-chat.js 11434` (models, pull, create, and /v1/messages with one scripted
+  Read tool call: "read the readme").
 - **Themes** (`extension/themes/`): Kural Dark and Kural Light (same keys). The panels (chat, Ask, Tab) set their
   own accent colors in CSS; a light theme overrides them under `body.vscode-light` (VS Code's class) with darker ones.
   `test/theme.test.js` checks Kural Light's text contrast (4.5:1; icons and line numbers 3:1): change a color, run it.

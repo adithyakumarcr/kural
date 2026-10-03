@@ -1,3 +1,13 @@
+## Not released yet
+
+These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
+
+- **Models on your computer in the chat (offline).** Besides Opus, Sonnet and Haiku, the model menu now lists
+  **On this computer**: your Ollama models that can use tools. The chat works the same with them (it edits files,
+  asks before commands, agents use the same model), privately and without internet. **Find & download models…**
+  searches Ollama's library, shows how much memory each size needs compared to your computer, downloads with a
+  progress bar, and lets you use or delete installed models. Needs Ollama 0.14 or newer.
+
 ## What's new in 1.1.0-alpha.3
 
 - **Kural Light theme.** A light theme with the same look as Kural Dark. Every text color, in the code, the

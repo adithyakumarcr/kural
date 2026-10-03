@@ -36,7 +36,9 @@
   const base = (p) => (p || "").split("/").pop();
   const dir = (p) => { const i = (p || "").lastIndexOf("/"); return i > 0 ? p.slice(0, i) : ""; };
   const post = (m) => vscode.postMessage(m);
-  const modelLabel = (id) => (S.models.find((m) => m.id === id) || { label: id || "?" }).label;
+  // "Sonnet", or for a model on this computer (Ollama) "qwen3-coder:30b · local".
+  const modelLabel = (id) => /^ollama:/.test(id || "") ? `${id.slice(7)} · local` : (S.models.find((m) => m.id === id) || { label: id || "?" }).label;
+  const gb = (bytes) => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(bytes >= 1e10 ? 0 : 1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
   const FRIENDS = ["Rachel", "Ross", "Monica", "Chandler", "Joey", "Phoebe"];
   const roleLabel = (id) => (S.roles.find((r) => r.id === id) || { label: id }).label;
   const moodLabel = (id) => (S.moods.find((m) => m.id === id) || { label: "" }).label;
@@ -170,6 +172,7 @@
   tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   const listEl = el("div", { class: "list" });
   const historyEl = el("div", { class: "history hidden" });
+  const localEl = el("div", { class: "history local hidden" });   // "Local models": search, download, use
   const chipsEl = el("div", { class: "chips" });
   const input = el("div", { class: "input", contenteditable: "plaintext-only", role: "textbox", "aria-multiline": "true", "data-placeholder": "" });
   const popupEl = el("div", { class: "popup hidden" });
@@ -183,7 +186,7 @@
       sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
   const visitBar = el("div", { class: "visit hidden" });
-  const body = el("div", { class: "body" }, listEl, historyEl);
+  const body = el("div", { class: "body" }, listEl, historyEl, localEl);
   app.replaceChildren(tabBar, body, visitBar, composer, menuEl);
 
   // ---------- tabs ----------
@@ -231,7 +234,7 @@
 
   // ---------- history (clock) ----------
   function toggleHistory() { S.showHistory ? closeHistory() : openHistory(); }
-  function openHistory() { S.showHistory = true; post({ type: "history" }); renderHistory(); historyBtn.classList.add("on"); }
+  function openHistory() { if (S.showLocal) closeLocal(); S.showHistory = true; post({ type: "history" }); renderHistory(); historyBtn.classList.add("on"); }
   function closeHistory() { S.confirmDelete = null; S.showHistory = false; historyEl.classList.add("hidden"); listEl.classList.remove("hidden"); historyBtn.classList.remove("on"); }
 
   // All chats from every workspace. Pinned ones first; then newest first.
@@ -770,6 +773,7 @@
         el("div", { class: `mi ${t.model === m.id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: m.id }); closeMenu(); } },
           el("span", { class: `check radio${t.model === m.id ? " on" : ""}` }),
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, m.hint))),
+        ...localMenuItems(t),
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         el("div", { class: "mh" }, "Mood"),
@@ -794,6 +798,97 @@
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
   }
+  // ---------- models on this computer (Ollama) ----------
+  // In the model menu: the installed models that can chat (they need tools), and the way to get more.
+  function localMenuItems(t) {
+    // Ask Ollama again when the menu opens (models come and go); the menu redraws when the answer comes.
+    // (At most every few seconds: the redraw itself calls this again.)
+    if (!S.localAskedAt || Date.now() - S.localAskedAt > 3000) { S.localAskedAt = Date.now(); post({ type: "localModels" }); }
+    const L = S.local;
+    const out = [el("div", { class: "mh" }, "On this computer", el("span", { class: "mh-key" }, "Ollama · offline"))];
+    if (!L) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint" }, "Looking for Ollama…")));
+    else if (!L.status.running) out.push(el("div", { class: "mi", onclick: () => { post({ type: "installOllama" }); closeMenu(); } },
+      el("span", { class: "mi-icon" }, "⬇"), el("span", { class: "mi-label" }, "Get Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
+    else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, `⚠ Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
+    else for (const m of L.models.filter((x) => x.chat)) {
+      const id = `ollama:${m.name}`;
+      out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
+        el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label" }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
+    }
+    out.push(el("div", { class: "mi", onclick: () => { closeMenu(); openLocal(); } },
+      el("span", { class: "mi-icon" }, "🔍"), el("span", { class: "mi-label" }, "Find & download models…")));
+    return out;
+  }
+
+  // The "Local models" page (in the chat panel, like History).
+  function openLocal() {
+    closeHistory(); S.showLocal = true;
+    post({ type: "localModels" });
+    if (!S.localSearch) post({ type: "localSearch", q: "" });
+    renderLocal();
+  }
+  function closeLocal() { S.showLocal = false; S.confirmDeleteModel = null; localEl.classList.add("hidden"); listEl.classList.remove("hidden"); }
+
+  function renderLocal() {
+    if (!S.showLocal) return;
+    listEl.classList.add("hidden"); historyEl.classList.add("hidden"); localEl.classList.remove("hidden");
+    const L = S.local, R = S.localSearch;
+    const t = S.tab;
+    const pulls = (L && L.pulls) || {};
+    const memory = L ? L.memory : 0;
+    const search = el("input", { class: "h-search", placeholder: "Search Ollama's models (ones that can use tools)…", value: S.localQuery || "",
+      onkeydown: (e) => { if (e.key === "Enter") { S.localQuery = e.target.value; S.localSearching = true; post({ type: "localSearch", q: e.target.value }); renderLocal(); } else if (e.key === "Escape") closeLocal(); } });
+    const kids = [
+      el("div", { class: "h-head" }, el("span", { class: "h-title" }, "Models on this computer"), el("span", { class: "spacer" }), el("button", { class: "cb", onclick: () => closeLocal() }, "Back")),
+      el("div", { class: "lm-note" }, "They run on your computer with Ollama: private, free, and they work offline. Slower and less capable than Claude; bigger ones need more memory",
+        memory ? ` (this computer has ${memory} GB).` : "."),
+    ];
+    if (!L) kids.push(el("div", { class: "h-empty" }, "Looking for Ollama…"));
+    else if (!L.status.running) kids.push(el("div", { class: "lm-warn" }, "Ollama isn't running. ", el("button", { class: "cb primary", onclick: () => post({ type: "installOllama" }) }, "Get Ollama"),
+      el("button", { class: "cb", onclick: () => post({ type: "localModels" }) }, "Check again")));
+    else if (!L.status.ok) kids.push(el("div", { class: "lm-warn" }, `⚠ Your Ollama is ${L.status.version}. The chat needs ${L.minVersion} or newer: update Ollama.`));
+    // Downloads in progress
+    for (const [name, p] of Object.entries(pulls)) kids.push(el("div", { class: "lm-pull" },
+      el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, name), el("span", { class: "spacer" }), el("span", { class: "h-when" }, `${p.percent || 0}%`)),
+      el("div", { class: "bar" }, el("span", { style: `width:${p.percent || 0}%` }))));
+    // Installed
+    if (L && L.models.length) {
+      kids.push(el("div", { class: "h-group" }, "Installed"));
+      for (const m of L.models) {
+        const id = `ollama:${m.name}`, using = t && t.model === id, confirming = S.confirmDeleteModel === m.name;
+        kids.push(el("div", { class: "lm-item" },
+          el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, m.name), el("span", { class: "spacer" }),
+            m.chat ? el("button", { class: `cb ${using ? "" : "primary"}`, disabled: using ? "" : null, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeLocal(); } }, using ? "In use" : "Use in chat") : null,
+            confirming ? el("button", { class: "cb danger", onclick: () => { S.confirmDeleteModel = null; post({ type: "localDelete", name: m.name }); } }, "Delete?")
+              : el("button", { class: "icon-btn small show", title: "Delete from this computer", onclick: () => { S.confirmDeleteModel = m.name; renderLocal(); } }, icon("trash"))),
+          el("div", { class: "h-meta" }, [m.params, gb(m.size), m.chat ? "can chat" : "can't chat (no tools)"].filter(Boolean).join(" · "))));
+      }
+    }
+    // Search
+    kids.push(el("div", { class: "h-group" }, "Get more"), search);
+    if (S.localSearching) kids.push(el("div", { class: "h-empty" }, "Searching…"));
+    else if (R) {
+      if (R.from === "suggested") kids.push(el("div", { class: "lm-note" }, "Couldn't reach ollama.com, so these are Kural's suggestions."));
+      if (!R.results.length) kids.push(el("div", { class: "h-empty" }, "No models found."));
+      for (const m of R.results) {
+        const local = m.sizes.length ? m.sizes : [];
+        kids.push(el("div", { class: "lm-item" },
+          el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, m.name), el("span", { class: "spacer" }), m.pulls ? el("span", { class: "h-when" }, `${m.pulls} pulls`) : null),
+          m.description ? el("div", { class: "lm-desc" }, m.description) : null,
+          el("div", { class: "lm-sizes" },
+            ...m.capabilities.filter((c) => c !== "cloud").map((c) => el("span", { class: "lm-cap" }, c)),
+            ...(local.length ? local.map((z) => {
+              const name = `${m.name}:${z.size}`, have = L && L.models.some((x) => x.name === name), busy = !!pulls[name];
+              const tooBig = memory && z.memory && z.memory > memory;
+              return el("button", { class: `cb lm-size ${tooBig ? "danger" : ""}`, disabled: have || busy ? "" : null,
+                title: have ? "Already on this computer" : `Download ${name}${z.memory ? `; needs about ${z.memory} GB of memory` : ""}${tooBig ? ` (this computer has ${memory} GB: too big)` : ""}`,
+                onclick: () => post({ type: "localPull", name }) }, have ? `✓ ${z.size}` : `⬇ ${z.size}${z.memory ? ` · ~${z.memory} GB` : ""}`);
+            }) : [el("span", { class: "lm-cap" }, "cloud only (not offline)")]))));
+      }
+    }
+    localEl.replaceChildren(...kids.filter(Boolean));
+  }
+
   // "Rachel (Developer) and Ross (Critic) talk it through and agree on a decision."
   function teamHint(t) {
     const roles = t.roles || [];
@@ -910,6 +1005,9 @@
         break;
       case "full": S.tab = m.tab; renderAll(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
+      case "localModels": S.local = m; renderLocal(); if (S.menu === "model") openMenu.refresh(); break;
+      case "localSearch": S.localSearch = m; S.localSearching = false; renderLocal(); break;
+      case "localPull": if (S.local) { S.local.pulls = { ...(S.local.pulls || {}), [m.name]: { percent: m.percent, status: m.status } }; renderLocal(); } break;
       case "ticketStatus": { const U = S.ticketUI; if (U && U.id === m.id && U.searching) { U.status = m.text; if (S.menu === "ticket") openMenu.refresh(); } break; }
       case "ticketResults": {
         const U = S.ticketUI;

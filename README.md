@@ -120,6 +120,19 @@ Also in the chat:
 
 <br clear="right">
 
+### Models on your computer (offline)
+
+Besides Opus, Sonnet and Haiku, the chat can use a model that runs on your own computer through
+[Ollama](https://ollama.com): private, free, and it works without internet. Everything else stays the same: it edits
+files, asks before running commands, and agents use it too.
+
+In the model menu, **On this computer** lists your models; **Find & download models…** searches Ollama's library
+(models that can use tools, which the chat needs), shows how much memory each size needs compared to your computer,
+and downloads with one click.
+
+Local models are slower and less capable than Claude, and bigger ones need a lot of memory: on a laptop, start with
+something like `qwen3:8b`; `qwen3-coder:30b` or `gpt-oss:20b` need about 20 GB. You need Ollama 0.14 or newer.
+
 ### Multiple agents
 
 Turn on **Multiple agents** in the model menu. The lead agent gets a team named after Friends (Rachel, Ross,
