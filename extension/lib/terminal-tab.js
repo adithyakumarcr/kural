@@ -104,7 +104,8 @@ function firstAnswer(promises) {
   });
 }
 
-function terminalTab(context, session, local, activity = null) {
+// commitSession: commit messages come from the chat's model (lib/brain.js Session); other lines from Tab Complete.
+function terminalTab(context, session, local, activity = null, commitSession = null) {
   trackCommands(context, activity);
   const cache = new Map();   // typed line -> suggested line
 
@@ -117,6 +118,7 @@ function terminalTab(context, session, local, activity = null) {
     const git = g.text;
     const note = activity ? activity.terminalNote(typed, commit ? { since: g.since, files: g.files } : null) : "";
     const history = (recent.get(terminal) || []).map((c) => `$ ${c}`).join("\n");
+    if (commit && commitSession) return [tidy(await commitSession.ask(claudePrompt({ shell, cwd, history, git, note, typed }), token), typed), "chat"];
     const engineSetting = cfg().get("tabCompletion.engine");
     const useLocal = local && engineSetting !== "claude" && await local.ready();
 
@@ -144,8 +146,8 @@ function terminalTab(context, session, local, activity = null) {
   const kind = KIND.InlineSuggestion ?? KIND.InlineSuggestionAlwaysOnTop ?? KIND.Argument ?? KIND.Method;
   const item = (line, typed, engine) => ({
     label: line, replacementRange: [0, typed.length], kind,
-    detail: `Kural · ${engine === "local" ? "local model" : "Claude"}`,
-    documentation: "Suggested by Kural Tab. Tab inserts it; you still press Enter to run it.",
+    detail: `Kural · ${engine === "chat" ? "your chat model" : "Tab Complete"}`,
+    documentation: "Suggested by Kural's Tab Complete. Tab inserts it; you still press Enter to run it.",
   });
 
   // The terminal waits for every suggestion source before it shows its list. So Kural never makes it wait:

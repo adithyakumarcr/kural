@@ -5,8 +5,8 @@
 <h1 align="center">Kural Code Editor</h1>
 
 <p align="center">
-  A code editor with Claude built in, in the style of Cursor.<br>
-  It uses <b>your Claude Code login</b>, so there's no API key to set up.
+  An AI code editor in the style of Cursor.<br>
+  Use <b>Claude</b> with your Claude Code login, or <b>your own model</b> on your computer: free, private, offline.
 </p>
 
 <p align="center">
@@ -21,19 +21,23 @@
 
 ## What is Kural?
 
-Kural is [VSCodium](https://vscodium.com) (the open-source build of VS Code) with Claude built in.
+Kural is [VSCodium](https://vscodium.com) (the open-source build of VS Code) with an AI assistant built in.
 Everything you know from VS Code works the same: extensions, themes, settings, the terminal, Git.
 On top of that, Kural adds:
 
-- **A chat that edits your code.** Ask for a change; Claude reads your project, edits files, runs your tests, and you
+- **A chat that edits your code.** Ask for a change; Kural reads your project, edits files, runs your tests, and you
   keep or undo each change.
-- **Tab completion.** Grey suggestions as you type; **Tab** accepts.
+- **Tab Complete.** Grey suggestions as you type; **Tab** accepts.
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
 - **Teams of agents.** A project team (Researcher, Architect, Developers, Tester, led by a Project Manager) that
   plans, gets your OK and builds, or agents that discuss a question and agree on an answer.
 
-Kural runs the `claude` command (Claude Code) in the background. So it uses your Claude plan, your Claude Code
-settings, MCP servers, skills and `CLAUDE.md` files. No API key, nothing extra to pay for.
+Its AI comes from one of two places (or both; you switch in the model menu):
+
+- **Claude.** Kural runs Claude Code in the background with your Claude plan: Anthropic's most capable models, your
+  Claude Code settings, MCP servers, skills and `CLAUDE.md` files. No API key, nothing extra to pay for.
+- **Your own model.** A model on your computer through [Ollama](https://ollama.com), run by Kural's own engine. No
+  account, no subscription, no internet: your code never leaves your computer.
 
 ## Install
 
@@ -68,21 +72,26 @@ code-signed). It installs for your user only, so you don't need admin rights.
 
 ### 2. Get started (Kural walks you through it)
 
-Kural's AI comes from [Claude Code](https://code.claude.com/docs/en/setup), Anthropic's coding tool: Kural runs it in
-the background with your login, so there's no API key. The first time you open Kural, **Get started** checks the three
-things it needs and helps with each one:
+The first time you open Kural, **Get started** asks where its AI should come from, then checks each step and helps
+with it. Either way is enough; you can add the other later.
 
+**Claude**
 1. **Claude Code installed.** **Install for me** runs Anthropic's official installer in a terminal (or copy the command).
    Installed somewhere unusual? **Choose the claude file…**
 2. **Logged in.** **Log in** opens your browser. You need a Claude Pro, Max, Team or Enterprise plan, or an Anthropic
    Console account; the free plan doesn't include Claude Code.
-3. **A test.** One tiny request to Claude (Haiku), sent the way Kural sends them. If it fails, the page shows Claude's
-   error and what it means.
+3. **A test.** One tiny request to Claude (Haiku). If it fails, the page shows the error and what it means.
 
-The chat unlocks when all three pass. Git and Ollama are optional; the page shows whether you have them. If Claude Code
-breaks later (removed, logged out), Kural notices and opens the page again. Open it any time: **Kural: Get Started**.
+**Your own model**
+1. **Ollama.** **Get Ollama** (on Ubuntu it runs the installer; on a Mac or Windows it opens the download page).
+2. **A model.** Pick one you have, or download one that fits your computer's memory (the page suggests a few).
+3. **A test.** One request to that model, the way Kural will use it.
 
-<p align="center"><img src="docs/screenshots/get-started.png" width="620" alt="Get started: Claude Code installed, logged in, test passed; Git and Ollama found"></p>
+The chat unlocks when one way passes. Until then nothing runs in the background, so there are no errors. Git and a
+Tab Complete model are optional; the page shows whether you have them. If Claude breaks later (removed, logged out),
+Kural notices and opens the page again. Open it any time: **Kural: Get Started**.
+
+<p align="center"><img src="docs/screenshots/get-started.png" width="620" alt="Get started: Claude or your own model; here your own model: Ollama running, a model picked, the test passed"></p>
 
 ### Updates
 
@@ -90,10 +99,10 @@ breaks later (removed, logged out), Kural notices and opens the page again. Open
 versions. If it's newer than yours, Kural downloads it, installs it and restarts. On Ubuntu it asks for your
 password; on a Mac it replaces Kural.app in place; on Windows it runs the setup.
 
-### 3. Optional: a local model for faster Tab completion
+### 3. Optional: a local model for faster Tab Complete
 
-Tab completion with Claude takes about 0.6–0.9 s. For suggestions in about 150–300 ms, Kural can use a small code model
-on your own computer through [Ollama](https://ollama.com). Click **Tab** in the status bar, then **Install Ollama**
+Tab Complete with Claude takes about 0.6–0.9 s. For suggestions in about 150–300 ms, Kural can use a small code model
+on your own computer through [Ollama](https://ollama.com). Click **Tab Complete** in the status bar, then **Install Ollama**
 (on a Mac or Windows this opens the Ollama download page). Then click **Check again** and download a model from the same
 panel (1.5B is a good start).
 
@@ -101,9 +110,9 @@ panel (1.5B is a good start).
 
 ### Chat (Ctrl+L)
 
-The chat sits on the right and has tabs. Pick how much freedom Claude gets:
+The chat sits on the right and has tabs. Pick how much freedom Kural gets:
 
-| Mode | What Claude may do |
+| Mode | What Kural may do |
 |---|---|
 | **Agent** | edits files (you keep or undo each one) and asks before running commands |
 | **Auto** | edits and runs commands without asking |
@@ -121,30 +130,32 @@ Also in the chat:
   (claude.ai → Settings → Connectors); without it, the menu shows ⚠ and how to connect it.
 - **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
-- **Questions with options.** When a choice is yours, Claude asks with options you can click.
-- **Model and intensity.** Opus / Sonnet / Haiku, and Low → Max. You can switch in the middle of an answer.
+- **Questions with options.** When a choice is yours, Kural asks with options you can click.
+- **Model and intensity.** Claude's Opus / Sonnet / Haiku or a model on your computer, and Low → Max. You can switch
+  in the middle of a conversation; the new model gets the conversation so far.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Teacher** explains the why.
 - **Two chats at once.** The split button (next to **+** in the Kural panel's title bar) opens a second chat beside
   your code, with its own tabs and input. Both can work at the same time; drag it anywhere, even to another screen.
 - **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
   need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
   its folder, or **Continue here** (a new chat here that knows the old conversation).
-- **Thinking.** Claude's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
+- **Thinking.** The model's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
 
 <br clear="right">
 
 ### Models on your computer (offline)
 
-Besides Opus, Sonnet and Haiku, the chat can use a model that runs on your own computer through
-[Ollama](https://ollama.com): private, free, and it works without internet. Everything else stays the same: it edits
-files, asks before running commands, and agents use it too.
+Besides Claude's models, Kural can use a model that runs on your own computer through [Ollama](https://ollama.com):
+private, free, and it works without internet or any account. Kural runs it with its own engine (no Claude Code): it
+reads and edits files, searches your project, and asks before running commands, like with Claude. **Ask**, **Ctrl+K**,
+**Apply** and commit messages use the chat's model too. (Agent teams and Claude Code connectors need a Claude model.)
 
 In the model menu, **On this computer** lists your models; **Find & download models…** searches Ollama's library
 (models that can use tools, which the chat needs), shows how much memory each size needs compared to your computer,
 and downloads with one click.
 
 Local models are slower and less capable than Claude, and bigger ones need a lot of memory: on a laptop, start with
-something like `qwen3:8b`; `qwen3-coder:30b` or `gpt-oss:20b` need about 20 GB. You need Ollama 0.14 or newer.
+something like `qwen3:8b`; `qwen3-coder:30b` or `gpt-oss:20b` need about 20 GB. You need Ollama 0.8 or newer.
 
 ### Multiple agents
 
@@ -181,14 +192,14 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
   <sub>Pick the roles and how they work &nbsp;·&nbsp; Then they discuss and decide (sped up)</sub>
 </p>
 
-### Tab completion
+### Tab Complete
 
 Suggestions appear as you type or when you place the cursor, also in the middle of a line. Write a comment, press
 Enter, and the suggestion implements it. **Tab** accepts.
 
 ![Tab: a method's first line, and a comment, become code; Tab accepts](docs/screenshots/tab-completion.gif)
 
-Click **Tab** in the status bar for the Tab panel. There you can:
+Click **Tab Complete** in the status bar for its panel. There you can:
 
 - turn suggestions on or off,
 - set how quickly they appear,
@@ -196,7 +207,7 @@ Click **Tab** in the status bar for the Tab panel. There you can:
 
 In **Auto**, the local model and Claude race, and the first good answer wins.
 
-![The Tab panel: speed, engine and model](docs/screenshots/tab-panel.gif)
+![The Tab Complete panel: speed, engine and model](docs/screenshots/tab-panel.gif)
 
 **Tab learns from your work.** The models themselves never change, so Kural tells them, with each suggestion, what
 you've been doing in this workspace:
@@ -209,7 +220,7 @@ you've been doing in this workspace:
 
 So a suggestion in a new file follows what you just wrote in another one. A commit message says why you changed
 things ("params: reject zero speeds (controller crashed on 0)") in the style of your earlier commits. It's kept only
-on this computer, per workspace. Commands with passwords or tokens are never kept. The Tab panel shows what it has
+on this computer, per workspace. Commands with passwords or tokens are never kept. The Tab Complete panel shows what it has
 learned, with **Forget** to clear it and a switch to turn it off.
 
 ### Tab in the terminal
@@ -253,7 +264,7 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 | **Ctrl+Alt+N** | new chat tab |
 | **Ctrl+K** | inline edit |
 | **Ctrl+Enter** / **Ctrl+Shift+Backspace** | keep / reject an inline edit |
-| **Ctrl+Alt+Space** | Tab completion on/off *(Ctrl on Mac too)* |
+| **Ctrl+Alt+Space** | Tab Complete on/off *(Ctrl on Mac too)* |
 | **Ctrl+Alt+A** | Ask |
 | **Ctrl+Esc** | Claude Code terminal |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |
@@ -270,6 +281,7 @@ No GitHub needed: one command builds Kural from the code in this folder and inst
 ```bash
 ./install.sh            # build and install (on a Mac it opens Kural when done)
 ./install.sh --ext      # changed only files in extension/? put them into the installed Kural in a few seconds
+./install.sh --fresh    # install like a new user: your Kural settings and chats go to a backup folder first
 ```
 
 The first build downloads VSCodium once (about 250 MB, kept in `downloads/`). After that, a build takes about a
@@ -336,9 +348,10 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/getstarted.js   Get started: Claude Code installed, logged in, test request (lib/checks.js)
   lib/chat.js         chat tabs, history, modes, models, agent teams, questions
   lib/archive.js      every chat from every workspace (History)
-  lib/completion.js   Tab completion (Claude), lib/local.js (local model via Ollama)
+  lib/completion.js   Tab Complete (Claude), lib/local.js (local model via Ollama)
+  lib/brain.js        which engine answers: Claude Code, or Kural's own (lib/engine.js + lib/tools.js, via Ollama)
   lib/activity.js     what Tab learns from your work (per workspace)
-  lib/tabpanel.js     the Tab panel
+  lib/tabpanel.js     the Tab Complete panel
   lib/edits.js        Ctrl+K and Apply, lib/review.js (red/green review)
   lib/team-mcp.js     the agents' message board (a tiny MCP server)
   lib/…               attachments, search, workspace folders, setup changes

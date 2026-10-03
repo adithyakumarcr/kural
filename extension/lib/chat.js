@@ -15,6 +15,7 @@ const ws = require("./workspace");
 const { Attachments } = require("./attachments");
 const { ChatArchive } = require("./archive");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("./ollama");
+const brain = require("./brain");
 const { installOllama } = require("./local");
 const { watchSetup } = require("./setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
@@ -355,7 +356,7 @@ class ChatView {
   lastChoices() {
     const last = this.context.globalState.get(LAST_KEY) || {};
     return {
-      model: validModel(last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet"),
+      model: this.usableModel(validModel(last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet")),
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
@@ -363,6 +364,15 @@ class ChatView {
       roles: Array.isArray(last.roles) ? last.roles.filter((r) => valid(ROLES, r)) : [],
       teamStyle: valid(TEAM_STYLES, last.teamStyle) ? last.teamStyle : "split",
     };
+  }
+
+  // Set by extension.js from Get started: is anything set up, and the model on this computer that passed its test.
+  isReady() { return this.readyCheck ? this.readyCheck() : isSetUp(); }
+  // A new chat's model: your last one, unless it's a Claude model and only your own model is set up (or the reverse).
+  usableModel(m) {
+    const local = this.localDefault ? this.localDefault() : null;
+    if (!isLocal(m) && !isSetUp() && local) return local;
+    return m;
   }
 
   remember(tab) {
@@ -375,6 +385,8 @@ class ChatView {
   fix(tab) {
     const d = this.lastChoices();
     if (!validModel(tab.model)) tab.model = d.model;
+    // Which engine has this conversation (chats from before Kural had its own engine: the one their model uses).
+    if (!tab.engine && tab.messages && tab.messages.length) tab.engine = isLocal(tab.model) ? "local" : "claude";
     if (!valid(EFFORTS, tab.effort)) tab.effort = d.effort;
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
@@ -732,7 +744,7 @@ class ChatView {
   }
 
   teamSize(tab) {
-    if (!(tab.team > 1)) return 0;
+    if (!(tab.team > 1) || isLocal(tab.model)) return 0;   // (agent teams need a Claude model)
     const editing = tab.mode === "agent" || tab.mode === "auto";
     if (tab.teamStyle !== "discuss" && !editing) return 0;
     const roles = tab.roles || [];
@@ -746,7 +758,11 @@ class ChatView {
   // Claude for the open chat now, in the same conversation; other chats reload when you use them.
   // Get started passed (or something broke since): the panes show the chat (or "Set up Kural first").
   readyChanged(ready) {
-    this.post({ type: "setupReady", ready });
+    // Empty chats on a Claude model while only your own model is set up: switch them to it.
+    const local = this.localDefault ? this.localDefault() : null;
+    if (local && !isSetUp()) for (const t of this.tabs) if (!t.messages.length && !isLocal(t.model)) { t.model = local; t.modelName = null; }
+    this.postTabs();
+    this.post({ type: "setupReady", ready, claudeReady: isSetUp() });
     if (ready) for (const p of this.panes) { const t = this.tab(p.activeId); if (t && t.status === "idle") this.warm(t); }
   }
 
@@ -762,7 +778,7 @@ class ChatView {
 
   // Start the tab's Claude process ahead of time, so your first message is answered quickly.
   warm(tab) {
-    if (!isSetUp() || !findClaude()) return;   // not set up yet (Get started)
+    if (!isLocal(tab.model) && (!isSetUp() || !findClaude())) return;   // Claude isn't set up (Get started)
     const r = this.runtime.get(tab.id);
     if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) return;
     if (r && r.turn && r.turn.reply.running) return;   // never restart in the middle of an answer
@@ -775,10 +791,11 @@ class ChatView {
   }
 
   // ---------- models on your computer (Ollama) ----------
-  // Before the first message with a local model: is Ollama there and new enough, is the model downloaded?
-  // Then make its larger-context copy. Returns { variant } or { error } (said in the chat).
+  // A local model runs on Kural's own engine (lib/engine.js): Ollama directly, no Claude Code, no account, offline.
+  // Before the first message: is Ollama there and new enough, is the model downloaded, can it use tools?
+  // Returns { ok } or { error } (said in the chat).
   async prepareLocal(tab) {
-    const name = localName(tab.model), ctx = cfg().get("localModels.contextLength") || 32768;
+    const name = localName(tab.model);
     const st = await this.ollama.status();
     if (!st.running) return { error: "Ollama isn't running. Start Ollama (or get it from ollama.com), then send again." };
     if (!st.ok) return { error: `Your Ollama is version ${st.version}; using it in the chat needs ${MIN_VERSION} or newer. Update Ollama, then send again.` };
@@ -787,29 +804,8 @@ class ChatView {
     const m = models.find((x) => x.name === name || x.name === `${name}:latest`);
     if (!m) return { error: `${name} isn't on this computer (anymore). Download it in Local models (model menu), or pick another model.` };
     if (!m.chat) return { error: `${name} can't use tools, so it can't edit files or run commands. Pick a model with "tools".` };
-    try {
-      const variant = await this.ollama.withContext(m.name, ctx);
-      this.localReady.set(tab.model, variant);
-      return { variant };
-    } catch (e) { return { error: `Ollama couldn't prepare ${name}: ${e.message}` }; }
-  }
-
-  // How Claude Code reaches a local model: Ollama speaks Claude's API. Its agents use the same model,
-  // its context is the model's real window (so long chats get compacted in time), and nothing else goes online.
-  localEnv(tab) {
-    const variant = this.localReady.get(tab.model);
-    const base = String(cfg().get("tabCompletion.ollamaUrl") || "http://127.0.0.1:11434").replace(/\/$/, "");
-    let host = "127.0.0.1"; try { host = new URL(base).hostname; } catch { /* keep the default */ }
-    const noProxy = [...new Set([process.env.NO_PROXY || process.env.no_proxy, "localhost", "127.0.0.1", "::1", host].filter(Boolean))].join(",");
-    return {
-      ANTHROPIC_BASE_URL: base, ANTHROPIC_AUTH_TOKEN: "ollama", ANTHROPIC_API_KEY: "",
-      ANTHROPIC_DEFAULT_OPUS_MODEL: variant, ANTHROPIC_DEFAULT_SONNET_MODEL: variant, ANTHROPIC_DEFAULT_HAIKU_MODEL: variant,
-      CLAUDE_CODE_SUBAGENT_MODEL: variant,
-      CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(cfg().get("localModels.contextLength") || 32768),
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
-      // Ollama is on this computer (or your network): never send it through a proxy (a company proxy, say).
-      NO_PROXY: noProxy, no_proxy: noProxy,
-    };
+    this.localReady.set(tab.model, m.capabilities);   // (thinking models get thinking turned on by intensity)
+    return { ok: true };
   }
 
   // The model menu's "On this computer" list and the Local models page.
@@ -870,10 +866,11 @@ class ChatView {
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
     const tools = [...(editing ? AGENT_TOOLS : READ_TOOLS), ...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
-    const local = isLocal(tab.model) && this.localReady.get(tab.model);
-    const proc = new ClaudeProcess({
-      name: `chat ${tab.id}`, model: local || tab.model, effort: tab.effort, partial: true, showThinking: true,
-      env: local ? this.localEnv(tab) : undefined,
+    // A Claude model: Claude Code. A model on this computer: Kural's own engine, with the same tools and events.
+    const local = isLocal(tab.model);
+    const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
+    const proc = brain.makeAgent(tab.model, {
+      name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true,
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
@@ -882,7 +879,8 @@ class ChatView {
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
-    }, {
+    }, local ? { tools: localTools, allowedTools: ["Read", "Grep", "Glob"], capabilities: this.localReady.get(tab.model) || [],
+      store: brain.localStore(this.context) } : null, {
       onMessage: (m) => { if (r.stale) return; r.gotOutput = true; this.onClaude(tab, r, m); },
       onPermission: (req) => r.stale ? { allow: false, message: "Stopped." } : this.onPermission(tab, r, req),
       onExit: (info) => this.onExit(tab, r, info),
@@ -891,7 +889,7 @@ class ChatView {
     this.runtime.set(tab.id, r);
     if (!proc.start()) { r.proc = null; return null; }
     // Ask which connectors / MCP servers it has (they connect in the background, so twice).
-    if (full) for (const ms of [1500, 7000]) setTimeout(() => { if (!r.stale && r.proc) this.checkServers(tab, r); }, ms);
+    if (full && !local) for (const ms of [1500, 7000]) setTimeout(() => { if (!r.stale && r.proc) this.checkServers(tab, r); }, ms);
     if (instr.files.length) log(`chat ${tab.id}: using instructions from ${instr.files.join(", ")}`);
     return r;
   }
@@ -911,7 +909,7 @@ class ChatView {
     r.proc = null;
     if (last && last.role === "assistant" && last.running) {
       last.running = false;
-      last.error = info.login ? "login" : "Claude stopped unexpectedly. See View → Output → Kural.";
+      last.error = info.login ? "login" : "The model stopped unexpectedly. See View → Output → Kural.";
       tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(last) });
       this.postTabs(); this.save();
@@ -955,7 +953,12 @@ class ChatView {
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
     if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
-    if (!isSetUp()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // Claude Code isn't ready yet
+    if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
+    if (!isLocal(tab.model) && !isSetUp()) {   // a Claude model, but only your own model is set up
+      this.post({ type: "flash", text: "Claude isn't set up: pick a model on your computer, or set Claude up in Get started" });
+      vscode.commands.executeCommand("kural.getStarted", "claude");
+      return;
+    }
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
@@ -967,10 +970,21 @@ class ChatView {
     this.post({ type: "append", tabId: tab.id, msgs: [user, reply] });
     this.postTabs();
 
+    // The chat was on the other engine (Claude Code ↔ Kural's own): that one has the conversation, this one doesn't.
+    // A new session, and this message carries the conversation so far (everything before it).
+    const engine = isLocal(tab.model) ? "local" : "claude";
+    if (tab.engine && tab.engine !== engine) {
+      if (tab.messages.length > 2) tab.carryOver = { model: true, text: ChatView.transcript({ ...tab, messages: tab.messages.slice(0, -2) }) };
+      tab.sessionId = newSessionId(); tab.started = false;
+      const old = this.runtime.get(tab.id);
+      if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
+    }
+    tab.engine = engine;
     let r = this.runtime.get(tab.id);
     // A model on this computer: check Ollama and prepare the model first (says what's missing if it can't).
     if (isLocal(tab.model) && (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab) || !this.localReady.has(tab.model))) {
       const p = await this.prepareLocal(tab);
+      if (!reply.running) return;   // you pressed Stop meanwhile
       if (p.error) {
         reply.running = false; reply.error = p.error; tab.status = "idle";
         this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); this.save();
@@ -992,9 +1006,12 @@ class ChatView {
     if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
     clearInterval(r.busyTimer);
     if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
-    // Continued from another workspace: the first message carries the earlier conversation.
-    const carry = tab.carryOver && !tab.started ? `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
-      "That's our earlier conversation, from another workspace. Carry on from it here.\n\n" : "";
+    // Continued from another workspace, or switched to a model on another engine (Claude ↔ your computer): the first
+    // message carries the conversation so far.
+    const carry = tab.carryOver && !tab.started ? (tab.carryOver.model
+      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far (with another model). Carry on from it.\n\n`
+      : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
+        "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
     delete tab.carryOver;
     const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
@@ -1464,7 +1481,7 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: isSetUp() });
+          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp() });
         w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
@@ -1550,9 +1567,9 @@ class ChatView {
         tab.model = m.model;
         const r = this.runtime.get(tab.id);
         if (isLocal(m.model) || isLocal(was)) {
-          // To or from a model on this computer: that's another Claude Code setup (it talks to Ollama), so
-          // the next message starts it, keeping the conversation. In the middle of an answer: after it.
-          if (tab.status === "idle") this.warm(tab);
+          // To or from a model on this computer: another engine (Kural's own, or Claude Code), which doesn't have
+          // this conversation. send() notices (tab.engine) and starts a new session that carries the conversation.
+          if (tab.status === "idle" && !(tab.engine && tab.engine !== (isLocal(m.model) ? "local" : "claude"))) this.warm(tab);
           else this.post({ type: "flash", text: "The new model takes over with your next message" });
         } else if (r && r.proc && !r.proc.exited) r.proc.setModel(m.model);
         // Switch right away, keeping the conversation — even in the middle of an answer:
@@ -1581,7 +1598,7 @@ class ChatView {
       } break;
       case "setTeamStyle": if (valid(TEAM_STYLES, m.style)) { tab.teamStyle = m.style; if (!tab.team) tab.team = TEAM_SIZES[1]; this.afterTeamChange(tab); } break;
       case "reloadSetup": this.setupChanged("reload asked for"); break;
-      case "getStarted": vscode.commands.executeCommand("kural.getStarted"); break;
+      case "getStarted": vscode.commands.executeCommand("kural.getStarted", m.path); break;
       case "useFullSetup":
         await cfg().update("chat.fullClaudeCodeSetup", !!m.on, vscode.ConfigurationTarget.Global);
         this.setupChanged(m.on ? "switched to your full setup" : "switched to the minimal setup");
@@ -1684,7 +1701,7 @@ class ChatView {
 function prettyServer(name) { return String(name).replace(/^claude[._ ]ai[_ ]/i, "").replace(/_/g, " "); }
 
 // The model's name under the input: "Opus 4.7", or "qwen3-coder:30b · local" (not its larger-context copy's name).
-function shownModel(tab, id) { return isLocal(tab.model) ? `${localName(tab.model)} · local` : prettyModel(id); }
+function shownModel(tab, id) { return isLocal(tab.model) ? localName(tab.model) : prettyModel(id); }
 
 function prettyModel(id) {
   const m = id.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);

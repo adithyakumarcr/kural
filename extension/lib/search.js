@@ -1,12 +1,13 @@
 // "Ask" in the left sidebar: a question in plain words ("where is the operator box pause variable?")
-// → Claude searches the project and lists the exact places (file + line). Click one to open it there.
+// → the chat's model searches the project and lists the exact places (file + line). Click one to open it there.
 // (Plain text search is VS Code's own search, Ctrl+Shift+F.)
 
 const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("./ui");
 const fs = require("fs");
 const path = require("path");
-const { ClaudeProcess, log, findClaude, isSetUp, LOGIN_RE } = require("./claude");
+const { log, LOGIN_RE } = require("./claude");
+const brain = require("./brain");
 
 const SCHEMA = {
   type: "object",
@@ -87,7 +88,7 @@ class SearchView {
 
   async onMessage(m) {
     switch (m.type) {
-      case "ready": this.post({ type: "config", model: cfg().get("askSearch.model") }); this.prepare(); break;
+      case "ready": this.post({ type: "config", model: brain.currentModel() }); this.prepare(); break;
       case "ask": this.ask(m.q, m.id); break;
       case "cancel": this.cancel(); break;
       case "open": {
@@ -108,20 +109,23 @@ class SearchView {
   }
 
   // ---------- Ask ----------
-  makeProc(handlers) {
-    const p = new ClaudeProcess({
-      name: "ask", model: cfg().get("askSearch.model"), effort: "low", noThinking: true, safeMode: true,
+  // Ask uses the model picked in the chat: a Claude model through Claude Code, a model on your computer through
+  // Kural's own engine (same tools, read-only, and the answer as JSON).
+  makeProc(model, handlers) {
+    return brain.makeAgent(model, {
+      name: "ask", effort: "low", noThinking: true, safeMode: true,
       appendSystemPrompt: ASK_PROMPT + ws.promptNote(), tools: ["Read", "Grep", "Glob"], allowedTools: ["Read", "Grep", "Glob"],
       cwd: this.root(), jsonSchema: SCHEMA, addDirs: ws.extraDirs(),
-    }, handlers);
-    return p;
+    }, { tools: ["Read", "Grep", "Glob"], allowedTools: ["Read", "Grep", "Glob"], effort: "low" }, handlers);
   }
 
-  // Start the next Claude now, so the next question doesn't wait for it to start.
+  // Start the next one now, so the next question doesn't wait for it to start (for the chat's current model).
   prepare() {
-    if (this.spare || !this.root() || !findClaude()) return;
-    const slot = { proc: null, handlers: null };
-    slot.proc = this.makeProc({
+    const model = brain.currentModel();
+    if (this.spare && this.spare.model !== model) { const s = this.spare; this.spare = null; s.proc.kill(); }
+    if (this.spare || !this.root() || !brain.usable(model).ok) return;
+    const slot = { proc: null, handlers: null, model };
+    slot.proc = this.makeProc(model, {
       onMessage: (msg) => slot.handlers && slot.handlers.onMessage(msg),
       onExit: (info) => { if (this.spare === slot) this.spare = null; if (slot.handlers) slot.handlers.onExit(info); },
     });
@@ -136,11 +140,12 @@ class SearchView {
     this.cancel();
     const root = this.root();
     if (!root) { this.post({ type: "error", id, message: "Open a folder first." }); return; }
-    if (!isSetUp() || !findClaude()) { this.post({ type: "error", id, message: "Set up Kural first: Claude Code, installed and logged in." }); vscode.commands.executeCommand("kural.getStarted"); return; }
+    const can = brain.usable();
+    if (!can.ok) { this.post({ type: "error", id, message: can.why }); vscode.commands.executeCommand("kural.getStarted"); return; }
     this.prepare();
     const slot = this.spare;
     this.spare = null;
-    if (!slot) { this.post({ type: "error", id, message: "Couldn't start Claude. See View → Output → Kural." }); return; }
+    if (!slot) { this.post({ type: "error", id, message: "Couldn't start the model. See View → Output → Kural." }); return; }
     const t0 = Date.now();
     this.current = { proc: slot.proc, id };
     slot.handlers = {
@@ -157,19 +162,19 @@ class SearchView {
           this.current = null;
           slot.proc.kill();
           if (msg.is_error) {
-            this.post({ type: "error", id, message: LOGIN_RE.test(msg.result || "") ? "You're not logged in to Claude. Run Kural: Log In." : (msg.result || "Something went wrong.") });
+            this.post({ type: "error", id, message: !brain.isLocal(slot.model) && LOGIN_RE.test(msg.result || "") ? "Claude isn't logged in. Open Kural: Get Started." : (msg.result || "Something went wrong.") });
             return;
           }
           const out = msg.structured_output || safeJson(msg.result) || { answer: msg.result || "", results: [] };
           const results = verify(out.results || []);
           log(`ask: "${q}" → ${results.length} places in ${Date.now() - t0} ms`);
-          this.post({ type: "askResult", id, answer: out.answer || "", results, ms: Date.now() - t0 });
+          this.post({ type: "askResult", id, answer: out.answer || "", results, ms: Date.now() - t0, model: brain.isLocal(slot.model) ? brain.localName(slot.model) : slot.model[0].toUpperCase() + slot.model.slice(1) });
         }
       },
       onExit: (info) => {
         if (this.current && this.current.id === id) {
           this.current = null;
-          this.post({ type: "error", id, message: info.login ? "You're not logged in to Claude." : "Claude stopped unexpectedly. See View → Output → Kural." });
+          this.post({ type: "error", id, message: info.login ? "Claude isn't logged in. Open Kural: Get Started." : "The model stopped unexpectedly. See View → Output → Kural." });
         }
       },
     };
