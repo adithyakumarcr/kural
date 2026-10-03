@@ -54,6 +54,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .answer code.ref { color: var(--vscode-textLink-foreground); cursor: pointer; }
 .answer code.ref:hover { text-decoration: underline; }
 .answer .link { color: var(--vscode-textLink-foreground); }
+.answer a.link { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.answer a.link:hover { color: var(--vscode-textLink-activeForeground); }
+.answer { overflow-wrap: break-word; }   /* a long web address wraps instead of widening the chat */
 .tool { color: var(--muted); font-size: calc(12px * var(--fs, 1)); margin: 0 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tool-name { color: var(--vscode-foreground); opacity: .85; }
 .tool-file { cursor: pointer; } .tool-file:hover { text-decoration: underline; }

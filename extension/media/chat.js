@@ -70,7 +70,7 @@
     p = String(p || "").trim();
     if (/^data:image\/[a-z+.-]+;base64,/i.test(p)) return p;
     if (/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[A-Za-z]:[\\/]/.test(p) && !/^file:/i.test(p)) return null;   // http(s) and other schemes
-    const F = S.files || {};
+    const F = S.pics || {};   // { base, root } (from the extension: filesFor)
     let abs = p.replace(/^file:\/\//i, "").replace(/\\/g, "/");
     if (!/^\//.test(abs) && !/^[A-Za-z]:\//.test(abs)) abs = `${String(F.root || "").replace(/\\/g, "/").replace(/\/$/, "")}/${abs.replace(/^\.\//, "")}`;
     if (/^[A-Za-z]:\//.test(abs)) abs = `/${abs[0].toLowerCase()}:${abs.slice(2)}`;   // C:/x → /c:/x (Windows)
@@ -98,7 +98,11 @@
       })
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-      .replace(/(^|[^"])\[([^\]]+)\]\(([^)]+)\)/g, '$1<span class="link">$2</span>');
+      .replace(/(^|[^"])\[([^\]]+)\]\(([^)\s]+)\)/g, (_, pre, text, url) => pre + (/^https?:\/\//.test(url)
+        ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : `<span class="link">${text}</span>`))
+      // A bare web address: clickable too (not inside `code`, not inside a link made above).
+      .split(/(<code[^>]*>[\s\S]*?<\/code>|<a [^>]*>[\s\S]*?<\/a>)/).map((part, i) => i % 2 ? part
+        : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')).join("");
   }
 
   // "| a | b |" → ["a", "b"]   (a "|" inside `code` doesn't split)
@@ -1071,6 +1075,8 @@
   listEl.addEventListener("click", (e) => {
     const remote = e.target.closest && e.target.closest(".img-remote");
     if (remote) { remote.replaceWith(el("img", { class: "md-img", src: remote.dataset.url, alt: remote.dataset.alt || "" })); return; }
+    const a = e.target.closest && e.target.closest("a.link[data-url]");
+    if (a) { e.preventDefault(); post({ type: "openUrl", url: a.dataset.url }); return; }
     const r = e.target.closest && e.target.closest("code.ref");
     if (r) post({ type: "openFile", path: r.dataset.path, line: +r.dataset.line || undefined });
   });
@@ -1105,7 +1111,7 @@
     switch (m.type) {
       case "config":
         S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false;
-        S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.files = m.files || S.files;
+        S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.pics = m.pics || S.pics;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;

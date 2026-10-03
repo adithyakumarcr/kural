@@ -34,6 +34,6 @@ own model on their computer (Ollama, offline, no account). Features and how to u
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme).
 - Full guide: ${WIKI}
 If they ask for something Kural doesn't have, say so plainly (don't pretend), suggest the closest thing it has, and
-invite them to ask for it as a feature: ${ISSUES}`;
+invite them to ask for it as a feature, with this link: [Ask for this feature](${ISSUES}).`;
 
 module.exports = { GUIDE, ISSUES, WIKI };
