@@ -64,15 +64,41 @@
   }
 
   // ---------- tiny markdown (with tables) ----------
+  // A picture's address for this page: a file (absolute, or relative to the project) becomes the editor's own
+  // address for it; data:image/… stays; a web address returns null (shown as "Load image", see inline()).
+  function fileSrc(p) {
+    p = String(p || "").trim();
+    if (/^data:image\/[a-z+.-]+;base64,/i.test(p)) return p;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[A-Za-z]:[\\/]/.test(p) && !/^file:/i.test(p)) return null;   // http(s) and other schemes
+    const F = S.files || {};
+    let abs = p.replace(/^file:\/\//i, "").replace(/\\/g, "/");
+    if (!/^\//.test(abs) && !/^[A-Za-z]:\//.test(abs)) abs = `${String(F.root || "").replace(/\\/g, "/").replace(/\/$/, "")}/${abs.replace(/^\.\//, "")}`;
+    if (/^[A-Za-z]:\//.test(abs)) abs = `/${abs[0].toLowerCase()}:${abs.slice(2)}`;   // C:/x → /c:/x (Windows)
+    return F.base ? F.base + abs.split("/").map((x, i) => i === 0 ? x : encodeURIComponent(x)).join("/") : null;
+  }
+  // ![alt](src) → the picture. A web picture waits for a click: loading it would tell that website you read this (a
+  // model can be tricked into writing a picture link that carries your data away).
+  function imageHtml(alt, src) {
+    const raw = src.replace(/&amp;/g, "&");
+    const local = fileSrc(raw);
+    if (local) return `<img class="md-img" src="${esc(local)}" alt="${alt}" title="${alt}">`;
+    if (/^https?:\/\//i.test(raw)) {
+      let host = ""; try { host = new URL(raw).host; } catch { /* not a URL */ }
+      return `<span class="img-remote" data-url="${esc(raw)}" data-alt="${alt}" title="${esc(raw)}">Load image${host ? ` from ${esc(host)}` : ""}</span>`;
+    }
+    return `<span class="img-missing">${alt || "image"}</span>`;
+  }
+
   function inline(s) {
     return esc(s)
+      .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^)]*&quot;)?\)/g, (_, alt, src) => imageHtml(alt, src))
       .replace(/`([^`]+)`/g, (_, c) => {
         const m = c.match(/^([\w./-]+\.[A-Za-z0-9]+)(?::(\d+)(?:-(\d+))?)?$/);
         return m ? `<code class="ref" data-path="${m[1]}" data-line="${m[2] || ""}">${c}</code>` : `<code>${c}</code>`;
       })
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="link">$1</span>');
+      .replace(/(^|[^"])\[([^\]]+)\]\(([^)]+)\)/g, '$1<span class="link">$2</span>');
   }
 
   // "| a | b |" → ["a", "b"]   (a "|" inside `code` doesn't split)
@@ -166,6 +192,13 @@
   const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, historyBtn);
   tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   const listEl = el("div", { class: "list" });
+  // Follow new text only while you're at the bottom. Scrolled up to read? It stays put, and "Jump to latest" appears.
+  let stick = true;
+  const jumpBtn = el("button", { class: "jump hidden", title: "Jump to the latest", onclick: () => { stick = true; toBottom(); } }, icon("arrow-down"), " Latest");
+  const atBottom = () => listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 24;
+  const toBottom = () => { listEl.scrollTop = listEl.scrollHeight; jumpBtn.classList.add("hidden"); };
+  const follow = () => { if (stick) toBottom(); else jumpBtn.classList.remove("hidden"); };
+  listEl.addEventListener("scroll", () => { stick = atBottom(); if (stick) jumpBtn.classList.add("hidden"); });
   const historyEl = el("div", { class: "history hidden" });
   const localEl = el("div", { class: "history local hidden" });   // "Local models": search, download, use
   const chipsEl = el("div", { class: "chips" });
@@ -181,7 +214,7 @@
       sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
   const visitBar = el("div", { class: "visit hidden" });
-  const body = el("div", { class: "body" }, listEl, historyEl, localEl);
+  const body = el("div", { class: "body" }, listEl, historyEl, localEl, jumpBtn);
   app.replaceChildren(tabBar, body, visitBar, composer, menuEl);
 
   // ---------- tabs ----------
@@ -296,16 +329,32 @@
     } else {
       t.messages.forEach((m, i) => listEl.append(messageNode(m, i)));
     }
-    listEl.scrollTop = listEl.scrollHeight;
+    stick = true; toBottom();
     renderFoot();
   }
 
   function rerender(i) {
-    const nearBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 120;
     const old = listEl.querySelector(`[data-i="${i}"]`);
     const node = messageNode(S.tab.messages[i], i);
     if (old) old.replaceWith(node); else listEl.append(node);
-    if (nearBottom) listEl.scrollTop = listEl.scrollHeight;
+    follow();
+  }
+
+  // While an answer streams in, only the part that grew is redrawn (a text block, or the thinking box's text), not the
+  // whole message: the rest of the page doesn't move, and the thinking box keeps its scroll position.
+  function patchBlock(i, k) {
+    const msg = S.tab.messages[i], b = msg && msg.blocks[k];
+    const wrap = listEl.querySelector(`[data-i="${i}"] [data-b="${k}"]`);
+    if (!b || !wrap) return rerender(i);
+    if (b.k === "text") wrap.replaceChildren(...markdown(b.text, !msg.running));
+    else if (b.k === "think") {
+      const body = wrap.querySelector(".think-body");
+      if (!body) return rerender(i);
+      const end = body.scrollHeight - body.scrollTop - body.clientHeight < 16;   // following its end?
+      body.textContent = b.text;
+      if (end) body.scrollTop = body.scrollHeight;
+    } else return rerender(i);
+    follow();
   }
 
   // Pills in sent messages open the file when clicked; pills you're still typing don't.
@@ -324,20 +373,26 @@
           (m.contexts || []).map((c) => el("span", { class: "ctx" }, icon("file"), " ", c.name || base(c.path)))) : null,
         el("div", { class: "bubble" }, (m.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)),
           (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
-            el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
-              kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
+            a.kind === "image" && fileSrc(a.path)
+              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.path }) })
+              : el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
+                kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
     }
     const out = el("div", { class: "answer" });
     const last = i === S.tab.messages.length - 1;
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
-    for (const b of m.blocks || []) {
-      if (b.k === "text") out.append(...markdown(b.text, !m.running));
-      else if (b.k === "tool") out.append(toolNode(b));
-      else if (b.k === "perm") out.append(permNode(b));
-      else if (b.k === "agent") out.append(agentNode(b));
-      else if (b.k === "question") out.append(questionNode(b));
-      else if (b.k === "think") out.append(thinkNode(b, m.running && !b.done));
-    }
+    (m.blocks || []).forEach((b, k) => {
+      // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock).
+      const w = el("div", { class: "blk", "data-b": k });
+      if (b.k === "text") w.append(...markdown(b.text, !m.running));
+      else if (b.k === "tool") w.append(toolNode(b));
+      else if (b.k === "perm") w.append(permNode(b));
+      else if (b.k === "agent") w.append(agentNode(b));
+      else if (b.k === "question") w.append(questionNode(b));
+      else if (b.k === "think") w.append(thinkNode(b, m.running && !b.done));
+      else if (b.k === "image") w.append(imageNode(b));
+      out.append(w);
+    });
     const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
     const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
     if (m.running && waiting) out.append(el("div", { class: "working" }, el("span", { class: "wait-dot" }), asking ? "Waiting for your answer above" : "Waiting for your OK above"));
@@ -368,11 +423,7 @@
     return s < 2 ? "Thinking…" : `Thinking… ${s}s`;
   }
   setInterval(() => {
-    for (const e of listEl.querySelectorAll(".elapsed")) {
-      e.textContent = workingText(+e.dataset.t0);
-      const s = (Date.now() - +e.dataset.t0) / 1000;
-      if (s > 45 && !e.parentNode.querySelector(".slow")) e.parentNode.append(el("span", { class: "slow" }, " Taking a while. ", el("button", { class: "cb", onclick: () => post({ type: "showLog" }) }, "See log")));
-    }
+    for (const e of listEl.querySelectorAll(".elapsed")) e.textContent = workingText(+e.dataset.t0);
   }, 1000);
 
   const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page" };
@@ -389,10 +440,12 @@
     }
     if (b.name === "mcp__team__read") return el("div", { class: "tool team-wait" }, b.detail);
     const file = ["Read", "Edit", "Write", "NotebookEdit"].includes(b.name) ? b.detail.split("  (")[0] : null;
+    const pic = file && b.name === "Read" && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file) ? fileSrc(file) : null;
     return el("div", { class: `tool ${b.name}` },
       el("span", { class: "tool-name" }, TOOL_VERB[b.name] || prettyTool(b.name)), " ",
       file ? el("span", { class: "tool-file", onclick: () => post({ type: "openFile", path: file }) }, b.detail)
-        : b.name === "Bash" ? el("code", {}, b.detail) : el("span", {}, b.detail));
+        : b.name === "Bash" ? el("code", {}, b.detail) : el("span", {}, b.detail),
+      pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), onclick: () => post({ type: "openFile", path: file }) }) : null);
   }
 
   // Claude's thinking (short summaries). Open while it thinks; afterwards one line you can click to open.
@@ -405,6 +458,13 @@
       el("div", { class: "think-body" }, b.text));
     if (live) requestAnimationFrame(() => { const body = node.querySelector(".think-body"); if (body) body.scrollTop = body.scrollHeight; });
     return node;
+  }
+
+  // A picture the model made (saved by Kural as a file): shown in the answer; click opens it.
+  function imageNode(b) {
+    const src = fileSrc(b.path);
+    return src ? el("img", { class: "md-img gen-img", src, alt: b.alt || "picture", title: "Open the picture", onclick: () => post({ type: "openFile", path: b.path }) })
+      : el("span", { class: "img-missing" }, icon("file-media"), " ", b.path);
   }
 
   function agentNode(b) {
@@ -1009,14 +1069,33 @@
     if (S.menu && !menuEl.contains(e.target) && !modeBtn.contains(e.target) && !modelBtn.contains(e.target) && !attachBtn.contains(e.target)) closeMenu();
   });
   listEl.addEventListener("click", (e) => {
+    const remote = e.target.closest && e.target.closest(".img-remote");
+    if (remote) { remote.replaceWith(el("img", { class: "md-img", src: remote.dataset.url, alt: remote.dataset.alt || "" })); return; }
     const r = e.target.closest && e.target.closest("code.ref");
     if (r) post({ type: "openFile", path: r.dataset.path, line: +r.dataset.line || undefined });
   });
 
+  // A picture that can't be shown (moved, outside the folders Kural may show): its name instead of a broken image.
+  listEl.addEventListener("error", (e) => {
+    const t = e.target;
+    if (t && t.tagName === "IMG" && (t.classList.contains("md-img") || t.classList.contains("att-photo"))) {
+      t.replaceWith(el("span", { class: "img-missing" }, icon("file-media"), " ", t.alt || "image"));
+    }
+  }, true);
+
   // ---------- messages from the extension ----------
   const lastAssistant = () => { const m = S.tab && S.tab.messages; return m && m.length && m[m.length - 1].role === "assistant" ? m.length - 1 : -1; };
   let pending = null;
-  const scheduleRerender = (i) => { if (pending === null) { pending = i; requestAnimationFrame(() => { const k = pending; pending = null; if (S.tab && S.tab.messages[k]) rerender(k); }); } };
+  const scheduleRerender = (i) => { if (pending === null) { pending = i; requestAnimationFrame(() => { const k = pending; pending = null; patches.clear(); if (S.tab && S.tab.messages[k]) rerender(k); }); } };
+  // Streaming: patch one block, at most once per frame (several deltas in one frame → one redraw).
+  const patches = new Set();
+  const schedulePatch = (i, k) => {
+    if (pending !== null) return;   // a full redraw is coming anyway
+    const key = `${i}:${k}`;
+    if (patches.has(key)) return;
+    patches.add(key);
+    requestAnimationFrame(() => { if (!patches.delete(key)) return; if (S.tab && S.tab.messages[i]) patchBlock(i, k); });
+  };
   const findAgent = (id) => { const i = lastAssistant(); return i >= 0 ? [i, S.tab.messages[i].blocks.find((b) => b.k === "agent" && b.id === id)] : [i, null]; };
 
   window.addEventListener("message", (ev) => {
@@ -1026,7 +1105,7 @@
     switch (m.type) {
       case "config":
         S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false;
-        S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || [];
+        S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.files = m.files || S.files;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
@@ -1057,14 +1136,14 @@
         const i = lastAssistant(); if (i < 0) break;
         const msg = S.tab.messages[i];
         let b = msg.blocks[msg.blocks.length - 1];
-        if (!b || b.k !== "text") { b = { k: "text", text: "" }; msg.blocks.push(b); }
-        b.text += m.text; scheduleRerender(i);
+        if (!b || b.k !== "text") { b = { k: "text", text: "" }; msg.blocks.push(b); b.text += m.text; scheduleRerender(i); break; }
+        b.text += m.text; schedulePatch(i, msg.blocks.length - 1);
       } break;
       case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i].blocks.push(m.block); scheduleRerender(i); } } break;
       case "thinkDelta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
         const blocks = S.tab.messages[i].blocks, b = blocks[blocks.length - 1];
-        if (b && b.k === "think") { b.text += m.text; scheduleRerender(i); }
+        if (b && b.k === "think") { b.text += m.text; schedulePatch(i, blocks.length - 1); }
       } break;
       case "agentActivity": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.activity = m.activity; scheduleRerender(i); } } break;
       case "agentStep": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.steps.push(m.step); scheduleRerender(i); } } break;

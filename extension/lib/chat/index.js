@@ -20,6 +20,7 @@ const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
+const { GUIDE } = require("./guide");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
 
 const MODELS = [
@@ -191,6 +192,7 @@ class ChatView {
     if (!valid(EFFORTS, tab.effort)) tab.effort = d.effort;
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
+    if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)
     if (!valid(MOODS, tab.mood)) tab.mood = d.mood;
     if (!Array.isArray(tab.roles)) tab.roles = d.roles;
     tab.roles = tab.roles.filter((r) => valid(ROLES, r));
@@ -445,16 +447,37 @@ class ChatView {
     view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
   }
 
+  // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (attachments,
+  // pictures a model made) and the temp folder. Not your whole disk.
+  resourceRoots() {
+    return [vscode.Uri.joinPath(this.context.extensionUri, "media"), ...ws.folders().map((f) => vscode.Uri.file(f.path)),
+      this.context.globalStorageUri, vscode.Uri.file(os.tmpdir())];
+  }
+  // For the page: how to turn a file path into an address it can load (fileSrc in media/chat.js).
+  filesFor(webview) {
+    return { base: webview.asWebviewUri(vscode.Uri.file("/")).toString().replace(/\/$/, ""), root: this.root() || "" };
+  }
+
+  // A picture a model made (Ollama image models): saved as a file in Kural's storage, shown in the answer.
+  saveImage(data, mime) {
+    const ext = { "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" }[mime] || "png";
+    const dir = path.join(this.context.globalStorageUri.fsPath, "images");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${Date.now()}-${shortId()}.${ext}`);
+    fs.writeFileSync(file, Buffer.from(data, "base64"));
+    return file;
+  }
+
   // Show the chat page in a webview (the side panel or a panel beside the code) and track it as a pane.
   attach(webview, kind, panel, activeId) {
     const pane = { id: shortId(), kind, webview, panel, ready: false, queue: [], activeId };
     this.panes.push(pane);
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
-    webview.options = { enableScripts: true, localResourceRoots: [media] };
+    webview.options = { enableScripts: true, localResourceRoots: this.resourceRoots() };
     const nonce = shortId() + shortId();
     const uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
 <body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
     webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
@@ -672,7 +695,7 @@ class ChatView {
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
       name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true,
-      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (MOOD_PROMPTS[tab.mood] || "") +
+      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
       tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : [])],
@@ -835,6 +858,14 @@ class ChatView {
   onClaude(tab, r, m) {
     const turn = r.turn;
     const reply = turn && turn.reply;
+    if (m.type === "kural_image" && r.turn) {   // (Kural's engine: a picture from the model)
+      try {
+        const block = { k: "image", path: this.saveImage(m.data, m.mime) };
+        r.turn.reply.blocks.push(block);
+        this.post({ type: "block", tabId: tab.id, block });
+      } catch (e) { log(`chat: couldn't save a picture: ${e.message}`); }
+      return;
+    }
     if (m.type === "system" && m.subtype === "init" && m.model) {
       tab.modelName = shownModel(tab, m.model);
       if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
@@ -1282,7 +1313,7 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp() });
+          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), files: this.filesFor(w) });
         w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
