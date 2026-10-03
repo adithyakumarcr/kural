@@ -454,8 +454,8 @@ class ChatView {
     const nonce = shortId() + shortId();
     const uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
-<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("chat.css")}"></head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
+<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
 <body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
     webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
     return pane;

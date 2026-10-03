@@ -50,14 +50,9 @@
   // "Ctrl+" is ⌘ on a Mac; "Control+" means the Control key everywhere (⌃ on a Mac).
   const keys = (k) => MAC ? k.replace(/Control\+/g, "⌃").replace(/Ctrl\+/g, "⌘").replace(/Alt\+/g, "⌥") : k.replace(/Control\+/g, "Ctrl+");
 
-  // Small line icons (inline SVG, colored by the theme).
-  const ICON = {
-    clock: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.4 1.6" stroke-linecap="round"/></svg>',
-    plus: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
-    pin: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M9.8 2.2l4 4-2.1.7-2.4 2.4.3 3-1.3 1.3-2.4-2.4-3.2 3.2M5.3 8.6L2.9 6.2l1.3-1.3 3 .3 2.4-2.4z"/></svg>',
-    trash: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>',
-  };
-  const icon = (name) => el("span", { class: "ic", html: ICON[name] });
+  // Icons: Codicons (VS Code's own icon set, media/codicons), so Kural looks like the editor around it. Never emoji.
+  const ICON_ALIAS = { clock: "history", plus: "add" };
+  const icon = (name, cls = "") => el("i", { class: `codicon codicon-${ICON_ALIAS[name] || name}${cls ? ` ${cls}` : ""}`, "aria-hidden": "true" });
 
   function ago(t) {
     const s = Math.max(1, Math.round((Date.now() - t) / 1000));
@@ -220,7 +215,7 @@
         },
         el("span", { class: "dot" }),
         el("span", { class: "tab-title" }, t.title),
-        el("button", { class: "tab-x", title: "Close (stays in history)", onclick: (e) => { e.stopPropagation(); post({ type: "closeTab", id: t.id }); } }, "×"));
+        el("button", { class: "tab-x", title: "Close (stays in history)", onclick: (e) => { e.stopPropagation(); post({ type: "closeTab", id: t.id }); } }, icon("close")));
       }));
     const a = tabsEl.querySelector(".tab.active");
     if (a) a.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -326,11 +321,11 @@
       return el("div", { class: "msg user", "data-i": i },
         (m.contexts || []).length || (m.mode && m.mode !== "agent") ? el("div", { class: "ctx-line" },
           m.mode && m.mode !== "agent" ? el("span", { class: `mode-tag ${m.mode}` }, modeLabel(m.mode)) : null,
-          (m.contexts || []).map((c) => el("span", { class: "ctx" }, "▤ ", c.name || base(c.path)))) : null,
+          (m.contexts || []).map((c) => el("span", { class: "ctx" }, icon("file"), " ", c.name || base(c.path)))) : null,
         el("div", { class: "bubble" }, (m.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)),
           (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
             el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
-              el("span", { class: "att-icon" }, KIND_ICON[a.kind] || "📎"), el("span", { class: "att-name" }, a.name)))) : null));
+              kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
     }
     const out = el("div", { class: "answer" });
     const last = i === S.tab.messages.length - 1;
@@ -358,7 +353,7 @@
     else if (m.error === "missing") out.append(el("div", { class: "note warn" }, "Claude isn't set up yet. Open Kural: Get Started, or pick a model on your computer."));
     else if (m.error) out.append(el("div", { class: "note warn" }, m.error, " ", el("button", { class: "cb", onclick: () => post({ type: "showLog" }) }, "Open log")));
     if (m.planReady) out.append(el("div", { class: "plan-bar" },
-      m.planBuilt ? el("span", { class: "row-state" }, "✓ Building it") : [
+      m.planBuilt ? el("span", { class: "row-state" }, icon("check"), " Building it") : [
         el("span", { class: "plan-q" }, "Happy with this plan?"),
         el("span", { class: "spacer" }),
         el("button", { class: "cb primary solid big", disabled: S.tab.status !== "idle", onclick: () => post({ type: "buildPlan", tabId: S.tab.id, msgIndex: i }) }, "Build it")]));
@@ -512,7 +507,7 @@
         el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: always.checked }) }, "Run"),
         el("button", { class: "cb", onclick: () => post({ type: "permission", pid: b.pid, allow: false }) }, "Skip"),
         el("label", { class: "always", for: `al-${b.pid}` }, always, " Allow all commands in this chat")));
-    } else card.append(el("div", { class: "perm-state" }, b.state === "allowed" ? "✓ Allowed" : "✕ Skipped"));
+    } else card.append(el("div", { class: "perm-state" }, b.state === "allowed" ? [icon("check"), " Allowed"] : [icon("close"), " Skipped"]));
     return card;
   }
 
@@ -528,7 +523,7 @@
           el("button", { class: "cb", onclick: () => act("review", c.id) }, "Review"),
           el("button", { class: "cb", onclick: () => act("undo", c.id) }, "Undo"),
           el("button", { class: "cb primary", onclick: () => act("keep", c.id) }, "Keep"))
-          : el("span", { class: "row-state" }, c.state === "kept" ? "✓ Kept" : "↶ Undone"))),
+          : el("span", { class: "row-state" }, c.state === "kept" ? [icon("check"), " Kept"] : [icon("discard"), " Undone"]))),
       pending > 1 ? el("div", { class: "card-foot" },
         el("button", { class: "cb", onclick: () => act("undo", "*") }, "Undo all"),
         el("button", { class: "cb primary", onclick: () => act("keep", "*") }, "Keep all")) : null);
@@ -540,21 +535,22 @@
     const tk = S.tab && S.tab.ticket;
     if (tk) chipsEl.append(el("span", { class: "chip ticket", title: `${tk.key}: ${tk.summary}${tk.status ? ` (${tk.status})` : ""}\nLinked to this chat: the model knows about it in every message.${tk.url ? "\nClick to open it in Jira." : ""}`,
       onclick: () => tk.url && post({ type: "openUrl", url: tk.url }) },
-      "🎫 ", el("b", {}, tk.key), el("span", { class: "chip-dim ticket-chip-sum" }, ` · ${tk.summary}`),
-      el("button", { class: "chip-x", title: "Unlink this ticket", onclick: (e) => { e.stopPropagation(); post({ type: "linkTicket", tabId: S.tab.id, ticket: null }); } }, "×")));
+      icon("issues"), " ", el("b", {}, tk.key), el("span", { class: "chip-dim ticket-chip-sum" }, ` · ${tk.summary}`),
+      el("button", { class: "chip-x", title: "Unlink this ticket", onclick: (e) => { e.stopPropagation(); post({ type: "linkTicket", tabId: S.tab.id, ticket: null }); } }, icon("close"))));
     if (S.activeFile && S.includeActive)
-      chipsEl.append(el("span", { class: "chip", title: `${S.activeFile.path} is sent with your message` }, "▤ ", S.activeFile.name, el("span", { class: "chip-dim" }, " · current file"),
-        el("button", { class: "chip-x", title: "Don't send this file", onclick: () => { S.includeActive = false; renderChips(); } }, "×")));
+      chipsEl.append(el("span", { class: "chip", title: `${S.activeFile.path} is sent with your message` }, icon("file"), " ", S.activeFile.name, el("span", { class: "chip-dim" }, " · current file"),
+        el("button", { class: "chip-x", title: "Don't send this file", onclick: () => { S.includeActive = false; renderChips(); } }, icon("close"))));
     else if (S.activeFile)
       chipsEl.append(el("button", { class: "chip ghost", onclick: () => { S.includeActive = true; renderChips(); } }, "+ ", S.activeFile.name));
     for (const a of S.attachments) chipsEl.append(attachChip(a, () => { S.attachments = S.attachments.filter((x) => x.id !== a.id); renderChips(); }));
   }
-  const KIND_ICON = { image: "🖼", pdf: "📄", text: "▤", folder: "📁", file: "📎" };
+  const KIND_ICON = { image: "file-media", pdf: "file-pdf", text: "file-text", folder: "folder", file: "file" };
+  const kindIcon = (kind) => el("span", { class: "att-icon" }, icon(KIND_ICON[kind] || "file"));
   function attachChip(a, remove) {
     return el("span", { class: `chip att ${a.kind}`, title: a.path || a.name },
-      a.thumb ? el("img", { class: "att-thumb", src: a.thumb, alt: "" }) : el("span", { class: "att-icon" }, KIND_ICON[a.kind] || "📎"),
+      a.thumb ? el("img", { class: "att-thumb", src: a.thumb, alt: "" }) : kindIcon(a.kind),
       el("span", { class: "att-name" }, a.name),
-      remove ? el("button", { class: "chip-x", title: "Remove", onclick: remove }, "×") : null);
+      remove ? el("button", { class: "chip-x", title: "Remove", onclick: remove }, icon("close")) : null);
   }
 
   function renderFoot() {
@@ -575,11 +571,11 @@
         v.canOpen ? el("button", { class: "cb", title: "Open that folder in a new window and carry on there", onclick: () => post({ type: "openWorkspace", id: t.id }) }, "Open its folder") : null,
         el("button", { class: "cb primary", title: "Start a new chat here that knows this conversation", onclick: () => { S.focusNext = true; post({ type: "continueHere", id: t.id }); } }, "Continue here")));
     const running = t.status !== "idle";
-    modeBtn.replaceChildren(el("span", { class: `mode-dot m-${t.mode}` }), modeLabel(t.mode), el("span", { class: "chev" }, "▾"));
+    modeBtn.replaceChildren(el("span", { class: `mode-dot m-${t.mode}` }), modeLabel(t.mode), icon("chevron-down", "chev"));
     const team = t.teamSize ? ` · ${t.teamStyle === "discuss" ? "discussion" : `${t.teamSize} agents`}` : "";
     const mood = t.mood && t.mood !== "default" ? ` · ${moodLabel(t.mood)}` : "";
-    modelBtn.replaceChildren(`${t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${team}`, el("span", { class: "chev" }, "▾"));
-    sendBtn.replaceChildren(running ? "■" : "↑");
+    modelBtn.replaceChildren(`${t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${team}`, icon("chevron-down", "chev"));
+    sendBtn.replaceChildren(icon(running ? "debug-stop" : "arrow-up"));
     sendBtn.title = running ? "Stop (Esc)" : "Send (Enter)";
     sendBtn.classList.toggle("stop", running);
     input.dataset.placeholder = {
@@ -769,10 +765,10 @@
       const jira = (S.setups[t.id] || {}).jira || { ok: true };
       items = [
         el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "attachPick" }); } },
-          el("span", { class: "mi-icon" }, "📎"), el("span", { class: "mi-label" }, "Add files"), el("span", { class: "mi-hint" }, "images, PDFs, code")),
+          el("span", { class: "mi-icon" }, icon("attach")), el("span", { class: "mi-label" }, "Add files"), el("span", { class: "mi-hint" }, "images, PDFs, code")),
         el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
-          el("span", { class: "mi-icon" }, "🎫"), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
-          jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, "⚠ Atlassian not connected"))];
+          el("span", { class: "mi-icon" }, icon("issues")), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
+          jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected"))];
     } else if (kind === "ticket") {
       items = ticketItems(t);
     } else if (kind === "mode") {
@@ -826,8 +822,8 @@
     const out = [el("div", { class: "mh" }, "On this computer", el("span", { class: "mh-key" }, "Ollama · offline"))];
     if (!L) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint" }, "Looking for Ollama…")));
     else if (!L.status.running) out.push(el("div", { class: "mi", onclick: () => { post({ type: "installOllama" }); closeMenu(); } },
-      el("span", { class: "mi-icon" }, "⬇"), el("span", { class: "mi-label" }, "Get Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
-    else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, `⚠ Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
+      el("span", { class: "mi-icon" }, icon("cloud-download")), el("span", { class: "mi-label" }, "Get Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
+    else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, icon("warning"), ` Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
     else for (const m of L.models.filter((x) => x.chat)) {   // (models without tools can't chat: not listed)
       const id = `ollama:${m.name}`;
       out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
@@ -836,7 +832,7 @@
     if (L && L.status.ok && !L.models.some((x) => x.chat)) out.push(el("div", { class: "mi dim" },
       el("span", { class: "mi-hint" }, "No model for the chat yet: find one below")));
     out.push(el("div", { class: "mi", onclick: () => { closeMenu(); openLocal(); } },
-      el("span", { class: "mi-icon" }, "🔍"), el("span", { class: "mi-label" }, "Find & download models…")));
+      el("span", { class: "mi-icon" }, icon("search")), el("span", { class: "mi-label" }, "Find & download models…")));
     return out;
   }
 
@@ -866,7 +862,7 @@
     if (!L) kids.push(el("div", { class: "h-empty" }, "Looking for Ollama…"));
     else if (!L.status.running) kids.push(el("div", { class: "lm-warn" }, "Ollama isn't running. ", el("button", { class: "cb primary", onclick: () => post({ type: "installOllama" }) }, "Get Ollama"),
       el("button", { class: "cb", onclick: () => post({ type: "localModels" }) }, "Check again")));
-    else if (!L.status.ok) kids.push(el("div", { class: "lm-warn" }, `⚠ Your Ollama is ${L.status.version}. The chat needs ${L.minVersion} or newer: update Ollama.`));
+    else if (!L.status.ok) kids.push(el("div", { class: "lm-warn" }, icon("warning"), ` Your Ollama is ${L.status.version}. The chat needs ${L.minVersion} or newer: update Ollama.`));
     // Downloads in progress
     for (const [name, p] of Object.entries(pulls)) kids.push(el("div", { class: "lm-pull" },
       el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, name), el("span", { class: "spacer" }), el("span", { class: "h-when" }, `${p.percent || 0}%`)),
@@ -903,7 +899,7 @@
               const tooBig = memory && z.memory && z.memory > memory;
               return el("button", { class: `cb lm-size ${tooBig ? "danger" : ""}`, disabled: have || busy ? "" : null,
                 title: have ? "Already on this computer" : `Download ${name}${z.memory ? `; needs about ${z.memory} GB of memory` : ""}${tooBig ? ` (this computer has ${memory} GB: too big)` : ""}`,
-                onclick: () => post({ type: "localPull", name }) }, have ? `✓ ${z.size}` : `⬇ ${z.size}${z.memory ? ` · ~${z.memory} GB` : ""}`);
+                onclick: () => post({ type: "localPull", name }) }, have ? [icon("check"), ` ${z.size}`] : [icon("cloud-download"), ` ${z.size}${z.memory ? ` · ~${z.memory} GB` : ""}`]);
             }))));
       }
     }
@@ -948,20 +944,20 @@
     const U = S.ticketUI;
     const out = [el("div", { class: "mh" }, "Link a Jira ticket to this chat")];
     if (!jira.ok) {
-      out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, "⚠ "), jira.why));
+      out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), jira.why));
       return out;
     }
     out.push(el("div", { class: "ticket-search" }, U.input));
     if (U.searching) out.push(el("div", { class: "ticket-status" }, el("span", { class: "dots small" }, el("span"), el("span"), el("span")),
       " ", U.status || (U.query ? `Searching Jira for “${U.query}”…` : "Getting your recent tickets…")));
-    else if (U.error) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, "⚠ "), U.error));
+    else if (U.error) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), U.error));
     else if (U.issues && !U.issues.length) out.push(el("div", { class: "ticket-status" }, U.note || "No tickets found. Try other words or the ticket's key."));
     for (const i of (!U.searching && U.issues) || []) out.push(el("div", { class: `mi ticket-row${t.ticket && t.ticket.key === i.key ? " on" : ""}`, title: i.summary,
       onclick: () => { post({ type: "linkTicket", tabId: t.id, ticket: i }); closeMenu(); input.focus(); } },
       el("span", { class: "ticket-key" }, i.key), i.type ? el("span", { class: "ticket-type" }, i.type) : null,
       el("span", { class: "ticket-sum" }, i.summary), i.status ? el("span", { class: "mi-hint" }, i.status) : null));
     if (t.ticket) out.push(el("div", { class: "sep" }), el("div", { class: "mi", onclick: () => { post({ type: "linkTicket", tabId: t.id, ticket: null }); closeMenu(); } },
-      el("span", { class: "mi-icon" }, "✕"), el("span", { class: "mi-label" }, `Unlink ${t.ticket.key}`)));
+      el("span", { class: "mi-icon" }, icon("close")), el("span", { class: "mi-label" }, `Unlink ${t.ticket.key}`)));
     return out;
   }
   function ticketSearch(q) {
@@ -975,7 +971,7 @@
   function setupItems(t) {
     const st = S.setups[t.id];
     const head = el("div", { class: "mh" }, "Your Claude Code setup",
-      el("button", { class: "mh-btn", title: "Reload connectors, MCP servers, plugins and skills (same conversation)", onclick: (e) => { e.stopPropagation(); post({ type: "reloadSetup", tabId: t.id }); } }, "↻ Reload"));
+      el("button", { class: "mh-btn", title: "Reload connectors, MCP servers, plugins and skills (same conversation)", onclick: (e) => { e.stopPropagation(); post({ type: "reloadSetup", tabId: t.id }); } }, icon("refresh"), " Reload"));
     if (st && !st.full) return [el("div", { class: "sep" }), head,
       el("div", { class: "setup-row" }, "Fast minimal setup: no connectors or plugins. ",
         el("button", { class: "cb primary", onclick: () => post({ type: "useFullSetup", on: true }) }, "Use my full setup"))];
@@ -987,7 +983,7 @@
       st.plugins.length ? plural(st.plugins.length, "plugin") : "", st.skills ? plural(st.skills, "skill") : ""].filter(Boolean).join(" · ");
     const line = el("div", { class: `setup-row setup-sum${S.setupOpen ? " open" : ""}`, title: n ? "Show connectors" : "",
       onclick: (e) => { e.stopPropagation(); if (!n) return; S.setupOpen = !S.setupOpen; openMenu.refresh(); } },
-      n ? el("span", { class: "think-caret" }) : null, bad ? el("span", { class: "warn-tri", title: "Some connectors aren't connected" }, "⚠") : null, summary);
+      n ? el("span", { class: "think-caret" }) : null, bad ? el("span", { class: "warn-tri", title: "Some connectors aren't connected" }, icon("warning")) : null, summary);
     const servers = S.setupOpen && n ? el("div", { class: "setup-row" }, ...st.servers.map((x) =>
       el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name))) : null;
     return [el("div", { class: "sep" }), head, line, servers];

@@ -233,7 +233,7 @@ function triggerOnCursor(context) {
   context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection((e) => {
     clearTimeout(timer);
     const cfg = vscode.workspace.getConfiguration("kural");
-    if (!cfg.get("tabCompletion.enabled") || !cfg.get("tabCompletion.onCursorMove")) return;
+    if (!cfg.get("tabCompletion.enabled")) return;   // (suggesting when you place the cursor is always on)
     if (e.kind === vscode.TextEditorSelectionChangeKind.Command || e.kind === undefined) return; // code-driven moves
     if (Date.now() - (lastEdit.get(e.textEditor.document.uri.toString()) || 0) < 150) return;   // that was typing
     const sel = e.selections[0];

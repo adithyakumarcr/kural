@@ -19,14 +19,16 @@
   const link = (label, type) => el("a", { href: "#", onclick: (e) => { e.preventDefault(); post({ type }); } }, label);
   const code = (text) => el("div", { class: "cmd" }, el("code", {}, text), el("button", { class: "b small", onclick: () => post({ type: "copy", text }) }, "Copy"));
   const spin = () => el("span", { class: "spin" });
+  // Icons: Codicons (VS Code's icon set, media/codicons). Never emoji.
+  const icon = (name) => el("i", { class: `codicon codicon-${name}`, "aria-hidden": "true" });
   const gb = (bytes) => bytes ? `${(bytes / 1e9).toFixed(bytes > 1e10 ? 0 : 1)} GB` : "";
   const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
 
   // One step: number/status mark, title, what it found, what to do.
   function step(n, title, state, ...body) {
-    const mark = { ok: "✓", fail: "✕", warn: "!", running: "", waiting: "" }[state];
+    const mark = { ok: "check", fail: "close", warn: "warning" }[state];
     return el("section", { class: `step ${state}` },
-      el("div", { class: "mark" }, state === "running" || state === "waiting" ? spin() : mark || String(n)),
+      el("div", { class: "mark" }, state === "running" || state === "waiting" ? spin() : mark ? icon(mark) : String(n)),
       el("div", { class: "body" }, el("h2", {}, title), ...body));
   }
 
@@ -35,7 +37,7 @@
     const on = S.path === path;
     return el("button", { class: `choice ${on ? "on" : ""}`, onclick: () => post({ type: "path", path }) },
       el("div", { class: "c-head" }, el("span", { class: `radio ${on ? "on" : ""}` }), el("strong", {}, title), el("span", { class: "spacer" }),
-        done ? el("span", { class: "badge ok" }, "✓ set up") : null),
+        done ? el("span", { class: "badge ok" }, icon("check"), " set up") : null),
       el("p", { class: "muted" }, what),
       el("ul", {}, ...facts.map((f) => el("li", {}, f))));
   }
@@ -135,7 +137,7 @@
   // ---------- extras ----------
   function extra(name, have, what, ...rest) {
     return el("div", { class: "extra" },
-      el("div", { class: "x-head" }, el("span", { class: `x-mark ${have ? "yes" : ""}` }, have ? "✓" : "○"), el("strong", {}, name), el("span", { class: "spacer" }), ...rest),
+      el("div", { class: "x-head" }, el("span", { class: `x-mark ${have ? "yes" : ""}` }, icon(have ? "pass-filled" : "circle-large-outline")), el("strong", {}, name), el("span", { class: "spacer" }), ...rest),
       el("p", { class: "muted small" }, what));
   }
 
@@ -143,13 +145,13 @@
     const o = S.optional || {}, ol = o.ollama;
     const kids = [el("h3", {}, "For the full experience", el("span", { class: "tag" }, "optional")),
       el("p", { class: "muted small" }, "Kural works without these, but they make it better.")];
-    kids.push(extra("Git", !!o.git, "Kural uses Git to see what changed in your project, and Tab Complete writes your commit messages from it." +
+    kids.push(extra("Git", !!o.git, "Kural uses Git to see what changed in your project, and Tab Completion writes your commit messages from it." +
       (S.platform === "win32" ? " On Windows, Git also gives Claude Code a Bash shell for running commands." : ""),
       o.git ? el("span", { class: "muted" }, `Git ${o.git}`) : o.git === undefined ? spin() : btn("Get Git", "git")));
     const tabHave = ol && ol.running && o.tabModel;
-    kids.push(extra("Tab Complete model", tabHave, `A small code model (${S.tabModel.id}, ${S.tabModel.size}) on your computer: grey suggestions as you type in a few hundred milliseconds, offline.` +
-      (S.claudeReady ? " Without it, Tab Complete uses Claude Haiku." : ""),
-      !ol ? spin() : !ol.running ? btn("Get Ollama", "ollama") : tabHave ? el("span", { class: "muted" }, "downloaded") : btn("Set up in the Tab Complete panel", "tabModel")));
+    kids.push(extra("Tab Completion model", tabHave, `A small code model (${S.tabModel.id}, ${S.tabModel.size}) on your computer: grey suggestions as you type in a few hundred milliseconds, offline.` +
+      (S.claudeReady ? " Without it, Tab Completion uses Claude Haiku." : ""),
+      !ol ? spin() : !ol.running ? btn("Get Ollama", "ollama") : tabHave ? el("span", { class: "muted" }, "downloaded") : btn("Set up in the Tab Completion panel", "tabModel")));
     if (S.claudeReady && !S.localSet) kids.push(extra("Your own models", !!(o.chatModels && o.chatModels.length), "Chat with a model on your computer when you're offline or want privacy.",
       ol && ol.running ? btn(o.chatModels && o.chatModels.length ? "Find more" : "Find & download", "chatModels") : btn("Set up", "path", "", { path: "local" })));
     return el("section", { class: "optional" }, ...kids);
@@ -171,7 +173,7 @@
         choice("local", "Your own model", "A model on your computer, through Ollama.", ["Free, no account, works offline", "Your code stays on your computer"], !!S.localSet)),
       ...(S.path === "claude" ? [claudeStep(), loginStep(), testStep()] : S.path === "local" ? [ollamaStep(), modelStep(), localTestStep()] : []),
       el("div", { class: `go ${S.path ? "" : "nopath"}` },
-        el("button", { class: "b big solid", disabled: !S.ready, onclick: () => post({ type: "done" }) }, "Start using Kural →"),
+        el("button", { class: "b big solid", disabled: !S.ready, onclick: () => post({ type: "done" }) }, "Start using Kural ", icon("arrow-right")),
         el("span", { class: "muted small" }, caption)),
       optional(),
       el("p", { class: "muted small foot" }, "Open this page again any time: Command Palette → ", el("strong", {}, "Kural: Get Started"), "."));

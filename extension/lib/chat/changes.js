@@ -57,7 +57,7 @@ class ChangeTracker {
     const s = this.snapshots.get(id);
     if (!s) return;
     const before = vscode.Uri.from({ scheme: SCHEME, path: s.file, query: `id=${id}` });
-    await vscode.commands.executeCommand("vscode.diff", before, vscode.Uri.file(s.file), `${path.basename(s.file)} (before ↔ after Claude)`);
+    await vscode.commands.executeCommand("vscode.diff", before, vscode.Uri.file(s.file), `${path.basename(s.file)} (before ↔ after)`);
   }
 
   async undo(id) {

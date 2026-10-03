@@ -270,8 +270,8 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .think { margin: 4px 0 8px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); }
 .think-head { cursor: pointer; display: inline-flex; align-items: center; gap: 5px; user-select: none; }
 .think-head:hover { color: var(--fg, inherit); }
-.think-caret::before { content: "▸"; display: inline-block; width: 1em; }
-.think.open .think-caret::before { content: "▾"; }
+.think-caret::before { font-family: codicon; content: "\eab6"; display: inline-block; width: 1em; vertical-align: -2px; }
+.think.open .think-caret::before { content: "\eab4"; }
 .think.live .think-head { color: var(--accent-hi); }
 .think-body { display: none; margin: 4px 0 0 6px; padding: 2px 0 2px 10px; border-left: 2px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-style: italic; }
 .think.open .think-body { display: block; }
@@ -319,12 +319,12 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mh-btn:hover { text-decoration: underline; }
 .setup-sum { cursor: pointer; color: var(--muted); gap: 5px; }
 .setup-sum:hover { color: var(--vscode-foreground); }
-.setup-sum.open .think-caret::before { content: "▾"; }
+.setup-sum.open .think-caret::before { content: "\eab4"; }
 .warn-tri { color: var(--yellow); }
 .setup-row { padding: 2px 8px 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: calc(12px * var(--fs, 1)); }
 .srv { padding: 0 7px; border-radius: 10px; font-size: calc(11.5px * var(--fs, 1)); border: 1px solid var(--border); }
-.srv.ok::before { content: "● "; color: var(--green); }
-.srv.bad::before { content: "● "; color: var(--yellow); }
+.srv.ok::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--green); }
+.srv.bad::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--yellow); }
 /* roles and moods */
 .roles { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 6px; align-items: center; }
 .roles-h { font-size: calc(10.5px * var(--fs, 1)); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 2px; }
@@ -382,3 +382,7 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 /* "Set up Kural first" (before Get started has passed) */
 .setup-text { margin: 10px auto 16px; max-width: 250px; color: var(--muted); text-align: center; }
 .setup-title { font-size: calc(18px * var(--fs, 1)); }
+
+/* Codicons inside text: line up with the words around them. */
+.codicon { font-size: 1.05em; vertical-align: -2px; }
+.mi-icon .codicon, .att-icon .codicon { vertical-align: -3px; }

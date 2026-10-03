@@ -41,8 +41,8 @@ class ReviewManager {
           const range = new vscode.Range(this.pending.start, 0, this.pending.start, 0);
           const n = this.pending.ops.filter((o) => o.op !== "same").length;
           return [
-            new vscode.CodeLens(range, { title: "✓ Accept  (Ctrl+Enter)", command: "kural.review.accept" }),
-            new vscode.CodeLens(range, { title: "✕ Reject  (Ctrl+Shift+Backspace)", command: "kural.review.reject" }),
+            new vscode.CodeLens(range, { title: "$(check) Accept  (Ctrl+Enter)", command: "kural.review.accept" }),
+            new vscode.CodeLens(range, { title: "$(close) Reject  (Ctrl+Shift+Backspace)", command: "kural.review.reject" }),
             new vscode.CodeLens(range, { title: `${n} line${n === 1 ? "" : "s"} changed`, command: "" }),
           ];
         },

@@ -5,7 +5,7 @@ an AI assistant. Two engines: **Claude** (the user's own `claude` CLI, headless,
 own model** (Ollama on the user's computer, run by Kural's own engine: no Claude, no account, offline).
 **Identity:** Kural is its own product, not "Claude". UI text says Kural ("Ask Kural to change something…", "Kural
 searches…"); "Claude" appears only where it means Claude (its models in the menu, the Claude way in Get started,
-Claude Code itself). The completion feature is called **Tab Complete** (never "Kural Tab").
+Claude Code itself). The completion feature is called **Tab Completion** (never "Kural Tab").
 Read `README.md` for the features. This file is how the code works and how to change it safely.
 
 ## The owner
@@ -17,7 +17,7 @@ new user: Kural's data is moved to `~/kural-backup-<date>` first), or the releas
 
 ## Layout
 - `extension/` — plain JavaScript, no build step, no npm dependencies at runtime.
-  - `extension.js` wires everything; status bar "Tab Complete" opens `lib/tabpanel.js` (bottom panel: switch, slider, model).
+  - `extension.js` wires everything; status bar "Tab Completion" opens `lib/tabpanel.js` (bottom panel: switch, slider, model).
   - `lib/brain.js` — which engine answers: the chat's model decides for the chat, Ask, Ctrl+K/Apply and commit messages
     (`makeAgent`, `Session`, `usable`). `lib/engine.js` (`LocalAgent`) + `lib/tools.js` — Kural's own engine for Ollama
     models (no vscode inside; behaves like `ClaudeProcess`: same methods, same stream-json events).
@@ -143,7 +143,7 @@ new user: Kural's data is moved to `~/kural-backup-<date>` first), or the releas
   Agent teams and Claude Code connectors/skills: Claude only (`teamSize` is 0 for local; the menu says so). Switching a
   chat between Claude and local starts a new session with `carryOver` (the transcript). `prepareLocal`: Ollama running,
   ≥ `MIN_VERSION` (0.8: streamed tool calls), model downloaded, has "tools". Ctrl+K/Apply/commits with a local model:
-  one non-streamed `/api/chat` (`brain.askLocal`). Tab Complete keeps its own engine (FIM model or Claude Haiku).
+  one non-streamed `/api/chat` (`brain.askLocal`). Tab Completion keeps its own engine (FIM model or Claude Haiku).
   Search reads ollama.com/search?c=tools (no API; `parseSearch` reads list items loosely; cloud-only = no sizes → left
   out), falling back to `SUGGESTED`. Test without Ollama: `node test/fake-ollama-chat.js 11434` (`/api/chat` scripted:
   "read the readme" → Read call; "add a line to notes" → Edit; `format` → JSON; non-streamed → `<code>`/`<cmd>` replies)

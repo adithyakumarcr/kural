@@ -27,7 +27,7 @@ On top of that, Kural adds:
 
 - **A chat that edits your code.** Ask for a change; Kural reads your project, edits files, runs your tests, and you
   keep or undo each change.
-- **Tab Complete.** Grey suggestions as you type; **Tab** accepts.
+- **Tab Completion.** Grey suggestions as you type; **Tab** accepts.
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
 - **Teams of agents.** A project team (Researcher, Architect, Developers, Tester, led by a Project Manager) that
   plans, gets your OK and builds, or agents that discuss a question and agree on an answer.
@@ -88,7 +88,7 @@ with it. Either way is enough; you can add the other later.
 3. **A test.** One request to that model, the way Kural will use it.
 
 The chat unlocks when one way passes. Until then nothing runs in the background, so there are no errors. Git and a
-Tab Complete model are optional; the page shows whether you have them. If Claude breaks later (removed, logged out),
+Tab Completion model are optional; the page shows whether you have them. If Claude breaks later (removed, logged out),
 Kural notices and opens the page again. Open it any time: **Kural: Get Started**.
 
 <p align="center"><img src="docs/screenshots/get-started.png" width="620" alt="Get started: Claude or your own model; here your own model: Ollama running, a model picked, the test passed"></p>
@@ -99,10 +99,10 @@ Kural notices and opens the page again. Open it any time: **Kural: Get Started**
 versions. If it's newer than yours, Kural downloads it, installs it and restarts. On Ubuntu it asks for your
 password; on a Mac it replaces Kural.app in place; on Windows it runs the setup.
 
-### 3. Optional: a local model for faster Tab Complete
+### 3. Optional: a local model for faster Tab Completion
 
-Tab Complete with Claude takes about 0.6–0.9 s. For suggestions in about 150–300 ms, Kural can use a small code model
-on your own computer through [Ollama](https://ollama.com). Click **Tab Complete** in the status bar, then **Install Ollama**
+Tab Completion with Claude takes about 0.6–0.9 s. For suggestions in about 150–300 ms, Kural can use a small code model
+on your own computer through [Ollama](https://ollama.com). Click **Tab Completion** in the status bar, then **Install Ollama**
 (on a Mac or Windows this opens the Ollama download page). Then click **Check again** and download a model from the same
 panel (1.5B is a good start).
 
@@ -192,14 +192,14 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
   <sub>Pick the roles and how they work &nbsp;·&nbsp; Then they discuss and decide (sped up)</sub>
 </p>
 
-### Tab Complete
+### Tab Completion
 
 Suggestions appear as you type or when you place the cursor, also in the middle of a line. Write a comment, press
 Enter, and the suggestion implements it. **Tab** accepts.
 
 ![Tab: a method's first line, and a comment, become code; Tab accepts](docs/screenshots/tab-completion.gif)
 
-Click **Tab Complete** in the status bar for its panel. There you can:
+Click **Tab Completion** in the status bar for its panel. There you can:
 
 - turn suggestions on or off,
 - set how quickly they appear,
@@ -207,7 +207,7 @@ Click **Tab Complete** in the status bar for its panel. There you can:
 
 In **Auto**, the local model and Claude race, and the first good answer wins.
 
-![The Tab Complete panel: speed, engine and model](docs/screenshots/tab-panel.gif)
+![The Tab Completion panel: speed, engine and model](docs/screenshots/tab-panel.gif)
 
 **Tab learns from your work.** The models themselves never change, so Kural tells them, with each suggestion, what
 you've been doing in this workspace:
@@ -220,7 +220,7 @@ you've been doing in this workspace:
 
 So a suggestion in a new file follows what you just wrote in another one. A commit message says why you changed
 things ("params: reject zero speeds (controller crashed on 0)") in the style of your earlier commits. It's kept only
-on this computer, per workspace. Commands with passwords or tokens are never kept. The Tab Complete panel shows what it has
+on this computer, per workspace. Commands with passwords or tokens are never kept. The Tab Completion panel shows what it has
 learned, with **Forget** to clear it and a switch to turn it off.
 
 ### Tab in the terminal
@@ -264,7 +264,7 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 | **Ctrl+Alt+N** | new chat tab |
 | **Ctrl+K** | inline edit |
 | **Ctrl+Enter** / **Ctrl+Shift+Backspace** | keep / reject an inline edit |
-| **Ctrl+Alt+Space** | Tab Complete on/off *(Ctrl on Mac too)* |
+| **Ctrl+Alt+Space** | Tab Completion on/off *(Ctrl on Mac too)* |
 | **Ctrl+Alt+A** | Ask |
 | **Ctrl+Esc** | Claude Code terminal |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |
@@ -348,10 +348,10 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/getstarted.js   Get started: Claude Code installed, logged in, test request (lib/checks.js)
   lib/chat.js         chat tabs, history, modes, models, agent teams, questions
   lib/archive.js      every chat from every workspace (History)
-  lib/completion.js   Tab Complete (Claude), lib/local.js (local model via Ollama)
+  lib/completion.js   Tab Completion (Claude), lib/local.js (local model via Ollama)
   lib/brain.js        which engine answers: Claude Code, or Kural's own (lib/engine.js + lib/tools.js, via Ollama)
   lib/activity.js     what Tab learns from your work (per workspace)
-  lib/tabpanel.js     the Tab Complete panel
+  lib/tabpanel.js     the Tab Completion panel
   lib/edits.js        Ctrl+K and Apply, lib/review.js (red/green review)
   lib/team-mcp.js     the agents' message board (a tiny MCP server)
   lib/…               attachments, search, workspace folders, setup changes

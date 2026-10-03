@@ -54,29 +54,29 @@ function activate(context) {
 
   // ---------- status bar ----------
   const status = vscode.window.createStatusBarItem("kural.status", vscode.StatusBarAlignment.Right, 100);
-  status.name = "Tab Complete";
+  status.name = "Tab Completion";
   let state = "ready";
   const toggleKey = process.platform === "darwin" ? "⌃⌥Space" : "Ctrl+Alt+Space";
   // Hover on "Tab": what it does; click opens the Tab panel (switch, speed slider, model).
   const tabCard = (on) => {
     const sp = SPEEDS.reduce((a, b) => Math.abs(b.ms - cfg().get("tabCompletion.debounceMs")) < Math.abs(a.ms - cfg().get("tabCompletion.debounceMs")) ? b : a);
-    const md = new vscode.MarkdownString(`**Tab Complete** · ${on ? "On" : "Off"} · speed: ${sp.label}\n\n` +
-      `Click for the Tab Complete panel (on/off, speed slider, model). \`${toggleKey}\` turns it ${on ? "off" : "on"}.`);
+    const md = new vscode.MarkdownString(`**Tab Completion** · ${on ? "On" : "Off"} · speed: ${sp.label}\n\n` +
+      `Click for the Tab Completion panel (on/off, speed slider, model). \`${toggleKey}\` turns it ${on ? "off" : "on"}.`);
     md.supportThemeIcons = true;
     return md;
   };
   const refresh = () => {
     const on = cfg().get("tabCompletion.enabled");
     const look = {
-      ready:    ["$(sparkle) Tab Complete", tabCard(true), "kural.tabPanel.focus"],
-      thinking: ["$(sparkle) Tab Complete", tabCard(true), "kural.tabPanel.focus"],
-      error:    ["$(warning) Tab Complete", "Last suggestion failed; see View → Output → Kural", "kural.showLog"],
+      ready:    ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
+      thinking: ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
+      error:    ["$(warning) Tab Completion", "Last suggestion failed; see View → Output → Kural", "kural.showLog"],
       login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted"],
       missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted"],
     }[state];
     if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, or your own model with Ollama): open Get started", "kural.getStarted"]; return; }
     [status.text, status.tooltip, status.command] = on || state === "login" || state === "missing"
-      ? look : ["$(circle-slash) Tab Complete", tabCard(false), "kural.tabPanel.focus"];
+      ? look : ["$(circle-slash) Tab Completion", tabCard(false), "kural.tabPanel.focus"];
   };
   const setState = (s) => {
     if (s === "login" || s === "missing") { getStarted.broke(s); return; }   // back to Get started at that step
@@ -108,7 +108,7 @@ function activate(context) {
   }, () => {});
 
   // What you've been doing in this workspace: makes Tab's suggestions fit you (lib/activity.js).
-  const activity = new Activity(context.workspaceState, () => cfg().get("tabCompletion.learn") !== false);
+  const activity = new Activity(context.workspaceState, () => true);   // (always on; Kural: Forget… clears it)
   watchEdits(context, activity);
 
   // Tab's local engine (Ollama): checked now and every 15 s, so it's used as soon as it's there.
@@ -116,9 +116,8 @@ function activate(context) {
   local.status(true);
   const localTimer = setInterval(() => { if (cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status(); }, 15000);
   context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
-  terminalTab(context, terminalSession, local, activity, commitSession);   // Tab in the terminal (Tab Complete; commits: the chat's model)
-  const tabPanel = new TabPanel(context, SPEEDS, local, activity);
-  activity.onChange = () => tabPanel.push();
+  terminalTab(context, terminalSession, local, activity, commitSession);   // Tab in the terminal (Tab Completion; commits: the chat's model)
+  const tabPanel = new TabPanel(context, SPEEDS, local);
   tabPanel.register();
   const review = new ReviewManager();
   review.register(context);
@@ -144,26 +143,26 @@ function activate(context) {
     vscode.commands.registerCommand("kural.tab.forget", () => {
       activity.forget();
       tabPanel.push();
-      vscode.window.showInformationMessage("Tab Complete forgot what it learned in this workspace.");
+      vscode.window.showInformationMessage("Tab Completion forgot what it learned in this workspace.");
     }),
     vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState) : getStarted.open()),
     vscode.commands.registerCommand("kural.toggleTab", async () => {
       const on = !cfg().get("tabCompletion.enabled");
       await cfg().update("tabCompletion.enabled", on, vscode.ConfigurationTarget.Global);
-      vscode.window.setStatusBarMessage(`Tab Complete ${on ? "on" : "off"}`, 1500);
+      vscode.window.setStatusBarMessage(`Tab Completion ${on ? "on" : "off"}`, 1500);
       if (on) tabSession.start();
     }),
     vscode.commands.registerCommand("kural.tabSpeedSet", async (ms) => {
       if (typeof ms !== "number") return;
       await cfg().update("tabCompletion.debounceMs", ms, vscode.ConfigurationTarget.Global);
       const sp = SPEEDS.find((x) => x.ms === ms);
-      vscode.window.setStatusBarMessage(`Tab Complete speed: ${sp ? sp.label : ms + " ms"}`, 1500);
+      vscode.window.setStatusBarMessage(`Tab Completion speed: ${sp ? sp.label : ms + " ms"}`, 1500);
     }),
     vscode.commands.registerCommand("kural.tabSpeed", async () => {
       const ms = cfg().get("tabCompletion.debounceMs");
       const pick = await vscode.window.showQuickPick(SPEEDS.map((sp) => ({
         label: `${sp.ms === ms ? "$(check) " : ""}${sp.label}`, description: sp.ms ? `${sp.ms} ms after you stop typing` : "as you type", ms: sp.ms,
-      })), { title: "How fast should Tab Complete suggest?" });
+      })), { title: "How fast should Tab Completion suggest?" });
       if (pick) await vscode.commands.executeCommand("kural.tabSpeedSet", pick.ms);
     }),
     vscode.commands.registerCommand("kural.openClaudeCode", openClaudeCode),
@@ -206,7 +205,7 @@ function activate(context) {
   }
 
   // Set up (or once it is): warm up in the background so the first suggestion is quick.
-  // (Claude's sessions only run once Claude is set up; with only your own model, Tab Complete uses Ollama.)
+  // (Claude's sessions only run once Claude is set up; with only your own model, Tab Completion uses Ollama.)
   getStarted.onChange((ready) => {
     state = "ready"; refresh();
     if (getStarted.claudeReady && cfg().get("tabCompletion.enabled")) tabSession.start();

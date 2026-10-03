@@ -9,13 +9,13 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
 - **Ask, Ctrl+K, Apply and commit messages use the chat's model.** Pick a model once, in the chat. (Their separate
   model settings are gone.) Switch a chat between Claude and a local model and the conversation carries over.
 - **Kural's own name.** The chat says "Ask Kural to change something…", Ask says "Kural searches your project", and
-  Kural Tab is now **Tab Complete**. "Claude" appears where you pick Claude's models.
+  Kural Tab is now **Tab Completion**. "Claude" appears where you pick Claude's models.
 - **Get started.** Without Claude Code (or without a login) Kural used to show errors whenever you used the chat, Tab
   or Ctrl+K. Now a **Get started** page opens the first time and asks where Kural's AI comes from. **Claude**: it checks
   that Claude Code is installed (**Install for me** runs Anthropic's official installer), that you're logged in (**Log
   in** opens your browser), and sends one tiny test request. **Your own model**: Ollama, a model that fits your
   computer (pick or download one), and a test request. Either way unlocks Kural; until then nothing runs in the
-  background, so there are no errors. Git and a Tab Complete model are shown as optional. If Claude Code breaks later (removed, logged out), the page opens again at that step. **Kural: Get Started**
+  background, so there are no errors. Git and a Tab Completion model are shown as optional. If Claude Code breaks later (removed, logged out), the page opens again at that step. **Kural: Get Started**
   opens it any time.
 - **Kural finds Claude Code in more places.** Opened from the Dock or a menu, Kural didn't get your terminal's PATH, so
   an install it doesn't know about (e.g. npm under nvm) wasn't found. Now it asks your login shell too, and Get started

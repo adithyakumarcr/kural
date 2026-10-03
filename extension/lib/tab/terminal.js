@@ -104,7 +104,7 @@ function firstAnswer(promises) {
   });
 }
 
-// commitSession: commit messages come from the chat's model (lib/brain.js Session); other lines from Tab Complete.
+// commitSession: commit messages come from the chat's model (lib/brain.js Session); other lines from Tab Completion.
 function terminalTab(context, session, local, activity = null, commitSession = null) {
   trackCommands(context, activity);
   const cache = new Map();   // typed line -> suggested line
@@ -146,8 +146,8 @@ function terminalTab(context, session, local, activity = null, commitSession = n
   const kind = KIND.InlineSuggestion ?? KIND.InlineSuggestionAlwaysOnTop ?? KIND.Argument ?? KIND.Method;
   const item = (line, typed, engine) => ({
     label: line, replacementRange: [0, typed.length], kind,
-    detail: `Kural · ${engine === "chat" ? "your chat model" : "Tab Complete"}`,
-    documentation: "Suggested by Kural's Tab Complete. Tab inserts it; you still press Enter to run it.",
+    detail: `Kural · ${engine === "chat" ? "your chat model" : "Tab Completion"}`,
+    documentation: "Suggested by Kural's Tab Completion. Tab inserts it; you still press Enter to run it.",
   });
 
   // The terminal waits for every suggestion source before it shows its list. So Kural never makes it wait:

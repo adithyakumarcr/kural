@@ -12,7 +12,7 @@
 //
 // Kural is "set up" when one of them passed (remembered on this computer). Until then the chat shows "Set up Kural
 // first". Claude processes only start once the Claude way passed (claude.js setSetupGate): no background errors for
-// people who don't use Claude. Optional extras: Git, and a Tab Complete model.
+// people who don't use Claude. Optional extras: Git, and a Tab Completion model.
 // On later starts a quick check of Claude (no request) runs in the background if Claude was set up; if something
 // broke (Claude Code removed, logged out), the Claude models wait for it and the page says why.
 
@@ -134,8 +134,8 @@ class GetStarted {
     const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     const uri = (f) => p.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     p.webview.html = `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${p.webview.cspSource}; script-src 'nonce-${nonce}';">
-<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("getstarted.css")}"></head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${p.webview.cspSource}; font-src ${p.webview.cspSource}; script-src 'nonce-${nonce}';">
+<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("getstarted.css")}"></head>
 <body><div id="app"></div><script nonce="${nonce}" src="${uri("getstarted.js")}"></script></body></html>`;
     p.webview.onDidReceiveMessage((m) => this.onMessage(m).catch((e) => log(`get started: ${e.stack}`)));
     p.onDidDispose(() => { this.panel = null; this.wait(null); });
