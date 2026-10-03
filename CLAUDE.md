@@ -37,7 +37,13 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   card is done (`task_started` / `task_notification` events, keyed by `tool_use_id`), and a late lead turn
   reopens the answer. Only Stop ends a team answer early; `warm()` never restarts Claude while an agent works
   (that would kill background agents). If Claude doesn't wake the lead after the last report, `conclude()`
-  asks it for the final answer. Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
+  asks it for the final answer (up to `MAX_NUDGES`, since a project has several phases). Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
+  **Roles** (Adithya's design): the lead is the Project Manager; Researcher (Rachel), Architect (Ross), Developer
+  (`DEVELOPERS`: Monica, Chandler, Joey; the PM starts 1–3), Tester (Phoebe); any combination. Split the work with
+  roles = `projectPrompt()`: requirements (PM asks you) → plan (Researcher/Architect, "PLAN:" to the lead) → your OK
+  (AskUserQuestion: Go ahead / Change the plan / Stop) → build + Tester review (max 2 rounds) → report. Without
+  developers, the plan is the result. `teamMembers()` gives who can exist; the team file's `started` says who the PM
+  actually started (the board waits only for them) and `busy` who's working (an empty wait then doesn't count).
   Their board posts (`mcp__team__post`) go into the answer itself as bubbles (not the card), so the discussion is
   where you read; cards hold tools, `task_progress` activity, and the agent's text/thinking.
   **Stuck agents** (an agent waiting on the board for a teammate who already ended): the board has `finish`

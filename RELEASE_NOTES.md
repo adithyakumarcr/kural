@@ -7,6 +7,12 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
   asks before commands, agents use the same model), privately and without internet. **Find & download models…**
   searches Ollama's library, shows how much memory each size needs compared to your computer, downloads with a
   progress bar, and lets you use or delete installed models. Needs Ollama 0.14 or newer.
+- **New agent roles: a project team.** The lead is now the **Project Manager**: it gets the requirements from you
+  and asks when something is unclear. **Researcher** (searches online, proposes a plan), **Architect** (studies your
+  architecture, picks the solution), **Developers** (1–3, the PM decides) and **Tester** (checks every piece of code).
+  With **Split the work**, the team runs as a project: plan, **your OK** on the plan, build, review, report. Pick any
+  combination; with only a Researcher and/or Architect you get the plan. The old Debugger, Critic and Explorer roles
+  are gone (the Critic and Explorer *moods* stay). **Discuss & decide** uses the new roles too.
 
 ## What's new in 1.1.0-alpha.3
 

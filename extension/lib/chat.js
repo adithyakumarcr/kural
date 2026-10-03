@@ -77,6 +77,7 @@ const FRIENDS = ["Rachel", "Ross", "Monica", "Chandler", "Joey", "Phoebe"];
 const TEAM_TOOLS = ["mcp__team__post", "mcp__team__read", "mcp__team__finish"];
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
 const BUILD_TEXT = "Go ahead and implement the plan above.";
+const MAX_NUDGES = 4;   // how often Kural may wake a paused lead for one question (a project team has phases)
 const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
 // Moods: how the chat (or the team's lead) works with you.
 const MOODS = [
@@ -95,39 +96,50 @@ const MOOD_PROMPTS = {
 };
 
 // Roles you can give the agents in a team (pick several).
+// Roles for agent teams. Each has its own name (Friends), so the same role is always the same person.
+// The lead (the main Claude, the one you talk to) is the Project Manager. With "Split the work" the team works in
+// phases: plan (Researcher, Architect) → your OK → build (1–3 Developers, the PM decides) → check (Tester).
 const ROLES = [
-  { id: "developer", label: "Developer", desc: "builds it",
-    duty: "You build. Propose concrete solutions and implement them. Defend your design with reasons, but change it when a " +
-      "teammate shows a real problem. Answer every point a teammate raises: fix it, or explain with evidence why not." },
-  { id: "tester", label: "Tester", desc: "tries to break it",
-    duty: "You try to break things. Think of edge cases and failure modes first. Write and RUN tests and report results with " +
-      "exact inputs, expected and actual output. Never accept 'it works' without a test result. Every time you reply, add at " +
-      "least one case or risk the others missed." },
-  { id: "researcher", label: "Researcher", desc: "brings the facts",
-    duty: "You bring facts. Check the code, docs and other sources before anyone assumes; quote file:line or the source. " +
-      "Correct any claim that doesn't match the evidence, even the lead's. You don't change code." },
-  { id: "debugger", label: "Debugger", desc: "finds root causes",
-    duty: "You find root causes. Reproduce the problem, trace it to the exact line, and prove it (output, logs, a minimal " +
-      "reproduction). Challenge fixes that hide the symptom instead of fixing the cause." },
-  { id: "critic", label: "Critic", desc: "finds what's wrong",
-    duty: "You are the devil's advocate: find what's wrong — bugs, risks, hidden costs, a simpler alternative. Attack the " +
-      "strongest proposal, not a weak one. Raise at least two concrete objections (with evidence) before you may agree, and " +
-      "agree only when they are really answered. Agreeing easily means failing your role." },
-  { id: "explorer", label: "Explorer", desc: "widens the options",
-    duty: "You widen the options. Before the team settles, bring at least one approach nobody proposed and compare it " +
-      "honestly (pros, cons, cost). Look in other parts of the codebase for patterns to reuse." },
+  { id: "researcher", label: "Researcher", name: "Rachel", desc: "researches and plans",
+    duty: "You research and plan. Search online (WebSearch, WebFetch: official docs, best practices, libraries, known " +
+      "pitfalls) and look in the code where needed. Then write a plan proposal: the approach, the steps, what to use, the " +
+      "risks, and your sources (links). Send it to the Architect (if there is one) and the lead. Back every claim with a " +
+      "source or file:line. You don't change code." },
+  { id: "architect", label: "Architect", name: "Ross", desc: "designs the solution",
+    duty: "You are the Software Architect. Study the current architecture first: structure, patterns, modules and their " +
+      "interfaces, conventions (quote file:line). Then decide the best solution for the request that fits this " +
+      "architecture: which files change, new or changed interfaces and names, and how the work splits into independent " +
+      "parts for developers. Review the Researcher's proposal against the real code: keep what fits, push back on what " +
+      "doesn't, with reasons. Prefer the simplest design that solves it. You don't change code." },
+  { id: "developer", label: "Developer", name: "Monica", desc: "builds it",
+    duty: "You build. Implement exactly your part of the approved plan, only in your files, following the Architect's " +
+      "design and the project's style. When your part is ready, tell the Tester (by name) what changed and where. Answer " +
+      "every finding: fix it, or explain with evidence why not, and tell the Tester when it's done." },
+  { id: "tester", label: "Tester", name: "Phoebe", desc: "checks code quality",
+    duty: "You check every piece of code that gets written. Read the real changes (the diff), not the description. Check " +
+      "code quality: correctness, readability, structure, naming, duplication, error handling, security, and whether it " +
+      "follows the plan and the architecture. If the project has tests, run them; add a test for the new behaviour where " +
+      "it makes sense. Send concrete findings (file:line, what's wrong, what to do) to the developer. Never just approve: " +
+      "reply \"OK\" only when the code is good, and say what you checked." },
 ];
+const DEVELOPERS = ["Monica", "Chandler", "Joey"];   // the PM starts 1–3 of them, as the work needs
 const TEAM_STYLES = [
   { id: "split", label: "Split the work", hint: "work in parallel" },
   { id: "discuss", label: "Discuss & decide", hint: "talk it through, agree" },
 ];
 
-// The team: who's who ("Rachel, the Developer (writes …)").
-function teamMembers(n, roles) {
-  return FRIENDS.slice(0, n).map((name, i) => {
-    const r = ROLES.find((x) => x.id === roles[i]);
-    return { name, role: r ? r.label : null, desc: r ? r.desc : null };
-  });
+// The team: who's who ("Rachel, the Researcher (researches and plans)"). With roles, each role has its own name;
+// with "Split the work" the Developer role can be up to three people (the PM decides how many to start).
+function teamMembers(n, roles, style = "split") {
+  if (!roles.length) return FRIENDS.slice(0, n).map((name) => ({ name, role: null, desc: null }));
+  const out = [];
+  for (const r of ROLES.filter((x) => roles.includes(x.id))) {
+    const names = r.id === "developer" && style !== "discuss" ? DEVELOPERS : [r.name];
+    for (const name of names) out.push({ name, role: r.label, desc: r.desc, id: r.id });
+  }
+  // A discussion needs two: add someone without a role.
+  if (style === "discuss" && out.length < 2) out.push({ name: FRIENDS.find((f) => !out.some((m) => m.name === f)), role: null, desc: null });
+  return out;
 }
 const who = (m) => m.role ? `${m.name}, the ${m.role} (${m.desc})` : m.name;
 const opening = (m, team) => `"You are ${m.name}${m.role ? `, the ${m.role}` : ""}, on a team with ` +
@@ -136,18 +148,17 @@ const BOARD = `The team can talk: tell each agent it has three tools, mcp__team_
   `"lead", or to "all"), mcp__team__read (read its messages; wait_seconds waits for a reply) and mcp__team__finish (call ` +
   `it once, with its final position, right before it ends; teammates then stop waiting for it). Tell them too: never ` +
   `keep waiting for a teammate who has finished, and when mcp__team__read says to stop waiting, finish right away.`;
+const brief = (m, team) => `${opening(m, team).slice(0, -1)}${m.role ? ` Your role — ${m.role}: ${ROLES.find((r) => r.label === m.role).duty}` : ""}"`;
+const starts = (team) => `put the Task tool calls in ONE message, subagent_type "general-purpose". Begin each agent's Task prompt ` +
+  `with its brief, word for word:\n${team.map((m) => `- ${m.name}: ${brief(m, team)}`).join("\n")}\n`;
 
 function teamPrompt(n, roles = [], style = "split") {
-  const team = teamMembers(n, roles);
-  const brief = (m) => `${opening(m, team).slice(0, -1)}${m.role ? ` Your role — ${m.role}: ${ROLES.find((r) => r.label === m.role).duty}` : ""}"`;
-  const starts = `Start all of them at once — put the Task tool calls in ONE message, subagent_type "general-purpose", in this ` +
-    `order. Begin each agent's Task prompt with its brief, word for word:\n${team.map((m) => `- ${m.name}: ${brief(m)}`).join("\n")}\n` +
-    `Then add `;
+  const team = teamMembers(n, roles, style);
   if (style === "discuss") {
     const first = team[0].name;
-    return `\n\nYou moderate a discussion between ${n} agents: ${team.map(who).join("; ")}. The user wants a real debate ` +
+    return `\n\nYou moderate a discussion between ${team.length} agents: ${team.map(who).join("; ")}. The user wants a real debate ` +
       `where each agent argues from its own role, and then a decision. Copies of the same model tend to agree too fast; ` +
-      `your rules exist to prevent that. ${starts}the full question and context, and these rules, word for word:\n` +
+      `your rules exist to prevent that. Start all of them at once: ${starts(team)}Then add the full question and context, and these rules, word for word:\n` +
       `"1. First investigate on your own, from your role (read the code, run things if useful). Form your own position ` +
       `BEFORE reading your teammates' messages.\n` +
       `2. Round 1: post your own position to "all" with mcp__team__post: your claim, your evidence (file:line, output), and ` +
@@ -166,28 +177,78 @@ function teamPrompt(n, roles = [], style = "split") {
       `the user: the decision; each agent's final position in one line (name, role, agree or not, the main reason); the ` +
       `main point of disagreement and how it was settled; and any remaining dissent. Don't smooth over disagreement.`;
   }
-  const flow = roles.length ? `\nThey work as a team, by role, with hand-offs:\n` +
-    `- At the start each agent posts to "all" what it will do (one line).\n` +
-    `- Whoever produces something (code, a finding, a fix) tells the teammates who check it, by name, when it's ready.\n` +
-    `- Checkers (Tester, Critic, Debugger, Researcher) wait for that with mcp__team__read (wait_seconds 120), then check ` +
-    `the actual result — run the tests, read the real diff, verify the claim — and send concrete findings back to the ` +
-    `author. They don't just approve: each sends at least one finding or test result.\n` +
-    `- Authors answer every finding (fix it, or explain why not) and tell the checker when it's done. At most two review ` +
-    `rounds. Nobody finishes until the checker has replied "OK" or two rounds have passed.\n` +
-    `- Each agent's final report: what it did, what its teammates found in its work, and what's still open. Just before ` +
-    `ending, it calls mcp__team__finish with that report.` : "";
+  if (roles.length) return projectPrompt(team);
   return `\n\nYou lead a team of ${n} agents: ${team.map(who).join("; ")}. Your goal is to finish the user's task ` +
-    (roles.length ? `well and fast, with every agent doing its own role. ` : `as FAST as possible by working in parallel. `) +
-    `Split it into parts${roles.length ? ` that fit each agent's role` : ` (by file or feature)`}, so two agents never edit ` +
-    `the same file. ${starts}a complete, self-contained description of its part (files, goal, constraints)` +
-    (roles.length ? ` and the team rules below, word for word.` : `.`) + flow + `\n` +
+    `as FAST as possible by working in parallel. Split it into parts (by file or feature), so two agents never edit ` +
+    `the same file. Start all of them at once: ${starts(team)}Then add a complete, self-contained description of its part (files, goal, constraints).\n` +
     `${BOARD} Agents should use them whenever their work depends on each other — agree on shared names and interfaces, ask ` +
     `a question and wait for the answer, tell others when something they need is ready. You can use them too, as "lead".\n` +
     `Refer to the agents by name. Don't do their parts yourself. While they work, don't post progress updates; reply ` +
-    `once, when all have reported back: check the results, fix gaps, and give the user a short summary` +
-    (roles.length ? ` — what each agent did and what they found in each other's work. The user picked these roles on ` +
-      `purpose: always use every agent in its role, even for a small task.` : `. Only for a tiny task (one quick edit or a ` +
-      `question) work alone.`);
+    `once, when all have reported back: check the results, fix gaps, and give the user a short summary. Only for a tiny ` +
+    `task (one quick edit or a question) work alone.`;
+}
+
+// "Split the work" with roles: you lead it as the Project Manager, in phases.
+function projectPrompt(team) {
+  const planners = team.filter((m) => m.id === "researcher" || m.id === "architect");
+  const devs = team.filter((m) => m.id === "developer");
+  const tester = team.find((m) => m.id === "tester");
+  const R = team.find((m) => m.id === "researcher"), A = team.find((m) => m.id === "architect");
+  const names = (list) => list.map((m) => m.name).join(" and ");
+  let step = 1;
+  const out = [`\n\nYou are the Project Manager (PM), the lead of a project team. The user talks to you. Your team: ` +
+    `${team.filter((m) => m.id !== "developer").map(who).concat(devs.length ? [`up to ${devs.length} Developers (${devs.map((m) => m.name).join(", ")}; you decide how many)`] : []).join("; ")}. ` +
+    `The user picked this team on purpose: use every role, even for a small task. Work in these phases, in order:`];
+  out.push(`${step++}. Requirements. Make sure you know what the user wants: scope, behaviour, constraints, and what "done" ` +
+    `means. If something important is unclear and you can't find it out yourself (from the code, the files, the context), ` +
+    `ask the user with AskUserQuestion (short options, your recommendation first) BEFORE you start anyone. Don't ask about ` +
+    `things you can look up.`);
+  if (planners.length) {
+    const rules = R && A
+      ? `${R.name} researches and posts a plan proposal to ${A.name} and "lead". ${A.name} studies the current architecture, ` +
+        `reviews the proposal against it and posts the solution design. They settle disagreements on the board (at most two ` +
+        `rounds, with mcp__team__read wait_seconds 120). Then ${A.name} posts the agreed plan to "lead", starting with "PLAN:": ` +
+        `the approach, the files that change, interfaces and names, and how the work splits into independent parts.`
+      : R ? `${R.name} researches and posts the plan to "lead", starting with "PLAN:": the approach, the steps, the files that ` +
+        `change, the risks and the sources.`
+      : `${A.name} studies the current architecture and posts the solution design to "lead", starting with "PLAN:": the ` +
+        `approach, the files that change, interfaces and names, and how the work splits into independent parts.`;
+    out.push(`${step++}. Plan. Start ${names(planners)}: ${starts(planners)}Then add the requirements and these rules, word for ` +
+      `word: "${rules} Then call mcp__team__finish with the plan and end. Nobody changes files in this phase."`);
+  }
+  if (devs.length) {
+    out.push(`${step++}. Your plan, the user's OK. ${planners.length ? `When the plan is in, check` : `Plan the work yourself from the code:`} ` +
+      `the approach, the files that change, and the parts. Before anyone builds, show the plan to the user with ` +
+      `AskUserQuestion: the question holds the plan in a few lines (what changes, which files, the approach, the risks, ` +
+      `how many developers); options "Go ahead" (first), "Change the plan" and "Stop". Wait for the answer. If the user ` +
+      `wants changes, adjust the plan${planners.length ? ` (ask the planners again if needed)` : ``} and ask again. If they ` +
+      `stop, end with the plan.`);
+    const devTeam = [...devs, ...(tester ? [tester] : [])];
+    out.push(`${step++}. Build. Decide how many developers the work needs: 1 for a small or tightly connected change, 2 or 3 ` +
+      `only when it splits into independent parts. Never two developers on the same file. Use the names in this order: ` +
+      `${devs.map((m) => m.name).join(", ")}. Start the developers${tester ? ` and ${tester.name}` : ``} in ONE message, ` +
+      `subagent_type "general-purpose". Begin each Task prompt with its brief, word for word (leave out the developers you ` +
+      `don't start, also in the briefs' team lists):\n${devTeam.map((m) => `- ${m.name}: ${brief(m, devTeam)}`).join("\n")}\n` +
+      `Then add the approved plan, that agent's part (files, goal, constraints), and these rules, word for word: ` +
+      (tester
+        ? `"Developers build only their part. When a part is ready, the developer tells ${tester.name} (by name) what ` +
+          `changed and where. ${tester.name} waits for that with mcp__team__read (wait_seconds 120), reviews the real code ` +
+          `and runs the tests, and sends concrete findings back. The developer fixes them (or explains why not) and tells ` +
+          `${tester.name}. At most two review rounds; ${tester.name} replies "OK" when it's good. Nobody finishes before ` +
+          `${tester.name}'s OK or two rounds. Each agent's final report: what it did, what was found, what's still open; ` +
+          `just before ending, it calls mcp__team__finish with that report."`
+        : `"Developers build only their part, agree on shared names and interfaces on the board, and run the tests if ` +
+          `the project has any. Each one's final report: what it did and what's still open; just before ending, it calls ` +
+          `mcp__team__finish with that report."`));
+  } else {
+    out.push(`${step++}. Result. The plan is the result: nobody changes files. Give it to the user.`);
+  }
+  out.push(`${step}. Report. When everyone has reported: ${devs.length ? `check the result yourself (read the diff, run the tests), ` +
+    `fix small gaps, and ` : ``}give the user a short summary: the plan, what each agent did${tester ? `, what ${tester.name} found and ` +
+    `how it was fixed` : ``}, and what's still open.`);
+  out.push(`${BOARD} You can use the board too, as "lead". Refer to the agents by name. Don't do their work yourself. ` +
+    `While they work, don't post progress updates.`);
+  return out.join("\n");
 }
 
 const MAX_INLINE = 60000;       // files bigger than this are read by Claude instead of pasted in
@@ -661,12 +722,20 @@ class ChatView {
   // ---------- Claude process per tab ----------
   // How many agents this tab's team has (0 = no team). Splitting work needs a mode that can edit;
   // a discussion works in every mode. With roles picked, one agent per role.
+  // Shown above a team answer: "Project team: Researcher, Architect, Developers (1–3), Tester · you talk to the PM".
+  teamLabel(tab) {
+    const roles = tab.roles || [];
+    if (!this.teamSize(tab) || !roles.length) return null;
+    const labels = ROLES.filter((r) => roles.includes(r.id)).map((r) => r.id === "developer" && tab.teamStyle !== "discuss" ? `Developers (1–${DEVELOPERS.length})` : r.label);
+    return tab.teamStyle === "discuss" ? `Discussion: ${labels.join(", ")}` : `Project team: ${labels.join(", ")} · led by the PM`;
+  }
+
   teamSize(tab) {
     if (!(tab.team > 1)) return 0;
     const editing = tab.mode === "agent" || tab.mode === "auto";
     if (tab.teamStyle !== "discuss" && !editing) return 0;
     const roles = tab.roles || [];
-    return roles.length ? Math.min(FRIENDS.length, Math.max(2, roles.length)) : tab.team;
+    return roles.length ? teamMembers(0, roles, tab.teamStyle).length : tab.team;
   }
   // When this changes, the tab's Claude restarts (same conversation) before your next message.
   procKey(tab) { return `${isLocal(tab.model) ? tab.model : "claude"}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${cfg().get("chat.fullClaudeCodeSetup")}|${ws.key()}|${this.setupVersion}`; }
@@ -802,7 +871,7 @@ class ChatView {
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
       tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : [])],
-      mcpServers: team ? { team: teamServer(teamMembers(team, tab.roles || []).map((m) => m.name), r.teamFile) } : null,
+      mcpServers: team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
@@ -882,7 +951,8 @@ class ChatView {
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
-    const reply = { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, team: this.teamSize(tab), teamStyle: tab.teamStyle };
+    const reply = { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, team: this.teamSize(tab), teamStyle: tab.teamStyle,
+      teamLabel: this.teamLabel(tab) };
     tab.messages.push(user, reply);
     tab.status = "running";
     tab.updatedAt = Date.now();
@@ -907,11 +977,13 @@ class ChatView {
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
     r.turn = { snaps: {}, reply, ask };
     r.agents = new Map();   // Task call id -> agent card
-    r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = false;
+    r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
     if (r.teamFile) { r.round = (r.round || 0) + 1; r.finished = []; this.writeTeamFile(r); }
     clearInterval(r.watchdog);
     if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
+    clearInterval(r.busyTimer);
+    if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
     // Continued from another workspace: the first message carries the earlier conversation.
     const carry = tab.carryOver && !tab.started ? `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
       "That's our earlier conversation, from another workspace. Carry on from it here.\n\n" : "";
@@ -1047,6 +1119,7 @@ class ChatView {
           const role = said && said[2] && ROLES.some((x) => x.label === said[2]) ? said[2] : null;
           const block = { k: "agent", id: b.id, n, name, role, title: (b.input && b.input.description) || name, steps: [], state: "running", lastActive: Date.now() };
           r.agents.set(b.id, block);
+          this.writeTeamFile(r);   // the board now knows who's on the team for this question
           reply.blocks.push(block);
           this.post({ type: "block", tabId: tab.id, block });
           continue;
@@ -1101,7 +1174,7 @@ class ChatView {
         r.idleTimer = setTimeout(() => { if (r.betweenTurns && reply.running && !r.stale) this.finishReply(tab, r, m); }, 4000);
         return;
       }
-      if (r.agents.size && !r.concluded && m.is_error) {
+      if (r.agents.size && r.concluded < MAX_NUDGES && m.is_error) {
         // The team finished but the lead's last turn failed: ask it for the conclusion.
         r.idleTimer = setTimeout(() => this.conclude(tab, r, reply, m), 500);
         return;
@@ -1112,9 +1185,18 @@ class ChatView {
 
   // ---------- agents that get stuck ----------
   // The board (team-mcp.js) reads this file to learn who has finished, so nobody waits for them.
+  // started: the agents the lead actually started; busy: those with a sign of life in the last minute (the board
+  // doesn't count waiting for a busy teammate as "nobody answers").
   writeTeamFile(r) {
-    try { fs.writeFileSync(r.teamFile, JSON.stringify({ round: r.round || 0, finished: r.finished || [] })); }
-    catch (e) { log(`team file: ${e.message}`); }
+    if (!r.teamFile) return;
+    const now = Date.now(), all = [...(r.agents || new Map()).values()];
+    const lower = (a) => String(a.name || "").toLowerCase();
+    const state = { round: r.round || 0, finished: r.finished || [], started: all.map(lower).filter(Boolean),
+      busy: all.filter((a) => a.state === "running" && now - (a.lastActive || 0) < 60000).map(lower) };
+    const text = JSON.stringify(state);
+    if (text === r.teamFileText) return;
+    r.teamFileText = text;
+    try { fs.writeFileSync(r.teamFile, text); } catch (e) { log(`team file: ${e.message}`); }
   }
   teamFinished(r, agent) {
     if (!r.teamFile || !agent.name) return;
@@ -1167,14 +1249,16 @@ class ChatView {
   // seconds, ask the lead for the conclusion, so it always reaches you.
   conclude(tab, r, reply, m) {
     if (!r.betweenTurns && !(m && m.is_error) || !r.turn || r.turn.reply !== reply || !reply.running || r.stale) return;
-    if (r.concluded || !r.proc || r.proc.exited) { this.finishReply(tab, r, m); return; }
-    r.concluded = true;
+    if (r.concluded >= MAX_NUDGES || !r.proc || r.proc.exited) { this.finishReply(tab, r, m); return; }
+    r.concluded++;
     r.betweenTurns = false;
     r.turnStartAt = Date.now();
     reply.waitingFor = [];
     log(`chat ${tab.id}: all agents reported; asking the lead for the conclusion`);
-    r.proc.send("All of your agents have now reported back. Give me the final answer now: the result or decision, " +
-      "why, and any disagreement that remains.");
+    // (A project team works in phases: after the planners report, the next phase starts; so don't say "final".)
+    r.proc.send("All the agents you started have reported back. If your instructions have a next phase (the user's OK, " +
+      "building, checking), go on with it now. Otherwise give me the final answer: the result or decision, why, and any " +
+      "disagreement that remains.");
   }
 
   // What Claude loaded from your setup: connectors / MCP servers, plugins, skills. Shown in the
@@ -1216,7 +1300,7 @@ class ChatView {
     const reply = r.turn.reply;
     reply.waitingFor = [];
     clearTimeout(r.idleTimer);
-    clearInterval(r.watchdog);
+    clearInterval(r.watchdog); clearInterval(r.busyTimer);
     r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
@@ -1245,7 +1329,7 @@ class ChatView {
   // Stop no matter what state Claude is in.
   forceStop(tab, r) {
     if (r) {
-      clearInterval(r.watchdog);
+      clearInterval(r.watchdog); clearInterval(r.busyTimer);
       if (r.teamFile) fs.rm(r.teamFile, { force: true }, () => {});
       r.stale = true;
       if (r.proc) r.proc.kill();

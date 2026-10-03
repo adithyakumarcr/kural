@@ -75,6 +75,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert.strictEqual(await r, "No messages in 1 s.");
   });
 
+  await check("only started agents count: not waiting for developers the PM never started", async () => {
+    fs.writeFileSync(file, JSON.stringify({ round: 3, finished: [], started: ["rachel", "ross"] }));
+    await sleep(1300);
+    const r = b.call("read", { name: "Ross", wait_seconds: 30 });
+    await sleep(100); await b.call("finish", { name: "Rachel", final_position: "PLAN: ..." });
+    assert.ok(/Everyone else has finished/.test(await r));   // Monica is on the team list but never started
+  });
+  await check("waiting for a teammate who's still busy doesn't count as 'nobody answers'", async () => {
+    fs.writeFileSync(file, JSON.stringify({ round: 4, finished: [], started: ["monica", "ross"], busy: ["monica"] }));
+    await sleep(1300);
+    await b.call("read", { name: "Ross" });
+    for (let i = 0; i < 3; i++) assert.strictEqual(await b.call("read", { name: "Ross", wait_seconds: 1 }), "No messages in 1 s.");
+    fs.writeFileSync(file, JSON.stringify({ round: 4, finished: [], started: ["monica", "ross"], busy: [] }));
+    await sleep(1300);
+    await b.call("read", { name: "Ross", wait_seconds: 1 });
+    assert.ok(/Stop waiting/.test(await b.call("read", { name: "Ross", wait_seconds: 1 })));
+  });
+
   b.p.kill();
   fs.rmSync(file, { force: true });
   console.log(fail ? `team board: ${fail} FAILED` : "team board: ALL PASS");
