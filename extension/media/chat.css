@@ -378,3 +378,7 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 .mi.dim.off .mi-label { opacity: .55; }
 .mi .mi-label.ln { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mi .mi-label.ln + .mi-hint { flex-shrink: 0; }
+
+/* "Set up Kural first" (before Get started has passed) */
+.setup-text { margin: 10px auto 16px; max-width: 250px; color: var(--muted); text-align: center; }
+.setup-title { font-size: calc(18px * var(--fs, 1)); }

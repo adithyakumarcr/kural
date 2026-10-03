@@ -6,7 +6,7 @@ const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("./ui");
 const fs = require("fs");
 const path = require("path");
-const { ClaudeProcess, log, findClaude, LOGIN_RE } = require("./claude");
+const { ClaudeProcess, log, findClaude, isSetUp, LOGIN_RE } = require("./claude");
 
 const SCHEMA = {
   type: "object",
@@ -136,7 +136,7 @@ class SearchView {
     this.cancel();
     const root = this.root();
     if (!root) { this.post({ type: "error", id, message: "Open a folder first." }); return; }
-    if (!findClaude()) { this.post({ type: "error", id, message: "Claude Code isn't installed." }); vscode.commands.executeCommand("kural.install"); return; }
+    if (!isSetUp() || !findClaude()) { this.post({ type: "error", id, message: "Set up Kural first: Claude Code, installed and logged in." }); vscode.commands.executeCommand("kural.getStarted"); return; }
     this.prepare();
     const slot = this.spare;
     this.spare = null;

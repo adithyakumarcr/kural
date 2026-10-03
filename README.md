@@ -37,12 +37,7 @@ settings, MCP servers, skills and `CLAUDE.md` files. No API key, nothing extra t
 
 ## Install
 
-### 1. Install Claude Code and log in (once)
-
-Kural needs [Claude Code](https://docs.claude.com/en/docs/claude-code/setup). Install it, then run `claude` in a
-terminal and type `/login`. Kural uses that login.
-
-### 2. Download Kural
+### 1. Download Kural
 
 Get the file for your computer from [Releases](https://github.com/adithyakumarcr/kural/releases). Versions marked
 **Pre-release** (like `1.1.0-alpha.1`) are test versions.
@@ -70,6 +65,24 @@ Open **Kural Code Editor** from your apps, or type `kural` in a terminal (`kural
 
 **Windows.** Run the setup. If Windows says "Windows protected your PC", click **More info → Run anyway** (Kural isn't
 code-signed). It installs for your user only, so you don't need admin rights.
+
+### 2. Get started (Kural walks you through it)
+
+Kural's AI comes from [Claude Code](https://code.claude.com/docs/en/setup), Anthropic's coding tool: Kural runs it in
+the background with your login, so there's no API key. The first time you open Kural, **Get started** checks the three
+things it needs and helps with each one:
+
+1. **Claude Code installed.** **Install for me** runs Anthropic's official installer in a terminal (or copy the command).
+   Installed somewhere unusual? **Choose the claude file…**
+2. **Logged in.** **Log in** opens your browser. You need a Claude Pro, Max, Team or Enterprise plan, or an Anthropic
+   Console account; the free plan doesn't include Claude Code.
+3. **A test.** One tiny request to Claude (Haiku), sent the way Kural sends them. If it fails, the page shows Claude's
+   error and what it means.
+
+The chat unlocks when all three pass. Git and Ollama are optional; the page shows whether you have them. If Claude Code
+breaks later (removed, logged out), Kural notices and opens the page again. Open it any time: **Kural: Get Started**.
+
+<p align="center"><img src="docs/screenshots/get-started.png" width="620" alt="Get started: Claude Code installed, logged in, test passed; Git and Ollama found"></p>
 
 ### Updates
 
@@ -320,6 +333,7 @@ owner can create release tags (`v…`). See [CONTRIBUTING.md](CONTRIBUTING.md).
 extension/            the Kural extension (plain JavaScript, no build step)
   extension.js        wires everything together
   lib/claude.js       runs `claude` headless (sessions, permissions, speed)
+  lib/getstarted.js   Get started: Claude Code installed, logged in, test request (lib/checks.js)
   lib/chat.js         chat tabs, history, modes, models, agent teams, questions
   lib/archive.js      every chat from every workspace (History)
   lib/completion.js   Tab completion (Claude), lib/local.js (local model via Ollama)
@@ -341,10 +355,10 @@ docs/                 screenshots for this README
 ## Troubleshooting
 
 - **View → Output → Kural** shows every request Kural makes, with timings.
-- **"Kural: log in" in the status bar:** click it, type `/login` in the Claude Code terminal that opens, then reload
-  the window.
+- **"Kural: finish setup" in the status bar:** click it. Get started shows which step is missing (Claude Code, the
+  login, or the test request) and how to fix it.
 - **No Tab suggestions:** click **Tab** in the status bar. The panel shows what's wrong and has a speed check.
-- **Mac says the app is damaged:** run the `xattr` command from [Install](#2-download-kural).
+- **Mac says the app is damaged:** run the `xattr` command from [Install](#1-download-kural).
 
 ## Credits
 

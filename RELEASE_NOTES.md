@@ -2,6 +2,16 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Get started.** Kural's AI comes from Claude Code, and without it (or without a login) Kural used to show errors
+  whenever you used the chat, Tab or Ctrl+K. Now a **Get started** page opens the first time: it checks that Claude
+  Code is installed (**Install for me** runs Anthropic's official installer), that you're logged in (**Log in** opens
+  your browser), and sends one tiny test request. The chat unlocks only when all three pass; until then nothing starts
+  Claude in the background, so there are no errors. Git and Ollama (local Tab model, offline chat models) are shown as
+  optional. If Claude Code breaks later (removed, logged out), the page opens again at that step. **Kural: Get Started**
+  opens it any time.
+- **Kural finds Claude Code in more places.** Opened from the Dock or a menu, Kural didn't get your terminal's PATH, so
+  an install it doesn't know about (e.g. npm under nvm) wasn't found. Now it asks your login shell too, and Get started
+  has **Choose the claude file…** (setting `kural.claudePath`).
 - **Models on your computer in the chat (offline).** Besides Opus, Sonnet and Haiku, the model menu now lists
   **On this computer**: your Ollama models that can use tools. The chat works the same with them (it edits files,
   asks before commands, agents use the same model), privately and without internet. **Find & download models…**
@@ -168,7 +178,7 @@ First public version, released as the test version **1.1.0-alpha.1**.
 | **Ubuntu 22.04 / 24.04** (x64) | `kural_…_amd64.deb` |
 | **Windows 10 / 11** (x64) | `Kural-…-windows-x64-setup.exe` (or the portable `.zip`) |
 
-First install **Claude Code** and log in once (`claude`, then `/login`). Kural uses that login.
+Kural's **Get started** page helps you install **Claude Code** and log in the first time you open it.
 
 ### Mac
 1. Open the `.dmg` (or unzip the `.zip`) and drag **Kural** into **Applications**.

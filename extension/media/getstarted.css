@@ -1,0 +1,76 @@
+/* Get started page. Colors from the editor theme (--vscode-*); accents like the chat panel's. */
+:root {
+  --accent: #8b6cef; --accent-hi: #a68af9; --on-accent: #fff;
+  --green: #6cc490; --red: #e5707a; --yellow: #e0b45c;
+  --muted: var(--vscode-descriptionForeground);
+  --border: var(--vscode-widget-border, rgba(128,128,128,.22));
+  --surface: var(--vscode-input-background);
+  --code-bg: var(--vscode-textCodeBlock-background, rgba(0,0,0,.25));
+  --hover: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.15));
+}
+/* Light themes: darker accents, so text stays at least 4.5:1 on white (same as the chat panel). */
+body.vscode-light { --accent: #6447d6; --accent-hi: #5a3cc8; --green: #2c7a34; --red: #c02a3a; --yellow: #8a5d00; --code-bg: var(--vscode-textCodeBlock-background, #efedf5); }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--vscode-font-family); font-size: 14px; line-height: 1.55; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+#app { max-width: 680px; margin: 0 auto; padding: 36px 24px 48px; }
+h1 { font-size: 22px; margin: 0; font-weight: 650; }
+h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
+h3 { font-size: 14px; margin: 0 0 2px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+p { margin: 4px 0; }
+code, pre { font-family: var(--vscode-editor-font-family); font-size: 12.5px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.spacer { flex: 1; }
+.warn { color: var(--yellow); }
+
+header { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
+.logo { width: 48px; height: 48px; flex-shrink: 0; border-radius: 13px; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); color: var(--on-accent);
+  font-weight: 700; display: grid; place-items: center; font-family: var(--vscode-editor-font-family); }
+
+/* steps: a mark on the left (number, ✓, ✕, !, spinner) joined by a line */
+.step { display: flex; gap: 14px; position: relative; padding-bottom: 20px; }
+.step:not(:has(+ .go))::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: 2px; width: 2px; background: var(--border); }
+.mark { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px;
+  border: 2px solid var(--border); color: var(--muted); background: var(--vscode-editor-background); z-index: 1; }
+.step.ok .mark { border-color: var(--green); color: var(--green); }
+.step.fail .mark { border-color: var(--red); color: var(--red); }
+.step.warn .mark { border-color: var(--yellow); color: var(--yellow); }
+.step.todo .mark, .step.waiting .mark, .step.running .mark { border-color: var(--accent); color: var(--accent); }
+.step.ok h2 { color: var(--muted); }
+.body { flex: 1; min-width: 0; padding-top: 3px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 6px; }
+.note { padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, transparent); margin: 10px 0 6px; }
+.cmd { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 8px; background: var(--code-bg); border: 1px solid var(--border); margin: 4px 0 8px; }
+.cmd code { flex: 1; overflow-x: auto; white-space: nowrap; }
+pre.err { white-space: pre-wrap; word-break: break-word; margin: 6px 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--red) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 35%, transparent); }
+
+/* buttons */
+.b { font: inherit; font-size: 13px; cursor: pointer; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--vscode-foreground); white-space: nowrap; }
+.b:hover:not([disabled]) { background: var(--hover); }
+.b.primary { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.b.primary:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.b.small { font-size: 12px; padding: 2px 9px; }
+.b.big { font-size: 14px; padding: 8px 20px; font-weight: 600; }
+.b.solid { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.b.solid:hover:not([disabled]) { background: var(--accent-hi); border-color: var(--accent-hi); }
+.b[disabled] { opacity: .45; cursor: default; }
+
+.go { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 0 34px 42px; }
+
+/* optional extras */
+.optional { border-top: 1px solid var(--border); padding-top: 20px; }
+.tag { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; }
+.extra { margin-top: 14px; }
+.x-head { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.x-mark { width: 16px; text-align: center; color: var(--muted); }
+.x-mark.yes { color: var(--green); font-weight: 700; }
+.extra .muted.small { margin-left: 24px; }
+.sub { margin: 4px 0 0 24px; padding-left: 12px; border-left: 2px solid var(--border); font-size: 13px; }
+.foot { margin-top: 30px; }
+
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); border-top-color: var(--accent);
+  display: inline-block; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

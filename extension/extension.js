@@ -18,12 +18,15 @@ const { SearchView } = require("./lib/search");
 const { TabPanel } = require("./lib/tabpanel");
 const { LocalEngine } = require("./lib/local");
 const { Activity } = require("./lib/activity");
+const { GetStarted } = require("./lib/getstarted");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
+let getStarted = null;   // the Get started page (lib/getstarted.js)
+
 function openClaudeCode() {
   const bin = findClaude();
-  if (!bin) return offerInstall();
+  if (!bin) return getStarted.open();
   // Start claude inside a normal shell, so if it stops (not logged in, no network) its
   // message stays on screen. Windows always gets PowerShell, so the command syntax is known.
   const win = process.platform === "win32";
@@ -37,33 +40,19 @@ function openClaudeCode() {
   t.sendText(win ? `& "${bin}"` : `"${bin}"`);
 }
 
-async function offerInstall() {
-  const pick = await vscode.window.showInformationMessage(
-    "Kural needs Claude Code (it provides your Claude login). Install it now with Anthropic's official installer?",
-    "Install", "Cancel");
-  if (pick !== "Install") return;
-  // Anthropic's official installers: PowerShell on Windows, a shell script elsewhere.
-  if (process.platform === "win32") {
-    const t = vscode.window.createTerminal({ name: "Install Claude Code", shellPath: "powershell.exe" });
-    t.show();
-    t.sendText("irm https://claude.ai/install.ps1 | iex; & \"$env:USERPROFILE\\.local\\bin\\claude.exe\"; Write-Host 'Done. Reload Kural (Ctrl+Shift+P, Reload Window).'");
-  } else {
-    const t = vscode.window.createTerminal({ name: "Install Claude Code" });
-    t.show();
-    t.sendText("curl -fsSL https://claude.ai/install.sh | bash && ~/.local/bin/claude && echo 'Done. Reload Kural (Ctrl+Shift+P → Reload Window).'");
-  }
-}
-
 function activate(context) {
   const output = initLog();
   context.subscriptions.push(output);
   const updater = new Updater(context);   // Help → Check for Updates…
   log(`Kural ${context.extension.packageJSON.version} starting; claude at ${findClaude() || "(not found)"}`);
+  // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
+  getStarted = new GetStarted(context);
+  getStarted.register();
 
   // ---------- status bar ----------
   const status = vscode.window.createStatusBarItem("kural.status", vscode.StatusBarAlignment.Right, 100);
   status.name = "Kural Tab";
-  let state = findClaude() ? "ready" : "missing";
+  let state = "ready";
   const toggleKey = process.platform === "darwin" ? "⌃⌥Space" : "Ctrl+Alt+Space";
   // Hover on "Tab": what it does; click opens the Tab panel (switch, speed slider, model).
   const tabCard = (on) => {
@@ -80,12 +69,16 @@ function activate(context) {
       thinking: ["$(sparkle) Tab", tabCard(true), "kural.tabPanel.focus"],
       error:    ["$(warning) Tab", "Last suggestion failed; see View → Output → Kural", "kural.showLog"],
       login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.login"],
-      missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.install"],
+      missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted"],
     }[state];
+    if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Kural needs Claude Code, logged in: open Get started", "kural.getStarted"]; return; }
     [status.text, status.tooltip, status.command] = on || state === "login" || state === "missing"
       ? look : ["$(circle-slash) Tab", tabCard(false), "kural.tabPanel.focus"];
   };
-  const setState = (s) => { if (s !== state) { state = s; refresh(); } };
+  const setState = (s) => {
+    if (s === "login" || s === "missing") { getStarted.broke(s); return; }   // back to Get started at that step
+    if (s !== state) { state = s; refresh(); }
+  };
   refresh();
   status.show();
 
@@ -142,7 +135,7 @@ function activate(context) {
       tabPanel.push();
       vscode.window.showInformationMessage("Kural Tab forgot what it learned in this workspace.");
     }),
-    vscode.commands.registerCommand("kural.inlineEdit", () => inlineEdit(editSession, review, getState)),
+    vscode.commands.registerCommand("kural.inlineEdit", () => getStarted.ready ? inlineEdit(editSession, review, getState) : getStarted.open()),
     vscode.commands.registerCommand("kural.toggleTab", async () => {
       const on = !cfg().get("tabCompletion.enabled");
       await cfg().update("tabCompletion.enabled", on, vscode.ConfigurationTarget.Global);
@@ -163,12 +156,8 @@ function activate(context) {
       if (pick) await vscode.commands.executeCommand("kural.tabSpeedSet", pick.ms);
     }),
     vscode.commands.registerCommand("kural.openClaudeCode", openClaudeCode),
-    vscode.commands.registerCommand("kural.login", () => {
-      vscode.window.showInformationMessage("In the Claude Code terminal, type /login and follow the steps. Then reload Kural.");
-      openClaudeCode();
-      tabSession.stop(); editSession.stop(); setState("ready");
-    }),
-    vscode.commands.registerCommand("kural.install", offerInstall),
+    vscode.commands.registerCommand("kural.login", () => getStarted.open()),
+    vscode.commands.registerCommand("kural.install", () => getStarted.open()),
     vscode.commands.registerCommand("kural.showLog", () => output.show(true)),
     vscode.commands.registerCommand("kural.checkForUpdates", () => updater.check()),
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -206,9 +195,15 @@ function activate(context) {
     }, 900);
   }
 
-  // Warm up in the background so the first suggestion is quick.
-  if (state === "missing") offerInstall();
-  else if (cfg().get("tabCompletion.enabled")) tabSession.start();
+  // Set up (or once it is): warm up in the background so the first suggestion is quick.
+  getStarted.onChange((ready) => {
+    state = "ready"; refresh();
+    if (ready && cfg().get("tabCompletion.enabled")) tabSession.start();
+    if (!ready) { tabSession.stop(); terminalSession.stop(); editSession.stop(); }
+    chat.readyChanged(ready);
+  });
+  getStarted.start();
+  if (getStarted.ready && cfg().get("tabCompletion.enabled")) tabSession.start();
 }
 
 // Which files you edit, and the lines around your last edit in each (for Tab in other files).

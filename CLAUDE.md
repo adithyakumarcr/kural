@@ -20,11 +20,25 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   - `lib/completion.js` — tab completion; `lib/terminal-tab.js` — Tab in the terminal; `lib/activity.js` — what Tab learns from your work. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
   - `lib/updates.js` (Help → Check for Updates), `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask), `lib/ui.js` (font size).
+  - `lib/getstarted.js` — the Get started page (editor tab, `media/getstarted.*`); `lib/checks.js` (no vscode) — the checks.
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
   `make-deb.sh` (Ubuntu), `build-mac.sh` (Apple Silicon), `build-win.sh` (Windows, runs on Linux).
 - `.github/workflows/build.yml` — tests + all three builds; a `v*` tag publishes a Release.
 
 ## Things that are easy to break
+- **Get started gate** (`lib/getstarted.js`): Kural is "set up" when the test request passed once on this computer
+  (globalState `kural.setup.v1`) and nothing broke since. Until then `setSetupGate` makes `ClaudeProcess.start` and
+  `ClaudeSession.startSlot` do nothing (no background errors); the chat shows "Set up Kural first", Ask/Ctrl+K open
+  the page. Steps: installed (`claude --version`), logged in (`claude auth status --json`; old versions take unknown
+  commands as a prompt, so only JSON counts → "unknown"), test (`checks.claudeTest`: stream-json, Haiku, like Kural).
+  Later starts: a quick check (no request) 2.5 s after start. A session reporting login/missing calls `broke()`, which
+  checks for real first (the login regex can match unrelated errors) and only then locks. All checks are async
+  (`execFile`): spawnSync froze every extension while the page polled.
+  `findClaude()`: setting `kural.claudePath` (Windows: `claude.cmd` → its `claude.exe`), the usual places, PATH, then
+  the last answer of your shell (`$SHELL -ilc "command -v claude"`, run in the background by `findClaude.lookInShell()`
+  at startup and on Check again; interactive, so nvm in .bashrc/.zshrc counts). findClaude never waits for a shell.
+  Test all states without logging out: `test/fake-claude.js` (state in `$FAKE_CLAUDE_STATE` or
+  `<tmp>/kural-fake-claude-state`: ok / loggedout / nocredit / old) with `kural.claudePath` pointing at it.
 - **Claude CLI flags** (see `ClaudeProcess.start`): `--safe-mode` skips the user's setup *and* any
   `--mcp-config` we pass; with a team in safe mode we use `--setting-sources "" --disable-slash-commands`
   instead. Full setup (default) = no safe mode, no `--strict-mcp-config`.
@@ -136,7 +150,7 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   old extension description) and drops ELECTRON_*/VSCODE_* env vars. Tested end to end on Ubuntu only.
 
 ## Test
-- `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script).
+- `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script, Get started checks).
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
 - `node test/personal.live.js` — Tab and commit messages with vs without what you've been doing (real Haiku).
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts
