@@ -11,7 +11,7 @@ const { initLog, log, findClaude, ClaudeSession } = require("./lib/ai/claude");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/tab/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edit/inline");
 const { Updater } = require("./lib/updates");
-const { terminalTab, TERMINAL_SYSTEM_PROMPT } = require("./lib/tab/terminal");
+const { terminalTab, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT } = require("./lib/tab/terminal");
 const { ReviewManager } = require("./lib/edit/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
@@ -116,7 +116,13 @@ function activate(context) {
   local.status(true);
   const localTimer = setInterval(() => { if (cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status(); }, 15000);
   context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
-  terminalTab(context, terminalSession, local, activity, commitSession);   // Tab in the terminal (Tab Completion; commits: the chat's model)
+  // Plain words in the terminal ("push this to main") → a command, by the chat's model.
+  const wordsSession = new brain.Session({
+    name: "words", quiet: true, fallbackModel: () => "haiku", effort: "low", noThinking: true,
+    systemPrompt: INTENT_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 20000, clearEach: true, earlyStop: "</cmd>",
+  }, () => {});
+  context.subscriptions.push({ dispose: () => wordsSession.stop() });
+  terminalTab(context, terminalSession, local, activity, commitSession, wordsSession);   // Tab in the terminal (Tab Completion; commits: the chat's model)
   const tabPanel = new TabPanel(context, SPEEDS, local);
   tabPanel.register();
   const review = new ReviewManager();
@@ -209,7 +215,7 @@ function activate(context) {
   getStarted.onChange((ready) => {
     state = "ready"; refresh();
     if (getStarted.claudeReady && cfg().get("tabCompletion.enabled")) tabSession.start();
-    if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); }
+    if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); wordsSession.stop(); }
     chat.readyChanged(ready);
   });
   getStarted.start();

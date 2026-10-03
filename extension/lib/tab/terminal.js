@@ -8,6 +8,10 @@
 // Plus your own activity (activity.js): commands you often run here; for a commit, your recent commit
 // messages (to match your style) and what you asked Kural to do since the last commit (the *why*).
 //
+// Plain words work too: "push this code to the fix/code-editor branch" → git push origin fix/code-editor. Those go to
+// the chat's model (an instruct model that can follow a request; Tab Completion's small fill-in model can't), with the
+// git branch and remotes, and the changes for a commit.
+//
 // Speed: the terminal waits for every suggestion source before showing its list, so Kural never makes it
 // wait: it answers from its cache, and opens the list again when a new answer arrives (see the provider).
 
@@ -16,6 +20,19 @@ const { execFile } = require("child_process");
 const { log } = require("../ai/claude");
 
 const DIFF_CHARS = 3500;
+
+// Plain words → one command line (the chat's model).
+const INTENT_SYSTEM_PROMPT = `You turn what the user wrote in plain words in their terminal into the one shell command
+line that does it. Reply with exactly one <cmd>...</cmd> block: one line, the complete command, no explanation.
+Use the context: the shell, the folder, the git branch and remotes, recent commands. Examples:
+"push this code to fix/code-editor branch" -> <cmd>git push origin fix/code-editor</cmd>
+"commit with message fixed the login bug" -> <cmd>git commit -m "Fixed the login bug"</cmd>
+"commit everything" -> <cmd>git commit -am "..."</cmd> with a short message that names what the changes do
+"show files changed today" -> <cmd>find . -type f -newermt "$(date +%F)" -not -path "./.git/*"</cmd>
+For a commit message they wrote, keep their words (fix the capital letter and obvious typos only) and close the quote;
+if they didn't write one, write a short one from the changes. The command must fit on ONE line: never a heredoc, never
+$(cat <<EOF …), never several -m, no trailers (no Co-Authored-By or similar): only the message itself. Never add destructive options (--force, -f, rm -rf,
+reset --hard) unless they asked for them. If you can't tell what they want, reply <cmd></cmd>.`;
 
 const TERMINAL_SYSTEM_PROMPT = `You are the autocomplete of a terminal. You get what the user has typed so far
 in the shell, plus context (folder, recent commands, git state). Reply with exactly one <cmd>...</cmd> block holding
@@ -48,6 +65,8 @@ async function gitContext(cwd, wantDiff) {
   const status = await run("git", ["status", "--short", "--branch"], cwd);
   if (status) {
     text = `git status:\n${status.split("\n").slice(0, 25).join("\n")}`;
+    const remotes = (await run("git", ["remote"], cwd)).trim().split("\n").filter(Boolean);
+    if (remotes.length) text += `\nRemotes: ${remotes.join(", ")}`;
     if (wantDiff) {
       let diff = await run("git", ["diff", "--cached", "--stat"], cwd), which = "staged", names = ["--cached"];
       let body = diff ? await run("git", ["diff", "--cached", "-U1"], cwd) : "";
@@ -78,6 +97,47 @@ function trackCommands(context, activity) {
   }), vscode.window.onDidCloseTerminal((t) => recent.delete(t)));
 }
 
+// Is this plain words ("push this to main") rather than a command ("git push origin main")? Cheap, no model:
+// shell syntax (flags, pipes, quotes…) means a command; otherwise words that read like a sentence (filler words like
+// "this", "to", "my") or a first word that isn't a program you have.
+const FILLER = /^(this|that|these|the|to|my|a|an|all|with|and|from|into|for|of|me|please|which|what|how|it|its|them|new|current|every|everything|branch|message)$/i;
+const BUILTINS = new Set(["cd", "export", "echo", "source", "alias", "set", "unset", "exit", "history", "type", "which", "eval", "exec", "pwd", "pushd", "popd", "ls", "dir"]);
+const known = new Map();   // first word -> is it a program on PATH (or a builtin)?
+function isProgram(word) {
+  const w = String(word || "").toLowerCase();
+  if (BUILTINS.has(w)) return true;
+  if (known.has(w)) return known.get(w);
+  const fs = require("fs"), path = require("path");
+  const exts = process.platform === "win32" ? ["", ".exe", ".cmd", ".bat", ".ps1"] : [""];
+  const yes = (process.env.PATH || "").split(path.delimiter).some((d) => d && exts.some((e) => { try { return fs.statSync(path.join(d, w + e)).isFile(); } catch { return false; } }));
+  known.set(w, yes);
+  return yes;
+}
+function plainWords(typed) {
+  const t = String(typed || "").trim();
+  const words = t.split(/\s+/);
+  if (words.length < 3) return false;
+  if (/[|><$`=;&\\]|(^|\s)--?[A-Za-z]|["']/.test(t)) return false;   // shell syntax: a command
+  const filler = words.filter((w) => FILLER.test(w)).length;
+  return isProgram(words[0]) ? filler >= 2 : filler >= 1 || words.length >= 4;
+}
+
+// What the chat's model is asked for plain words.
+function intentPrompt({ shell, cwd, history, git, typed }) {
+  return `Shell: ${shell}\nFolder: ${cwd}\n${history ? `Recent commands:\n${history}\n` : ""}${git ? `\n${git}\n` : ""}\nThey wrote:\n${typed}`;
+}
+// The model's answer → one command line ("" when there's none).
+function tidyIntent(answer) {
+  const m = /<cmd>([\s\S]*?)(<\/cmd>|$)/.exec(String(answer || ""));
+  const full = (m ? m[1] : "").trim();
+  // A commit written as a heredoc (git commit -m "$(cat <<'EOF' … EOF)"): one line with its first line of message.
+  const h = /^(git\s+commit\b[^\n]*?)(-[a-z]*m)\s+"\$\(cat\s+<<-?'?(\w+)'?\s*\n([\s\S]*?)\n\s*\3/.exec(full);
+  if (h) { const msg = (h[4].split(/\r?\n/).find((l) => l.trim()) || "").trim().replace(/"/g, '\\"'); return msg ? `${h[1]}${h[2]} "${msg}"` : ""; }
+  let s = full.replace(/^\s*\$\s/, "").split(/\r?\n/)[0].trim();
+  if ((s.replace(/\\"/g, "").match(/"/g) || []).length % 2) s += '"';
+  return s;
+}
+
 // What Claude is asked (the instructions are TERMINAL_SYSTEM_PROMPT).
 function claudePrompt({ shell, cwd, history, git, note, typed }) {
   return `Shell: ${shell}\nFolder: ${cwd}\n${history ? `Recent commands:\n${history}\n` : ""}${git ? `\n${git}\n` : ""}${note ? `\n${note}` : ""}\nTyped so far:\n${typed}`;
@@ -104,8 +164,9 @@ function firstAnswer(promises) {
   });
 }
 
-// commitSession: commit messages come from the chat's model (lib/brain.js Session); other lines from Tab Completion.
-function terminalTab(context, session, local, activity = null, commitSession = null) {
+// commitSession: commit messages come from the chat's model (lib/ai Session); intentSession: plain words → a command,
+// also the chat's model. Other lines: Tab Completion's engine.
+function terminalTab(context, session, local, activity = null, commitSession = null, intentSession = null) {
   trackCommands(context, activity);
   const cache = new Map();   // typed line -> suggested line
 
@@ -113,6 +174,11 @@ function terminalTab(context, session, local, activity = null, commitSession = n
     const cwd = (terminal.shellIntegration && terminal.shellIntegration.cwd && terminal.shellIntegration.cwd.fsPath)
       || (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0].uri.fsPath) || process.cwd();
     const shell = (terminal.state && terminal.state.shell) || (process.platform === "win32" ? "pwsh" : "bash");
+    if (intentSession && plainWords(typed)) {
+      const g = await gitContext(cwd, /\bcommit\b/i.test(typed));
+      const history = (recent.get(terminal) || []).map((c) => `$ ${c}`).join("\n");
+      return [tidyIntent(await intentSession.ask(intentPrompt({ shell, cwd, history, git: g.text, typed }), token)), "words"];
+    }
     const commit = /^\s*git\s+commit\b/.test(typed);
     const g = await gitContext(cwd, commit);
     const git = g.text;
@@ -146,7 +212,7 @@ function terminalTab(context, session, local, activity = null, commitSession = n
   const kind = KIND.InlineSuggestion ?? KIND.InlineSuggestionAlwaysOnTop ?? KIND.Argument ?? KIND.Method;
   const item = (line, typed, engine) => ({
     label: line, replacementRange: [0, typed.length], kind,
-    detail: `Kural · ${engine === "chat" ? "your chat model" : "Tab Completion"}`,
+    detail: `Kural · ${engine === "words" ? "from your words" : engine === "chat" ? "your chat model" : "Tab Completion"}`,
     documentation: "Suggested by Kural's Tab Completion. Tab inserts it; you still press Enter to run it.",
   });
 
@@ -200,4 +266,4 @@ function terminalTab(context, session, local, activity = null, commitSession = n
   log("terminal tab: ready");
 }
 
-module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, _test: { gitContext, claudePrompt } };
+module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT, _test: { gitContext, claudePrompt, plainWords, tidyIntent, intentPrompt } };
