@@ -113,13 +113,17 @@ function isProgram(word) {
   known.set(w, yes);
   return yes;
 }
+// Words only people write, not commands: after a program name ("git push this to the main branch") two are needed.
+const PERSONAL = /^(this|that|these|the|my|a|an|please|me|it|its|them|which|what|how|into)$/i;
 function plainWords(typed) {
   const t = String(typed || "").trim();
   const words = t.split(/\s+/);
   if (words.length < 3) return false;
   if (/[|><$`=;&\\]|(^|\s)--?[A-Za-z]|["']/.test(t)) return false;   // shell syntax: a command
-  const filler = words.filter((w) => FILLER.test(w)).length;
-  return isProgram(words[0]) ? filler >= 2 : filler >= 1 || words.length >= 4;
+  if (/[\/\\]|^[.~]/.test(words[0])) return false;                     // ./run.sh, /usr/bin/python3, ~/bin/x: a program
+  // A wrong guess replaces your command line, so only clear sentences count.
+  if (isProgram(words[0])) return words.filter((w) => PERSONAL.test(w)).length >= 2;
+  return words.some((w) => FILLER.test(w));
 }
 
 // What the chat's model is asked for plain words.

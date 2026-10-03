@@ -25,7 +25,8 @@ check("plain words are noticed", () => {
 });
 check("commands stay commands", () => {
   for (const t of ["git push origin main", 'git commit -m "fix it"', "ls -la", "npm run build -- --watch", "cd src/app", "python3 main.py --port 80",
-    "grep -rn foo .", "echo hello > out.txt", "ga", "make"]) assert.ok(!plainWords(t), t);
+    "grep -rn foo .", "echo hello > out.txt", "ga", "make",
+    "./run.sh build all now", "/usr/bin/python3 a.py b c", "kubectl get pods in prod", "make clean all and test"]) assert.ok(!plainWords(t), t);
 });
 check("the model's command, one line, quote closed", () => {
   assert.strictEqual(tidyIntent("<cmd>git push origin fix/code-editor</cmd>"), "git push origin fix/code-editor");

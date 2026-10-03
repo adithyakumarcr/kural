@@ -26,7 +26,12 @@ class Account {
 
   register() {
     this.context.subscriptions.push(this.item, vscode.commands.registerCommand("kural.account", () => this.menu()));
-    this.gs.onChange(() => this.update());
+    this.gs.onChange(() => {
+      // A new login passed its test: Claude's chat processes start again, with it. (Not at log out: a process started
+      // then would still be the logged-out one after you log in.)
+      if (this.relogin && this.gs.claudeReady) { this.relogin = false; this.onSwitched(); }
+      this.update();
+    });
     this.draw();
     this.item.show();
     setTimeout(() => this.update(), 3000);   // (not during startup: it starts a program)
@@ -113,7 +118,7 @@ class Account {
     if (!r.ok) { vscode.window.showErrorMessage(`Kural couldn't log out: ${r.error}`); return false; }
     this.auth = { loggedIn: false };
     this.draw();
-    this.onSwitched();
+    this.relogin = true;
     this.gs.loggedOut();
     return true;
   }

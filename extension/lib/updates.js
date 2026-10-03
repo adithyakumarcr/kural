@@ -142,10 +142,7 @@ class Updater {
       if (this.busy || Date.now() - last < DAY) return;
       this.busy = true;
       try { await this.context.globalState.update(LAST_CHECK, Date.now()); await this.run(true); }
-      catch (e) {
-        log(`update: automatic check: ${e.message}`);   // (offline, say: try again tomorrow)
-        if (e.afterYes) this.failed(e);                  // (you said install: then say what went wrong)
-      }
+      catch (e) { log(`update: automatic check: ${e.message}`); }   // (offline, say: try again tomorrow)
       finally { this.busy = false; }
     };
     const first = setTimeout(tick, 60 * 1000);
@@ -175,13 +172,21 @@ class Updater {
       if (p) vscode.env.openExternal(vscode.Uri.parse(rel.html_url));
       return;
     }
+    // The automatic check doesn't wait for your answer: a notification you ignore would otherwise keep Kural "busy",
+    // and Check for Updates would do nothing.
+    if (quiet) { this.offer(rel, asset, true).catch((e) => { log(`update: ${e.stack || e.message}`); this.failed(e); }); return; }
+    await this.offer(rel, asset, false);
+  }
+
+  async offer(rel, asset, quiet) {
     const kind = /-(alpha|beta|rc)/i.exec(rel.version);
     const pick = await vscode.window.showInformationMessage(
       `Kural ${rel.version}${kind ? ` (${kind[1].toLowerCase()} test version)` : ""} is available. You have ${this.version}. Install it now? Kural restarts afterwards.`,
       { modal: !quiet }, "Install and restart", "What's new", ...(quiet ? ["Later"] : []));
     if (pick === "What's new") { vscode.env.openExternal(vscode.Uri.parse(rel.html_url)); return; }
-    if (pick !== "Install and restart") return;
-    try { await this.fetchAndInstall(rel, asset); } catch (e) { e.afterYes = true; throw e; }
+    if (pick !== "Install and restart" || this.installing) return;
+    this.installing = true;   // (two offers answered "Install": only one download)
+    try { await this.fetchAndInstall(rel, asset); } finally { this.installing = false; }
   }
 
   async fetchAndInstall(rel, asset) {

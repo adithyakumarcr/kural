@@ -262,7 +262,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .team-msg { margin: 3px 0; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(12px * var(--fs, 1)); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .team-who { font-weight: 600; color: var(--accent-hi); }
 /* The agents' discussion, in the answer itself: a bit bigger than inside a card */
-.answer > .team-msg { margin: 6px 0; padding: 6px 10px; font-size: calc(13px * var(--fs, 1)); }
+.answer > .team-msg, .answer > .blk > .team-msg { margin: 6px 0; padding: 6px 10px; font-size: calc(13px * var(--fs, 1)); }
 .agent-activity { font-size: calc(11px * var(--fs, 1)); color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .agent-say, .agent-think { margin: 3px 0; font-size: calc(12px * var(--fs, 1)); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
 .agent-think { color: var(--muted); font-style: italic; }

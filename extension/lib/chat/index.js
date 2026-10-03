@@ -119,6 +119,11 @@ class ChatView {
       vscode.workspace.onDidChangeWorkspaceFolders(() => {
         this.files = null;
         if (this.panes.some((p) => p.ready)) this.sendFiles();
+        // Pictures from the new folder: the pages may load files from it now.
+        for (const p of this.panes) {
+          p.webview.options = { ...p.webview.options, localResourceRoots: this.resourceRoots() };
+          this.postTo(p, { type: "pics", pics: this.filesFor(p.webview) });
+        }
         for (const t of this.tabs) { const r = this.runtime.get(t.id); if (r && r.proc && t.status === "idle") this.warm(t); }
       }),
       vscode.window.onDidChangeTextEditorSelection((e) => {

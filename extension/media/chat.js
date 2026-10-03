@@ -100,8 +100,8 @@
       .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
       .replace(/(^|[^"])\[([^\]]+)\]\(([^)\s]+)\)/g, (_, pre, text, url) => pre + (/^https?:\/\//.test(url)
         ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : `<span class="link">${text}</span>`))
-      // A bare web address: clickable too (not inside `code`, not inside a link made above).
-      .split(/(<code[^>]*>[\s\S]*?<\/code>|<a [^>]*>[\s\S]*?<\/a>)/).map((part, i) => i % 2 ? part
+      // A bare web address: clickable too (not inside `code`, a link or a picture made above).
+      .split(/(<code[^>]*>[\s\S]*?<\/code>|<a [^>]*>[\s\S]*?<\/a>|<img [^>]*>|<span class="img-[^>]*>[\s\S]*?<\/span>)/).map((part, i) => i % 2 ? part
         : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')).join("");
   }
 
@@ -1160,6 +1160,7 @@
       case "allowAll": break;
       case "activeFile": S.activeFile = m.file; S.includeActive = true; renderChips(); break;
       case "files": S.files = m.files; if (S.popup) renderPopup(); break;
+      case "pics": S.pics = m.pics; break;
       case "insertPill": closeHistory(); insertPill(m.ctx); break;
       case "pasted":
         if (m.ctx) insertPill(m.ctx, pasteRange);

@@ -48,13 +48,11 @@ def edit(path, **changes):
     with open(path, "wb") as f: plistlib.dump(d, f)
 edit(f"{app}/Contents/Info.plist", CFBundleName="Kural", CFBundleDisplayName="Kural", CFBundleExecutable="Kural",
      CFBundleIdentifier="com.kural", CFBundleIconFile="Kural.icns")
-# Ask only for what Kural uses. VS Code's app declares camera, microphone, audio capture and Bluetooth (for its voice
-# features, which VSCodium and Kural don't have): drop them, so Kural can never ask for them. Kept: AppleScript (VS Code's
-# "open in an external terminal") and the local network (a model on another computer, with Ollama).
+# The texts macOS shows if something asks for a permission. They don't ask for anything by themselves, and they stay:
+# without one, macOS closes the whole app when an extension tries that device. Kural itself uses none of them, and the
+# signature below doesn't allow camera or microphone (macOS just says no). The prompts people saw (Music, Photos…) came
+# from walking the home folder, which Kural no longer does.
 with open(f"{app}/Contents/Info.plist", "rb") as f: d = plistlib.load(f)
-for k in ("NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSAudioCaptureUsageDescription",
-          "NSBluetoothAlwaysUsageDescription", "NSBluetoothPeripheralUsageDescription"):
-    d.pop(k, None)
 for k in [k for k in d if k.endswith("UsageDescription")]:
     d[k] = d[k].replace("Visual Studio Code", "Kural")
 with open(f"{app}/Contents/Info.plist", "wb") as f: plistlib.dump(d, f)

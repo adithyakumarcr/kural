@@ -50,12 +50,14 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 ## Things that are easy to break
 - **Account** (`lib/account.js`): status item (plan) + QuickPick menu. Who's logged in comes from `claude auth status
   --json` (email, orgName, subscriptionType), never from the Keychain (Claudemeter, removed, read the Keychain: prompts
-  after every update, then failures). Log out = `claude auth logout` → `getStarted.loggedOut()` (locks Claude) and
-  `chat.setupChanged()` (new processes with the new login). Switch = log out + `getStarted.signIn()` (login terminal;
+  after every update, then failures). Log out = `claude auth logout` → `getStarted.loggedOut()` (locks Claude); once a new
+  login passes its test, `chat.setupChanged()` (new processes with the new login; not earlier, or a process started
+  while logged out would be kept). Switch = log out + `getStarted.signIn()` (login terminal;
   the page polls, runs the test, unlocks). `test/fake-claude.js` does `auth logout` too.
 - **No home-folder scans** (macOS asks for Music, Photos… when a process walks those folders): with no folder open,
   AI work runs in `ws.workDir()` (globalStorage/work), never `~`; `tools.walk` skips home's private folders
-  (`HOME_PRIVATE`). `build-mac.sh` removes the camera/microphone/Bluetooth declarations and entitlements.
+  (`HOME_PRIVATE`). `build-mac.sh` drops the camera/microphone entitlements but keeps
+  Info.plist's usage texts (without them macOS kills the app when any extension touches that device).
 - **Get started gate** (`lib/getstarted.js`): two ways, either is enough (globalState `kural.setup.v2` =
   `{claude, local}`): Claude's test passed (`claudeReady`, and nothing broke since) or a local model's test passed
   (`localModel`). `ready` = either. Claude processes only start when `claudeReady` (`setSetupGate` → `ClaudeProcess.start`
@@ -151,7 +153,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (`workbench.action.terminal.triggerSuggest`) when the answer comes. Same engine/model as editor Tab; own Claude
   session ("terminal", `<cmd>…</cmd>`). For `git commit` it adds the staged (else unstaged) diff (the chat's model).
   package.json `configurationDefaults` turns on the terminal's suggest-while-typing (VS Code's default is off).
-  **Plain words** ("push this to main"): `plainWords()` (filler words, shell syntax, `isProgram` on PATH) → the chat's
+  **Plain words** ("push this to main"): `plainWords()` (no shell syntax, first word not a path; after a program on PATH
+  two `PERSONAL` words, else one `FILLER` word: a wrong guess replaces the user's line, so keep it strict) → the chat's
   model with `INTENT_SYSTEM_PROMPT` (`wordsSession`); `tidyIntent` keeps one line. The suggestion list hides items
   whose label doesn't fuzzy-match the typed text, so `suggestionItem()` gives such items an empty replacement range
   (always shown) and `inputData` = DEL × typed characters + the command (what the terminal gets on Tab; VS Code's own
@@ -195,7 +198,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `::warning::` (shows in the CI summary). Because a menu patch can silently miss, updates are also checked daily and
   reachable from the Chat panel's … menu and the Account menu.
 - **Updates** (`lib/updates.js`): `autoCheck()` once a day (globalState `kural.update.lastCheck`, setting
-  `kural.updates.autoCheck`), quiet unless there's a newer version (non-modal offer); newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
+  `kural.updates.autoCheck`), quiet unless there's a newer version (non-modal offer, not awaited: an ignored
+  notification must not keep `busy` set, or Check for Updates silently does nothing); newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
   (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then restart.
   Mac/Windows: a detached script waits for Kural's main process (`process.ppid`) to quit, swaps the app / runs the setup,
   starts Kural. The script clears `CachedProfilesData/*/extensions.builtin.cache` (else the restarted Kural shows the

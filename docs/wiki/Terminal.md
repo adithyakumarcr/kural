@@ -22,7 +22,9 @@ Write what you want in your own words, and Kural suggests the command:
 |---|---|
 | `push this code to fix/code-editor branch` | `git push origin HEAD:fix/code-editor` |
 | `commit with message please added the low stock check` | `git commit -m "Added the low stock check"` |
-Kural notices plain words (sentences that don't start with a program you have) and asks the chat's model, with your
+
+Kural notices plain words (a sentence, not a command: no options or shell symbols, and words like "this", "the",
+"please"; after a program name such as `git` it needs at least two of them) and asks the chat's model, with your
 current branch and remotes. Kural tells the model to avoid destructive options (like `rm -rf` or `push --force`), but
 it's a model: read the suggestion before you press Enter.
 

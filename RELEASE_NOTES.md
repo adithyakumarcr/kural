@@ -10,7 +10,7 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
   menu doesn't show it (reported on the Mac). Setting `kural.updates.autoCheck`.
 - **The Mac asks only for what Kural needs.** No more requests for Apple Music, Photos or other private folders: with no
   project open, Kural's AI works in its own folder instead of your home folder, and never looks through your Music,
-  Pictures or Library folders. Kural no longer declares camera, microphone or Bluetooth use.
+  Pictures or Library folders. The Mac build no longer allows camera or microphone use at all.
 - **Terminal: plain words become commands.** Type `push this code to fix/code-editor branch` or `commit with message
   added the low stock check`, and Kural suggests `git push origin HEAD:fix/code-editor` or
   `git commit -m "Added the low stock check"`. Tab puts it in place of your words; Enter runs it.

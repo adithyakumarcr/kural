@@ -145,7 +145,7 @@
     const o = S.optional || {}, ol = o.ollama;
     const kids = [el("h3", {}, "For the full experience", el("span", { class: "tag" }, "optional")),
       el("p", { class: "muted small" }, "Kural works without these, but they make it better.")];
-    kids.push(extra("Git", !!o.git, "Kural uses Git to see what changed in your project, and Tab Completion writes your commit messages from it." +
+    kids.push(extra("Git", !!o.git, "Kural uses Git to see what changed in your project, and to write your commit messages." +
       (S.platform === "win32" ? " On Windows, Git also gives Claude Code a Bash shell for running commands." : ""),
       o.git ? el("span", { class: "muted" }, `Git ${o.git}`) : o.git === undefined ? spin() : btn("Get Git", "git")));
     const tabHave = ol && ol.running && o.tabModel;
