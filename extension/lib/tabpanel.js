@@ -1,4 +1,4 @@
-// "Kural Tab" panel at the bottom of the window: a real on/off switch, a draggable speed
+// "Tab Complete" panel at the bottom of the window: a real on/off switch, a draggable speed
 // slider, the model, and how fast the last suggestions came. Opened by clicking "Tab" in the
 // status bar. (A status bar hover can't hold a real slider; this panel can.)
 
@@ -112,7 +112,7 @@ function page(nonce, csp) {
   progress { width: 160px; accent-color: var(--accent); vertical-align: middle; }
 </style></head><body>
 <div id="app">
-  <div class="row"><span class="label">Tab completion</span><button id="on" class="switch" title="Turn on/off"></button>
+  <div class="row"><span class="label">Tab Complete</span><button id="on" class="switch" title="Turn on/off"></button>
     <span id="onText"></span><span class="muted">Shortcut: <kbd id="key"></kbd></span></div>
   <div class="dim">
     <div class="row"><span class="label">How fast it suggests</span>

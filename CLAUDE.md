@@ -1,7 +1,11 @@
 # Kural Code Editor — notes for Claude Code
 
-Kural Code Editor (by Adithya Chinnakkonda; formerly ClaudeX) is VSCodium rebranded, plus a built-in extension (`extension/`) that runs the user's own
-`claude` CLI headless. No API key: everything goes through Claude Code's login.
+Kural Code Editor (by Adithya Chinnakkonda; formerly ClaudeX) is VSCodium rebranded, plus a built-in extension (`extension/`) with
+an AI assistant. Two engines: **Claude** (the user's own `claude` CLI, headless, with its login: no API key) and **your
+own model** (Ollama on the user's computer, run by Kural's own engine: no Claude, no account, offline).
+**Identity:** Kural is its own product, not "Claude". UI text says Kural ("Ask Kural to change something…", "Kural
+searches…"); "Claude" appears only where it means Claude (its models in the menu, the Claude way in Get started,
+Claude Code itself). The completion feature is called **Tab Complete** (never "Kural Tab").
 Read `README.md` for the features. This file is how the code works and how to change it safely.
 
 ## The owner
@@ -12,7 +16,10 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
 
 ## Layout
 - `extension/` — plain JavaScript, no build step, no npm dependencies at runtime.
-  - `extension.js` wires everything; status bar "Tab" opens `lib/tabpanel.js` (bottom panel: switch, slider, model).
+  - `extension.js` wires everything; status bar "Tab Complete" opens `lib/tabpanel.js` (bottom panel: switch, slider, model).
+  - `lib/brain.js` — which engine answers: the chat's model decides for the chat, Ask, Ctrl+K/Apply and commit messages
+    (`makeAgent`, `Session`, `usable`). `lib/engine.js` (`LocalAgent`) + `lib/tools.js` — Kural's own engine for Ollama
+    models (no vscode inside; behaves like `ClaudeProcess`: same methods, same stream-json events).
   - `lib/claude.js` — `ClaudeProcess` (one `claude -p --input-format stream-json` process) and
     `ClaudeSession` (pool of warm processes for one-shot questions: tab completion, Ctrl+K).
   - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
@@ -20,16 +27,19 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   - `lib/completion.js` — tab completion; `lib/terminal-tab.js` — Tab in the terminal; `lib/activity.js` — what Tab learns from your work. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
   - `lib/updates.js` (Help → Check for Updates), `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
     `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask), `lib/ui.js` (font size).
-  - `lib/getstarted.js` — the Get started page (editor tab, `media/getstarted.*`); `lib/checks.js` (no vscode) — the checks.
+  - `lib/getstarted.js` — the Get started page (editor tab, `media/getstarted.*`): Claude or your own model;
+    `lib/checks.js` (no vscode) — the Claude checks.
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
   `make-deb.sh` (Ubuntu), `build-mac.sh` (Apple Silicon), `build-win.sh` (Windows, runs on Linux).
 - `.github/workflows/build.yml` — tests + all three builds; a `v*` tag publishes a Release.
 
 ## Things that are easy to break
-- **Get started gate** (`lib/getstarted.js`): Kural is "set up" when the test request passed once on this computer
-  (globalState `kural.setup.v1`) and nothing broke since. Until then `setSetupGate` makes `ClaudeProcess.start` and
-  `ClaudeSession.startSlot` do nothing (no background errors); the chat shows "Set up Kural first", Ask/Ctrl+K open
-  the page. Steps: installed (`claude --version`), logged in (`claude auth status --json`; old versions take unknown
+- **Get started gate** (`lib/getstarted.js`): two ways, either is enough (globalState `kural.setup.v2` =
+  `{claude, local}`): Claude's test passed (`claudeReady`, and nothing broke since) or a local model's test passed
+  (`localModel`). `ready` = either. Claude processes only start when `claudeReady` (`setSetupGate` → `ClaudeProcess.start`
+  and `ClaudeSession.startSlot` do nothing: no background errors for people without Claude). Nothing set up: the chat
+  shows "Set up Kural first", Ask/Ctrl+K open the page. Only the local way: new/empty chats use the local model
+  (`chat.localDefault`), Claude models in the menu say "set up Claude…". Claude steps: installed (`claude --version`), logged in (`claude auth status --json`; old versions take unknown
   commands as a prompt, so only JSON counts → "unknown"), test (`checks.claudeTest`: stream-json, Haiku, like Kural).
   Later starts: a quick check (no request) 2.5 s after start. A session reporting login/missing calls `broke()`, which
   checks for real first (the login regex can match unrelated errors) and only then locks. All checks are async
@@ -123,16 +133,20 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed), 
   Live check: `node test/personal.live.js` (same request with and without the note, real Haiku).
 - **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
-- **Local models in the chat** (`lib/ollama.js`, no vscode inside): Ollama ≥ 0.14 speaks Claude's API, so a local chat
-  is the same Claude Code with env `ANTHROPIC_BASE_URL` = Ollama, `ANTHROPIC_AUTH_TOKEN=ollama`, all model aliases and
-  `CLAUDE_CODE_SUBAGENT_MODEL` = the model (agents too), `CLAUDE_CODE_MAX_CONTEXT_TOKENS` = its window (else Claude Code
-  assumes 200k and never compacts), `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`, and `NO_PROXY` for Ollama's host
-  (a proxy in the environment would otherwise get even localhost requests). `tab.model` = `"ollama:<name>"`; its own
-  process (`procKey`), prepared first (`prepareLocal`: running, version, downloaded, has "tools"), then a copy with
-  `num_ctx` (`kural-<model>-32k`, `/api/create`, shares the files; setting `kural.localModels.contextLength`).
-  Search reads ollama.com/search?c=tools (no API; `parseSearch` reads list items loosely), falling back to `SUGGESTED`.
-  Test without Ollama: `node test/fake-ollama-chat.js 11434` (models, pull, create, and /v1/messages with one scripted
-  Read tool call: "read the readme").
+- **Local models** (`tab.model` = `"ollama:<name>"`): Kural's own engine (`lib/engine.js`), never Claude Code (that
+  needed Claude installed and its env tricks). It calls Ollama's `/api/chat` (streamed; `tools`; `think` for thinking
+  models; `options.num_ctx` = setting `kural.localModels.contextLength`), runs the tools in `lib/tools.js` (Read, Write,
+  Edit, Glob, Grep, Bash, AskUserQuestion: Claude Code's names and inputs, so the chat shows them and Undo works;
+  file paths made absolute before the permission check) and emits Claude Code's stream-json events. Conversations are
+  saved in globalStorage `local-chats/<session>.json` (resume). `jsonSchema` (Ask) = one more request with `format`.
+  Agent teams and Claude Code connectors/skills: Claude only (`teamSize` is 0 for local; the menu says so). Switching a
+  chat between Claude and local starts a new session with `carryOver` (the transcript). `prepareLocal`: Ollama running,
+  ≥ `MIN_VERSION` (0.8: streamed tool calls), model downloaded, has "tools". Ctrl+K/Apply/commits with a local model:
+  one non-streamed `/api/chat` (`brain.askLocal`). Tab Complete keeps its own engine (FIM model or Claude Haiku).
+  Search reads ollama.com/search?c=tools (no API; `parseSearch` reads list items loosely; cloud-only = no sizes → left
+  out), falling back to `SUGGESTED`. Test without Ollama: `node test/fake-ollama-chat.js 11434` (`/api/chat` scripted:
+  "read the readme" → Read call; "add a line to notes" → Edit; `format` → JSON; non-streamed → `<code>`/`<cmd>` replies)
+  and `node test/engine.test.js`. Offline check: start Kural with `HTTPS_PROXY` pointing nowhere.
 - **Themes** (`extension/themes/`): Kural Dark and Kural Light (same keys). The panels (chat, Ask, Tab) set their
   own accent colors in CSS; a light theme overrides them under `body.vscode-light` (VS Code's class) with darker ones.
   `test/theme.test.js` checks Kural Light's text contrast (4.5:1; icons and line numbers 3:1): change a color, run it.

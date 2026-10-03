@@ -4,6 +4,9 @@
 //   node test/fake-ollama-chat.js [port]          (default 11435; requests are logged to stdout)
 // /v1/messages: if your message says "read the readme", the "model" first asks to Read README.md
 // (a tool call, like a real model would), then answers with the file's first line. Otherwise it says hello.
+// /api/chat (Kural's own engine), streamed: "read the readme" → a Read tool call, then the first line;
+// "add a line to notes.txt" → an Edit tool call; "slow" → a slow answer (to test Stop); "think" → thinking first;
+// with "format" → a JSON answer (for Ask). Otherwise: "Hello from <model>. You said: …".
 const http = require("http");
 
 function start(port = 11435, { version = "0.15.2", log = () => {} } = {}) {
@@ -11,6 +14,7 @@ function start(port = 11435, { version = "0.15.2", log = () => {} } = {}) {
     ["qwen3-coder:30b", { size: 18e9, params: "30.5B", caps: ["completion", "tools"] }],
     ["nomic-embed-text:latest", { size: 274e6, params: "137M", caps: ["embedding"] }],
     ["qwen2.5-coder:1.5b-base", { size: 986e6, params: "1.5B", caps: ["completion", "insert"] }],
+    ["qwen3:8b", { size: 5.2e9, params: "8.2B", caps: ["completion", "tools", "thinking"] }],
   ]);
   const created = [];
   const requests = [];
@@ -46,6 +50,7 @@ function start(port = 11435, { version = "0.15.2", log = () => {} } = {}) {
         }, Number(process.env.FAKE_PULL_MS) || 60);
         return;
       }
+      if (req.url === "/api/chat") return ollamaChat(j, res, models);
       if (req.url.startsWith("/v1/messages/count_tokens")) return json({ input_tokens: 100 });
       if (req.url.startsWith("/v1/messages")) return messages(j, res);
       json({ error: "not found" }, 404);
@@ -53,6 +58,48 @@ function start(port = 11435, { version = "0.15.2", log = () => {} } = {}) {
   });
   server.listen(port, "127.0.0.1");
   return { server, requests, created, models, close: () => server.close() };
+}
+
+// Ollama's own chat API (what Kural's engine uses), scripted.
+function ollamaChat(j, res, models) {
+  if (!models.has(j.model)) { res.writeHead(404, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: `model "${j.model}" not found, try pulling it first` })); return; }
+  const msgs = j.messages || [];
+  const lastUser = [...msgs].reverse().find((m) => m.role === "user") || { content: "" };
+  const afterUser = msgs.slice(msgs.lastIndexOf(lastUser) + 1);
+  const toolDone = afterUser.find((m) => m.role === "tool");
+  const say = (text, extra = {}) => ({ model: j.model, message: { role: "assistant", content: text, ...extra }, done: false });
+  let chunks;
+  if (j.format) {
+    const out = { answer: "The README starts the project.", results: [{ file: "README.md", line: 1, why: "the first line" }] };
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ model: j.model, message: { role: "assistant", content: JSON.stringify(out) }, done: true }));
+    return;
+  }
+  if (j.stream === false) {   // one answer, not streamed: Ctrl+K / Apply (<code>…</code>), commit messages (<cmd>…</cmd>)
+    const sys = String((msgs.find((m) => m.role === "system") || {}).content || "");
+    const text = /<code>/.test(sys) ? `<code>\n# edited by ${j.model}, offline\n</code>`
+      : /<cmd>/.test(sys) ? `<cmd>git commit -m "Add notes"</cmd>` : `Hello from ${j.model}.`;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ model: j.model, message: { role: "assistant", content: text }, done: true }));
+    return;
+  }
+  if (/read the readme/i.test(lastUser.content) && !toolDone) chunks = [say("Let me look.", { tool_calls: [{ function: { name: "Read", arguments: { file_path: "README.md" } } }] })];
+  else if (/read the readme/i.test(lastUser.content)) {
+    const first = (toolDone.content.split("\n").find((l) => /\S/.test(l.replace(/^\s*\d+\t/, ""))) || "").replace(/^\s*\d+\t/, "").trim();
+    chunks = [say("The README's first line is: "), say(first)];
+  } else if (/add a line to notes/i.test(lastUser.content) && !toolDone) chunks = [say("", { tool_calls: [{ function: { name: "Edit", arguments: { file_path: "notes.txt", old_string: "one", new_string: "one\ntwo" } } }] })];
+  else if (/add a line to notes/i.test(lastUser.content)) chunks = [say(`Done: ${toolDone.content}`)];
+  else if (/think/i.test(lastUser.content)) chunks = [{ model: j.model, message: { role: "assistant", content: "", thinking: "Let me think about this." }, done: false }, say("Thought it through.")];
+  else chunks = [say(`Hello from ${j.model}. `), say(`You said: ${String(lastUser.content).slice(0, 60)}`)];
+  res.writeHead(200, { "Content-Type": "application/x-ndjson" });
+  const slow = /slow/i.test(lastUser.content);
+  let i = 0;
+  const t = setInterval(() => {
+    if (res.destroyed) { clearInterval(t); return; }
+    if (i < chunks.length) { res.write(JSON.stringify(chunks[i++]) + "\n"); return; }
+    clearInterval(t);
+    res.end(JSON.stringify({ model: j.model, message: { role: "assistant", content: "" }, done: true }) + "\n");
+  }, slow ? 2000 : 5);
 }
 
 // The "model": scripted answers in Anthropic's streaming format.

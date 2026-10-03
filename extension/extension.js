@@ -19,6 +19,7 @@ const { TabPanel } = require("./lib/tabpanel");
 const { LocalEngine } = require("./lib/local");
 const { Activity } = require("./lib/activity");
 const { GetStarted } = require("./lib/getstarted");
+const brain = require("./lib/brain");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
@@ -51,29 +52,29 @@ function activate(context) {
 
   // ---------- status bar ----------
   const status = vscode.window.createStatusBarItem("kural.status", vscode.StatusBarAlignment.Right, 100);
-  status.name = "Kural Tab";
+  status.name = "Tab Complete";
   let state = "ready";
   const toggleKey = process.platform === "darwin" ? "⌃⌥Space" : "Ctrl+Alt+Space";
   // Hover on "Tab": what it does; click opens the Tab panel (switch, speed slider, model).
   const tabCard = (on) => {
     const sp = SPEEDS.reduce((a, b) => Math.abs(b.ms - cfg().get("tabCompletion.debounceMs")) < Math.abs(a.ms - cfg().get("tabCompletion.debounceMs")) ? b : a);
-    const md = new vscode.MarkdownString(`**Kural Tab** · ${on ? "On" : "Off"} · speed: ${sp.label}\n\n` +
-      `Click for the Tab panel (on/off, speed slider, model). \`${toggleKey}\` turns it ${on ? "off" : "on"}.`);
+    const md = new vscode.MarkdownString(`**Tab Complete** · ${on ? "On" : "Off"} · speed: ${sp.label}\n\n` +
+      `Click for the Tab Complete panel (on/off, speed slider, model). \`${toggleKey}\` turns it ${on ? "off" : "on"}.`);
     md.supportThemeIcons = true;
     return md;
   };
   const refresh = () => {
     const on = cfg().get("tabCompletion.enabled");
     const look = {
-      ready:    ["$(sparkle) Tab", tabCard(true), "kural.tabPanel.focus"],
-      thinking: ["$(sparkle) Tab", tabCard(true), "kural.tabPanel.focus"],
-      error:    ["$(warning) Tab", "Last suggestion failed; see View → Output → Kural", "kural.showLog"],
-      login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.login"],
+      ready:    ["$(sparkle) Tab Complete", tabCard(true), "kural.tabPanel.focus"],
+      thinking: ["$(sparkle) Tab Complete", tabCard(true), "kural.tabPanel.focus"],
+      error:    ["$(warning) Tab Complete", "Last suggestion failed; see View → Output → Kural", "kural.showLog"],
+      login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted"],
       missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted"],
     }[state];
-    if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Kural needs Claude Code, logged in: open Get started", "kural.getStarted"]; return; }
+    if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, or your own model with Ollama): open Get started", "kural.getStarted"]; return; }
     [status.text, status.tooltip, status.command] = on || state === "login" || state === "missing"
-      ? look : ["$(circle-slash) Tab", tabCard(false), "kural.tabPanel.focus"];
+      ? look : ["$(circle-slash) Tab Complete", tabCard(false), "kural.tabPanel.focus"];
   };
   const setState = (s) => {
     if (s === "login" || s === "missing") { getStarted.broke(s); return; }   // back to Get started at that step
@@ -94,10 +95,15 @@ function activate(context) {
     name: "terminal", model: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
     systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true, pool: 2, earlyStop: "</cmd>",
   }, () => {});
-  const editSession = new ClaudeSession({
-    name: "edit", model: () => cfg().get("editModel"), effort: "medium", systemPrompt: EDIT_SYSTEM_PROMPT,
+  // Ctrl+K, Apply and commit messages: the chat's model (a Claude model, or one on your computer: lib/brain.js).
+  const editSession = new brain.Session({
+    name: "edit", fallbackModel: () => "sonnet", effort: "medium", systemPrompt: EDIT_SYSTEM_PROMPT,
     restartAfter: 10, timeoutMs: 180000, clearEach: true,
   }, (s) => { if (s === "login" || s === "missing") setState(s); });
+  const commitSession = new brain.Session({
+    name: "commit", quiet: true, fallbackModel: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
+    systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 20000, clearEach: true, earlyStop: "</cmd>",
+  }, () => {});
 
   // What you've been doing in this workspace: makes Tab's suggestions fit you (lib/activity.js).
   const activity = new Activity(context.workspaceState, () => cfg().get("tabCompletion.learn") !== false);
@@ -108,7 +114,7 @@ function activate(context) {
   local.status(true);
   const localTimer = setInterval(() => { if (cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status(); }, 15000);
   context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
-  terminalTab(context, terminalSession, local, activity);   // Tab in the terminal (same engine and model)
+  terminalTab(context, terminalSession, local, activity, commitSession);   // Tab in the terminal (Tab Complete; commits: the chat's model)
   const tabPanel = new TabPanel(context, SPEEDS, local, activity);
   activity.onChange = () => tabPanel.push();
   tabPanel.register();
@@ -121,38 +127,41 @@ function activate(context) {
   const getState = () => state;
   const chat = new ChatView(context, (code, uri, ask) => applyCode(editSession, review, getState, code, uri, ask));
   chat.activity = activity;
+  chat.readyCheck = () => getStarted.ready;           // Claude or your own model set up
+  chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
+  brain.setModelSource(() => { const t = chat.active(); return t ? t.model : chat.lastChoices().model; }, () => getStarted.localModel);
   chat.register();
   new SearchView(context).register();
   triggerOnCursor(context);
 
   context.subscriptions.push(
     status,
-    { dispose: () => { tabSession.stop(); editSession.stop(); } },
+    { dispose: () => { tabSession.stop(); editSession.stop(); commitSession.stop(); } },
     vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity)),
     vscode.commands.registerCommand("kural.tab.accepted", (a) => { if (a) activity.tabAccepted(a.file, a.lang, a.before, a.text); }),
     vscode.commands.registerCommand("kural.tab.forget", () => {
       activity.forget();
       tabPanel.push();
-      vscode.window.showInformationMessage("Kural Tab forgot what it learned in this workspace.");
+      vscode.window.showInformationMessage("Tab Complete forgot what it learned in this workspace.");
     }),
-    vscode.commands.registerCommand("kural.inlineEdit", () => getStarted.ready ? inlineEdit(editSession, review, getState) : getStarted.open()),
+    vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState) : getStarted.open()),
     vscode.commands.registerCommand("kural.toggleTab", async () => {
       const on = !cfg().get("tabCompletion.enabled");
       await cfg().update("tabCompletion.enabled", on, vscode.ConfigurationTarget.Global);
-      vscode.window.setStatusBarMessage(`Kural Tab ${on ? "on" : "off"}`, 1500);
+      vscode.window.setStatusBarMessage(`Tab Complete ${on ? "on" : "off"}`, 1500);
       if (on) tabSession.start();
     }),
     vscode.commands.registerCommand("kural.tabSpeedSet", async (ms) => {
       if (typeof ms !== "number") return;
       await cfg().update("tabCompletion.debounceMs", ms, vscode.ConfigurationTarget.Global);
       const sp = SPEEDS.find((x) => x.ms === ms);
-      vscode.window.setStatusBarMessage(`Kural Tab speed: ${sp ? sp.label : ms + " ms"}`, 1500);
+      vscode.window.setStatusBarMessage(`Tab Complete speed: ${sp ? sp.label : ms + " ms"}`, 1500);
     }),
     vscode.commands.registerCommand("kural.tabSpeed", async () => {
       const ms = cfg().get("tabCompletion.debounceMs");
       const pick = await vscode.window.showQuickPick(SPEEDS.map((sp) => ({
         label: `${sp.ms === ms ? "$(check) " : ""}${sp.label}`, description: sp.ms ? `${sp.ms} ms after you stop typing` : "as you type", ms: sp.ms,
-      })), { title: "How fast should Kural Tab suggest?" });
+      })), { title: "How fast should Tab Complete suggest?" });
       if (pick) await vscode.commands.executeCommand("kural.tabSpeedSet", pick.ms);
     }),
     vscode.commands.registerCommand("kural.openClaudeCode", openClaudeCode),
@@ -165,7 +174,6 @@ function activate(context) {
       if (e.affectsConfiguration("kural.tabCompletion.localModel") || e.affectsConfiguration("kural.tabCompletion.ollamaUrl")) local.status(true);
       // Turned on (shortcut or the Tab panel): start Claude now so the first suggestion is quick.
       if (e.affectsConfiguration("kural.tabCompletion") && cfg().get("tabCompletion.enabled")) tabSession.start();
-      if (e.affectsConfiguration("kural.editModel")) editSession.stop();
       if (e.affectsConfiguration("kural")) refresh();
     }),
   );
@@ -196,14 +204,16 @@ function activate(context) {
   }
 
   // Set up (or once it is): warm up in the background so the first suggestion is quick.
+  // (Claude's sessions only run once Claude is set up; with only your own model, Tab Complete uses Ollama.)
   getStarted.onChange((ready) => {
     state = "ready"; refresh();
-    if (ready && cfg().get("tabCompletion.enabled")) tabSession.start();
-    if (!ready) { tabSession.stop(); terminalSession.stop(); editSession.stop(); }
+    if (getStarted.claudeReady && cfg().get("tabCompletion.enabled")) tabSession.start();
+    if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); }
     chat.readyChanged(ready);
   });
   getStarted.start();
-  if (getStarted.ready && cfg().get("tabCompletion.enabled")) tabSession.start();
+  chat.readyChanged(getStarted.ready);   // (saved empty chats get a model that's set up)
+  if (getStarted.claudeReady && cfg().get("tabCompletion.enabled")) tabSession.start();
 }
 
 // Which files you edit, and the lines around your last edit in each (for Tab in other files).

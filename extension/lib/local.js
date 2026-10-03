@@ -131,7 +131,7 @@ class LocalEngine {
         }
       }
       log(`tab: downloaded ${name}`);
-      vscode.window.setStatusBarMessage(`Kural Tab: ${name} downloaded — local suggestions are on`, 4000);
+      vscode.window.setStatusBarMessage(`Tab Complete: ${name} downloaded — local suggestions are on`, 4000);
     } catch (e) {
       log(`tab: download failed: ${e.message}`);
       vscode.window.showErrorMessage(`Kural couldn't download ${name}: ${e.message}`);

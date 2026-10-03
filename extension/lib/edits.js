@@ -71,7 +71,7 @@ async function inlineEdit(session, review, state) {
   thinking.dispose();
 
   if (reply == null) { notReady(state); return; }
-  if (doc.version !== version) { vscode.window.showWarningMessage("Kural: the file changed while Claude was working, so the edit was not applied. Try again."); return; }
+  if (doc.version !== version) { vscode.window.showWarningMessage("Kural: the file changed while Kural was working, so the edit was not applied. Try again."); return; }
   await review.propose(doc, start, end, unwrap(reply), { source: "Ctrl+K", ask: instruction });
 }
 
@@ -100,7 +100,7 @@ async function applyCode(session, review, state, code, targetUri, ask = "") {
   const version = doc.version;
   const reply = await runWithProgress(session, `Kural is applying to ${vscode.workspace.asRelativePath(doc.uri)}…`, prompt);
   if (reply == null) { notReady(state); return; }
-  if (doc.version !== version) { vscode.window.showWarningMessage("Kural: the file changed while Claude was working. Click Apply again."); return; }
+  if (doc.version !== version) { vscode.window.showWarningMessage("Kural: the file changed while Kural was working. Click Apply again."); return; }
   // Most files end with a line break, which shows up as an empty last line. Leave it alone.
   let end = doc.lineCount;
   if (end > 1 && doc.lineAt(end - 1).text === "") end--;

@@ -38,8 +38,8 @@ const SEARCH_HTML = `<ul>
   });
   await check("models: only ones with tools can chat (not embeddings, not Tab's code model)", async () => {
     const m = await ol.models();
-    assert.deepStrictEqual(m.filter((x) => x.chat).map((x) => x.name), ["qwen3-coder:30b"]);
-    assert.strictEqual(m.length, 3);
+    assert.deepStrictEqual(m.filter((x) => x.chat).map((x) => x.name), ["qwen3-coder:30b", "qwen3:8b"]);
+    assert.strictEqual(m.length, 4);
   });
   await check("bigger context: a copy made once, then reused, and not listed as a model", async () => {
     const v = await ol.withContext("qwen3-coder:30b", 32768);

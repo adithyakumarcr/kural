@@ -1,7 +1,7 @@
 {
   "name": "kural",
   "displayName": "Kural",
-  "description": "Kural Code Editor's Claude features: fast tab completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask — using your Claude login.",
+  "description": "Kural Code Editor's AI: Tab Complete, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude (your Claude Code login) or your own model on this computer (Ollama, offline).",
   "version": "1.1.0-alpha.3",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
@@ -29,7 +29,7 @@
     "commands": [
       {
         "command": "kural.tab.forget",
-        "title": "Kural: Forget What Tab Learned (This Workspace)"
+        "title": "Kural: Forget What Tab Complete Learned (This Workspace)"
       },
       {
         "command": "kural.chat.open",
@@ -60,7 +60,7 @@
       },
       {
         "command": "kural.inlineEdit",
-        "title": "Kural: Edit with Claude (inline)",
+        "title": "Kural: Edit Inline (Ctrl+K)",
         "icon": "$(sparkle)"
       },
       {
@@ -73,7 +73,7 @@
       },
       {
         "command": "kural.toggleTab",
-        "title": "Kural: Turn Tab Completion On/Off"
+        "title": "Kural: Turn Tab Complete On/Off"
       },
       {
         "command": "kural.openClaudeCode",
@@ -129,7 +129,7 @@
       },
       {
         "command": "kural.tabSpeed",
-        "title": "Kural: Tab Completion Speed"
+        "title": "Kural: Tab Complete Speed"
       },
       {
         "command": "kural.reloadSetup",
@@ -164,7 +164,7 @@
       "panel": [
         {
           "id": "kural-tab",
-          "title": "Kural Tab",
+          "title": "Tab Complete",
           "icon": "media/chat-icon.svg"
         }
       ]
@@ -348,7 +348,7 @@
         "kural.tabCompletion.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Show Claude suggestions as grey text. Tab accepts."
+          "description": "Tab Complete: show suggestions as grey text as you type. Tab accepts."
         },
         "kural.tabCompletion.model": {
           "type": "string",
@@ -358,14 +358,14 @@
             "sonnet",
             "opus"
           ],
-          "description": "Model for tab completion. Haiku is fastest (about half a second)."
+          "description": "Claude model for Tab Complete (when it uses Claude). Haiku is fastest (about half a second)."
         },
         "kural.tabCompletion.debounceMs": {
           "type": "number",
           "default": 75,
           "minimum": 0,
           "maximum": 2000,
-          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set from the Tab item in the status bar."
+          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set from Tab Complete in the status bar."
         },
         "kural.tabCompletion.onCursorMove": {
           "type": "boolean",
@@ -415,26 +415,6 @@
           "default": true,
           "description": "Chat uses your whole Claude Code setup: connectors and MCP servers, plugins, skills, hooks, settings. Kural reloads it in the same conversation when it changes. Off = a faster, minimal setup (your CLAUDE.md and .claude/rules are still used)."
         },
-        "kural.editModel": {
-          "type": "string",
-          "default": "sonnet",
-          "enum": [
-            "sonnet",
-            "opus",
-            "haiku"
-          ],
-          "description": "Model for Ctrl+K edits and Apply."
-        },
-        "kural.askSearch.model": {
-          "type": "string",
-          "default": "sonnet",
-          "enum": [
-            "sonnet",
-            "haiku",
-            "opus"
-          ],
-          "description": "Model for Ask questions."
-        },
         "kural.fontSize": {
           "type": "number",
           "default": 0,
@@ -455,12 +435,12 @@
             "Always the local model (Claude only if Ollama isn't available)",
             "Always Claude"
           ],
-          "description": "What writes Tab suggestions. Easiest to set in the Tab panel (click Tab in the status bar)."
+          "description": "What writes Tab Complete suggestions. Easiest to set in the Tab Complete panel (click Tab Complete in the status bar)."
         },
         "kural.tabCompletion.localModel": {
           "type": "string",
           "default": "qwen2.5-coder:1.5b-base",
-          "description": "Ollama model for local Tab suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:0.5b-base / 1.5b-base / 3b-base)."
+          "description": "Ollama model for local Tab Complete suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:0.5b-base / 1.5b-base / 3b-base)."
         },
         "kural.tabCompletion.ollamaUrl": {
           "type": "string",
@@ -471,7 +451,7 @@
           "type": "number",
           "default": 32768,
           "minimum": 16384,
-          "markdownDescription": "How many tokens a model on your computer (Ollama) can look at in the chat. Claude Code's instructions and tools need room, so 32k is the minimum that works well; more needs more memory. Changing it makes a new copy of the model's settings the next time you use it (no new download)."
+          "markdownDescription": "How many tokens a model on your computer (Ollama) can look at in the chat: your conversation, the files it read, Kural's instructions. 32k works well; more needs more memory."
         },
         "kural.tabCompletion.learn": {
           "type": "boolean",
@@ -534,7 +514,7 @@
     "terminal": {
       "completionProviders": [
         {
-          "description": "Kural Tab: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
+          "description": "Tab Complete: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
         }
       ]
     }

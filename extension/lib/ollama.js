@@ -18,7 +18,7 @@
 
 const os = require("os");
 
-const MIN_VERSION = "0.14.0";   // first Ollama with the Claude-compatible API
+const MIN_VERSION = "0.8.0";    // streaming answers with tool calls (Kural's engine needs them)
 const VARIANT = /^kural-/;      // our larger-context copies: not shown as separate models
 
 // Shown when ollama.com can't be searched (offline, or its page changed). All can use tools.

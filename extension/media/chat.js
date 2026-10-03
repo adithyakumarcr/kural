@@ -286,7 +286,7 @@
       listEl.append(el("div", { class: "empty" },
         el("div", { class: "logo" }, "{K}"),
         el("div", { class: "brand setup-title" }, "Set up Kural first"),
-        el("div", { class: "setup-text" }, "Kural's AI comes from Claude Code. Install it and log in once; Kural checks that it works."),
+        el("div", { class: "setup-text" }, "Pick where Kural's AI comes from: Claude, or your own model on this computer. Kural checks that it works."),
         el("button", { class: "cb big solid", onclick: () => post({ type: "getStarted" }) }, "Get started")));
     } else if (!t || !t.messages.length) {
       // Home: the name, what it is, one line, three hints. The rest is in the menus.
@@ -354,8 +354,8 @@
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
     if (m.note) out.append(el("div", { class: "note" }, m.note));
     if (m.error === "stopped") out.append(el("div", { class: "note" }, "Stopped."));
-    else if (m.error === "login") out.append(el("div", { class: "note warn" }, "You're not logged in to Claude. ", el("button", { class: "cb primary", onclick: () => post({ type: "login" }) }, "Log in")));
-    else if (m.error === "missing") out.append(el("div", { class: "note warn" }, "Claude Code isn't installed yet."));
+    else if (m.error === "login") out.append(el("div", { class: "note warn" }, "Claude isn't logged in. ", el("button", { class: "cb primary", onclick: () => post({ type: "login" }) }, "Get started")));
+    else if (m.error === "missing") out.append(el("div", { class: "note warn" }, "Claude isn't set up yet. Open Kural: Get Started, or pick a model on your computer."));
     else if (m.error) out.append(el("div", { class: "note warn" }, m.error, " ", el("button", { class: "cb", onclick: () => post({ type: "showLog" }) }, "Open log")));
     if (m.planReady) out.append(el("div", { class: "plan-bar" },
       m.planBuilt ? el("span", { class: "row-state" }, "✓ Building it") : [
@@ -468,7 +468,7 @@
       qs.forEach((q, i) => { answers[q.question] = answerOf(q, i); });
       post({ type: "answer", tabId: S.tab.id, pid: b.pid, answers });
     };
-    card.append(el("div", { class: "q-title" }, who, qs.length > 1 ? "Claude has a few questions" : "Claude asks"));
+    card.append(el("div", { class: "q-title" }, who, qs.length > 1 ? "A few questions for you" : "A question for you"));
     qs.forEach((q, i) => {
       const multi = !!q.multiSelect;
       const box = el("div", { class: "q-block" },
@@ -538,7 +538,7 @@
   function renderChips() {
     chipsEl.replaceChildren();
     const tk = S.tab && S.tab.ticket;
-    if (tk) chipsEl.append(el("span", { class: "chip ticket", title: `${tk.key}: ${tk.summary}${tk.status ? ` (${tk.status})` : ""}\nLinked to this chat: Claude knows about it in every message.${tk.url ? "\nClick to open it in Jira." : ""}`,
+    if (tk) chipsEl.append(el("span", { class: "chip ticket", title: `${tk.key}: ${tk.summary}${tk.status ? ` (${tk.status})` : ""}\nLinked to this chat: the model knows about it in every message.${tk.url ? "\nClick to open it in Jira." : ""}`,
       onclick: () => tk.url && post({ type: "openUrl", url: tk.url }) },
       "🎫 ", el("b", {}, tk.key), el("span", { class: "chip-dim ticket-chip-sum" }, ` · ${tk.summary}`),
       el("button", { class: "chip-x", title: "Unlink this ticket", onclick: (e) => { e.stopPropagation(); post({ type: "linkTicket", tabId: S.tab.id, ticket: null }); } }, "×")));
@@ -567,10 +567,10 @@
     composer.classList.toggle("hidden", !!v || locked);
     visitBar.classList.toggle("hidden", !v && !setupBar);
     if (setupBar) visitBar.replaceChildren(
-      el("div", { class: "visit-text" }, "The chat works once Claude Code is installed and logged in."),
+      el("div", { class: "visit-text" }, "The chat works once Kural's AI is set up."),
       el("div", { class: "visit-actions" }, el("button", { class: "cb primary", onclick: () => post({ type: "getStarted" }) }, "Get started")));
     if (v) visitBar.replaceChildren(
-      el("div", { class: "visit-text" }, "This chat is from the workspace ", el("b", {}, v.name), ". Claude keeps each conversation with its own folder."),
+      el("div", { class: "visit-text" }, "This chat is from the workspace ", el("b", {}, v.name), ". Each conversation stays with its own folder."),
       el("div", { class: "visit-actions" },
         v.canOpen ? el("button", { class: "cb", title: "Open that folder in a new window and carry on there", onclick: () => post({ type: "openWorkspace", id: t.id }) }, "Open its folder") : null,
         el("button", { class: "cb primary", title: "Start a new chat here that knows this conversation", onclick: () => { S.focusNext = true; post({ type: "continueHere", id: t.id }); } }, "Continue here")));
@@ -583,9 +583,9 @@
     sendBtn.title = running ? "Stop (Esc)" : "Send (Enter)";
     sendBtn.classList.toggle("stop", running);
     input.dataset.placeholder = {
-      agent: "Ask Claude to change something…  @ to mention a file",
-      auto: "Ask Claude to change something (runs commands without asking)…",
-      plan: "Describe what you want; Claude plans it first…",
+      agent: "Ask Kural to change something…  @ to mention a file",
+      auto: "Ask Kural to change something (runs commands without asking)…",
+      plan: "Describe what you want; Kural plans it first…",
       ask: "Ask about your code…  @ to mention a file",
     }[t.mode] || "";
   }
@@ -782,26 +782,31 @@
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
-      items = [el("div", { class: "mh" }, "Model"), ...S.models.map((m) =>
-        el("div", { class: `mi ${t.model === m.id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: m.id }); closeMenu(); } },
+      const local = /^ollama:/.test(t.model || "");
+      // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
+      items = [el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
+        el("div", { class: `mi ${t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
+          if (S.claudeReady) post({ type: "setModel", tabId: t.id, model: m.id }); else post({ type: "getStarted", path: "claude" });
+          closeMenu(); } },
           el("span", { class: `check radio${t.model === m.id ? " on" : ""}` }),
-          el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, m.hint))),
+          el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, S.claudeReady ? m.hint : "set up Claude…"))),
         ...localMenuItems(t),
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         el("div", { class: "mh" }, "Mood"),
         el("div", { class: "seg mood" }, S.moods.map((md) => el("button", { class: t.mood === md.id ? "on" : "", title: md.hint, onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label))),
         el("div", { class: "sep" }),
-        el("div", { class: "mi toggle-row", onclick: () => post({ type: "setTeam", tabId: t.id, team: teamOn ? 0 : (S.teamSizes[1] || 3) }) },
+        // (Agent teams run on Claude Code: not with a model on this computer.)
+        el("div", { class: `mi toggle-row ${local ? "dim off" : ""}`, onclick: () => { if (!local) post({ type: "setTeam", tabId: t.id, team: teamOn ? 0 : (S.teamSizes[1] || 3) }); } },
           el("div", { class: "tr-text" },
             el("div", { class: "mi-label" }, "Multiple agents"),
-            el("div", { class: "tr-hint" }, teamOn ? teamHint(t) : "Split a task across agents, or let them discuss and decide")),
-          el("span", { class: `switch ${teamOn ? "on" : ""}` }, el("span"))),
-        teamOn ? el("div", { class: "seg team" }, S.teamStyles.map((st) => el("button", { class: t.teamStyle === st.id ? "on" : "", title: st.hint, onclick: () => post({ type: "setTeamStyle", tabId: t.id, style: st.id }) }, st.label))) : null,
-        teamOn ? el("div", { class: "roles" }, el("span", { class: "roles-h" }, "Roles"),
+            el("div", { class: "tr-hint" }, local ? "Needs a Claude model" : teamOn ? teamHint(t) : "Split a task across agents, or let them discuss and decide")),
+          el("span", { class: `switch ${teamOn && !local ? "on" : ""}` }, el("span"))),
+        teamOn && !local ? el("div", { class: "seg team" }, S.teamStyles.map((st) => el("button", { class: t.teamStyle === st.id ? "on" : "", title: st.hint, onclick: () => post({ type: "setTeamStyle", tabId: t.id, style: st.id }) }, st.label))) : null,
+        teamOn && !local ? el("div", { class: "roles" }, el("span", { class: "roles-h" }, "Roles"),
           S.roles.map((r) => el("button", { class: `role ${(t.roles || []).includes(r.id) ? "on" : ""}`, title: r.desc, onclick: () => post({ type: "toggleRole", tabId: t.id, role: r.id }) }, r.label))) : null,
-        teamOn && !(t.roles || []).length ? el("div", { class: "seg team" }, S.teamSizes.map((n) => el("button", { class: t.team === n ? "on" : "", onclick: () => post({ type: "setTeam", tabId: t.id, team: n }) }, `${n} agents`))) : null,
-        ...setupItems(t)];
+        teamOn && !local && !(t.roles || []).length ? el("div", { class: "seg team" }, S.teamSizes.map((n) => el("button", { class: t.team === n ? "on" : "", onclick: () => post({ type: "setTeam", tabId: t.id, team: n }) }, `${n} agents`))) : null,
+        ...(local ? [] : setupItems(t))];   // (your Claude Code setup: connectors, skills — Claude only)
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");
@@ -855,7 +860,7 @@
       onkeydown: (e) => { if (e.key === "Enter") { S.localQuery = e.target.value; S.localSearching = true; post({ type: "localSearch", q: e.target.value }); renderLocal(); } else if (e.key === "Escape") closeLocal(); } });
     const kids = [
       el("div", { class: "h-head" }, el("span", { class: "h-title" }, "Models on this computer"), el("span", { class: "spacer" }), el("button", { class: "cb", onclick: () => closeLocal() }, "Back")),
-      el("div", { class: "lm-note" }, "They run on your computer with Ollama: private, free, and they work offline. Slower and less capable than Claude; bigger ones need more memory",
+      el("div", { class: "lm-note" }, "They run on your computer with Ollama: private, free, and they work offline. Slower and less capable than the big cloud models; bigger ones need more memory",
         memory ? ` (this computer has ${memory} GB).` : "."),
     ];
     if (!L) kids.push(el("div", { class: "h-empty" }, "Looking for Ollama…"));
@@ -1024,7 +1029,7 @@
     if (m.type === "fontScale") { setFs(m.value); return; }
     switch (m.type) {
       case "config":
-        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false;
+        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false;
         S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || [];
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "tabs":
@@ -1034,7 +1039,7 @@
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
-      case "setupReady": S.notReady = !m.ready; renderAll(); break;
+      case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
       case "full": S.tab = m.tab; renderAll(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
