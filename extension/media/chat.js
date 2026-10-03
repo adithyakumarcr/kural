@@ -810,13 +810,16 @@
     else if (!L.status.running) out.push(el("div", { class: "mi", onclick: () => { post({ type: "installOllama" }); closeMenu(); } },
       el("span", { class: "mi-icon" }, "⬇"), el("span", { class: "mi-label" }, "Get Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
     else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, `⚠ Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
-    else for (const m of L.models.filter((x) => x.chat)) {
+    else for (const m of L.models) {
       const id = `ollama:${m.name}`;
+      // Models that can't use tools (e.g. Tab's code model, embeddings) are shown greyed, with why.
+      if (!m.chat) { out.push(el("div", { class: "mi dim off", title: "The chat edits files and runs commands through tools; this model can't use tools." },
+        el("span", { class: "check radio" }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, "can't chat (no tools)"))); continue; }
       out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
-        el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label" }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
+        el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
     }
     if (L && L.status.ok && !L.models.some((x) => x.chat)) out.push(el("div", { class: "mi dim" },
-      el("span", { class: "mi-hint" }, "No model here can chat yet (it needs one with tools): download one below")));
+      el("span", { class: "mi-hint" }, "None of these can chat: download a model with tools below")));
     out.push(el("div", { class: "mi", onclick: () => { closeMenu(); openLocal(); } },
       el("span", { class: "mi-icon" }, "🔍"), el("span", { class: "mi-label" }, "Find & download models…")));
     return out;

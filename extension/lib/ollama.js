@@ -66,10 +66,11 @@ function parseSearch(html) {
     const description = p ? text(p[1]) : "";
     const rest = description ? all.replace(description, " ") : all;   // sizes and badges, never the description's words
     const words = rest.split(" ");
-    // "8b", "30b", "e2b", "500m" are sizes; "1.2M Pulls" / "12 Tags" are not.
-    const sizes = [...new Set(words.filter((w, i) => params(w) != null && !/^(pulls|tags)$/i.test(words[i + 1] || "")).map((w) => w.toLowerCase()))];
+    // Sizes are lower case on ollama.com ("8b", "30b", "e2b", "135m"); counts are upper case ("7.8M Pulls",
+    // "1.2K Downloads"). So only lower-case words are sizes, and never one right before Pulls/Downloads/Tags.
+    const sizes = [...new Set(words.filter((w, i) => /^e?\d+(\.\d+)?[bm]$/.test(w) && !/^(pulls|downloads|tags)$/i.test(words[i + 1] || "")))];
     const capabilities = ["tools", "thinking", "vision", "embedding", "cloud"].filter((c) => new RegExp(`\\b${c}\\b`, "i").test(rest));
-    const pulls = (/([\d.]+[KMB]?)\s*Pulls/i.exec(rest) || [])[1] || "";
+    const pulls = (/([\d.]+[KMB]?)\s*(?:Pulls|Downloads)/i.exec(rest) || [])[1] || "";
     const updated = (/Updated\s+(.+?ago)/i.exec(rest) || [])[1] || "";
     out.push({ name, description, sizes, capabilities, pulls, updated });
   }
@@ -93,7 +94,7 @@ class Ollama {
     try {
       const res = await this.fetch(this.url(p), { method: method || (body ? "POST" : "GET"), signal: ctl.signal,
         headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
-      if (!res.ok) throw new Error((await res.text().catch(() => "")).replace(/^\{"error":"|"\}$/g, "") || `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(friendly((await res.text().catch(() => "")).replace(/^\{"error":"|"\}$/g, "") || `HTTP ${res.status}`, body && body.model));
       return res;
     } finally { clearTimeout(t); }
   }
@@ -137,7 +138,7 @@ class Ollama {
         const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
         if (!line) continue;
         let m; try { m = JSON.parse(line); } catch { continue; }
-        if (m.error) throw new Error(m.error);
+        if (m.error) throw new Error(friendly(m.error, name));
         last = { status: m.status || last.status, completed: m.completed, total: m.total,
           percent: m.total ? Math.round(100 * (m.completed || 0) / m.total) : last.percent };
         onProgress(last);
@@ -173,6 +174,11 @@ class Ollama {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     return { results: SUGGESTED.filter((m) => words.every((w) => `${m.name} ${m.description}`.toLowerCase().includes(w))), from: "suggested" };
   }
+}
+
+// Ollama's "pull model manifest: file does not exist" means: no model (or no such size) by that name.
+function friendly(msg, name) {
+  return /file does not exist|manifest unknown/i.test(msg) && name ? `Ollama has no model called "${name}" (check the name and size)` : msg;
 }
 
 // "qwen3-coder:30b" -> "kural-qwen3-coder-30b-32k"

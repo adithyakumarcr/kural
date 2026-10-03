@@ -375,3 +375,6 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 .icon-btn.small.show { opacity: .7; }
 .bar { height: 4px; border-radius: 2px; background: var(--border); margin-top: 5px; overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.mi.dim.off .mi-label { opacity: .55; }
+.mi .mi-label.ln { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi .mi-label.ln + .mi-hint { flex-shrink: 0; }

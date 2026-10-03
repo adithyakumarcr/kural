@@ -15,6 +15,8 @@ const SEARCH_HTML = `<ul>
 <li x-test-model class="flex"><a href="/library/gpt-oss"><h2>gpt-oss</h2><p>OpenAI&#39;s open-weight models &amp; more.</p>
   <span>tools</span><span>thinking</span><span>20b</span><span>120b</span><span>5.2M</span><span>Pulls</span><span>Updated 1 week ago</span></a></li>
 <li><a href="/library/gpt-oss">duplicate</a></li>
+<li><a href="/library/glm-ocr"><h2>glm-ocr</h2><p>Reads text in images.</p><span>vision</span><span>tools</span>
+  <span>0.9b</span><span>7.8M</span><svg><path d="M1 2"/></svg><span>Downloads</span><span>12</span><span>Tags</span></a></li>
 <li><a href="/blog/x">not a model</a></li>
 </ul>`;
 
@@ -54,7 +56,7 @@ const SEARCH_HTML = `<ul>
     assert.ok((await ol.models()).some((x) => x.name === "llama3.1:8b" && x.chat));
   });
   await check("download: a model that doesn't exist says why", async () => {
-    await assert.rejects(ol.pull("nope:1b"), /does not exist/);
+    await assert.rejects(ol.pull("nope:1b"), /Ollama has no model called "nope:1b"/);
   });
   await check("delete", async () => {
     await ol.remove("llama3.1:8b");
@@ -62,7 +64,9 @@ const SEARCH_HTML = `<ul>
   });
   await check("search page: name, description, sizes, capabilities, pulls", () => {
     const r = parseSearch(SEARCH_HTML);
-    assert.deepStrictEqual(r.map((x) => x.name), ["qwen3-coder", "gpt-oss"]);
+    assert.deepStrictEqual(r.map((x) => x.name), ["qwen3-coder", "gpt-oss", "glm-ocr"]);
+    assert.deepStrictEqual(r[2].sizes, ["0.9b"]);                               // not "7.8M" (downloads), not "12"
+    assert.strictEqual(r[2].pulls, "7.8M");
     assert.deepStrictEqual(r[0].sizes, ["30b", "480b"]);                      // not "480B" from the description
     assert.deepStrictEqual(r[0].capabilities, ["tools", "cloud"]);
     assert.strictEqual(r[0].pulls, "1.4M");
@@ -76,7 +80,7 @@ const SEARCH_HTML = `<ul>
     const r = await ol.search("coder", async (u) => { asked = u; return { ok: true, text: async () => SEARCH_HTML }; });
     assert.ok(/ollama\.com\/search\?c=tools&q=coder/.test(asked), asked);
     assert.strictEqual(r.from, "ollama.com");
-    assert.strictEqual(r.results.length, 2);
+    assert.strictEqual(r.results.length, 3);
   });
   await check("search offline: Kural's own suggestions, matching the words", async () => {
     const r = await ol.search("coding", async () => { throw new Error("offline"); });
