@@ -23,6 +23,8 @@ const team = (process.env.KURAL_TEAM || "").split(",").map((x) => x.trim().toLow
 const finished = new Set();   // agents done with this question
 const emptyWaits = new Map(); // name -> waits in a row that got nothing
 let round = null;             // Kural's question number (a new question starts afresh)
+let started = [];             // who the lead has actually started (a PM may start 1 of 3 possible developers)
+let busy = [];                // who Kural has seen working in the last minute
 
 const norm = (s) => String(s || "").trim().toLowerCase();
 const forMe = (m, name) => m.from !== name && (m.to === "all" || m.to === name);
@@ -38,8 +40,11 @@ function deliver(name) {
   return list;
 }
 
-// Everyone but `me` has finished.
-const othersDone = (me) => { const others = team.filter((n) => n !== me); return others.length > 0 && others.every((n) => finished.has(n)); };
+// Everyone but `me` has finished. (Only those started count, once Kural says who that is.)
+const members = () => started.length ? started : team;
+const othersDone = (me) => { const others = members().filter((n) => n !== me); return others.length > 0 && others.every((n) => finished.has(n)); };
+// Someone `me` may be waiting for is still at work (building takes longer than a few waits).
+const othersBusy = (me) => members().some((n) => n !== me && !finished.has(n) && busy.includes(n));
 const END_NOW = "Everyone else has finished, so no more messages will come. Don't wait: post your final position with " +
   "mcp__team__finish and end.";
 
@@ -52,13 +57,16 @@ function markFinished(name, text) {
   for (const w of waiting.splice(0)) w.done();
 }
 
-// Kural writes {"round": n, "finished": ["ross"]} when a question starts and when an agent's task ends.
+// Kural writes {"round": n, "finished": ["ross"], "started": [...], "busy": [...]} when a question starts, when an
+// agent starts or ends, and every few seconds while agents work.
 function checkKural() {
   const file = process.env.KURAL_TEAM_FILE;
   if (!file) return;
   let st;
   try { st = JSON.parse(fs.readFileSync(file, "utf8")); } catch { return; }
   if (st.round !== round) { round = st.round; finished.clear(); emptyWaits.clear(); }
+  started = Array.isArray(st.started) ? st.started.map(norm) : [];
+  busy = Array.isArray(st.busy) ? st.busy.map(norm) : [];
   for (const n of st.finished || []) markFinished(String(n).toLowerCase(), "(has finished and won't reply any more)");
 }
 if (process.env.KURAL_TEAM_FILE) setInterval(checkKural, 1000).unref();
@@ -144,7 +152,9 @@ function call(name, args, reply) {
     } };
     timer = setTimeout(() => {
       const i = waiting.indexOf(w); if (i >= 0) waiting.splice(i, 1);
-      const n = (emptyWaits.get(me) || 0) + 1;
+      checkKural();
+      // An empty wait only counts when nobody you could be waiting for is still working.
+      const n = othersBusy(me) ? (emptyWaits.get(me) || 0) : (emptyWaits.get(me) || 0) + 1;
       emptyWaits.set(me, n);
       reply(n >= MAX_EMPTY
         ? `No messages in ${wait} s, ${n} times in a row: your teammates aren't answering. Stop waiting: post your final ` +

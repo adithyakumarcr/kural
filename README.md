@@ -29,8 +29,8 @@ On top of that, Kural adds:
   keep or undo each change.
 - **Tab completion.** Grey suggestions as you type; **Tab** accepts.
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
-- **Teams of agents.** Several Claude agents with roles (Developer, Tester, Critic…) that split a task or discuss it
-  and agree on an answer.
+- **Teams of agents.** A project team (Researcher, Architect, Developers, Tester, led by a Project Manager) that
+  plans, gets your OK and builds, or agents that discuss a question and agree on an answer.
 
 Kural runs the `claude` command (Claude Code) in the background. So it uses your Claude plan, your Claude Code
 settings, MCP servers, skills and `CLAUDE.md` files. No API key, nothing extra to pay for.
@@ -136,9 +136,21 @@ something like `qwen3:8b`; `qwen3-coder:30b` or `gpt-oss:20b` need about 20 GB. 
 ### Multiple agents
 
 Turn on **Multiple agents** in the model menu. The lead agent gets a team named after Friends (Rachel, Ross,
-Monica…), each with a role you pick. They message each other on a shared board. They can:
+Monica…), each with a role you pick. They message each other on a shared board. The roles:
 
-- **Split the work.** They work in parallel. For example, the Developer writes the code and hands it to the Tester.
+| Role | Does |
+|---|---|
+| **Project Manager** (the lead, always there) | Gets the requirements from you, asks you when something is unclear, runs the team, reports back |
+| **Researcher** (Rachel) | Searches online and in the code, writes a plan and proposes it to the Architect and the PM |
+| **Architect** (Ross) | Studies the current architecture and picks the best solution; splits the work into parts |
+| **Developers** (Monica, Chandler, Joey) | Build the approved plan, each their own part. The PM decides how many (1–3) |
+| **Tester** (Phoebe) | Checks every piece of code that gets written: quality, tests, edge cases |
+
+Pick any combination (Researcher + Developer, Researcher + Architect, all four…). Then how they work:
+
+- **Split the work** (a project). The PM asks you what's unclear; the Researcher and Architect plan; **you OK the
+  plan** (Go ahead / Change the plan / Stop); the Developers build; the Tester reviews until the code is good. With
+  only a Researcher and/or Architect, the plan is the result.
 - **Discuss & decide.** Each forms their own view first. Then they argue it out and agree. The answer shows everyone's
   final position and any disagreement left.
 

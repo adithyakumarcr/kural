@@ -327,7 +327,7 @@
     }
     const out = el("div", { class: "answer" });
     const last = i === S.tab.messages.length - 1;
-    if (m.team) out.append(el("div", { class: "team-note" }, m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`));
+    if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
     for (const b of m.blocks || []) {
       if (b.k === "text") out.append(...markdown(b.text, !m.running));
       else if (b.k === "tool") out.append(toolNode(b));
@@ -895,12 +895,27 @@
   // "Rachel (Developer) and Ross (Critic) talk it through and agree on a decision."
   function teamHint(t) {
     const roles = t.roles || [];
-    const n = roles.length ? Math.max(2, roles.length) : t.team;
-    const names = FRIENDS.slice(0, n).map((f, i) => roles[i] ? `${f} (${roleLabel(roles[i])})` : f);
-    const list = names.length > 2 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names.join(" and ");
     const editing = t.mode === "agent" || t.mode === "auto";
-    if (t.teamStyle === "discuss") return `${list} talk it through and agree on a decision (any mode)`;
-    return `${list} split the work, run at the same time and message each other${editing ? "" : " (Agent and Auto modes)"}`;
+    const and = (names) => names.length > 2 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names.join(" and ");
+    const picked = S.roles.filter((r) => roles.includes(r.id));
+    if (!picked.length) {
+      const names = FRIENDS.slice(0, t.team);
+      if (t.teamStyle === "discuss") return `${and(names)} talk it through and agree on a decision (any mode)`;
+      return `${and(names)} split the work, run at the same time and message each other${editing ? "" : " (Agent and Auto modes)"}`;
+    }
+    if (t.teamStyle === "discuss") {
+      const names = picked.map((r) => `${r.name} (${r.label})`);
+      if (names.length < 2) names.push(FRIENDS.find((f) => !picked.some((r) => r.name === f)));
+      return `${and(names)} talk it through and agree on a decision (any mode)`;
+    }
+    // The project team: you talk to the PM (the lead); it works in phases.
+    const plan = picked.filter((r) => r.id === "researcher" || r.id === "architect");
+    const dev = picked.some((r) => r.id === "developer"), tester = picked.find((r) => r.id === "tester");
+    const parts = ["You talk to the Project Manager"];
+    if (plan.length) parts.push(`${and(plan.map((r) => `${r.name} (${r.label})`))} plan${dev ? ", you OK the plan" : ""}`);
+    if (dev) parts.push("1–3 Developers build (the PM decides)");
+    if (tester) parts.push(`${tester.name} (Tester) checks the code`);
+    return parts.join("; ") + (editing ? "" : " (Agent and Auto modes)");
   }
 
   // "+ → Link ticket": search Jira (through your Atlassian connector) and link one ticket to this chat.
