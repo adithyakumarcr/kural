@@ -281,7 +281,14 @@
   function renderAll() {
     listEl.replaceChildren();
     const t = S.tab;
-    if (!t || !t.messages.length) {
+    if (S.notReady && (!t || !t.messages.length)) {
+      // Not set up yet: Claude Code missing or not logged in. Say so, instead of errors later.
+      listEl.append(el("div", { class: "empty" },
+        el("div", { class: "logo" }, "{K}"),
+        el("div", { class: "brand setup-title" }, "Set up Kural first"),
+        el("div", { class: "setup-text" }, "Kural's AI comes from Claude Code. Install it and log in once; Kural checks that it works."),
+        el("button", { class: "cb big solid", onclick: () => post({ type: "getStarted" }) }, "Get started")));
+    } else if (!t || !t.messages.length) {
       // Home: the name, what it is, one line, three hints. The rest is in the menus.
       const hint = (k, text) => el("span", { class: "hint" }, el("kbd", {}, keys(k)), text);
       listEl.append(el("div", { class: "empty" },
@@ -554,8 +561,14 @@
     const t = S.tab;
     if (!t) return;
     const v = t.visiting;
-    composer.classList.toggle("hidden", !!v);
-    visitBar.classList.toggle("hidden", !v);
+    // Not set up: no input (an empty chat shows the big "Set up Kural first"). An answer still running keeps it: Stop.
+    const locked = !!S.notReady && t.status === "idle";
+    const setupBar = locked && !v && t.messages.length > 0;
+    composer.classList.toggle("hidden", !!v || locked);
+    visitBar.classList.toggle("hidden", !v && !setupBar);
+    if (setupBar) visitBar.replaceChildren(
+      el("div", { class: "visit-text" }, "The chat works once Claude Code is installed and logged in."),
+      el("div", { class: "visit-actions" }, el("button", { class: "cb primary", onclick: () => post({ type: "getStarted" }) }, "Get started")));
     if (v) visitBar.replaceChildren(
       el("div", { class: "visit-text" }, "This chat is from the workspace ", el("b", {}, v.name), ". Claude keeps each conversation with its own folder."),
       el("div", { class: "visit-actions" },
@@ -1011,7 +1024,7 @@
     if (m.type === "fontScale") { setFs(m.value); return; }
     switch (m.type) {
       case "config":
-        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || "";
+        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false;
         S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || [];
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "tabs":
@@ -1021,6 +1034,8 @@
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
+      case "setupReady": S.notReady = !m.ready; renderAll(); break;
+      case "showLocal": openLocal(); break;
       case "full": S.tab = m.tab; renderAll(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
       case "localModels": S.local = m; renderLocal(); if (S.menu === "model") openMenu.refresh(); break;

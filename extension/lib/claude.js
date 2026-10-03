@@ -9,7 +9,7 @@
 //  - Starting `claude` costs 1–3 s, so processes are started ahead of time and reused.
 
 const vscode = require("vscode");
-const { spawn, spawnSync } = require("child_process");
+const { spawn, spawnSync, execFile } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -27,6 +27,13 @@ const IS_WIN = process.platform === "win32";
 // Where Claude Code usually lives. Apps started from a menu/Dock/Start often don't
 // have your shell's PATH, so check the usual install places directly.
 function findClaude() {
+  const chosen = (vscode.workspace.getConfiguration("kural").get("claudePath") || "").trim();   // Get started → "Choose…"
+  if (chosen) {
+    if (!fs.existsSync(chosen)) return null;
+    // Windows: npm's claude.cmd can't be started directly; use the claude.exe it points to.
+    const viaNpm = path.join(path.dirname(chosen), "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+    return IS_WIN && /\.cmd$/i.test(chosen) && fs.existsSync(viaNpm) ? viaNpm : chosen;
+  }
   const home = os.homedir();
   const candidates = IS_WIN ? [
     path.join(home, ".local", "bin", "claude.exe"),                    // official installer
@@ -49,8 +56,35 @@ function findClaude() {
     const viaNpm = path.join(dir, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
     if (fs.existsSync(path.join(dir, "claude.cmd")) && fs.existsSync(viaNpm)) return viaNpm;
   }
-  return null;
+  return IS_WIN ? null : fromLoginShell();
 }
+
+// Last try (Mac, Linux): where your terminal finds `claude`. Kural opened from the Dock or a menu doesn't get the
+// PATH your terminal has, so e.g. an npm install under nvm (~/.nvm/versions/node/…/bin) isn't found otherwise.
+// Asking the shell takes 0.1–2 s, so it runs in the background (lookInShell, at startup and on "Check again")
+// and findClaude only uses its last answer: it never waits for a shell.
+let shellFound = null;
+function fromLoginShell() { return shellFound && fs.existsSync(shellFound) ? shellFound : null; }
+function lookInShell() {
+  if (IS_WIN) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    // -i -l: an interactive login shell reads ~/.bashrc / ~/.zshrc too, where nvm and others add to PATH.
+    execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v claude"], { timeout: 8000, encoding: "utf8" }, (err, stdout) => {
+      const line = String(stdout || "").trim().split("\n").pop() || "";
+      const found = path.isAbsolute(line) && fs.existsSync(line) ? line : null;
+      if (found !== shellFound) log(`claude ${found ? `found by your shell: ${found}` : "not found by your shell"}`);
+      shellFound = found;
+      resolve(found);
+    }).stdin?.end();
+  });
+}
+findClaude.lookInShell = lookInShell;
+
+// Until Get started has passed (Claude Code installed, logged in, test request OK), nothing starts `claude` in the
+// background: it would only fail with errors. lib/getstarted.js sets this.
+let setupOk = () => true;
+function setSetupGate(f) { setupOk = f; }
+const isSetUp = () => setupOk();
 
 // Instructions for Claude go in a small file instead of on the command line:
 // Windows limits a command line to ~32,000 characters, and CLAUDE.md can be longer.
@@ -122,6 +156,7 @@ class ClaudeProcess {
   }
 
   start() {
+    if (!setupOk()) return false;   // not set up yet (Get started)
     const bin = findClaude();
     if (!bin) return false;
     const o = this.opts;
@@ -247,6 +282,7 @@ class ClaudeSession {
   // Start one process. Each slot keeps the list of answers it still expects (in order):
   // { ask: waiter } for a question, { clear: true } for our own "/clear".
   startSlot() {
+    if (!setupOk()) return null;   // not set up yet: quietly nothing (Get started says what's missing)
     const o = this.opts;
     const slot = { cp: null, expect: [], count: 0, dead: false };
     const cp = new ClaudeProcess({ name: o.name, model: o.model(), effort: o.effort, systemPrompt: o.systemPrompt,
@@ -361,4 +397,4 @@ function stripFence(text) {
   return m ? m[1] : text;
 }
 
-module.exports = { supportedFlags, IS_WIN, initLog, log, findClaude, ClaudeProcess, ClaudeSession, stripFence, newSessionId, LOGIN_RE };
+module.exports = { supportedFlags, IS_WIN, initLog, log, findClaude, cleanEnv, setSetupGate, isSetUp, ClaudeProcess, ClaudeSession, stripFence, newSessionId, LOGIN_RE };

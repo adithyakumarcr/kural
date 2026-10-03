@@ -8,7 +8,7 @@ const { fontScale, watchFontScale } = require("./ui");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const { ClaudeProcess, log, newSessionId, LOGIN_RE, findClaude } = require("./claude");
+const { ClaudeProcess, log, newSessionId, LOGIN_RE, findClaude, isSetUp } = require("./claude");
 const { projectInstructions } = require("./project");
 const { ChangeTracker } = require("./changes");
 const ws = require("./workspace");
@@ -330,6 +330,7 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
+      vscode.commands.registerCommand("kural.chat.localModels", async () => { await this.reveal(); this.post({ type: "showLocal" }); }),
       vscode.commands.registerCommand("kural.chat.attach", async () => { this.reveal(); await this.onMessage({ type: "attachPick" }); }),
       // Keyboard shortcuts while the chat has focus (Ctrl+M/H/O intensity, Ctrl+P plan). "Next model" has no
       // shortcut (Ctrl+S is Save); it's in the command palette.
@@ -743,6 +744,12 @@ class ChatView {
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
   // came back to Kural (connectors added on claude.ai don't leave a file to watch): reload
   // Claude for the open chat now, in the same conversation; other chats reload when you use them.
+  // Get started passed (or something broke since): the panes show the chat (or "Set up Kural first").
+  readyChanged(ready) {
+    this.post({ type: "setupReady", ready });
+    if (ready) for (const p of this.panes) { const t = this.tab(p.activeId); if (t && t.status === "idle") this.warm(t); }
+  }
+
   setupChanged(why) {
     this.setupVersion++;
     log(`chat: Claude Code setup ${why}; Claude reloads in the same conversation when it's not busy`);
@@ -755,7 +762,7 @@ class ChatView {
 
   // Start the tab's Claude process ahead of time, so your first message is answered quickly.
   warm(tab) {
-    if (!findClaude()) return;
+    if (!isSetUp() || !findClaude()) return;   // not set up yet (Get started)
     const r = this.runtime.get(tab.id);
     if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) return;
     if (r && r.turn && r.turn.reply.running) return;   // never restart in the middle of an answer
@@ -948,6 +955,7 @@ class ChatView {
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
     if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
+    if (!isSetUp()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // Claude Code isn't ready yet
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
@@ -1456,7 +1464,7 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version });
+          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: isSetUp() });
         w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
@@ -1573,6 +1581,7 @@ class ChatView {
       } break;
       case "setTeamStyle": if (valid(TEAM_STYLES, m.style)) { tab.teamStyle = m.style; if (!tab.team) tab.team = TEAM_SIZES[1]; this.afterTeamChange(tab); } break;
       case "reloadSetup": this.setupChanged("reload asked for"); break;
+      case "getStarted": vscode.commands.executeCommand("kural.getStarted"); break;
       case "useFullSetup":
         await cfg().update("chat.fullClaudeCodeSetup", !!m.on, vscode.ConfigurationTarget.Global);
         this.setupChanged(m.on ? "switched to your full setup" : "switched to the minimal setup");

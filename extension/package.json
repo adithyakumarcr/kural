@@ -81,6 +81,11 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "kural.getStarted",
+        "title": "Kural: Get Started",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "kural.login",
         "title": "Kural: Log In to Claude"
       },
@@ -335,6 +340,11 @@
     "configuration": {
       "title": "Kural",
       "properties": {
+        "kural.claudePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where the `claude` program (Claude Code) is. Leave empty to find it automatically; set it only if Kural can't find yours (Get started → *Choose the claude file…*)."
+        },
         "kural.tabCompletion.enabled": {
           "type": "boolean",
           "default": true,
