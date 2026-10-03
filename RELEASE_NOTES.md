@@ -1,53 +1,52 @@
-## Not released yet
+## What's new in 1.1.0-alpha.3
 
-These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
-
-- **A simpler home screen.** Kural, *AI-powered code editor*, the tagline "Few words. Working code.", and three hints.
-  Everything else is in the menus.
+- **Kural Light theme.** A light theme with the same look as Kural Dark. Every text color, in the code, the
+  menus, the terminal and Kural's panels, has at least 4.5:1 contrast with its background, so it's easy to read. Tab's
+  grey suggestions stay readable too. In the chat, code blocks use the normal text color. Pick it with
+  *Preferences: Color Theme*; with *Auto Detect Color Scheme* on, Kural follows your computer's light/dark mode.
 - **Full chat history, from every workspace.** The clock button lists all your chats (before: only this workspace's
   last 100, shortened). Search, filter *All workspaces / This workspace*, **pin** chats to the top, **delete** chats
   (it asks once). A chat from another workspace opens to read; **Open its folder** or **Continue here** (a new chat
   that knows the old conversation). Your existing closed chats move into History by themselves.
+- **Two chats at once.** The split button in the Kural panel's title bar opens a second chat beside your code.
+  Each one has its own tab, input and answer, and both can work at the same time. You can drag it anywhere,
+  even to another screen. It comes back after a restart.
+- **Tab in the terminal.** Type in Kural's terminal and Kural suggests the whole command line in the terminal's
+  suggestion list; Tab fills it in, and you still press Enter yourself. Made for commit messages: for
+  `git commit -m "` it reads your staged changes (or unstaged, if nothing is staged) and names the commit. It uses
+  the same engine and model as Tab in the editor. Kural turns on the terminal's "suggest while typing" for this.
 - **Tab learns from your work.** With each suggestion, Kural now tells the model what you've been doing in this
   workspace: what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted,
   suggestions you accepted, the file you just edited, and the commands you run. Suggestions fit your current task and
   style. Commit messages in the terminal say *why* you changed things, in the style of your earlier commits. It's kept
   only on this computer, per workspace; commands with passwords or tokens are never kept. The Tab panel shows what it
   has learned, with **Forget** and an off switch (also: **Kural: Forget What Tab Learned**).
-- **Tab in the terminal closes a commit message's quote** when the model forgets to.
 - **Multiple agents no longer get stuck.** An agent waiting for a message from a teammate who had already
   finished used to wait forever, so the lead never gave the final answer. Now agents are told when a teammate
   has finished, stop waiting after two empty waits, and end with their final position. An agent that shows no
   sign of life for 6 minutes is stopped, and the lead answers with what it has. A **Finish now** button next to
   "Waiting for …" stops the agents still working and gets the answer right away.
-- **Tab in the terminal.** Type in Kural's terminal and Kural suggests the whole command line in the terminal's
-  suggestion list; Tab fills it in, and you still press Enter yourself. Made for commit messages: for
-  `git commit -m "` it reads your staged changes (or unstaged, if nothing is staged) and names the commit. It uses
-  the same engine and model as Tab in the editor. Kural turns on the terminal's "suggest while typing" for this.
-- **Two chats at once.** The split button in the Kural panel's title bar opens a second chat beside your code.
-  Each one has its own tab, input and answer, and both can work at the same time. You can drag it anywhere,
-  even to another screen. It comes back after a restart.
-- **Ctrl+S (Cmd+S) always saves.** It no longer switches the model when the chat has focus; pick the model in the
-  model menu.
-- **Ask only.** The left "Ask & Search" panel is now just **Ask** (find code by describing it). For plain text search,
-  use VS Code's own search (Ctrl+Shift+F).
-- **Help → Check for Updates…** Kural looks for the newest release on GitHub (also alpha, beta and rc test
-  versions), and if there's a newer one, downloads it, installs it and restarts. On Ubuntu it asks for your
-  password to install. On a Mac it replaces Kural.app; on Windows it runs the setup.
 - **Link a Jira ticket to a chat.** **+ → Link ticket** searches Jira (your recent tickets, a key like
   PROJ-123, or words) and links the epic, story or task to the chat. Every message then tells Claude which
   ticket you're working on, and Claude reads its details from Jira when it needs them. This uses your
   Atlassian connector; if that isn't connected, the menu shows ⚠ and how to connect it. Reading Jira doesn't
-  ask for permission; writing to it (comments, status changes) still does.
-- **+ is now a small menu:** Add files, or Link ticket.
+  ask for permission; writing to it (comments, status changes) still does. **+** is now a small menu: Add files,
+  or Link ticket.
+- **Help → Check for Updates…** Kural looks for the newest release on GitHub (also alpha, beta and rc test
+  versions), and if there's a newer one, downloads it, installs it and restarts. On Ubuntu it asks for your
+  password to install. On a Mac it replaces Kural.app; on Windows it runs the setup.
+- **A simpler home screen.** Kural, *AI-powered code editor*, the tagline "Few words. Working code.", and three hints.
+  Everything else is in the menus.
+- **Ask only.** The left "Ask & Search" panel is now just **Ask** (find code by describing it). For plain text search,
+  use VS Code's own search (Ctrl+Shift+F).
+- **Ctrl+S (Cmd+S) always saves.** It no longer switches the model when the chat has focus; pick the model in the
+  model menu.
 - **"Your Claude Code setup" takes one line** in the model menu ("10 connectors · 3 need attention · 30 skills").
   Click it to see each connector.
-- **Fixed: the dot of the chosen model sat off-centre.** It was a "●" text character, which fonts don't centre;
-  it's now drawn as a circle.
-- **Kural Light theme.** A light theme with the same look as Kural Dark. Every text color, in the code, the
-  menus, the terminal and Kural's panels, has at least 4.5:1 contrast with its background, so it's easy to read. Tab's
-  grey suggestions stay readable too. In the chat, code blocks use the normal text color. Pick it with
-  *Preferences: Color Theme*; with *Auto Detect Color Scheme* on, Kural follows your computer's light/dark mode.
+- **Fixed:** Tab in the terminal now closes a commit message's quote when the model forgets to; the dot of the
+  chosen model sat off-centre (it was a "●" text character, which fonts don't centre; now it's drawn as a circle).
+- **New license: MIT with the Commons Clause.** Kural stays free to use and change, also at work, but nobody may sell
+  it or a paid service built mainly on it. Earlier versions you already downloaded keep the plain MIT license.
 
 ## What's new in 1.1.0-alpha.2
 

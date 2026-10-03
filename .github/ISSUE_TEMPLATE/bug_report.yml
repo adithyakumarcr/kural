@@ -47,7 +47,7 @@ body:
     attributes:
       label: Kural version
       description: Help → About (or the version under the logo in the chat panel).
-      placeholder: 1.1.0-alpha.2
+      placeholder: 1.1.0-alpha.3
     validations:
       required: true
   - type: dropdown
