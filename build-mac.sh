@@ -48,6 +48,16 @@ def edit(path, **changes):
     with open(path, "wb") as f: plistlib.dump(d, f)
 edit(f"{app}/Contents/Info.plist", CFBundleName="Kural", CFBundleDisplayName="Kural", CFBundleExecutable="Kural",
      CFBundleIdentifier="com.kural", CFBundleIconFile="Kural.icns")
+# Ask only for what Kural uses. VS Code's app declares camera, microphone, audio capture and Bluetooth (for its voice
+# features, which VSCodium and Kural don't have): drop them, so Kural can never ask for them. Kept: AppleScript (VS Code's
+# "open in an external terminal") and the local network (a model on another computer, with Ollama).
+with open(f"{app}/Contents/Info.plist", "rb") as f: d = plistlib.load(f)
+for k in ("NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSAudioCaptureUsageDescription",
+          "NSBluetoothAlwaysUsageDescription", "NSBluetoothPeripheralUsageDescription"):
+    d.pop(k, None)
+for k in [k for k in d if k.endswith("UsageDescription")]:
+    d[k] = d[k].replace("Visual Studio Code", "Kural")
+with open(f"{app}/Contents/Info.plist", "wb") as f: plistlib.dump(d, f)
 for h in glob.glob(f"{app}/Contents/Frameworks/Kural Helper*.app"):
     name = os.path.basename(h)[:-4]                       # "Kural Helper (GPU)"
     with open(f"{h}/Contents/Info.plist", "rb") as f: ident = plistlib.load(f).get("CFBundleIdentifier", "")
@@ -78,7 +88,7 @@ else
       echo '</dict></plist>'; } > "$f"; }
   E="$WORK/entitlements"; mkdir -p "$E"
   DLV=cs.disable-library-validation
-  ent "$E/main.plist"     cs.allow-jit device.audio-input device.camera automation.apple-events $DLV
+  ent "$E/main.plist"     cs.allow-jit automation.apple-events $DLV   # (no camera or microphone: Kural doesn't use them)
   ent "$E/renderer.plist" cs.allow-jit $DLV
   ent "$E/plugin.plist"   cs.allow-jit cs.allow-unsigned-executable-memory $DLV
   ent "$E/plain.plist"    $DLV

@@ -82,8 +82,15 @@
       },
       {
         "command": "kural.getStarted",
-        "title": "Kural: Get Started",
-        "icon": "$(rocket)"
+        "title": "Get Started",
+        "icon": "$(rocket)",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.account",
+        "title": "Account: Usage, Switch Account, Log Out",
+        "icon": "$(account)",
+        "category": "Kural"
       },
       {
         "command": "kural.login",
@@ -189,7 +196,7 @@
         {
           "type": "webview",
           "id": "kural.tabPanel",
-          "name": "Tab completion"
+          "name": "Tab Completion"
         }
       ]
     },
@@ -214,6 +221,21 @@
           "command": "kural.showLog",
           "when": "view == kural.chat",
           "group": "navigation@4"
+        },
+        {
+          "command": "kural.account",
+          "when": "view == kural.chat",
+          "group": "9_kural@1"
+        },
+        {
+          "command": "kural.getStarted",
+          "when": "view == kural.chat",
+          "group": "9_kural@2"
+        },
+        {
+          "command": "kural.checkForUpdates",
+          "when": "view == kural.chat",
+          "group": "9_kural@3"
         }
       ],
       "editor/title": [
@@ -452,6 +474,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
+        },
+        "kural.updates.autoCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for a new Kural version once a day (it asks before installing anything)."
         }
       }
     },

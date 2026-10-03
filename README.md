@@ -246,7 +246,8 @@ cursor.
 - **Ask (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get the exact `file:line` places. (For plain text
   search, use VS Code's own search, Ctrl+Shift+F.)
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
-- **Claudemeter.** Your Claude plan usage in the status bar.
+- **Account** (person icon in the status bar). Who you're logged in as and your plan; your usage, switch account,
+  log out, check for updates.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
   chat. When you add one, Kural reloads Claude in the same conversation.
 - **Kural Dark and Kural Light themes** (pick one: Command Palette → *Preferences: Color Theme*), and the same
@@ -357,7 +358,6 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/…               attachments, search, workspace folders, setup changes
   media/              the chat and search panels (HTML/CSS/JS)
   themes/             Kural Dark, Kural Light
-vendor/claudemeter/   Claudemeter (MIT), bundled as-is
 scripts/              shared rebranding, logo, icons, release notes
 installer/            the Windows installer (NSIS)
 make-deb.sh           Ubuntu .deb    build-mac.sh  Mac app    build-win.sh  Windows
@@ -375,8 +375,8 @@ docs/                 screenshots for this README
 
 ## Credits
 
-By **Adithya Chinnakkonda**. Built on [VSCodium](https://github.com/VSCodium/vscodium) (MIT) and includes
-[Claudemeter](vendor/claudemeter) (MIT). Kural is an independent project. It is not made or endorsed by Anthropic or
+By **Adithya Chinnakkonda**. Built on [VSCodium](https://github.com/VSCodium/vscodium) (MIT), with
+[Codicons](https://github.com/microsoft/vscode-codicons) (CC BY 4.0) for icons. Kural is an independent project. It is not made or endorsed by Anthropic or
 Microsoft. "Claude" is a trademark of Anthropic.
 
 ## License
@@ -386,4 +386,4 @@ or a version of it, and no paid product or service whose value comes mainly from
 That's the MIT license with the [Commons Clause](https://commonsclause.com/), see [LICENSE](LICENSE). Kural is
 "source-available", not "open source" in the strict sense, because of this limit.
 
-The VSCodium/VS Code and Claudemeter parts inside Kural keep their own MIT licenses.
+The VSCodium/VS Code parts inside Kural keep their own MIT license, and Codicons its CC BY 4.0 license.

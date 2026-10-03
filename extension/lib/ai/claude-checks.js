@@ -36,21 +36,32 @@ async function claudeVersion(bin, env) {
   return { version: v[1] };
 }
 
-// { loggedIn: true/false, method } or { loggedIn: null } when this Claude Code can't tell.
+// { loggedIn: true/false, method, email, org, plan, provider, apiKey } (email/org/plan: claude.ai logins) or { loggedIn: null } when this Claude Code can't tell.
 // (Old versions don't know `auth` and would take "auth status" as a question: only JSON counts.)
 async function claudeAuth(bin, env) {
   const r = await run(bin, ["auth", "status", "--json"], env, 15000);
   try {
     const j = JSON.parse(`${r.stdout || ""}`.trim());
     if (typeof j.loggedIn !== "boolean") return { loggedIn: null };
-    return { loggedIn: j.loggedIn, method: describeMethod(j) };
+    return { loggedIn: j.loggedIn, method: describeMethod(j), email: j.email || "", org: j.orgName || "", plan: planName(j.subscriptionType),
+      provider: j.apiProvider || "firstParty", apiKey: /api_?key/i.test(j.authMethod || "") };
   } catch { return { loggedIn: null }; }
 }
+
+// Log out of Claude Code (all of Claude Code on this computer, also in the terminal). { ok } or { error }.
+async function claudeLogout(bin, env) {
+  const r = await run(bin, ["auth", "logout"], env, 20000);
+  if (r.error || r.status !== 0) return { error: (`${r.stderr}`.trim() || `${r.stdout}`.trim() || (r.error && r.error.message) || `exit code ${r.status}`).split("\n")[0].slice(0, 200) };
+  return { ok: true };
+}
+
+// "pro" → "Pro", "max" → "Max", "team" → "Team"…
+const planName = (t) => t ? `${String(t)[0].toUpperCase()}${String(t).slice(1)}` : "";
 
 function describeMethod(j) {
   if (j.apiProvider && j.apiProvider !== "firstParty") return { bedrock: "Amazon Bedrock", vertex: "Google Cloud", foundry: "Microsoft Foundry" }[j.apiProvider] || j.apiProvider;
   if (/api_?key/i.test(j.authMethod || "")) return "API key";
-  if (j.subscriptionType) return `Claude ${j.subscriptionType[0].toUpperCase()}${j.subscriptionType.slice(1)}`;
+  if (j.subscriptionType) return `Claude ${planName(j.subscriptionType)}`;
   return j.authMethod ? "Claude account" : "";
 }
 
@@ -117,4 +128,4 @@ const INSTALL = {
 };
 const installFor = (platform) => INSTALL[platform === "win32" ? "win32" : "other"];
 
-module.exports = { claudeVersion, claudeAuth, claudeTest, explain, gitVersion, installFor, describeMethod, TEST_PROMPT };
+module.exports = { claudeVersion, claudeAuth, claudeLogout, claudeTest, explain, gitVersion, installFor, describeMethod, TEST_PROMPT };

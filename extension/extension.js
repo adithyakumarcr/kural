@@ -19,6 +19,7 @@ const { TabPanel } = require("./lib/tab/panel");
 const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
 const { GetStarted } = require("./lib/getstarted");
+const { Account } = require("./lib/account");
 const brain = require("./lib/ai");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
@@ -44,7 +45,8 @@ function openClaudeCode() {
 function activate(context) {
   const output = initLog();
   context.subscriptions.push(output);
-  const updater = new Updater(context);   // Help → Check for Updates…
+  const updater = new Updater(context);   // Help → Check for Updates…, and once a day by itself
+  updater.autoCheck();
   log(`Kural ${context.extension.packageJSON.version} starting; claude at ${findClaude() || "(not found)"}`);
   // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
   // AI work without a project open happens in Kural's own folder, never in your home folder (see workspace.js).
@@ -138,6 +140,9 @@ function activate(context) {
   chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
   brain.setModelSource(() => { const t = chat.active(); return t ? t.model : chat.lastChoices().model; }, () => getStarted.localModel);
   chat.register();
+  // Account (status bar, person icon): who's logged in, usage, switch account, log out. A new login: Claude's
+  // chat processes start again with it.
+  new Account(context, getStarted, () => chat.setupChanged("login changed")).register();
   new SearchView(context).register();
   triggerOnCursor(context);
 

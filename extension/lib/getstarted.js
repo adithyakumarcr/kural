@@ -124,6 +124,21 @@ class GetStarted {
     if (!brain.isLocal(brain.currentModel())) this.open("claude");
   }
 
+  // You logged out (Account menu): the Claude models wait until you log in again; the page shows the Log in step.
+  loggedOut() {
+    this.problem = null;   // (lock() again even if it was locked for something else)
+    this.lock("login");
+  }
+
+  // Log in to Claude now (Account menu: Log in, Switch account): the page at the Claude steps, and the login
+  // terminal open. When the login is done, the test runs by itself and Claude is unlocked.
+  async signIn() {
+    this.open("claude");
+    while (this.refreshing) await new Promise((r) => setTimeout(r, 100));   // (open() started a check)
+    await this.refresh();
+    if (this.s.login.state !== "ok") await this.onMessage({ type: "login" });
+  }
+
   open(path) {
     if (path) this.s.path = path;
     if (this.panel) { this.panel.reveal(); this.refresh(); return; }

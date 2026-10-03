@@ -18,6 +18,20 @@ const isWin = process.platform === "win32";
     assert.strictEqual((await checks.claudeAuth(fake, env("ok"))).loggedIn, true);
     assert.strictEqual((await checks.claudeAuth(fake, env("loggedout"))).loggedIn, false);
   });
+  await check("who's logged in: email, organization, plan", async () => {
+    const a = await checks.claudeAuth(fake, env("ok"));
+    assert.strictEqual(a.email, "tester@example.com"); assert.strictEqual(a.org, "Tester's Organization"); assert.strictEqual(a.plan, "Pro");
+    assert.strictEqual(a.method, "Claude Pro"); assert.strictEqual(a.apiKey, false);
+  });
+  await check("log out: Claude Code says logged out afterwards", async () => {
+    const file = path.join(os.tmpdir(), `kural-fake-state-${process.pid}`);
+    fs.writeFileSync(file, "ok");
+    const e = { ...process.env, FAKE_CLAUDE_FILE: file, FAKE_CLAUDE_MS: "50" };
+    delete e.FAKE_CLAUDE_STATE;
+    assert.deepStrictEqual(await checks.claudeLogout(fake, e), { ok: true });
+    assert.strictEqual((await checks.claudeAuth(fake, e)).loggedIn, false);
+    fs.unlinkSync(file);
+  });
   await check("old Claude Code without `auth status`: unknown (the test decides)", async () =>
     assert.strictEqual((await checks.claudeAuth(fake, env("old"))).loggedIn, null));
   await check("checks don't block: other work runs meanwhile", async () => {
