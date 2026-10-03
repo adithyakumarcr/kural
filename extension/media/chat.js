@@ -810,16 +810,13 @@
     else if (!L.status.running) out.push(el("div", { class: "mi", onclick: () => { post({ type: "installOllama" }); closeMenu(); } },
       el("span", { class: "mi-icon" }, "⬇"), el("span", { class: "mi-label" }, "Get Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
     else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, `⚠ Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
-    else for (const m of L.models) {
+    else for (const m of L.models.filter((x) => x.chat)) {   // (models without tools can't chat: not listed)
       const id = `ollama:${m.name}`;
-      // Models that can't use tools (e.g. Tab's code model, embeddings) are shown greyed, with why.
-      if (!m.chat) { out.push(el("div", { class: "mi dim off", title: "The chat edits files and runs commands through tools; this model can't use tools." },
-        el("span", { class: "check radio" }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, "can't chat (no tools)"))); continue; }
       out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
         el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
     }
     if (L && L.status.ok && !L.models.some((x) => x.chat)) out.push(el("div", { class: "mi dim" },
-      el("span", { class: "mi-hint" }, "None of these can chat: download a model with tools below")));
+      el("span", { class: "mi-hint" }, "No model for the chat yet: find one below")));
     out.push(el("div", { class: "mi", onclick: () => { closeMenu(); openLocal(); } },
       el("span", { class: "mi-icon" }, "🔍"), el("span", { class: "mi-label" }, "Find & download models…")));
     return out;
@@ -857,16 +854,17 @@
       el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, name), el("span", { class: "spacer" }), el("span", { class: "h-when" }, `${p.percent || 0}%`)),
       el("div", { class: "bar" }, el("span", { style: `width:${p.percent || 0}%` }))));
     // Installed
-    if (L && L.models.length) {
+    const chatModels = L ? L.models.filter((x) => x.chat) : [];   // models without tools can't chat: not listed
+    if (chatModels.length) {
       kids.push(el("div", { class: "h-group" }, "Installed"));
-      for (const m of L.models) {
+      for (const m of chatModels) {
         const id = `ollama:${m.name}`, using = t && t.model === id, confirming = S.confirmDeleteModel === m.name;
         kids.push(el("div", { class: "lm-item" },
           el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, m.name), el("span", { class: "spacer" }),
             m.chat ? el("button", { class: `cb ${using ? "" : "primary"}`, disabled: using ? "" : null, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeLocal(); } }, using ? "In use" : "Use in chat") : null,
             confirming ? el("button", { class: "cb danger", onclick: () => { S.confirmDeleteModel = null; post({ type: "localDelete", name: m.name }); } }, "Delete?")
               : el("button", { class: "icon-btn small show", title: "Delete from this computer", onclick: () => { S.confirmDeleteModel = m.name; renderLocal(); } }, icon("trash"))),
-          el("div", { class: "h-meta" }, [m.params, gb(m.size), m.chat ? "can chat" : "can't chat (no tools)"].filter(Boolean).join(" · "))));
+          el("div", { class: "h-meta" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
       }
     }
     // Search
@@ -876,19 +874,19 @@
       if (R.from === "suggested") kids.push(el("div", { class: "lm-note" }, "Couldn't reach ollama.com, so these are Kural's suggestions."));
       if (!R.results.length) kids.push(el("div", { class: "h-empty" }, "No models found."));
       for (const m of R.results) {
-        const local = m.sizes.length ? m.sizes : [];
+        const local = m.sizes;   // (cloud-only models are already left out)
         kids.push(el("div", { class: "lm-item" },
           el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, m.name), el("span", { class: "spacer" }), m.pulls ? el("span", { class: "h-when" }, `${m.pulls} pulls`) : null),
           m.description ? el("div", { class: "lm-desc" }, m.description) : null,
           el("div", { class: "lm-sizes" },
             ...m.capabilities.filter((c) => c !== "cloud").map((c) => el("span", { class: "lm-cap" }, c)),
-            ...(local.length ? local.map((z) => {
+            ...local.map((z) => {
               const name = `${m.name}:${z.size}`, have = L && L.models.some((x) => x.name === name), busy = !!pulls[name];
               const tooBig = memory && z.memory && z.memory > memory;
               return el("button", { class: `cb lm-size ${tooBig ? "danger" : ""}`, disabled: have || busy ? "" : null,
                 title: have ? "Already on this computer" : `Download ${name}${z.memory ? `; needs about ${z.memory} GB of memory` : ""}${tooBig ? ` (this computer has ${memory} GB: too big)` : ""}`,
                 onclick: () => post({ type: "localPull", name }) }, have ? `✓ ${z.size}` : `⬇ ${z.size}${z.memory ? ` · ~${z.memory} GB` : ""}`);
-            }) : [el("span", { class: "lm-cap" }, "cloud only (not offline)")]))));
+            }))));
       }
     }
     localEl.replaceChildren(...kids.filter(Boolean));
