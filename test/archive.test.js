@@ -1,7 +1,7 @@
-// Chat history across workspaces (extension/lib/archive.js): kept in full, pinned, deleted, shared by windows.
+// Chat history across workspaces (extension/lib/chat/archive.js): kept in full, pinned, deleted, shared by windows.
 const assert = require("assert");
 const fs = require("fs"), os = require("os"), path = require("path");
-const { ChatArchive } = require("../extension/lib/archive");
+const { ChatArchive } = require("../extension/lib/chat/archive");
 
 let fail = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };

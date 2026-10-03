@@ -1,12 +1,18 @@
-// Which engine answers: the model picked in the chat decides for the chat, Ask, Ctrl+K and Apply.
-//   a Claude model ("opus", "sonnet", "haiku")  → Claude Code (lib/claude.js), with your Claude login
-//   a model on your computer ("ollama:<name>")  → Kural's own engine (lib/engine.js), through Ollama, offline
-// (Tab Complete has its own setting: a small fill-in-the-middle model is much faster for that.)
+// Kural's AI: which provider answers. The model picked in the chat decides for the chat, Ask, Ctrl+K, Apply and commit
+// messages (Tab Completion has its own engine: a small fill-in-the-middle model is much faster for that).
+//
+//   PROVIDERS (below), one entry each:
+//     claude  "opus" / "sonnet" / "haiku"   → Claude Code (./claude.js) with your Claude login
+//     ollama  "ollama:<name>"               → Kural's own engine (./engine.js + ./tools.js), through Ollama, offline
+//   To add a provider (LM Studio, an OpenAI-compatible server…): an entry with the same shape — owns(model),
+//   ready(), agent(…) (a conversation process with ClaudeProcess's methods and events), ask(…) (one answer) —
+//   plus its models in the chat's model menu and a way in Get started.
 
 const vscode = require("vscode");
 const os = require("os");
 const path = require("path");
 const { ClaudeProcess, ClaudeSession, isSetUp, log } = require("./claude");
+const ws = require("../workspace");
 const { LocalAgent, systemPrompt, post, errorText, friendly } = require("./engine");
 
 const isLocal = (model) => /^ollama:./.test(model || "");
@@ -27,17 +33,25 @@ const setModelSource = (f, fallback) => { modelSource = f; if (fallback) localFa
 
 // Can this model be used right now? { ok } or { why } (for a Claude model before Claude is set up).
 function usable(model = currentModel()) {
-  if (isLocal(model) || isSetUp()) return { ok: true };
+  if (providerOf(model).ready()) return { ok: true };
   return { why: "Claude isn't set up. Set it up in Get started, or pick a model on your computer in the chat's model menu." };
 }
 
-// A conversation process for `model`: Claude Code, or Kural's engine. Both take the same handlers and send the
-// same events. claudeOpts: ClaudeProcess options; local: LocalAgent options (tools, allowedTools, jsonSchema…).
-function makeAgent(model, claudeOpts, local, handlers) {
-  if (!isLocal(model)) return new ClaudeProcess({ ...claudeOpts, model }, handlers);
-  return new LocalAgent({ name: claudeOpts.name, cwd: claudeOpts.cwd, addDirs: claudeOpts.addDirs, appendSystemPrompt: claudeOpts.appendSystemPrompt,
-    effort: claudeOpts.effort, jsonSchema: claudeOpts.jsonSchema, sessionId: claudeOpts.sessionId, resume: claudeOpts.resume, ...local, model: localName(model), baseUrl: ollamaUrl(), contextLength: contextLength() }, handlers);
-}
+const PROVIDERS = [
+  { id: "ollama", label: "Your own model", owns: isLocal, ready: () => true,   // (Ollama itself is checked before use)
+    // opts: ClaudeProcess-style options; local: the engine's own (tools, allowedTools, capabilities, store).
+    agent: (model, opts, local, handlers) => new LocalAgent({ name: opts.name, cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs,
+      appendSystemPrompt: opts.appendSystemPrompt, effort: opts.effort, jsonSchema: opts.jsonSchema, sessionId: opts.sessionId,
+      resume: opts.resume, ...local, model: localName(model), baseUrl: ollamaUrl(), contextLength: contextLength() }, handlers),
+    ask: (model, system, prompt, token, quiet) => askLocal(model, system, prompt, token, quiet) },
+  { id: "claude", label: "Claude", owns: () => true, ready: () => isSetUp(),
+    agent: (model, opts, _local, handlers) => new ClaudeProcess({ ...opts, model }, handlers),
+    ask: null },   // (one answers come from a warm ClaudeSession: see Session)
+];
+const providerOf = (model) => PROVIDERS.find((p) => p.owns(model));
+
+// A conversation process for `model`, from its provider. All take the same handlers and send the same events.
+function makeAgent(model, opts, local, handlers) { return providerOf(model).agent(model, opts, local || {}, handlers); }
 
 // One question, one answer, no tools (Ctrl+K, Apply, commit messages): a local model gets one /api/chat request.
 // quiet: no popup when it fails (commit suggestions in the terminal come often; the log has it).
@@ -77,7 +91,8 @@ class Session {
   stop() { this.claude.stop(); }
   ask(prompt, token) {
     const m = currentModel();
-    if (isLocal(m)) return askLocal(m, this.opts.systemPrompt, prompt, token, !!this.opts.quiet);
+    const p = providerOf(m);
+    if (p.ask) return p.ask(m, this.opts.systemPrompt, prompt, token, !!this.opts.quiet);
     if (this.started && this.started !== m) this.claude.stop();   // you picked another Claude model: start fresh with it
     this.started = m;
     return this.claude.ask(prompt, token);
@@ -86,4 +101,5 @@ class Session {
 
 const localStore = (context) => path.join(context.globalStorageUri.fsPath, "local-chats");
 
-module.exports = { isLocal, localName, currentModel, setModelSource, usable, makeAgent, Session, askLocal, ollamaUrl, contextLength, localStore, systemPrompt };
+module.exports = { PROVIDERS, providerOf, isLocal, localName, currentModel, setModelSource, usable, makeAgent, Session, askLocal, ollamaUrl,
+  contextLength, localStore, systemPrompt };

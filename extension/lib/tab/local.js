@@ -6,7 +6,7 @@
 // between (Qwen2.5-Coder's <|fim_prefix|> / <|fim_suffix|> / <|fim_middle|> format).
 
 const vscode = require("vscode");
-const { log } = require("./claude");
+const { log } = require("../ai/claude");
 
 const LOCAL_MODELS = [
   { id: "qwen2.5-coder:0.5b-base", label: "0.5B · fastest", size: "~400 MB" },

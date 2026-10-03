@@ -1,6 +1,6 @@
-// Local models for the chat (extension/lib/ollama.js), against a stand-in Ollama (test/fake-ollama-chat.js).
+// Local models for the chat (extension/lib/ai/ollama.js), against a stand-in Ollama (test/fake-ollama-chat.js).
 const assert = require("assert");
-const { Ollama, parseSearch, params, memoryGB, variantName, versionAtLeast } = require("../extension/lib/ollama");
+const { Ollama, parseSearch, params, memoryGB, variantName, versionAtLeast } = require("../extension/lib/ai/ollama");
 const fake = require("./fake-ollama-chat");
 
 let fail = 0;

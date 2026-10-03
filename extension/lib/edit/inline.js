@@ -2,7 +2,7 @@
 // Both ask Claude for new code, then hand it to the review (red/green) view.
 
 const vscode = require("vscode");
-const { log } = require("./claude");
+const { log } = require("../ai/claude");
 const { unwrap } = require("./code-reply");
 
 const EDIT_SYSTEM_PROMPT =

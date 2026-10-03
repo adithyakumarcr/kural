@@ -4,7 +4,7 @@
 // (a claude.ai connector or an MCP server you added). So: nothing to set up in Kural, and nothing works
 // without that connector — the + menu then shows a warning instead.
 
-const { ClaudeProcess, findClaude, log } = require("./claude");
+const { ClaudeProcess, findClaude, log } = require("../ai/claude");
 
 // Is a connector / MCP server Atlassian's? ("claude.ai Atlassian Rovo", "atlassian", "jira", …)
 const IS_ATLASSIAN = /atlassian|jira/i;

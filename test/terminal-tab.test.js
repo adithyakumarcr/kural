@@ -3,7 +3,7 @@ const assert = require("assert");
 const Module = require("module");
 const load = Module._load;
 Module._load = function (req, ...a) { return req === "vscode" ? {} : load.call(this, req, ...a); };   // no editor needed
-const { tidy } = require("../extension/lib/terminal-tab");
+const { tidy } = require("../extension/lib/tab/terminal");
 
 let fail = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };

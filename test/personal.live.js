@@ -6,9 +6,9 @@ const load = Module._load;
 Module._load = function (req, ...a) { return req === "vscode" ? {} : load.call(this, req, ...a); };
 const { execFileSync, spawnSync } = require("child_process");
 const fs = require("fs"), os = require("os"), path = require("path");
-const { TERMINAL_SYSTEM_PROMPT, tidy, _test: { gitContext, claudePrompt } } = require("../extension/lib/terminal-tab");
-const { COMPLETION_SYSTEM_PROMPT, completionPrompt, extractInsert } = require("../extension/lib/completion");
-const { Activity } = require("../extension/lib/activity");
+const { TERMINAL_SYSTEM_PROMPT, tidy, _test: { gitContext, claudePrompt } } = require("../extension/lib/tab/terminal");
+const { COMPLETION_SYSTEM_PROMPT, completionPrompt, extractInsert } = require("../extension/lib/tab/completion");
+const { Activity } = require("../extension/lib/tab/activity");
 
 const ask = (system, prompt) => {
   const r = spawnSync("claude", ["-p", "--model", "haiku", "--system-prompt", system, "--tools", ""], { input: prompt, encoding: "utf8", timeout: 90000 });

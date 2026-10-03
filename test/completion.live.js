@@ -8,8 +8,8 @@ Module._load = function (req, ...a) {
   return orig.call(this, req, ...a);
 };
 const ext = path.resolve(__dirname, "../extension");
-const { initLog, ClaudeSession } = require(ext + "/lib/claude.js");
-const { COMPLETION_SYSTEM_PROMPT, completionPrompt, extractInsert, trimOverlap } = require(ext + "/lib/completion.js");
+const { initLog, ClaudeSession } = require(ext + "/lib/ai/claude.js");
+const { COMPLETION_SYSTEM_PROMPT, completionPrompt, extractInsert, trimOverlap } = require(ext + "/lib/tab/completion.js");
 initLog();
 
 const FILE = `"""Simple helpers for welding parameters."""

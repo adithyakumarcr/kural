@@ -3,7 +3,7 @@
 // status bar. (A status bar hover can't hold a real slider; this panel can.)
 
 const vscode = require("vscode");
-const { fontScale } = require("./ui");
+const { fontScale } = require("../ui");
 const { LOCAL_MODELS, installOllama } = require("./local");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");

@@ -7,19 +7,19 @@
 // Each feature lives in lib/; this file connects them.
 
 const vscode = require("vscode");
-const { initLog, log, findClaude, ClaudeSession } = require("./lib/claude");
-const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/completion");
-const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edits");
+const { initLog, log, findClaude, ClaudeSession } = require("./lib/ai/claude");
+const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/tab/completion");
+const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edit/inline");
 const { Updater } = require("./lib/updates");
-const { terminalTab, TERMINAL_SYSTEM_PROMPT } = require("./lib/terminal-tab");
-const { ReviewManager } = require("./lib/review");
+const { terminalTab, TERMINAL_SYSTEM_PROMPT } = require("./lib/tab/terminal");
+const { ReviewManager } = require("./lib/edit/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
-const { TabPanel } = require("./lib/tabpanel");
-const { LocalEngine } = require("./lib/local");
-const { Activity } = require("./lib/activity");
+const { TabPanel } = require("./lib/tab/panel");
+const { LocalEngine } = require("./lib/tab/local");
+const { Activity } = require("./lib/tab/activity");
 const { GetStarted } = require("./lib/getstarted");
-const brain = require("./lib/brain");
+const brain = require("./lib/ai");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
@@ -47,6 +47,8 @@ function activate(context) {
   const updater = new Updater(context);   // Help → Check for Updates…
   log(`Kural ${context.extension.packageJSON.version} starting; claude at ${findClaude() || "(not found)"}`);
   // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
+  // AI work without a project open happens in Kural's own folder, never in your home folder (see workspace.js).
+  require("./lib/workspace").setWorkDir(require("path").join(context.globalStorageUri.fsPath, "work"));
   getStarted = new GetStarted(context);
   getStarted.register();
 

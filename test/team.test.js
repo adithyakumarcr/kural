@@ -1,4 +1,4 @@
-// The agent team's message board (extension/lib/team-mcp.js): messages, and nobody waiting forever.
+// The agent team's message board (extension/lib/chat/team-mcp.js): messages, and nobody waiting forever.
 const { spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -9,7 +9,7 @@ const file = path.join(os.tmpdir(), `kural-team-test-${process.pid}.json`);
 fs.writeFileSync(file, JSON.stringify({ round: 1, finished: [] }));
 
 function board() {
-  const p = spawn(process.execPath, [path.join(__dirname, "..", "extension", "lib", "team-mcp.js")],
+  const p = spawn(process.execPath, [path.join(__dirname, "..", "extension", "lib", "chat", "team-mcp.js")],
     { env: { ...process.env, KURAL_TEAM: "Rachel,Ross,Monica", KURAL_TEAM_FILE: file } });
   const waiters = new Map();
   let buf = "", id = 0;

@@ -9,7 +9,7 @@
 
 const vscode = require("vscode");
 const { diffLines } = require("./diff");
-const { log } = require("./claude");
+const { log } = require("../ai/claude");
 
 class ReviewManager {
   constructor() {

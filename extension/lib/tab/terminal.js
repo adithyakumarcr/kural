@@ -13,7 +13,7 @@
 
 const vscode = require("vscode");
 const { execFile } = require("child_process");
-const { log } = require("./claude");
+const { log } = require("../ai/claude");
 
 const DIFF_CHARS = 3500;
 

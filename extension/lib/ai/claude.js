@@ -15,10 +15,7 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 
-// ---------- logging (View → Output → Kural) ----------
-let output = null;
-function initLog() { output = vscode.window.createOutputChannel("Kural"); return output; }
-function log(msg) { if (output) output.appendLine(`[${new Date().toLocaleTimeString()}] ${msg}`); }
+const { initLog, log } = require("../log");   // (re-exported below: older code imports log from here)
 
 const LOGIN_RE = /not logged in|log ?in|invalid api key|api key|oauth|credential|401/i;
 

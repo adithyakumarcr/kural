@@ -5,7 +5,7 @@
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
-const { diffLines } = require("./diff");
+const { diffLines } = require("../edit/diff");
 
 const SCHEME = "kural-before";
 
@@ -45,7 +45,7 @@ class ChangeTracker {
       if (snap.content === now) continue;
       const ops = diffLines((snap.content || "").split("\n"), (now || "").split("\n"));
       out.push({
-        id, file, rel: require("./workspace").label(file),
+        id, file, rel: require("../workspace").label(file),
         added: ops.filter((o) => o.op === "add").length, removed: ops.filter((o) => o.op === "del").length,
         created: snap.content == null, deleted: now == null, state: "pending",
       });

@@ -6,8 +6,8 @@ const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("./ui");
 const fs = require("fs");
 const path = require("path");
-const { log, LOGIN_RE } = require("./claude");
-const brain = require("./brain");
+const { log, LOGIN_RE } = require("./ai/claude");
+const brain = require("./ai");
 
 const SCHEMA = {
   type: "object",

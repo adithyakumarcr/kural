@@ -18,12 +18,13 @@
 
 const vscode = require("vscode");
 const os = require("os");
-const { findClaude, cleanEnv, setSetupGate, log } = require("./claude");
-const checks = require("./checks");
-const { installOllama, LOCAL_MODELS } = require("./local");
-const { Ollama, memoryGB, totalMemoryGB } = require("./ollama");
-const { LocalAgent } = require("./engine");
-const brain = require("./brain");
+const { findClaude, cleanEnv, setSetupGate, log } = require("./ai/claude");
+const checks = require("./ai/claude-checks");
+const { installOllama, LOCAL_MODELS } = require("./tab/local");
+const { Ollama, memoryGB, totalMemoryGB } = require("./ai/ollama");
+const { LocalAgent } = require("./ai/engine");
+const brain = require("./ai");
+const ws = require("./workspace");
 
 const KEY = "kural.setup.v2";   // { claude: { bin, version, at, authSaid } | null, local: { model, at } | null }
 const OLD_KEY = "kural.setup.v1";
@@ -289,7 +290,8 @@ class GetStarted {
     this.post();
   }
 
-  cwd() { const root = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0]; return root ? root.uri.fsPath : os.homedir(); }
+  // (No folder open: Kural's own empty folder, never your home folder — see workspace.js workDir.)
+  cwd() { return ws.root() || ws.workDir(); }
 
   // Poll while you install or log in, so the page turns green by itself.
   wait(what) {

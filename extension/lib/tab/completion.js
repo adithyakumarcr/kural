@@ -3,7 +3,7 @@
 // (end of a line, an empty line, or before closing brackets), like Cursor.
 
 const vscode = require("vscode");
-const { log } = require("./claude");
+const { log } = require("../ai/claude");
 const { tidyLocal } = require("./local");
 
 const COMPLETION_SYSTEM_PROMPT = `You are the autocomplete engine of a code editor.

@@ -1,7 +1,7 @@
-// Get started's checks (extension/lib/checks.js), against a stand-in claude (test/fake-claude.js).
+// Get started's checks (extension/lib/ai/claude-checks.js), against a stand-in claude (test/fake-claude.js).
 const assert = require("assert");
 const fs = require("fs"), os = require("os"), path = require("path");
-const checks = require("../extension/lib/checks");
+const checks = require("../extension/lib/ai/claude-checks");
 
 let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };

@@ -11,7 +11,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
-const { log } = require("./claude");
+const { log } = require("./ai/claude");
 
 const REPO = "adithyakumarcr/kural";
 

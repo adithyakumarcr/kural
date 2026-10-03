@@ -1,6 +1,6 @@
 // Ctrl+K / Apply: the code is taken out of <code>…</code> with its indentation intact.
 const assert = require("assert");
-const { unwrap } = require("../extension/lib/code-reply");
+const { unwrap } = require("../extension/lib/edit/code-reply");
 
 const cases = [
   ["keeps the first line's indentation", "<code>\n    def f():\n        return 1\n</code>", "    def f():\n        return 1"],
