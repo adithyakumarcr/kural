@@ -457,6 +457,12 @@
           "default": "http://127.0.0.1:11434",
           "description": "Where Ollama runs."
         },
+        "kural.localModels.contextLength": {
+          "type": "number",
+          "default": 32768,
+          "minimum": 16384,
+          "markdownDescription": "How many tokens a model on your computer (Ollama) can look at in the chat. Claude Code's instructions and tools need room, so 32k is the minimum that works well; more needs more memory. Changing it makes a new copy of the model's settings the next time you use it (no new download)."
+        },
         "kural.tabCompletion.learn": {
           "type": "boolean",
           "default": true,

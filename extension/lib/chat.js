@@ -14,6 +14,8 @@ const { ChangeTracker } = require("./changes");
 const ws = require("./workspace");
 const { Attachments } = require("./attachments");
 const { ChatArchive } = require("./archive");
+const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("./ollama");
+const { installOllama } = require("./local");
 const { watchSetup } = require("./setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 
@@ -32,6 +34,10 @@ const MODES = [
   { id: "ask", label: "Ask", hint: "answers only" },
 ];
 const TEAM_SIZES = [2, 3, 4, 5];
+// A model on your own computer (Ollama) is saved as "ollama:<name>", e.g. "ollama:qwen3-coder:30b".
+const isLocal = (model) => /^ollama:./.test(model || "");
+const localName = (model) => String(model).slice("ollama:".length);
+const validModel = (m) => valid(MODELS, m) || (isLocal(m) && m.length < 200);
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
@@ -212,6 +218,10 @@ class ChatView {
     // Every chat from every workspace, in full (History). this.here: which workspace this window is.
     this.archive = new ChatArchive(path.join(context.globalStorageUri.fsPath, "chats"));
     this.here = ChatView.workspaceInfo();
+    // Models on your own computer (Ollama): the same address as Tab's local model.
+    this.ollama = new Ollama(() => cfg().get("tabCompletion.ollamaUrl"));
+    this.localReady = new Map();   // "ollama:<name>" -> the larger-context copy's name, once prepared
+    this.pulls = new Map();        // model downloads in progress: name -> { percent, status }
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.changes = new ChangeTracker();
     this.attachments = new Attachments();   // files added to the message you're writing
@@ -283,7 +293,7 @@ class ChatView {
   lastChoices() {
     const last = this.context.globalState.get(LAST_KEY) || {};
     return {
-      model: valid(MODELS, last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet"),
+      model: validModel(last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet"),
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
@@ -302,7 +312,7 @@ class ChatView {
   // Old saved tabs may lack a field or hold one that no longer exists ("undefined" in the menu).
   fix(tab) {
     const d = this.lastChoices();
-    if (!valid(MODELS, tab.model)) tab.model = d.model;
+    if (!validModel(tab.model)) tab.model = d.model;
     if (!valid(EFFORTS, tab.effort)) tab.effort = d.effort;
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
@@ -659,7 +669,7 @@ class ChatView {
     return roles.length ? Math.min(FRIENDS.length, Math.max(2, roles.length)) : tab.team;
   }
   // When this changes, the tab's Claude restarts (same conversation) before your next message.
-  procKey(tab) { return `${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${cfg().get("chat.fullClaudeCodeSetup")}|${ws.key()}|${this.setupVersion}`; }
+  procKey(tab) { return `${isLocal(tab.model) ? tab.model : "claude"}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${cfg().get("chat.fullClaudeCodeSetup")}|${ws.key()}|${this.setupVersion}`; }
 
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
   // came back to Kural (connectors added on claude.ai don't leave a file to watch): reload
@@ -681,7 +691,93 @@ class ChatView {
     if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) return;
     if (r && r.turn && r.turn.reply.running) return;   // never restart in the middle of an answer
     if (r && [...r.agents.values()].some((a) => a.state === "running")) return;   // … or while agents still work
+    if (isLocal(tab.model) && !this.localReady.has(tab.model)) {   // a local model is prepared first (quietly)
+      this.prepareLocal(tab).then((p) => { if (!p.error && tab.status === "idle") this.warm(tab); });
+      return;
+    }
     this.startProc(tab);
+  }
+
+  // ---------- models on your computer (Ollama) ----------
+  // Before the first message with a local model: is Ollama there and new enough, is the model downloaded?
+  // Then make its larger-context copy. Returns { variant } or { error } (said in the chat).
+  async prepareLocal(tab) {
+    const name = localName(tab.model), ctx = cfg().get("localModels.contextLength") || 32768;
+    const st = await this.ollama.status();
+    if (!st.running) return { error: "Ollama isn't running. Start Ollama (or get it from ollama.com), then send again." };
+    if (!st.ok) return { error: `Your Ollama is version ${st.version}; using it in the chat needs ${MIN_VERSION} or newer. Update Ollama, then send again.` };
+    let models = [];
+    try { models = await this.ollama.models(); } catch (e) { return { error: `Couldn't ask Ollama for its models: ${e.message}` }; }
+    const m = models.find((x) => x.name === name || x.name === `${name}:latest`);
+    if (!m) return { error: `${name} isn't on this computer (anymore). Download it in Local models (model menu), or pick another model.` };
+    if (!m.chat) return { error: `${name} can't use tools, so it can't edit files or run commands. Pick a model with "tools".` };
+    try {
+      const variant = await this.ollama.withContext(m.name, ctx);
+      this.localReady.set(tab.model, variant);
+      return { variant };
+    } catch (e) { return { error: `Ollama couldn't prepare ${name}: ${e.message}` }; }
+  }
+
+  // How Claude Code reaches a local model: Ollama speaks Claude's API. Its agents use the same model,
+  // its context is the model's real window (so long chats get compacted in time), and nothing else goes online.
+  localEnv(tab) {
+    const variant = this.localReady.get(tab.model);
+    const base = String(cfg().get("tabCompletion.ollamaUrl") || "http://127.0.0.1:11434").replace(/\/$/, "");
+    let host = "127.0.0.1"; try { host = new URL(base).hostname; } catch { /* keep the default */ }
+    const noProxy = [...new Set([process.env.NO_PROXY || process.env.no_proxy, "localhost", "127.0.0.1", "::1", host].filter(Boolean))].join(",");
+    return {
+      ANTHROPIC_BASE_URL: base, ANTHROPIC_AUTH_TOKEN: "ollama", ANTHROPIC_API_KEY: "",
+      ANTHROPIC_DEFAULT_OPUS_MODEL: variant, ANTHROPIC_DEFAULT_SONNET_MODEL: variant, ANTHROPIC_DEFAULT_HAIKU_MODEL: variant,
+      CLAUDE_CODE_SUBAGENT_MODEL: variant,
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(cfg().get("localModels.contextLength") || 32768),
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      // Ollama is on this computer (or your network): never send it through a proxy (a company proxy, say).
+      NO_PROXY: noProxy, no_proxy: noProxy,
+    };
+  }
+
+  // The model menu's "On this computer" list and the Local models page.
+  async postLocal(pane = null) {
+    const status = await this.ollama.status();
+    let models = [];
+    if (status.running) { try { models = await this.ollama.models(); } catch (e) { log(`local models: ${e.message}`); } }
+    const msg = { type: "localModels", status, models, memory: totalMemoryGB(), pulls: Object.fromEntries(this.pulls), minVersion: MIN_VERSION };
+    if (pane) this.postTo(pane, msg); else this.post(msg);
+  }
+
+  async searchLocal(pane, q) {
+    const r = await this.ollama.search(q);
+    const results = r.results.map((m) => ({ ...m, sizes: m.sizes.map((s) => ({ size: s, memory: memoryGB(s) })) }));
+    this.postTo(pane, { type: "localSearch", q, from: r.from, results });
+  }
+
+  async pullLocal(name) {
+    name = String(name || "").trim();
+    if (!/^[A-Za-z0-9._\/-]+(:[A-Za-z0-9._-]+)?$/.test(name) || this.pulls.has(name)) return;
+    this.pulls.set(name, { percent: 0, status: "starting" });
+    log(`local models: downloading ${name}`);
+    let last = 0;
+    try {
+      await this.ollama.pull(name, (p) => {
+        this.pulls.set(name, { percent: p.percent, status: p.status });
+        if (Date.now() - last > 400) { last = Date.now(); this.post({ type: "localPull", name, percent: p.percent, status: p.status }); }
+      });
+      log(`local models: ${name} downloaded`);
+      this.post({ type: "flash", text: `${name} is downloaded` });
+    } catch (e) {
+      log(`local models: downloading ${name} failed: ${e.message}`);
+      vscode.window.showWarningMessage(`Kural: couldn't download ${name}: ${e.message}`);
+    } finally {
+      this.pulls.delete(name);
+      this.postLocal();
+    }
+  }
+
+  async deleteLocal(name) {
+    try { await this.ollama.remove(name); log(`local models: deleted ${name}`); }
+    catch (e) { vscode.window.showWarningMessage(`Kural: couldn't delete ${name}: ${e.message}`); }
+    this.localReady.delete(`ollama:${name}`);
+    this.postLocal();
   }
 
   startProc(tab, fresh = false) {
@@ -698,8 +794,10 @@ class ChatView {
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
     const tools = [...(editing ? AGENT_TOOLS : READ_TOOLS), ...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
+    const local = isLocal(tab.model) && this.localReady.get(tab.model);
     const proc = new ClaudeProcess({
-      name: `chat ${tab.id}`, model: tab.model, effort: tab.effort, partial: true, showThinking: true,
+      name: `chat ${tab.id}`, model: local || tab.model, effort: tab.effort, partial: true, showThinking: true,
+      env: local ? this.localEnv(tab) : undefined,
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
@@ -792,9 +890,19 @@ class ChatView {
     this.postTabs();
 
     let r = this.runtime.get(tab.id);
+    // A model on this computer: check Ollama and prepare the model first (says what's missing if it can't).
+    if (isLocal(tab.model) && (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab) || !this.localReady.has(tab.model))) {
+      const p = await this.prepareLocal(tab);
+      if (p.error) {
+        reply.running = false; reply.error = p.error; tab.status = "idle";
+        this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); this.save();
+        return;
+      }
+      if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) { /* already running with it */ } else r = null;
+    }
     if (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab)) r = this.startProc(tab);
     if (!r) { reply.running = false; reply.error = "missing"; tab.status = "idle"; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); vscode.commands.executeCommand("kural.install"); return; }
-    if (tab.pendingModel) { r.proc.setModel(tab.model); tab.pendingModel = false; }
+    if (tab.pendingModel && !isLocal(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
     r.turn = { snaps: {}, reply, ask };
@@ -830,7 +938,7 @@ class ChatView {
     const turn = r.turn;
     const reply = turn && turn.reply;
     if (m.type === "system" && m.subtype === "init" && m.model) {
-      tab.modelName = prettyModel(m.model);
+      tab.modelName = shownModel(tab, m.model);
       if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
       this.noteSetup(tab, r, m);
       return;
@@ -916,7 +1024,7 @@ class ChatView {
     } else if (m.type === "assistant") {
       // Show the model that's actually answering (it changes when you switch mid-answer).
       if (!parent && m.message.model) {
-        const name = prettyModel(m.message.model);
+        const name = shownModel(tab, m.message.model);
         if (name !== tab.modelName) { tab.modelName = name; if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name }); }
       }
       const from = parent && r.agents.get(parent);
@@ -1293,6 +1401,11 @@ class ChatView {
         break;
       }
       case "continueHere": this.continueHere(m.id); break;
+      case "localModels": await this.postLocal(pane); break;
+      case "localSearch": await this.searchLocal(pane, m.q); break;
+      case "localPull": this.pullLocal(m.name); break;
+      case "localDelete": await this.deleteLocal(m.name); break;
+      case "installOllama": installOllama(); break;
       case "openWorkspace": this.openWorkspaceOf(m.id); break;
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || []); break;
       case "attachPick": {
@@ -1340,12 +1453,18 @@ class ChatView {
         break;
       }
       case "setModel": {
-        if (!valid(MODELS, m.model)) return;
+        if (!validModel(m.model)) return;
+        const was = tab.model;
         tab.model = m.model;
         const r = this.runtime.get(tab.id);
+        if (isLocal(m.model) || isLocal(was)) {
+          // To or from a model on this computer: that's another Claude Code setup (it talks to Ollama), so
+          // the next message starts it, keeping the conversation. In the middle of an answer: after it.
+          if (tab.status === "idle") this.warm(tab);
+          else this.post({ type: "flash", text: "The new model takes over with your next message" });
+        } else if (r && r.proc && !r.proc.exited) r.proc.setModel(m.model);
         // Switch right away, keeping the conversation — even in the middle of an answer:
         // Claude's next step already uses the new model.
-        if (r && r.proc && !r.proc.exited) r.proc.setModel(m.model);
         tab.modelName = null;
         this.post({ type: "modelName", tabId: tab.id, name: null });   // show the new choice right away
         this.remember(tab); this.postTabs(); this.save();
@@ -1470,6 +1589,9 @@ class ChatView {
 
 // "claude_ai_Notion" / "claude.ai Notion" -> "Notion"
 function prettyServer(name) { return String(name).replace(/^claude[._ ]ai[_ ]/i, "").replace(/_/g, " "); }
+
+// The model's name under the input: "Opus 4.7", or "qwen3-coder:30b · local" (not its larger-context copy's name).
+function shownModel(tab, id) { return isLocal(tab.model) ? `${localName(tab.model)} · local` : prettyModel(id); }
 
 function prettyModel(id) {
   const m = id.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);

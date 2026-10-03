@@ -104,7 +104,8 @@ function supportedFlags(bin) {
 // ---------- one running `claude` process ----------
 // opts: name, model, effort, systemPrompt, appendSystemPrompt, tools, allowedTools, cwd,
 //       partial, safeMode, noThinking, sessionId, resume, persist, hostPermissions,
-//       jsonSchema, mcpServers ({name: {command, args, env}}), addDirs (more folders Claude may use)
+//       jsonSchema, mcpServers ({name: {command, args, env}}), addDirs (more folders Claude may use),
+//       env (extra environment variables, e.g. to use a local model through Ollama)
 // handlers: onMessage(msg), onPermission(req) -> Promise<{allow, message?}>, onExit(info)
 // Debugging: set KURAL_RAW_LOG=/some/file before starting Kural to save everything Claude sends.
 const RAW_LOG = process.env.KURAL_RAW_LOG || "";
@@ -150,7 +151,7 @@ class ClaudeProcess {
     if (!o.persist) args.push("--no-session-persistence");
 
     const cwd = o.cwd || fs.mkdtempSync(path.join(os.tmpdir(), "kural-")); // empty folder: no project files loaded
-    const env = cleanEnv(o.noThinking ? { MAX_THINKING_TOKENS: "0" } : {});
+    const env = cleanEnv({ ...(o.noThinking ? { MAX_THINKING_TOKENS: "0" } : {}), ...(o.env || {}) });   // env: e.g. a local model (Ollama)
     // Its own process group (not on Windows), so stopping it also stops the commands it started.
     this.proc = spawn(bin, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
     this.startedAt = Date.now();
