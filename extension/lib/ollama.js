@@ -163,18 +163,23 @@ class Ollama {
   }
 
   // Search ollama.com's library for models that can use tools. Falls back to SUGGESTED (filtered by the words).
+  // Only models you can download and chat with offline: ollama.com also lists cloud-only models (no sizes to
+  // download, they run on Ollama's servers) and embedding models; those are left out.
   async search(q, fetchPage = (u) => this.fetch(u, { headers: { "User-Agent": "Kural" } })) {
     const query = String(q || "").trim();
     try {
       const res = await fetchPage(`https://ollama.com/search?c=tools&q=${encodeURIComponent(query)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const found = parseSearch(await res.text());
+      const found = parseSearch(await res.text()).filter(usable);
       if (found.length || query) return { results: found, from: "ollama.com" };
     } catch (e) { /* offline, or the page changed */ }
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     return { results: SUGGESTED.filter((m) => words.every((w) => `${m.name} ${m.description}`.toLowerCase().includes(w))), from: "suggested" };
   }
 }
+
+// A search result you can download and chat with: it has a size to download (not cloud only) and isn't an embedding model.
+const usable = (m) => m.sizes.length > 0 && !m.capabilities.includes("embedding");
 
 // Ollama's "pull model manifest: file does not exist" means: no model (or no such size) by that name.
 function friendly(msg, name) {

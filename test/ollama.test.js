@@ -82,6 +82,13 @@ const SEARCH_HTML = `<ul>
     assert.strictEqual(r.from, "ollama.com");
     assert.strictEqual(r.results.length, 3);
   });
+  await check("search: leaves out cloud-only models (nothing to download, not offline)", async () => {
+    const html = SEARCH_HTML.replace("</ul>", `<li><a href="/library/glm-5.3"><h2>glm-5.3</h2><p>Flagship coding model.</p>
+      <span>tools</span><span>thinking</span><span>cloud</span><span>90K</span><span>Pulls</span></a></li></ul>`);
+    const r = await ol.search("glm", async () => ({ ok: true, text: async () => html }));
+    assert.ok(!r.results.some((m) => m.name === "glm-5.3"), r.results.map((m) => m.name).join());
+    assert.ok(r.results.some((m) => m.name === "qwen3-coder"));   // has sizes and cloud: can be downloaded
+  });
   await check("search offline: Kural's own suggestions, matching the words", async () => {
     const r = await ol.search("coding", async () => { throw new Error("offline"); });
     assert.strictEqual(r.from, "suggested");
