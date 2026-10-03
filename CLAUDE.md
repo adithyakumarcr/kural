@@ -8,7 +8,8 @@ Read `README.md` for the features. This file is how the code works and how to ch
 Adithya is learning to code. Keep answers short; explain the *why* first; when fixing a bug say what
 was wrong and why; point out mistakes plainly. Small decisions: make them and say so.
 At the end of every change, give the steps to build and install: `./install.sh` on his Mac or Ubuntu (builds from
-this folder and installs; `./install.sh --ext` when only `extension/` changed), or the release download.
+this folder and installs; `./install.sh --ext` when only `extension/` changed; `./install.sh --fresh` to try it as a
+new user: Kural's data is moved to `~/kural-backup-<date>` first), or the release download.
 
 ## Layout
 - `extension/` — plain JavaScript, no build step, no npm dependencies at runtime.
