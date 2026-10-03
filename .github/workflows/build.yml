@@ -62,7 +62,7 @@ jobs:
       - name: Build and install with ./install.sh (what you run at home)
         run: ./install.sh
       - name: Quick extension update (./install.sh --ext)
-        run: ./install.sh --ext && test -f /usr/share/kural/resources/app/extensions/kural/lib/code-reply.js
+        run: ./install.sh --ext && test -f /usr/share/kural/resources/app/extensions/kural/lib/edit/code-reply.js
       - uses: actions/upload-artifact@v4
         with: { name: linux, path: dist/*.deb, if-no-files-found: error }
 
