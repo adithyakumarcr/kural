@@ -34,5 +34,14 @@ check("the model's command, one line, quote closed", () => {
   assert.strictEqual(tidyIntent("<cmd>git add -A\ngit commit</cmd>"), "git add -A");
   assert.strictEqual(tidyIntent(`<cmd>git commit -am "$(cat <<'EOF'\nPlease add the speed check\n\nCo-Authored-By: X <x@y>\nEOF\n)"</cmd>`), 'git commit -am "Please add the speed check"');
 });
+check("the suggestion list: a continuation replaces the line; plain words are deleted, then the command typed", () => {
+  const { suggestionItem } = require("../extension/lib/tab/terminal")._test;
+  const c = suggestionItem("git status", "git st", "claude", 0);
+  assert.deepStrictEqual(c.replacementRange, [0, 6]); assert.strictEqual(c.inputData, undefined);
+  const w = suggestionItem("git push origin main", "push it to main", "words", 0);
+  assert.deepStrictEqual(w.replacementRange, [15, 15]);   // (nothing to match: the list always shows it)
+  assert.strictEqual(w.inputData, "\x7F".repeat(15) + "git push origin main");
+  assert.strictEqual(suggestionItem("ls", "zeigé mir", "words", 0).inputData, "\x7F".repeat(9) + "ls");   // characters, not bytes
+});
 console.log(fail ? `terminal tab: ${fail} FAILED` : "terminal tab: ALL PASS");
 process.exit(fail ? 1 : 0);

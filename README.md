@@ -39,6 +39,8 @@ Its AI comes from one of two places (or both; you switch in the model menu):
 - **Your own model.** A model on your computer through [Ollama](https://ollama.com), run by Kural's own engine. No
   account, no subscription, no internet: your code never leaves your computer.
 
+Every feature is explained in the **[Kural wiki](https://github.com/adithyakumarcr/kural/wiki)**.
+
 ## Install
 
 ### 1. Download Kural
@@ -95,9 +97,11 @@ Kural notices and opens the page again. Open it any time: **Kural: Get Started**
 
 ### Updates
 
-**Help → Check for Updates…** finds the newest release here on GitHub, including the alpha, beta and rc test
-versions. If it's newer than yours, Kural downloads it, installs it and restarts. On Ubuntu it asks for your
-password; on a Mac it replaces Kural.app in place; on Windows it runs the setup.
+Kural checks GitHub for a newer release once a day (alpha, beta and rc test versions included) and offers it in a
+small notification; it never installs without asking. Check yourself with **Help → Check for Updates…**, the Chat
+panel's **…** menu, or the Account menu (person icon in the status bar). Kural downloads the new version, installs it
+and restarts: on Ubuntu it asks for your password; on a Mac it replaces Kural.app in place; on Windows it runs the
+setup. (Setting `kural.updates.autoCheck` turns the daily check off.)
 
 ### 3. Optional: a local model for faster Tab Completion
 
@@ -127,13 +131,18 @@ Also in the chat:
 - **Jira tickets.** **+ → Link ticket** links a Jira epic, story or task to the chat. Search your recent tickets,
   a key like `PROJ-123`, or words. Claude then knows in every message which ticket you're working on, and reads
   its details (acceptance criteria, comments) from Jira when needed. This needs the Atlassian connector in Claude
-  (claude.ai → Settings → Connectors); without it, the menu shows ⚠ and how to connect it.
+  (claude.ai → Settings → Connectors); without it, the menu says so and how to connect it.
 - **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.
 - **Model and intensity.** Claude's Opus / Sonnet / Haiku or a model on your computer, and Low → Max. You can switch
   in the middle of a conversation; the new model gets the conversation so far.
-- **Moods.** **Explorer** compares options, **Critic** pushes back, and **Teacher** explains the why.
+- **Moods.** **Explorer** compares options, **Critic** pushes back, and **Learn** teaches you: it first asks which
+  ideas behind your question you already know, explains the others, answers, then checks you got it.
+- **Pictures.** Pictures in answers are shown: from your project, ones the model read, or ones an image model made.
+  A picture from the internet waits for a click (loading it would tell that website you read the answer).
+- **Ask about Kural.** "How do I …?", "can Kural …?": the chat knows Kural's features, and if Kural can't do something
+  it says so and links to [a feature request](https://github.com/adithyakumarcr/kural/issues/new?template=feature_request.yml).
 - **Two chats at once.** The split button (next to **+** in the Kural panel's title bar) opens a second chat beside
   your code, with its own tabs and input. Both can work at the same time; drag it anywhere, even to another screen.
 - **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
@@ -203,7 +212,8 @@ Click **Tab Completion** in the status bar for its panel. There you can:
 
 - turn suggestions on or off,
 - set how quickly they appear,
-- pick the engine: **Auto**, **Local model** or **Claude**.
+- pick the engine: **Auto**, **Local model** or **Claude**, and its model,
+- see how long the last suggestion took.
 
 In **Auto**, the local model and Claude race, and the first good answer wins.
 
@@ -220,8 +230,8 @@ you've been doing in this workspace:
 
 So a suggestion in a new file follows what you just wrote in another one. A commit message says why you changed
 things ("params: reject zero speeds (controller crashed on 0)") in the style of your earlier commits. It's kept only
-on this computer, per workspace. Commands with passwords or tokens are never kept. The Tab Completion panel shows what it has
-learned, with **Forget** to clear it and a switch to turn it off.
+on this computer, per workspace. Commands with passwords or tokens are never kept. To clear it: **Kural: Forget What
+Tab Completion Learned**.
 
 ### Tab in the terminal
 
@@ -230,6 +240,10 @@ nothing runs until you press Enter. It's made for commit messages: type `git com
 staged changes (or the unstaged ones) and suggests a message that names what changed. It also knows your recent
 commands and `git status`. It uses the same engine and model as Tab in the editor (local model about 0.2 s, Claude
 about 1–2 s). Turn it off with the setting **Kural › Tab Completion: Terminal**.
+
+**Plain words work too.** Type what you want, like `push this code to fix/code-editor branch` or `commit with message
+added the low stock check`, and Kural suggests the command (`git push origin HEAD:fix/code-editor`,
+`git commit -m "Added the low stock check"`). Tab puts it in place of your words. These come from the chat's model.
 
 ![Tab in the terminal: git commit -m " gets a message from your changes](docs/screenshots/terminal-tab.gif)
 
@@ -345,24 +359,22 @@ owner can create release tags (`v…`). See [CONTRIBUTING.md](CONTRIBUTING.md).
 ```
 extension/            the Kural extension (plain JavaScript, no build step)
   extension.js        wires everything together
-  lib/claude.js       runs `claude` headless (sessions, permissions, speed)
-  lib/getstarted.js   Get started: Claude Code installed, logged in, test request (lib/checks.js)
-  lib/chat.js         chat tabs, history, modes, models, agent teams, questions
-  lib/archive.js      every chat from every workspace (History)
-  lib/completion.js   Tab Completion (Claude), lib/local.js (local model via Ollama)
-  lib/brain.js        which engine answers: Claude Code, or Kural's own (lib/engine.js + lib/tools.js, via Ollama)
-  lib/activity.js     what Tab learns from your work (per workspace)
-  lib/tabpanel.js     the Tab Completion panel
-  lib/edits.js        Ctrl+K and Apply, lib/review.js (red/green review)
-  lib/team-mcp.js     the agents' message board (a tiny MCP server)
-  lib/…               attachments, search, workspace folders, setup changes
-  media/              the chat and search panels (HTML/CSS/JS)
+  lib/ai/             where answers come from: index.js (the provider table), claude.js (Claude Code headless),
+                      engine.js + tools.js (Kural's own engine for models on your computer), ollama.js
+  lib/chat/           the chat: index.js (tabs, modes, models, questions, panes), prompts.js (modes, moods),
+                      team.js (agent roles) + team-mcp.js (their message board), guide.js (what Kural can do),
+                      archive.js (History), attachments, tickets, changes
+  lib/tab/            Tab Completion: completion.js (editor), terminal.js (terminal, plain words), local.js
+                      (Ollama), activity.js (what it learns), panel.js (the Tab Completion panel)
+  lib/edit/           Ctrl+K and Apply (inline.js), red/green review, diff
+  lib/getstarted.js   Get started; lib/account.js the Account menu; lib/updates.js updates; lib/search.js Ask
+  media/              the panels' pages (HTML/CSS/JS) and the Codicons icon font
   themes/             Kural Dark, Kural Light
-scripts/              shared rebranding, logo, icons, release notes
+scripts/              shared rebranding, logo, icons, release notes, push-wiki.sh
 installer/            the Windows installer (NSIS)
 make-deb.sh           Ubuntu .deb    build-mac.sh  Mac app    build-win.sh  Windows
 test/                 npm test
-docs/                 screenshots for this README
+docs/                 screenshots for this README; docs/wiki/ the wiki's pages
 ```
 
 ## Troubleshooting
@@ -370,7 +382,9 @@ docs/                 screenshots for this README
 - **View → Output → Kural** shows every request Kural makes, with timings.
 - **"Kural: finish setup" in the status bar:** click it. Get started shows which step is missing (Claude Code, the
   login, or the test request) and how to fix it.
-- **No Tab suggestions:** click **Tab** in the status bar. The panel shows what's wrong and has a speed check.
+- **No Tab suggestions:** click **Tab Completion** in the status bar. The panel shows the engine, whether the local
+  model is ready, and how long the last suggestion took.
+- **More:** the [Kural wiki](https://github.com/adithyakumarcr/kural/wiki) explains every feature.
 - **Mac says the app is damaged:** run the `xattr` command from [Install](#1-download-kural).
 
 ## Credits

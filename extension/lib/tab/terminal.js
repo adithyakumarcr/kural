@@ -164,6 +164,23 @@ function firstAnswer(promises) {
   });
 }
 
+// A suggestion that continues what you typed replaces the line (the list keeps it while it matches your typing).
+// One that doesn't start with it ("push this to main" → "git push origin main") would be hidden: the list only shows
+// items that match the typed text. So it replaces nothing as far as the list knows (always shown), and `inputData`
+// (what the terminal receives on Tab; VS Code's own items use it) first deletes what you typed, with the same
+// delete key VS Code sends when it replaces text. (inputData isn't in the published API: check after VSCodium updates.)
+function suggestionItem(line, typed, engine, kind) {
+  const words = !line.startsWith(typed);
+  return {
+    label: line, kind,
+    replacementRange: words ? [typed.length, typed.length] : [0, typed.length],
+    ...(words ? { inputData: "\x7F".repeat([...typed].length) + line } : {}),
+    detail: `Kural · ${words ? "from your words" : engine === "chat" ? "your chat model" : "Tab Completion"}`,
+    documentation: words ? "Kural turned what you wrote into this command. Tab puts it in place of your words; you still press Enter to run it."
+      : "Suggested by Kural's Tab Completion. Tab inserts it; you still press Enter to run it.",
+  };
+}
+
 // commitSession: commit messages come from the chat's model (lib/ai Session); intentSession: plain words → a command,
 // also the chat's model. Other lines: Tab Completion's engine.
 function terminalTab(context, session, local, activity = null, commitSession = null, intentSession = null) {
@@ -210,22 +227,7 @@ function terminalTab(context, session, local, activity = null, commitSession = n
 
   const KIND = vscode.TerminalCompletionItemKind || {};
   const kind = KIND.InlineSuggestion ?? KIND.InlineSuggestionAlwaysOnTop ?? KIND.Argument ?? KIND.Method;
-  // A suggestion that continues what you typed replaces the line (the list keeps it while it matches your typing).
-  // One that doesn't start with it ("push this to main" → "git push origin main") would be hidden: the list only shows
-  // items that match the typed text. So it replaces nothing as far as the list knows (always shown), and `inputData`
-  // (what the terminal receives on Tab; VS Code's own items use it) first deletes what you typed, with the same
-  // delete key VS Code sends when it replaces text. (inputData isn't in the published API: check after VSCodium updates.)
-  const item = (line, typed, engine) => {
-    const words = !line.startsWith(typed);
-    return {
-      label: line, kind,
-      replacementRange: words ? [typed.length, typed.length] : [0, typed.length],
-      ...(words ? { inputData: "\x7F".repeat([...typed].length) + line } : {}),
-      detail: `Kural · ${words ? "from your words" : engine === "chat" ? "your chat model" : "Tab Completion"}`,
-      documentation: words ? "Kural turned what you wrote into this command. Tab puts it in place of your words; you still press Enter to run it."
-        : "Suggested by Kural's Tab Completion. Tab inserts it; you still press Enter to run it.",
-    };
-  };
+  const item = (line, typed, engine) => suggestionItem(line, typed, engine, kind);
 
   // The terminal waits for every suggestion source before it shows its list. So Kural never makes it wait:
   // it answers at once from its cache, or with nothing. Meanwhile, after a short pause in your typing (the
@@ -277,4 +279,4 @@ function terminalTab(context, session, local, activity = null, commitSession = n
   log("terminal tab: ready");
 }
 
-module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT, _test: { gitContext, claudePrompt, plainWords, tidyIntent, intentPrompt } };
+module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT, _test: { suggestionItem, gitContext, claudePrompt, plainWords, tidyIntent, intentPrompt } };

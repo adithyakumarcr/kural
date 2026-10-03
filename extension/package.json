@@ -420,9 +420,9 @@
             "ask"
           ],
           "enumDescriptions": [
-            "Claude edits files; asks before running commands",
-            "Claude edits files and runs commands without asking",
-            "Claude writes a plan first; click Build it to carry it out",
+            "Kural edits files; asks before running commands",
+            "Kural edits files and runs commands without asking",
+            "Kural writes a plan first; click Build it to carry it out",
             "Answers only; nothing changes"
           ],
           "description": "Mode for your very first chat. After that, new chats use whatever you picked last."

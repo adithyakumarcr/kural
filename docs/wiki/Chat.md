@@ -1,0 +1,74 @@
+# Chat
+
+The chat sits on the right (**Ctrl+L**, **Cmd+L** on a Mac). Ask in plain words; Kural reads your project, changes
+files, runs commands and answers. With code selected, Ctrl+L adds it to your message.
+
+## Modes: how much Kural may do
+
+| Mode | What Kural may do |
+|---|---|
+| **Agent** | edits files and asks before running commands |
+| **Auto** | edits files and runs commands without asking |
+| **Plan** | writes a plan and changes nothing; **Build it** carries the plan out (**Ctrl+P** switches Plan on/off) |
+| **Ask** | only answers |
+
+Every file change shows under the answer: open the before/after, **keep** it or **undo** it.
+
+## The model menu (bottom of the chat)
+
+- **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, or a model **on this computer** (see [[Your Own Model]]).
+  You can switch in the middle of a conversation; the new model gets the conversation so far.
+- **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
+  Medium / High / Max).
+- **Mood.**
+  - **Default**: balanced.
+  - **Explorer**: looks around and compares options before settling.
+  - **Critic**: questions the request and the code, finds flaws.
+  - **Learn**: teaches you. It first asks which of the ideas behind your question you already know, explains only the
+    ones you don't, then answers the question, and ends with a short question to check you got it.
+- **Multiple agents** (Claude models): a team instead of one assistant. See [[Multiple Agents]].
+
+## Adding things to your message
+
+- **@** mentions a file in your sentence.
+- **+ → Add files**: files, images, PDFs. You can also paste a screenshot, or hold **Shift** and drag files from Kural's
+  own file explorer into the chat. (Dropping files from outside Kural doesn't work: VS Code doesn't pass them on.)
+- **+ → Link ticket** (Claude): link a Jira epic, story or task; Kural then knows which ticket you're working on in every
+  message, and reads its details from Jira when needed. Needs the Atlassian connector in Claude (claude.ai → Settings →
+  Connectors).
+- The file you're looking at is added by itself ("current file"); click its × to leave it out.
+
+## In the answer
+
+- **Thinking.** A short summary of the model's thinking, above the answer; click it to read it all.
+- **Questions with options.** When a choice is yours, Kural asks with options you can click.
+- **Code blocks** have **Copy**, **Insert** (at your cursor) and **Apply** (Kural applies it to the file and you review
+  it, like [[Inline Edit]]).
+- **Pictures.** Pictures in an answer are shown: a picture file from your project, one the model read, or one an image
+  model made. A picture from the internet shows **Load image** first: loading it would tell that website you read this
+  answer.
+- **Links** open in your browser; `file.py:12` style references open the file at that line.
+- **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;
+  **Latest** brings you back down.
+- **Stop** (the square button) stops the answer.
+
+## Tabs, history, two chats
+
+- **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close.
+- **History** (clock button): every chat from every workspace, in full. Search, **pin** chats to the top, delete
+  them. A chat from another workspace opens to read; **Open its folder**, or **Continue here** (a new chat here that knows
+  the old conversation).
+- **Two chats at once**: the split button in the Kural panel's title bar opens a second chat beside your code. Both can
+  work at the same time; drag it anywhere, even to another screen.
+
+## Your Claude Code setup
+
+With a Claude model, the chat uses your whole Claude Code setup: MCP servers, connectors, plugins, skills, hooks and
+`CLAUDE.md` files. When you add one, Kural reloads Claude in the same conversation. (Setting
+`kural.chat.fullClaudeCodeSetup`: off = a faster, minimal setup.) The full Claude Code terminal is one shortcut away:
+**Ctrl+Esc**.
+
+## Asking about Kural
+
+Ask the chat "how do I …?" or "can Kural …?": it knows Kural's features. If Kural can't do something, it says so and
+gives you the link to ask for it as a feature.
