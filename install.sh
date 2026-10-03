@@ -4,22 +4,39 @@
 #   ./install.sh            build everything and install it (on a Mac it then opens Kural)
 #   ./install.sh --ext      only put your changes in extension/ into the installed Kural (a few seconds)
 #   ./install.sh --no-open  don't open Kural afterwards (Mac)
+#   ./install.sh --fresh    install like on a new computer: your Kural settings, chats and extensions are moved to a
+#                           backup folder first (Claude Code and Ollama are separate programs: not touched)
 #
 # The first full build downloads VSCodium once (~250 MB, kept in downloads/). Later builds take about a minute.
 # Windows is built on Linux: ./build-win.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MODE=full OPEN=1
+MODE=full OPEN=1 FRESH=0
 for a in "$@"; do
   case "$a" in
     --ext) MODE=ext ;;
     --no-open) OPEN=0 ;;
-    -h|--help) sed -n 2,8p "$0"; exit 0 ;;
+    --fresh) FRESH=1 ;;
+    -h|--help) sed -n 2,10p "$0"; exit 0 ;;
     *) echo "Unknown option: $a (try --help)"; exit 1 ;;
   esac
 done
 die() { echo "Error: $*" >&2; exit 1; }
+[ "$FRESH" = 1 ] && [ "$MODE" = ext ] && die "--fresh is for a full install, not with --ext."
+
+# --fresh: Kural keeps your settings, chats and extensions outside the app, so a normal install (an update) keeps
+# them. For a first-time install, move them out of the way (not deleted: put them back to undo).
+fresh_start() {   # fresh_start <folder or file>...
+  local backup="$HOME/kural-backup-$(date +%Y%m%d-%H%M%S)" moved=0
+  for p in "$@"; do
+    [ -e "$p" ] || continue
+    mkdir -p "$backup"
+    mv "$p" "$backup/" && moved=1 && echo "  moved $p"
+  done
+  if [ "$moved" = 1 ]; then echo "Fresh start: your old Kural data is in $backup (delete it when you don't need it)."
+  else echo "Fresh start: there was no Kural data to move."; fi
+}
 
 # VS Code keeps a cache of its built-in extensions' descriptions (Kural's buttons, commands, settings) and
 # refreshes it only in the background after starting. Kural's updates keep the same VSCodium inside, so the
@@ -60,6 +77,12 @@ mac() {
     fi
     ./build-mac.sh
     quit_kural
+    if [ "$FRESH" = 1 ]; then
+      fresh_start "$HOME/Library/Application Support/Kural" "$HOME/.kural" "$HOME/Library/Caches/com.kural" \
+        "$HOME/Library/Caches/com.kural.ShipIt" "$HOME/Library/Saved Application State/com.kural.savedState" \
+        "$HOME/Library/HTTPStorages/com.kural" "$HOME/Library/Preferences/com.kural.plist"
+      defaults delete com.kural >/dev/null 2>&1 || true   # macOS also keeps those preferences in memory
+    fi
     clear_cache "$HOME/Library/Application Support/Kural"
     echo "Installing into $APPDIR ..."
     rm -rf "$APPDIR"
@@ -91,6 +114,10 @@ linux() {
   local deb; deb=$(ls -t dist/kural_*_amd64.deb | head -1)
   echo "Installing $deb ..."
   sudo apt install -y "./$deb"
+  if [ "$FRESH" = 1 ]; then
+    if pgrep -x kural >/dev/null; then echo "Closing Kural ..."; pkill -x kural || true; sleep 2; fi
+    fresh_start "${XDG_CONFIG_HOME:-$HOME/.config}/Kural" "$HOME/.kural"
+  fi
   clear_cache "${XDG_CONFIG_HOME:-$HOME/.config}/Kural"
   echo "Done. Open Kural Code Editor from your apps menu (or run: kural)."
 }

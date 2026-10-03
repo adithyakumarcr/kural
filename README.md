@@ -281,6 +281,7 @@ No GitHub needed: one command builds Kural from the code in this folder and inst
 ```bash
 ./install.sh            # build and install (on a Mac it opens Kural when done)
 ./install.sh --ext      # changed only files in extension/? put them into the installed Kural in a few seconds
+./install.sh --fresh    # install like a new user: your Kural settings and chats go to a backup folder first
 ```
 
 The first build downloads VSCodium once (about 250 MB, kept in `downloads/`). After that, a build takes about a
