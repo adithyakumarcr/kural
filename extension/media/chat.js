@@ -815,6 +815,8 @@
       out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
         el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label" }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
     }
+    if (L && L.status.ok && !L.models.some((x) => x.chat)) out.push(el("div", { class: "mi dim" },
+      el("span", { class: "mi-hint" }, "No model here can chat yet (it needs one with tools): download one below")));
     out.push(el("div", { class: "mi", onclick: () => { closeMenu(); openLocal(); } },
       el("span", { class: "mi-icon" }, "🔍"), el("span", { class: "mi-label" }, "Find & download models…")));
     return out;
