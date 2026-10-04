@@ -33,7 +33,8 @@ Kural logs in to your devices with its own SSH key, the way developers usually s
   and readable only by you.
 - Nothing asks for your computer's password or keychain (an earlier version kept the password in the keychain, and the
   Mac asked for your login password, again after every update).
-- **Remove** takes Kural's key off the device again (when the device is reachable).
+- **Remove** takes Kural's key off the device again (when the device is reachable, and no other saved device uses
+  the same login).
 - A device saved by an earlier version asks for its password once more (**Set up again**), then uses the key.
 
 ## Use it in a chat

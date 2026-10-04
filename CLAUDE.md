@@ -64,7 +64,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `result` (ends a turn; `usage` adds up per process). **No approvals possible**: Ask = default, Plan = `--mode plan`,
   Agent = `--mode accept-edits` (commands soft-denied; the answer streams a note listing them), Auto =
   `--dangerously-skip-permissions`. Mode/model are launch flags → a new agy with `--conversation <id>` (map file
-  `agy-sessions.json`; an unknown id silently starts a new one: then the instructions go again). Stop = SIGINT (agy
+  `agy-sessions.json` with the mode its instructions were sent for: an unknown id, or another mode, sends them
+  again). A restart sends what's queued; an agy that exits before `init` fails the waiting message (`started`), never
+  respawns in a loop. Stop = SIGINT (agy
   exits; next message respawns). Text-only input: pictures are saved to a folder passed with `--add-dir`. Undo: a
   best-effort `onPermission` Edit/Write when a tool step starts (agy doesn't wait). No login command: Get started
   (`loginTerminal`) runs `agy` in a terminal and polls `agyAuth` (`--print /model --output-format json`, no quota),
@@ -89,7 +91,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   SSH_* cleared, else Gemini switches to a paste-a-code flow that hangs ACP. The shim is a fresh `mkdtemp` folder,
   polled from spawn on (with `selectedType: oauth-personal` but no creds, Gemini starts the login before answering
   `initialize`). The install shows live on the page (`this.run`: command, lines, quiet time; Stop; a 3-minute-quiet
-  notification), since a silent install looks stuck. `Rpc` runs Gemini in its own process group and kills the group (+SIGKILL after 2 s): Gemini re-spawns
+  notification), since a silent install looks stuck. `refresh()` numbers each ask and returns after the first check
+  that started after it (returning at once while a check ran gave callers the old state). `Rpc` runs Gemini in its own process group and kills the group (+SIGKILL after 2 s): Gemini re-spawns
   itself as a child that ignores SIGTERM while waiting for a login. Notifications there are never awaited
   while `installing`/`loggingIn` is set. Terminal ways stay as fallbacks (`installCliTerminal`, `loginCliTerminal`). Tests: `test/fake-codex.js`, `test/fake-gemini.js` (state via `FAKE_CODEX_STATE` /
   `FAKE_GEMINI_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.geminiPath` pointing at
@@ -101,7 +104,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `~/.ssh/authorized_keys`, through `SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`; the askpass prints `KURAL_SSH_PW`, set
   only in that ssh's env), then it's gone: **nothing in the keychain** (`context.secrets` made the Mac ask for the login
   keychain password, and again after every update: each ad-hoc-signed build is a new app to the keychain). Devices
-  saved by an older version (no `auth: "key"`) need "Set up again" once; `remove` takes the key off (`removeKey`).
+  saved by an older version (no `auth: "key"`) need "Set up again" once; their old SecretStorage entry is left alone
+  (deleting it could itself prompt). `remove` takes the key off (`removeKey`; not if another saved device is the same
+  login: one key for all). A lost `.pub` is rebuilt with `ssh-keygen -y`, never a new key.
   `run(dev, null, …)` = the key; a non-null password only in `installKey`. Kural's own known_hosts (accept-new), ControlMaster reuse on Mac/Linux (ControlPath under /tmp: macOS
   allows 104 characters), `reuse:false` for login checks. `run()` answers at once on timeout/abort (with a reused
   connection, "close" waits for the device's command); `runLimited` adds the device's `timeout` in `$SHELL`; `qp()` keeps

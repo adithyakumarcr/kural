@@ -76,7 +76,9 @@ class Devices {
   async remove(id) {
     const dev = this.get(id);
     if (!dev) return;
-    if (dev.auth === "key") await this.ssh.removeKey(dev).catch(() => {});
+    // (Not when another saved device is the same login: it uses the same key.)
+    const same = this.list().some((d) => d.id !== id && d.host === dev.host && d.user === dev.user && Number(d.port) === Number(dev.port));
+    if (dev.auth === "key" && !same) await this.ssh.removeKey(dev).catch(() => {});
     this.ssh.close(dev);
     await this.save(this.list().filter((d) => d.id !== id));
   }

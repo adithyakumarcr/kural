@@ -77,7 +77,8 @@ async function installPlan(id) {
     if (IS_WIN) return { how: "script", file: "powershell.exe", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `irm ${pkg.script.win} | iex`], env, text: `irm ${pkg.script.win} | iex` };
     const curl = which("curl", PATH), bash = which("bash", PATH);
     if (!curl || !bash) return { missing: "curl", text: `curl -fsSL ${pkg.script.unix} | bash` };
-    return { how: "script", file: bash, args: ["-c", `curl -fsSL ${pkg.script.unix} | bash`], env, text: `curl -fsSL ${pkg.script.unix} | bash` };
+    // (pipefail: a failed download must fail the install, not run bash on nothing and "succeed".)
+    return { how: "script", file: bash, args: ["-c", `set -o pipefail; curl -fsSL ${pkg.script.unix} | bash`], env, text: `curl -fsSL ${pkg.script.unix} | bash` };
   }
   if (IS_MAC) {
     const brew = which("brew", PATH);

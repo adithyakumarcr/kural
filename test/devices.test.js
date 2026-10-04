@@ -43,6 +43,12 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
     assert.strictEqual((fs.statSync(ssh.key).mode & 0o077), 0, "the private key is readable only by you");
     assert.strictEqual((await ssh.test(dev)).ok, true);
   });
+  await check("a lost .pub is made again from the key (not a new key that would cut off every device)", async () => {
+    const before = fs.readFileSync(`${ssh.key}.pub`, "utf8").trim();
+    fs.unlinkSync(`${ssh.key}.pub`);
+    assert.strictEqual((await ssh.ensureKey()).split(" ").slice(0, 2).join(" "), before.split(" ").slice(0, 2).join(" "));
+    assert.strictEqual((await ssh.test(dev)).ok, true);
+  });
   await check("the password never goes on ssh's command line; key logins never ask anything", async () => {
     assert.ok(!ssh.args(dev, { password: true }).some((a) => /secret/.test(a)));
     assert.strictEqual(ssh.env("secret").KURAL_SSH_PW, "secret");

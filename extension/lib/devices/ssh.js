@@ -107,6 +107,17 @@ class Ssh {
 
   // Kural's key pair, made once. Resolves the public key line ("ssh-ed25519 AAAA… kural@host").
   async ensureKey() {
+    // The public half lost (but not the key): make it again from the key, not a new key (that would cut off every device).
+    if (fs.existsSync(this.key) && !fs.existsSync(`${this.key}.pub`)) {
+      const pub = await new Promise((resolve) => {
+        const p = spawn(this.keygen, ["-y", "-f", this.key], { windowsHide: true });
+        let out = "";
+        p.stdout.on("data", (d) => { out += d; });
+        p.on("error", () => resolve(""));
+        p.on("close", (code) => resolve(code === 0 ? out.trim() : ""));
+      });
+      if (pub) fs.writeFileSync(`${this.key}.pub`, `${pub}\n`);
+    }
     if (!fs.existsSync(this.key) || !fs.existsSync(`${this.key}.pub`)) {
       for (const f of [this.key, `${this.key}.pub`]) { try { fs.unlinkSync(f); } catch { /* not there */ } }
       const r = await new Promise((resolve) => {
@@ -140,7 +151,7 @@ class Ssh {
   // Take Kural's key off the device (when you remove it from Kural). Best effort: the device may be off.
   async removeKey(dev) {
     let pub; try { pub = fs.readFileSync(`${this.key}.pub`, "utf8").trim(); } catch { return; }
-    await this.run(dev, null, `f=~/.ssh/authorized_keys; [ -f "$f" ] || exit 0; umask 077; grep -vxF ${q(pub)} "$f" > "$f.kural"; cat "$f.kural" > "$f"; rm -f "$f.kural"`, { timeout: 10000, reuse: false });
+    await this.run(dev, null, `f=~/.ssh/authorized_keys; [ -f "$f" ] || exit 0; umask 077; grep -vxF ${q(pub)} "$f" > "$f.kural"; rc=$?; [ $rc -le 1 ] && cat "$f.kural" > "$f"; rm -f "$f.kural"`, { timeout: 10000, reuse: false });
   }
 
   // A device whose key changed (reinstalled, a new SD card): forget the old key, so the next connection trusts the new one.

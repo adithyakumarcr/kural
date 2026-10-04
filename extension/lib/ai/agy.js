@@ -193,8 +193,11 @@ class AgyAgent {
     this.model = opts.model || "";
     this.mode = MODE_FLAGS[opts.mode] ? opts.mode : "agent";
     this.sessionId = opts.resume || opts.sessionId || crypto.randomUUID();
-    this.conv = opts.resume ? this.lookup() : null;       // agy's conversation id
-    this.primed = !!this.conv;                            // Kural's instructions are already in that conversation
+    const saved = opts.resume ? this.lookup() : null;
+    this.conv = saved && saved.agy;                       // agy's conversation id
+    // Kural's instructions are in that conversation already, for this mode. (Another mode: its instructions go again,
+    // or after Ask → Agent the model would still think it may only answer.)
+    this.primed = !!(saved && saved.agy && saved.mode === this.mode);
     this.queue = [];
     this.busy = false;
     this.turn = null;
@@ -228,6 +231,7 @@ class AgyAgent {
   spawn() {
     if (this.exited || this.proc) return;
     this.ready = false;
+    this.started = false;   // this agy said "init"
     this.stderr = "";
     let p;
     try {
@@ -257,6 +261,7 @@ class AgyAgent {
 
   onInit(m) {
     clearTimeout(this.initTimer);
+    this.started = true;
     const id = m.conversation_id || (m.init && m.init.conversation_id);
     // An unknown --conversation silently starts a new one: then the instructions have to come again.
     if (this.conv && id && id !== this.conv) { log(`agy: conversation ${this.conv} not found; new one ${id}`); this.primed = false; }
@@ -280,14 +285,14 @@ class AgyAgent {
 
   // Kural's id → agy's conversation id, in a small JSON file (so a chat reopened later continues the same conversation).
   mapFile() { return this.opts.store ? path.join(this.opts.store, "agy-sessions.json") : null; }
-  lookup() { try { const e = JSON.parse(fs.readFileSync(this.mapFile(), "utf8"))[this.sessionId]; return (e && e.agy) || null; } catch { return null; } }
+  lookup() { try { return JSON.parse(fs.readFileSync(this.mapFile(), "utf8"))[this.sessionId] || null; } catch { return null; } }
   remember() {
     const f = this.mapFile();
     if (!f) return;
     try {
       let all = {};
       try { all = JSON.parse(fs.readFileSync(f, "utf8")); } catch { /* first one */ }
-      all[this.sessionId] = { agy: this.conv, cwd: this.cwd(), at: Date.now() };
+      all[this.sessionId] = { agy: this.conv, mode: this.primedMode || (all[this.sessionId] || {}).mode, cwd: this.cwd(), at: Date.now() };
       const keep = Object.entries(all).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, 500);
       fs.mkdirSync(path.dirname(f), { recursive: true });
       fs.writeFileSync(f, JSON.stringify(Object.fromEntries(keep)));
@@ -325,8 +330,10 @@ class AgyAgent {
     this.busy = true;
     this.stopped = false;
     this.turn = { t0: Date.now(), text: "", segment: "", block: null, tools: new Map(), denied: [] };
+    const priming = !this.primed;
     const line = JSON.stringify({ event: "user", message: { role: "user", content: this.toText(content) } });
     this.primed = true;
+    if (priming) { this.primedMode = this.mode; this.remember(); }
     raw(">>", line);
     try { this.proc.stdin.write(line + "\n"); } catch (e) { this.endTurn({ type: "result", subtype: "error", is_error: true, result: friendly(e.message) }); }
   }
@@ -371,7 +378,7 @@ class AgyAgent {
       this.closeBlock();
       this.turn.segment = "";   // the final answer is what comes after the last tool
       // A file about to change: let the chat keep a copy first (for Undo). agy doesn't wait, so it's a best effort.
-      if ((d.name === "Edit" || d.name === "Write") && d.input.file_path && this.h.onPermission) {
+      if ((d.name === "Edit" || d.name === "Write") && d.input.file_path && this.h.onPermission && (this.mode === "agent" || this.mode === "auto")) {
         Promise.resolve(this.h.onPermission({ tool_name: fs.existsSync(d.input.file_path) ? "Edit" : "Write", input: { file_path: d.input.file_path }, tool_use_id: t.id })).catch(() => {});
       }
       this.emit({ type: "assistant", message: { role: "assistant", model: this.model || "antigravity", content: [{ type: "tool_use", id: t.id, name: t.name, input: t.input }] } });
@@ -453,7 +460,14 @@ class AgyAgent {
   }
 
   // Start again on the next message (same conversation): new flags apply then.
-  restart() { const p = this.proc; this.proc = null; this.ready = false; this.usedSoFar = { input: 0, output: 0 }; if (p) this.killProc(p); }
+  restart() {
+    const p = this.proc;
+    this.proc = null; this.ready = false; this.usedSoFar = { input: 0, output: 0 };
+    clearTimeout(this.initTimer);
+    if (p) this.killProc(p);
+    // Messages already waiting (sent while agy was starting, or behind a stopped answer): a new agy for them.
+    if (!this.exited && this.queue.length) setImmediate(() => { if (!this.proc && !this.exited) this.spawn(); });
+  }
 
   request(req) { return Promise.resolve(req && req.subtype === "mcp_status" ? { mcpServers: [] } : {}); }
   control() { return null; }
@@ -501,7 +515,9 @@ class AgyAgent {
     this.proc = null;
     this.ready = false;
     if (this.exited) return;
-    if (!this.announced) return this.failStart(this.stderr || `Antigravity stopped (exit code ${code}).`);
+    // Stopped before it said "init" (no network, not logged in, a flag it refused): starting it again would fail the
+    // same way, over and over. Answer what's waiting with the reason, and stop.
+    if (!this.started) return this.failStart(this.stderr || `Antigravity stopped (exit code ${code}).`);
     if (this.busy) {
       if (this.stopped) this.endTurn({ type: "result", subtype: "error_during_execution", is_error: true, result: "Stopped." });
       else this.endTurn({ type: "result", subtype: "error", is_error: true, result: friendly(this.stderr || `stopped (exit code ${code})`) });

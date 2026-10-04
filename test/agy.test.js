@@ -135,6 +135,53 @@ function chat(opts = {}) {
     fs.writeFileSync(process.env.FAKE_AGY_FILE, "ok");
   });
 
+  await check("a message sent while agy restarts (new model) is answered; one that can't start fails once, not forever", async () => {
+    const c = chat();
+    c.a.start();
+    const p = c.ask("first");
+    c.a.setModel("gemini-3.8-pro-high");   // before "init": a restart with the message still waiting
+    const r = await p;
+    assert.match(r.result, /You said: first/);
+    assert.strictEqual(lastArgs()[lastArgs().indexOf("--model") + 1], "gemini-3.8-pro-high");
+    // Now agy can't start any more (logged out): the next message gets the reason, and agy isn't started again and again.
+    c.a.setModel("gemini-3.8-flash-high");
+    fs.writeFileSync(process.env.FAKE_AGY_FILE, "loggedout");
+    const before = fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").split("\n").length;
+    const r2 = await c.ask("second");
+    assert.strictEqual(r2.is_error, true);
+    await new Promise((res) => setTimeout(res, 300));
+    assert.ok(fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").split("\n").length - before <= 2, "started once");
+    fs.writeFileSync(process.env.FAKE_AGY_FILE, "ok");
+    c.a.kill();
+  });
+
+  await check("a message waiting behind a stopped answer still runs", async () => {
+    const c = chat();
+    c.a.start();
+    const p1 = c.ask("slow one");
+    const p2 = c.ask("queued one");
+    await new Promise((res) => setTimeout(res, 300));
+    c.a.interrupt();
+    assert.strictEqual((await p1).result, "Stopped.");
+    assert.match((await p2).result, /You said: queued one/);
+    c.a.kill();
+  });
+
+  await check("switching mode sends that mode's instructions again", async () => {
+    const c = chat({ mode: "ask" });
+    c.a.start();
+    await c.ask("hi");
+    const sid = c.a.sessionId;
+    c.a.kill();
+    const d = chat({ mode: "agent", resume: sid });
+    assert.strictEqual(d.a.primed, false);
+    d.a.start();
+    await d.ask("hi again");
+    d.a.kill();
+    const e = chat({ mode: "agent", resume: sid });
+    assert.strictEqual(e.a.primed, true);
+  });
+
   await check("agy's tool names and parameters → the chat's tools", async () => {
     const d = agy._test.describe;
     assert.deepStrictEqual(d("view_file", { AbsolutePath: "/a/b.py" }, "/x"), { name: "Read", input: { file_path: "/a/b.py" } });

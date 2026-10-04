@@ -196,8 +196,16 @@ class GetStarted {
   // (not on every poll: an interactive shell start is slow, and the installer puts claude where Kural looks anyway).
   // (Asked while a check is running: wait for it, then check once more. Returning at once used to let the caller read
   // the old state: right after an install, "not installed".)
+  // Each ask is numbered; it's answered by the first check that STARTED after it (so a slow check followed by polls
+  // doesn't make anyone wait forever, and nobody gets a check that began before their ask).
   async refresh(shell = true) {
-    if (this.refreshing) { this.refreshAgain = true; while (this.refreshing) await this.refreshing.catch(() => {}); return; }
+    const want = this.refreshAsked = (this.refreshAsked || 0) + 1;
+    for (;;) {
+      if ((this.refreshDone || 0) >= want) return;
+      if (!this.refreshing) break;
+      await this.refreshing.catch(() => {});
+    }
+    const covers = this.refreshAsked;
     this.refreshing = (async () => {
       if (this.s.path === "claude" || this.rec.claude) await this.checkClaude(shell);
       if (this.s.path === "local" || this.rec.local) await this.checkLocal();
@@ -205,8 +213,7 @@ class GetStarted {
       this.post();
       this.refreshOptional();
     })();
-    try { await this.refreshing; } finally { this.refreshing = null; }
-    if (this.refreshAgain) { this.refreshAgain = false; await this.refresh(shell); }
+    try { await this.refreshing; } finally { this.refreshing = null; this.refreshDone = Math.max(this.refreshDone || 0, covers); }
     // You chose your own model and it's there: test it once by itself (like the Claude test).
     const L = this.s.local;
     if (this.s.path === "local" && L.chosen && L.models.some((m) => m.name === L.chosen) && L.test.state === "idle" && this.autoLocal !== L.chosen) {
