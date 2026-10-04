@@ -1,10 +1,8 @@
-// Kural Light: is every text color readable on the background it sits on?
+// Kural Dark and Kural Light: is every text color readable on the background it sits on?
 // Contrast ratio as in WCAG: 4.5:1 for text (AA), 3:1 for icons and line numbers.
 const assert = require("assert");
 const fs = require("fs"), path = require("path");
 
-const theme = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "extension", "themes", "kural-light-color-theme.json"), "utf8"));
-const c = theme.colors;
 const lum = (hex) => {
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.replace("#", "").slice(i, i + 2), 16) / 255)
     .map((v) => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
@@ -13,12 +11,16 @@ const lum = (hex) => {
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
 let fail = 0;
-const need = (what, fg, bg, min) => {
+const needs = (what, fg, bg, min) => {
   const r = ratio(fg, bg);
   if (r < min) { fail++; console.log(`FAIL ${what}: ${fg} on ${bg} = ${r.toFixed(2)}:1 (needs ${min}:1)`); }
   else console.log(`ok   ${what}: ${r.toFixed(1)}:1`);
 };
 
+for (const which of ["light", "dark"]) {
+const theme = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "extension", "themes", `kural-${which}-color-theme.json`), "utf8"));
+const c = theme.colors;
+const need = (what, fg, bg, min) => needs(`${which}: ${what}`, fg, bg, min);
 // Code: every token color on the editor background.
 for (const t of theme.tokenColors) if (t.settings.foreground) need(`code ${[].concat(t.scope)[0]}`, t.settings.foreground, c["editor.background"], 4.5);
 for (const [k, v] of Object.entries(theme.semanticTokenColors)) need(`code (semantic) ${k}`, typeof v === "string" ? v : v.foreground, c["editor.background"], 4.5);
@@ -44,9 +46,15 @@ need("side bar icons", c["activityBar.inactiveForeground"], c["activityBar.backg
 for (const k of Object.keys(c).filter((k) => /^terminal\.ansi/.test(k) && !/Black$|BrightBlack$/.test(k))) need(k, c[k], c["terminal.background"], 4.5);
 
 // The chat, Ask and Tab panels' own colors in a light theme (body.vscode-light in their CSS).
-const css = fs.readFileSync(path.join(__dirname, "..", "extension", "media", "chat.css"), "utf8");
-const light = /body\.vscode-light \{([^}]*)\}/.exec(css)[1];
-for (const m of light.matchAll(/--(accent|accent-hi|green|red|yellow|blue): (#[0-9a-f]{6})/g)) need(`chat panel ${m[1]}`, m[2], c["sideBar.background"], 4.5);
+if (which === "light") {
+  const css = fs.readFileSync(path.join(__dirname, "..", "extension", "media", "chat.css"), "utf8");
+  const light = /body\.vscode-light \{([^}]*)\}/.exec(css)[1];
+  for (const m of light.matchAll(/--(accent|accent-hi|green|red|yellow|blue): (#[0-9a-f]{6})/g)) need(`chat panel ${m[1]}`, m[2], c["sideBar.background"], 4.5);
+}
+// Both themes have the same settings (a color set in one and not the other would fall back to VS Code's default).
+}
+const keys = (w) => Object.keys(JSON.parse(fs.readFileSync(path.join(__dirname, "..", "extension", "themes", `kural-${w}-color-theme.json`), "utf8")).colors).sort().join();
+if (keys("light") !== keys("dark")) { fail++; console.log("FAIL the two themes set different colors"); } else console.log("ok   both themes set the same colors");
 
 console.log(fail ? `theme: ${fail} FAILED` : "theme: ALL PASS");
 process.exit(fail ? 1 : 0);

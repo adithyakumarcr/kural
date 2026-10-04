@@ -190,6 +190,60 @@
     return out;
   }
 
+  // ---------- code colors ----------
+  // A small, any-language highlighter for code in answers: comments, strings, numbers, keywords, function names, types,
+  // in VS Code's Dark+ / Light+ colors (chat.css .tk-*). It makes text nodes and spans only (never HTML from the answer).
+  const KW_DECL = new Set(("const let var function func fn def class struct enum interface type public private protected static " +
+    "async new extends implements package namespace module void int float double char bool boolean string long short unsigned " +
+    "signed byte auto final abstract readonly declare lambda local mut pub impl trait use crate typeof instanceof delete sizeof " +
+    "val object override virtual extern volatile register inline constexpr template typename defer go chan map select " +
+    "export echo set unset alias source").split(" "));
+  const KW_CTRL = new Set(("if else elif for while do switch case default break continue return throw throws try catch finally " +
+    "except raise with as from import yield await goto match when then fi esac done unless until loop pass in of and or not is " +
+    "foreach elseif endif require include").split(" "));
+  const KW_LANG = new Set("true false null None True False undefined nil this self super NaN Infinity".split(" "));
+  const HASH_LANGS = /^(py|python|sh|bash|zsh|shell|console|ruby|rb|yaml|yml|toml|r|perl|pl|makefile|make|dockerfile|conf|ini|cmake|nim|elixir|ex|powershell|ps1|coffee|graphql|gql|tf|hcl)$/i;
+  const DASH_LANGS = /^(sql|lua|haskell|hs|elm|ada)$/i;
+  const MARKUP_LANGS = /^(html|xml|svg|vue|svelte|jsx|tsx)$/i;
+  const SHELL_LANGS = /^(sh|bash|zsh|shell|console)$/i;
+  const PLAIN_LANGS = /^(text|txt|plain|plaintext|output|log|diff|patch)$/i;
+  const R_SLASH = /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/.source, R_HASH = /#[^\n]*/.source, R_DASH = /--[^\n]*/.source,
+    R_HTMLC = /<!--[\s\S]*?(?:-->|$)/.source;
+  const R_STR = /"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$)|"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?|`(?:\\.|[^`\\])*`?/.source;
+  const R_NUM = /\b0[xX][\da-fA-F_]+\b|\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?\b/.source;
+  const R_TAG = /<\/?[A-Za-z][\w:-]*/.source, R_WORD = /([A-Za-z_$][\w$]*)(\s*\()?/.source;
+  function highlight(code, lang) {
+    lang = String(lang || "");
+    if (code.length > 60000 || PLAIN_LANGS.test(lang)) return [code];
+    // No language given: # starts a comment when the code looks like a script (no // in it).
+    const hash = HASH_LANGS.test(lang) || (!lang && /^\s*#(?!include|define|!)/m.test(code) && !/\/\//.test(code));
+    const markup = MARKUP_LANGS.test(lang);
+    const comment = [hash ? null : R_SLASH, hash ? R_HASH : null, DASH_LANGS.test(lang) ? R_DASH : null, markup ? R_HTMLC : null].filter(Boolean).join("|");
+    const re = new RegExp(`(${comment})|(${R_STR})|(${R_NUM})|(${markup ? R_TAG : "(?!)"})|${R_WORD}`, "g");
+    const out = [];
+    let last = 0, m;
+    const add = (cls, t) => out.push(el("span", { class: cls }, t));
+    while ((m = re.exec(code))) {
+      if (!m[0]) { re.lastIndex++; continue; }
+      if (m.index > last) out.push(code.slice(last, m.index));
+      const t = m[5] || m[0];
+      if (m[1]) add("tk-c", t);
+      else if (m[2]) add("tk-s", t);
+      else if (m[3]) add("tk-n", t);
+      else if (m[4]) add("tk-tag", t);
+      else if (KW_LANG.has(t)) add("tk-l", t);
+      else if (KW_CTRL.has(t)) add("tk-x", t);
+      else if (KW_DECL.has(t)) add("tk-k", t);
+      else if (m[6]) add("tk-f", t);
+      else if (/^[A-Z][a-z]\w*$/.test(t) && !SHELL_LANGS.test(lang)) add("tk-t", t);
+      else out.push(t);
+      if (m[6]) out.push(m[6]);   // (the "(" after a function name)
+      last = re.lastIndex;
+    }
+    if (last < code.length) out.push(code.slice(last));
+    return out;
+  }
+
   function codeCard(info, code, done) {
     const lang = (info.split(/\s+/)[0] || "").replace(/^path=.*/, "");
     const pm = info.match(/path=(\S+)/), file = pm ? pm[1] : null;
@@ -202,7 +256,7 @@
         btn("Copy", "Copy to clipboard", () => post({ type: "copy", code })),
         btn("Insert", "Insert at the cursor", () => post({ type: "insert", code })),
         btn("Apply", file ? `Apply to ${file} and review` : "Apply to the open file and review", () => post({ type: "apply", code, path: file }), "primary")),
-      el("pre", {}, el("code", {}, code)));
+      el("pre", {}, el("code", {}, highlight(code, lang))));
   }
 
   // ---------- layout ----------
