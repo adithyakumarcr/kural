@@ -24,13 +24,25 @@ const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const notLoggedIn = () => { process.stderr.write("Print mode: not logged in and no controlling terminal; cannot complete interactive login\n"); process.exit(1); };
 
-// `agy` alone: its interactive screen. Logged out, it "logs in" (as if you finished in the browser) after 2 s.
+// `agy` alone: its interactive screen. Logged out:
+//   FAKE_AGY_LOGIN=browser  "opens the browser" (calls open / xdg-open from PATH) and is logged in 2 s later
+//   otherwise (default)     shows a Google address and asks for the code: "4/kural-test" logs in, anything else fails
 if (!args.length) {
-  if (state() !== "loggedout") { console.log("Antigravity CLI (fake). Type a message, or Ctrl+C."); setInterval(() => {}, 1000); }
-  else {
+  if (state() !== "loggedout") { console.log("Antigravity CLI (fake). Type a message, or Ctrl+C."); setInterval(() => {}, 1000); return; }
+  const url = "https://accounts.google.com/o/oauth2/v2/auth?client_id=fake-agy.apps.googleusercontent.com&redirect_uri=https%3A%2F%2Fcodeassist.google.com%2Fauthcode&response_type=code&scope=openid%20email&state=xyz";
+  if (process.env.FAKE_AGY_LOGIN === "browser") {
     console.log("Welcome to Antigravity. Sign in with Google: opening your browser…");
+    try { require("child_process").spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { stdio: "ignore" }).on("error", () => {}); } catch { /* none */ }
     setTimeout(() => { fs.writeFileSync(file, "ok"); console.log("Signed in as tester@example.com."); setInterval(() => {}, 1000); }, 2000);
+    return;
   }
+  process.stdout.write("\x1b[1mWelcome to Antigravity\x1b[0m\r\n\r\nTo sign in, open this address in a browser:\r\n\r\n  " + url + "\r\n\r\n");
+  process.stdout.write("Enter the authorization code: ");
+  const ask = () => process.stdin.once("data", (d) => {
+    if (String(d).trim() === "4/kural-test") { fs.writeFileSync(file, "ok"); process.stdout.write("\r\nSigned in as tester@example.com.\r\n"); setInterval(() => {}, 1000); }
+    else { process.stdout.write("\r\nThat code didn't work. Enter the authorization code: "); ask(); }
+  });
+  ask();
   return;
 }
 if (args[0] === "--version") { console.log("1.2.7"); process.exit(0); }

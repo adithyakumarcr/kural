@@ -571,19 +571,46 @@ class GetStarted {
     } finally { this.loggingIn = null; this.post(); }
   }
 
-  // A program that only logs in on its own screen (Antigravity: no login command): Kural runs it in a terminal (its
-  // first screen is the Google login, which opens your browser), checks every few seconds whether you're logged in,
-  // and closes the terminal by itself when you are. { ok } / { cancelled } / { error }.
+  // A program that only logs in on its own screen (Antigravity: no login command): Kural runs that screen, opens the
+  // login page and passes on the code (below), checks every few seconds whether you're logged in, and closes the
+  // screen by itself when you are. { ok } / { cancelled } / { error }.
   loginWithScreen(id, progress, signal) {
     const c = CLIS[id], S = this.s.clis[id];
-    progress.report({ message: "in the terminal below: pick the Google login; your browser opens. Kural closes the terminal when you're done." });
-    const term = vscode.window.createTerminal({ name: `Log in to ${c.short}`, shellPath: S.bin, cwd: ws.workDir(), isTransient: true,
-      iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel });
+    progress.report({ message: "Kural opens the Google login page in your browser; log in there. Kural closes the login screen when you're done." });
+    // Mac, Linux: the screen in a pseudo-terminal Kural reads (agy.loginPty). Kural opens the login page itself and, if
+    // the screen asks for the code Google shows after you log in, asks you for it in a pop-up and types it in. The
+    // terminal shows the same screen (you can type there too). Windows: agy in a plain terminal.
+    let pty = null, opened = false, askingCode = false;
+    const shown = new vscode.EventEmitter(), gone = new vscode.EventEmitter();
+    const askCode = async () => {
+      if (askingCode || !pty) return;
+      askingCode = true;
+      const code = await vscode.window.showInputBox({ title: `Log in to ${c.short}`, ignoreFocusOut: true, placeHolder: "e.g. 4/0Ab…",
+        prompt: `${opened ? "Log in in the browser page Kural opened" : "Log in with Google in your browser"}; Google then shows a code. Paste it here.` });
+      askingCode = false;
+      if (code && code.trim() && pty) { log(`get started: ${c.short} login: code given`); pty.answerCode(code); }
+    };
+    const pseudo = c.loginPty ? {
+      onDidWrite: shown.event, onDidClose: gone.event,
+      open: (dims) => {
+        pty = c.loginPty(S.bin, { cols: (dims && dims.columns) || 100, rows: (dims && dims.rows) || 30,
+          onData: (d) => shown.fire(d),
+          onUrl: (url) => { if (opened) return; opened = true; log(`get started: opening ${c.short}'s login page`); vscode.env.openExternal(vscode.Uri.parse(url)); },
+          onCode: () => askCode(),
+          onExit: () => gone.fire() });
+        if (!pty) { shown.fire("Kural can't read this screen here. Run agy in a terminal to log in.\r\n"); gone.fire(); }
+      },
+      close: () => { if (pty) pty.kill(); },
+      handleInput: (d) => { if (pty) pty.write(d); },
+    } : null;
+    const term = vscode.window.createTerminal(pseudo
+      ? { name: `Log in to ${c.short}`, pty: pseudo, isTransient: true, iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel }
+      : { name: `Log in to ${c.short}`, shellPath: S.bin, cwd: ws.workDir(), isTransient: true, iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel });
     term.show();
     return new Promise((resolve) => {
       let done = false, checking = false;
       const t0 = Date.now();
-      const end = (r) => { if (done) return; done = true; clearInterval(poll); closed.dispose(); try { term.dispose(); } catch { /* closed */ } resolve(r); };
+      const end = (r) => { if (done) return; done = true; clearInterval(poll); closed.dispose(); if (pty) pty.kill(); try { term.dispose(); } catch { /* closed */ } resolve(r); };
       const check = async () => {
         if (checking || done) return;
         checking = true;

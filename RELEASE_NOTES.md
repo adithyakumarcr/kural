@@ -5,7 +5,8 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
 - **Google Gemini, with your Google account.** Kural runs Google's Gemini models through Google's **Antigravity CLI**,
   with your Google account (free, AI Pro or Ultra). Google stopped personal accounts in its older Gemini CLI on 26 Sept
   2026, so Kural uses Antigravity and calls it Google Gemini (Gemini CLI isn't offered any more). Get started installs it
-  with Google's installer, logs in (on its own screen, in a terminal Kural closes by itself) and tests it; its models
+  with Google's installer, logs in (Kural opens Google's login page, asks you for the code Google shows in a pop-up and types it into
+  Antigravity's own login screen) and tests it; its models
   are in the model menu, its weekly limits in the status bar. It can't ask before acting, so in Agent mode it edits
   files but runs no commands (the answer says which it skipped); Auto runs them.
 - **No more keychain password prompts on the Mac.** The prompt for "… Safe Storage" came from VS Code quietly looking

@@ -18,8 +18,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   "Install for me" installs in the background (Gemini: Google's Antigravity installer; Codex: Homebrew or npm,
   whichever the computer has, else it points to Node.js's installer) and shows what it's doing on the page (its output,
   time, a warning when it goes quiet; Stop); any question the installer asks comes as a pop-up. "Log in": Codex opens
-  the login page in the browser; Gemini (Antigravity) only logs in on its own screen, so Kural opens it in a terminal
-  and closes it by itself when you're logged in.
+  the login page in the browser; Gemini (Antigravity) only logs in on its own screen, so Kural runs it in a terminal,
+  opens Google's login page itself, asks for the code Google shows (a pop-up) and types it in, and closes the screen
+  when you're logged in.
 - Gemini (Antigravity) can't ask before acting: in Agent mode it edits files but runs no commands (the answer says which it
   didn't run); in Auto it runs commands; Plan and Ask change nothing. A mode change applies from the next message.
   No agent teams, no devices with Gemini.

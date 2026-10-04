@@ -90,8 +90,8 @@ with it. Either way is enough; you can add the other later.
 1. **Installed.** **Install for me** installs it in the background (Gemini: Google's installer; Codex: Homebrew or
    npm, whichever your computer has). The page shows its output as it runs, warns if it goes quiet, and
    any question the installer asks comes as a pop-up.
-2. **Logged in.** **Log in** opens the login page in your browser. (Gemini only logs in on its own screen: Kural
-   opens it in a terminal and closes it by itself when you're done.)
+2. **Logged in.** **Log in** opens the login page in your browser. (Gemini logs in on its own screen: Kural reads
+   it, asks you for the code Google shows in a pop-up, and closes it by itself when you're done.)
 3. **A test.** One tiny request. Then their models are in the chat's model menu.
 
 **Your own model**
