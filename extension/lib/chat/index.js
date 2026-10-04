@@ -271,6 +271,7 @@ class ChatView {
     if (!tab) return;
     if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
+    if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
     if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: tab.setup });
@@ -487,22 +488,15 @@ class ChatView {
   }
 
   // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (pictures a
-  // model made), the temp folder (pasted screenshots), and each picture you attached from elsewhere (Downloads, say),
-  // that file only. Not your whole home folder: an answer could then show (and so open) anything in Documents or
+  // model made), the temp folder (pasted screenshots, and copies of pictures you attach: attachments.js), and pictures
+  // in the open chats (attached by an older Kural), each file only. Not your whole home folder: an answer could then show (and so open) anything in Documents or
   // Desktop, and on a Mac that makes macOS ask about Kural. Only pictures: the page's rules (CSP) let it load nothing
   // else, and nothing it loads can be sent anywhere.
   resourceRoots() {
-    const pics = new Set(this.picFiles || []);
+    const pics = new Set();
     for (const t of this.tabs) for (const m of t.messages || []) for (const a of m.attachments || []) if (a.kind === "image" && a.path) pics.add(a.path);
     return [vscode.Uri.joinPath(this.context.extensionUri, "media"), ...ws.folders().map((f) => vscode.Uri.file(f.path)),
       this.context.globalStorageUri, vscode.Uri.file(os.tmpdir()), ...[...pics].slice(-200).map((f) => vscode.Uri.file(f))];
-  }
-  // A picture you attached from outside the project: the pages may show it now.
-  allowPictures(items) {
-    const add = items.filter((a) => a.kind === "image" && a.path && !ws.mayUse(a.path)).map((a) => a.path);
-    if (!add.length) return;
-    this.picFiles = [...(this.picFiles || []), ...add].slice(-200);
-    for (const p of this.panes) p.webview.options = { ...p.webview.options, localResourceRoots: this.resourceRoots() };
   }
   // For the page: how to turn a file path into an address it can load (fileSrc in media/chat.js).
   filesFor(webview) {
@@ -586,9 +580,19 @@ class ChatView {
 
   async sendFiles() {
     if (!this.files) {
-      // Your home folder open as the project: not into Desktop, Documents, Music, Photos… (macOS asks about each).
-      const home = ws.folders().some((f) => isHomeOrAbove(f.path)) ? HOME_PROTECTED.map((n) => `,${n}/**`).join("") : "";
-      const uris = await vscode.workspace.findFiles("**/*", `{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/__pycache__/**,**/.venv/**,**/venv/**,**/.mypy_cache/**,**/.pytest_cache/**${home}}`, 20000);
+      // Your home folder (or a folder above it) open as a project: not into Desktop, Documents, Music, Photos… (macOS
+      // asks about each). Per folder, since the patterns are relative to it.
+      const SKIP = "**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/__pycache__/**,**/.venv/**,**/venv/**,**/.mypy_cache/**,**/.pytest_cache/**";
+      const uris = [];
+      for (const f of ws.folders()) {
+        let extra = "";
+        if (isHomeOrAbove(f.path)) {
+          const rel = path.relative(f.path, os.homedir()).split(path.sep).join("/");
+          extra = HOME_PROTECTED.map((n) => `,${rel ? `${rel}/` : ""}${n}/**`).join("");
+        }
+        uris.push(...await vscode.workspace.findFiles(new vscode.RelativePattern(f.path, "**/*"), `{${SKIP}${extra}}`, 20000 - uris.length));
+        if (uris.length >= 20000) break;
+      }
       this.files = uris.map((u) => vscode.workspace.asRelativePath(u)).sort();
     }
     this.post({ type: "files", files: this.files });
@@ -930,7 +934,7 @@ class ChatView {
     if (meta.length) {
       user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta });
       // What you attached the AI may read without asking, even outside the project (onPermission).
-      tab.granted = [...new Set([...(tab.granted || []), ...meta.map((a) => a.path).filter(Boolean)])].slice(-50);
+      tab.granted = [...new Set([...(tab.granted || []), ...meta.flatMap((a) => [a.path, a.original]).filter(Boolean)])].slice(-50);
     }
     r.pendingSend = prompt;
     r.proc.send(prompt);
@@ -1493,7 +1497,6 @@ class ChatView {
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
-        this.allowPictures(items);
         if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
@@ -1533,7 +1536,6 @@ class ChatView {
       case "attachData": { const a = this.attachments.addData(m.name, m.data); if (a && pane) this.postTo(pane, { type: "attached", items: [a] }); break; }
       case "attachUris": {
         const items = (m.uris || []).map((u) => { try { return this.attachments.add(vscode.Uri.parse(u).fsPath); } catch { return null; } }).filter(Boolean);
-        this.allowPictures(items);
         if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }

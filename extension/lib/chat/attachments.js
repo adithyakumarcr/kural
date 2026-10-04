@@ -49,6 +49,15 @@ class Attachments {
       return this.view(a);
     }
     const a = { id: newId(), name: path.basename(file), path: file, kind: kindOf(file, st.size), size: st.size };
+    // A picture: a copy in Kural's own folder, which the chat may show (it may not look into your Downloads or Desktop:
+    // lib/chat/index.js resourceRoots). Clicking it still opens your file.
+    if (a.kind === "image" && !file.startsWith(dir())) {
+      try {
+        const d = path.join(dir(), a.id); fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+        const copy = path.join(d, a.name); fs.copyFileSync(file, copy); fs.chmodSync(copy, 0o600);
+        a.original = file; a.path = copy;
+      } catch { /* shown as a chip instead */ }
+    }
     this.items.set(a.id, a);
     return this.view(a);
   }
@@ -69,7 +78,7 @@ class Attachments {
     if (a.kind === "image" && a.size <= THUMB_MAX) {
       try { thumb = `data:${IMAGE_TYPES[path.extname(a.path).toLowerCase()]};base64,${fs.readFileSync(a.path).toString("base64")}`; } catch { /* no preview */ }
     }
-    return { id: a.id, name: a.name, kind: a.kind, size: a.size, path: a.path, thumb };
+    return { id: a.id, name: a.name, kind: a.kind, size: a.size, path: a.path, original: a.original, thumb };
   }
 
   // The message for Claude: your text, plus each attachment in the best form Claude can take.
@@ -97,7 +106,7 @@ class Attachments {
       } catch { notes.push(`${a.path} (couldn't be read)`); }
     }
     const intro = notes.length ? `\n\nI attached: ${notes.join("; ")}.` : "";
-    const meta = list.map((a) => ({ name: a.name, kind: a.kind, path: a.path }));
+    const meta = list.map((a) => ({ name: a.name, kind: a.kind, path: a.path, ...(a.original ? { original: a.original } : {}) }));
     for (const id of ids) this.items.delete(id);
     return { content: blocks.length ? [{ type: "text", text: prompt + intro + text }, ...blocks] : prompt + intro + text, meta };
   }

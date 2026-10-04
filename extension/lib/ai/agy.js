@@ -231,15 +231,19 @@ async function agyModels(bin) {
 const LEVEL = /^(.*?)[-_](minimal|low|medium|high|xhigh|max)$/i;
 function splitLevel(id) { const m = LEVEL.exec(String(id || "")); return m ? { base: m[1], level: m[2].toLowerCase() } : null; }
 function groupModels(list) {
-  const out = [], byBase = new Map();
+  const out = [], byBase = new Map(), plain = new Set();
   for (const m of list || []) {
     const sp = splitLevel(m.id);
+    if (!sp && !(m.efforts && Object.keys(m.efforts).length)) plain.add(m.id);
     if (!sp) { if (!byBase.has(m.id)) { const e = { ...m }; byBase.set(m.id, e); out.push(e); } else Object.assign(byBase.get(m.id), { label: m.label || byBase.get(m.id).label }); continue; }
     let g = byBase.get(sp.base);
     if (!g) { g = { id: sp.base, label: String(m.label || sp.base).replace(/\s*\((minimal|low|medium|high|xhigh|max)\)\s*$/i, ""), description: m.description || "", isDefault: false, efforts: {} }; byBase.set(sp.base, g); out.push(g); }
     g.efforts = { ...(g.efforts || {}), [sp.level]: m.id };
     if (m.isDefault) g.isDefault = true;
   }
+  // A model listed both plain and with levels ("gemini-3-pro" and "gemini-3-pro-high"): the plain one is its Medium,
+  // so it can still be picked.
+  for (const g of out) if (g.efforts && !g.efforts.medium && plain.has(g.id)) g.efforts = { ...g.efforts, medium: g.id };
   return out;
 }
 // Which of agy's models to run for Kural's intensity (low, medium, high, max). A model without levels: itself.

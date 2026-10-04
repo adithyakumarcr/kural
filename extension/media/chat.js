@@ -207,9 +207,12 @@
   const MARKUP_LANGS = /^(html|xml|svg|vue|svelte|jsx|tsx)$/i;
   const SHELL_LANGS = /^(sh|bash|zsh|shell|console)$/i;
   const PLAIN_LANGS = /^(text|txt|plain|plaintext|output|log|diff|patch)$/i;
-  const R_SLASH = /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/.source, R_HASH = /#[^\n]*/.source, R_DASH = /--[^\n]*/.source,
+  // (# starts a comment only at the start of a word: "https://x.com/#a" isn't one. A ' with no closing ' on its line
+  // isn't a string: Rust's 'a, "can't" in a sentence.)
+  const R_SLASH = /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/.source, R_HASH = /(?<!\S)#[^\n]*/.source, R_DASH = /--[^\n]*/.source,
     R_HTMLC = /<!--[\s\S]*?(?:-->|$)/.source;
-  const R_STR = /"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$)|"(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?|`(?:\\.|[^`\\])*`?/.source;
+  const R_STR = /"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$)|"(?:\\.|[^"\\\n])*"?|`(?:\\.|[^`\\])*`?/.source;
+  const R_SQ = /(?<!\w)(?:[fFrRbBuU]{1,2}(?='))?'(?:\\.|[^'\\\n])*'/.source, R_SQ_RUST = /'(?:\\.|[^'\\\n])'/.source;
   const R_NUM = /\b0[xX][\da-fA-F_]+\b|\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?\b/.source;
   const R_TAG = /<\/?[A-Za-z][\w:-]*/.source, R_WORD = /([A-Za-z_$][\w$]*)(\s*\()?/.source;
   function highlight(code, lang) {
@@ -219,7 +222,9 @@
     const hash = HASH_LANGS.test(lang) || (!lang && /^\s*#(?!include|define|!)/m.test(code) && !/\/\//.test(code));
     const markup = MARKUP_LANGS.test(lang);
     const comment = [hash ? null : R_SLASH, hash ? R_HASH : null, DASH_LANGS.test(lang) ? R_DASH : null, markup ? R_HTMLC : null].filter(Boolean).join("|");
-    const re = new RegExp(`(${comment})|(${R_STR})|(${R_NUM})|(${markup ? R_TAG : "(?!)"})|${R_WORD}`, "g");
+    // (Rust: 'a is a lifetime, so a ' string is one character: 'x', '\n'.)
+    const str = `${R_STR}|${/^(rust|rs)$/i.test(lang) ? R_SQ_RUST : R_SQ}`;
+    const re = new RegExp(`(${comment})|(${str})|(${R_NUM})|(${markup ? R_TAG : "(?!)"})|${R_WORD}`, "g");
     const out = [];
     let last = 0, m;
     const add = (cls, t) => out.push(el("span", { class: cls }, t));
@@ -484,7 +489,7 @@
             (m.segments || []).filter((s) => s.t !== "text" && s.ctx && s.ctx.kind !== "selection" && IMG_RE.test(s.ctx.path || "") && fileSrc(s.ctx.path)).map((s) => s.ctx)),
           (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
             a.kind === "image" && fileSrc(a.path)
-              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.path }) })
+              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.original || a.path }) })
               : el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
                 kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
     }
@@ -669,11 +674,13 @@
       : b.tool === "Read" ? "Read this file?" : b.tool === "Grep" || b.tool === "Glob" ? "Look through this folder?" : `Use ${prettyTool(b.tool)}?`;
     const card = el("div", { class: `perm ${b.state}` }, el("div", { class: "perm-q" }, b.agent ? el("span", { class: "perm-agent" }, typeof b.agent === "number" ? `Agent ${b.agent}` : b.agent) : null, what), el("pre", {}, b.detail));
     if (b.state === "pending") {
-      const always = el("input", { type: "checkbox", id: `al-${b.pid}` });
+      // A file outside the project (read or change): yes or no for this one; "allow all" is only for commands.
+      const fileCard = /^(Read|Grep|Glob|Write|Edit|NotebookEdit)$/.test(b.tool);
+      const always = fileCard ? null : el("input", { type: "checkbox", id: `al-${b.pid}` });
       card.append(el("div", { class: "perm-row" },
-        el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: always.checked }) }, "Run"),
+        el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: !!(always && always.checked) }) }, fileCard ? "Allow" : "Run"),
         el("button", { class: "cb", onclick: () => post({ type: "permission", pid: b.pid, allow: false }) }, "Skip"),
-        el("label", { class: "always", for: `al-${b.pid}` }, always, b.where ? ` Allow everything on ${b.where} in this chat` : " Allow all commands in this chat")));
+        always ? el("label", { class: "always", for: `al-${b.pid}` }, always, b.where ? ` Allow everything on ${b.where} in this chat` : " Allow all commands in this chat") : null));
     } else card.append(el("div", { class: "perm-state" }, b.state === "allowed" ? [icon("check"), " Allowed"] : [icon("close"), " Skipped"]));
     return card;
   }

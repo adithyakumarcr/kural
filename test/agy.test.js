@@ -149,6 +149,10 @@ function chat(opts = {}) {
     assert.strictEqual(v("gemini-3.8-pro", "low"), "gemini-3.8-pro-high");          // (only High)
     assert.strictEqual(v("claude-sonnet-5", "high"), "claude-sonnet-5");            // (no levels)
     assert.strictEqual(v("gemini-3.8-flash-high", "low"), "gemini-3.8-flash-high"); // (an exact id stays)
+    // Listed plain and with a level: the plain one is Medium, so it stays reachable.
+    const both = agy.groupModels([{ id: "g-pro", label: "G Pro" }, { id: "g-pro-high", label: "G Pro (High)" }]);
+    assert.deepStrictEqual(both.map((m) => [m.id, m.efforts]), [["g-pro", { high: "g-pro-high", medium: "g-pro" }]]);
+    assert.strictEqual(agy.variantFor(both, "g-pro", "medium"), "g-pro");
     const c = chat({ model: "gemini-3.8-flash", models, effort: "low" });
     c.a.start();
     assert.match((await c.ask("hi")).result, /You said: hi/);

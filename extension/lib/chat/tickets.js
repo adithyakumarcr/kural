@@ -11,8 +11,7 @@ const IS_ATLASSIAN = /atlassian|jira/i;
 // A read-only Atlassian tool: mcp__<atlassian…>__getJiraIssue, …__searchJiraIssuesUsingJql, …__lookupJiraAccountId
 function isAtlassianRead(tool) {
   const m = /^mcp__(.+)__(.+)$/.exec(tool || "");
-  // (The server's name: Atlassian's own, or one called just "jira"; not any server with "jira" somewhere in its name.)
-  return !!m && /atlassian|^jira$/i.test(m[1]) && /^(get|search|lookup|fetch|list|read)([A-Z_]|$)/.test(m[2]);
+  return !!m && IS_ATLASSIAN.test(m[1]) && /^(get|search|lookup|fetch|list|read|atlassianUserInfo)([A-Z_]|$)/.test(m[2]);
 }
 
 // What the + menu shows for "Link ticket": ok, or a warning and why.

@@ -29,8 +29,11 @@ function workDir() {
 function aiRoots(write = false) {
   const os = require("os");
   const store = scratch ? path.dirname(scratch) : null;
+  // Reading also: Claude Code's own files (long tool output it saved, its plans) and the system temp folder, where
+  // Claude Code's background agents write (on a Mac that's /tmp, not the per-user temp folder).
   return [...folders().map((f) => f.path), workDir(), os.tmpdir(),
-    ...(write ? [path.join(os.homedir(), ".claude", "plans")] : [store])].filter(Boolean);
+    ...(write ? [path.join(os.homedir(), ".claude", "plans")]
+      : [store, path.join(os.homedir(), ".claude", "projects"), path.join(os.homedir(), ".claude", "plans"), process.platform === "win32" ? null : "/tmp"])].filter(Boolean);
 }
 function mayUse(file, write = false) { return require("./paths").within(file, aiRoots(write)); }
 function extraDirs() { return folders().slice(1).map((f) => f.path); }
