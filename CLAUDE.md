@@ -66,7 +66,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Codex `account/login/start {type:"chatgpt"}` → `authUrl` (Kural opens it) → `account/login/completed`; Gemini ACP
   `authenticate {methodId:"oauth-personal"}` (no "[Y/n]" consent in ACP mode), with Kural's own `open`/`xdg-open`
   first on PATH so Kural gets the URL and opens it (`vscode.env.openExternal`); CI / NO_BROWSER / DEBIAN_FRONTEND /
-  SSH_* cleared, else Gemini switches to a paste-a-code flow that hangs ACP. Notifications there are never awaited
+  SSH_* cleared, else Gemini switches to a paste-a-code flow that hangs ACP. The shim is a fresh `mkdtemp` folder,
+  polled from spawn on (with `selectedType: oauth-personal` but no creds, Gemini starts the login before answering
+  `initialize`). `Rpc` runs Gemini in its own process group and kills the group (+SIGKILL after 2 s): Gemini re-spawns
+  itself as a child that ignores SIGTERM while waiting for a login. Notifications there are never awaited
   while `installing`/`loggingIn` is set. Terminal ways stay as fallbacks (`installCliTerminal`, `loginCliTerminal`). Tests: `test/fake-codex.js`, `test/fake-gemini.js` (state via `FAKE_CODEX_STATE` /
   `FAKE_GEMINI_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.geminiPath` pointing at
   the fakes. The real programs were only checked logged out: verify streaming, approvals and tool names with real

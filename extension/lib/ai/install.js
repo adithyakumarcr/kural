@@ -23,10 +23,14 @@ function shellPath() {
   if (shellPathCache) return shellPathCache;
   shellPathCache = new Promise((resolve) => {
     if (IS_WIN || !process.env.SHELL) { resolve(""); return; }
-    execFile(process.env.SHELL, ["-ilc", "printf '\\n__KURAL_PATH__%s\\n' \"$PATH\""], { timeout: 8000, encoding: "utf8" }, (_e, out) => {
+    const c = execFile(process.env.SHELL, ["-ilc", "printf '\\n__KURAL_PATH__%s\\n' \"$PATH\""], { timeout: 8000, encoding: "utf8" }, (_e, out) => {
       const m = /__KURAL_PATH__(.*)/.exec(out || "");
-      resolve(m ? m[1].trim() : "");
+      const found = m ? m[1].trim() : "";
+      if (!found) shellPathCache = null;   // (try again next time: a slow or chatty shell start isn't forever)
+      resolve(found);
     });
+    // Nothing to read: a question in .zshrc (an update prompt) gets an end of input instead of waiting 8 s.
+    try { c.stdin.end(); } catch { /* gone */ }
   });
   return shellPathCache;
 }
@@ -38,7 +42,9 @@ async function fullPath() {
   if (!IS_WIN) dirs.push("/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".npm-global", "bin"), path.join(home, ".volta", "bin"), "/usr/bin", "/bin", "/usr/sbin", "/sbin");
   else dirs.push(path.join(process.env.ProgramFiles || "C:\\Program Files", "nodejs"), path.join(process.env.APPDATA || path.join(home, "AppData", "Roaming"), "npm"));
   const nvm = path.join(home, ".nvm", "versions", "node");
-  try { for (const v of fs.readdirSync(nvm).sort().reverse()) dirs.push(path.join(nvm, v, "bin")); } catch { /* no nvm */ }
+  const num = (v) => v.replace(/^v/, "").split(".").map(Number);
+  const newer = (a, b) => { const x = num(a), y = num(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (y[i] || 0) - (x[i] || 0); return 0; };
+  try { for (const v of fs.readdirSync(nvm).sort(newer)) dirs.push(path.join(nvm, v, "bin")); } catch { /* no nvm */ }   // newest first (v22 before v9)
   return [...new Set(dirs.filter(Boolean))].join(path.delimiter);
 }
 
@@ -79,6 +85,8 @@ async function installPlan(id) {
 // Is the installer waiting for an answer? `tail` is what it printed last (a question has no newline after it yet).
 // { kind: "yesno" | "enter" | "secret", question } or null.
 function promptIn(tail) {
+  // A finished line isn't waiting for anything ("Proceed? (y)" printed as part of a log, with a newline after it).
+  if (/[\r\n]\s*$/.test(String(tail || ""))) return null;
   const line = String(tail || "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split(/\r?\n|\r/).filter((l) => l.trim()).pop() || "";
   const t = line.trim();
   if (!t || t.length > 400) return null;
@@ -99,16 +107,20 @@ function runInstall(plan, { ask, onOutput, signal, quietMs = 20000 } = {}) {
     // (Quoted: "C:\Program Files\nodejs\npm.cmd" has a space.)
     const viaShell = IS_WIN && /\.cmd$/i.test(plan.file);
     const p = spawn(viaShell ? `"${plan.file}"` : plan.file, plan.args, { env: plan.env, windowsHide: true, shell: viaShell });
+    // Stopping: on Windows npm runs under cmd.exe, and killing cmd.exe alone leaves npm running.
+    const stop = () => {
+      try { if (IS_WIN && p.pid) execFile("taskkill", ["/pid", String(p.pid), "/T", "/F"], () => {}); else p.kill(); } catch { /* gone */ }
+    };
     const finish = (r) => { if (done) return; done = true; clearTimeout(idle); clearTimeout(quiet); resolve({ output, ...r }); };
     let idle = null, quiet = null;
     // (After an answer `tail` starts empty, so the same question is asked again only if the installer prints it again.)
     const put = (q) => {
       if (asking || done || !ask) return;
       asking = true;
-      Promise.resolve(ask(q)).then((answer) => {
+      Promise.resolve().then(() => ask(q)).catch(() => undefined).then((answer) => {
         asking = false;
         if (done || answer === undefined) return;   // (undefined: leave it unanswered; the install goes on)
-        if (answer === null) { try { p.kill(); } catch { /* gone */ } finish({ ok: false, cancelled: true }); return; }
+        if (answer === null) { stop(); finish({ ok: false, cancelled: true }); return; }
         tail = "";
         try { p.stdin.write(`${answer}\n`); } catch { /* gone */ }
       });
@@ -134,7 +146,7 @@ function runInstall(plan, { ask, onOutput, signal, quietMs = 20000 } = {}) {
     p.stdin.on("error", () => {});
     p.on("error", (e) => finish({ ok: false, code: -1, output: `${output}\n${e.message}` }));
     p.on("close", (code) => finish({ ok: code === 0, code }));
-    if (signal) signal.addEventListener("abort", () => { try { p.kill(); } catch { /* gone */ } finish({ ok: false, cancelled: true }); }, { once: true });
+    if (signal) signal.addEventListener("abort", () => { stop(); finish({ ok: false, cancelled: true }); }, { once: true });
   });
 }
 

@@ -213,7 +213,9 @@ class Rpc {
     this.ids = 0;
     this.stderr = "";
     this.closed = false;
-    this.proc = spawn(l.cmd, [...l.args, ...args], { cwd, env: { ...process.env, ...l.env, ...(env || {}) }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    // Its own process group (not on Windows): Gemini CLI restarts itself as a child process, and stopping only the
+    // parent left that child running (a cancelled login could still finish).
+    this.proc = spawn(l.cmd, [...l.args, ...args], { cwd, env: { ...process.env, ...l.env, ...(env || {}) }, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
     let buf = "";
     this.proc.stdout.setEncoding("utf8");
     this.proc.stdout.on("data", (d) => {
@@ -257,7 +259,17 @@ class Rpc {
     this.waits.clear();
     if (this.h.onExit) this.h.onExit(code);
   }
-  kill() { if (this.closed) return; try { this.proc.stdin.end(); } catch { /* */ } try { this.proc.kill(); } catch { /* gone */ } }
+  kill() {
+    if (this.killed) return;
+    this.killed = true;
+    try { this.proc.stdin.end(); } catch { /* */ }
+    const pid = this.proc.pid;
+    const group = (sig) => { try { if (!IS_WIN && pid) process.kill(-pid, sig); else this.proc.kill(sig); } catch { /* gone */ } };
+    group("SIGTERM");
+    // Waiting for a login, Gemini ignores SIGTERM: make sure after 2 s.
+    if (!IS_WIN) setTimeout(() => group("SIGKILL"), 2000).unref();
+    else if (pid) execFile("taskkill", ["/pid", String(pid), "/T", "/F"], () => {});
+  }
 }
 
 // A JSON-RPC error → an Error with Gemini's words ("Internal error" comes with the real reason in data.details).
@@ -787,15 +799,16 @@ async function geminiLogin(bin, { openUrl, signal, dir, timeout = 6 * 60 * 1000 
   // Gemini prints a code to paste instead of opening a browser when it thinks there's no screen (CI, SSH,
   // DEBIAN_FRONTEND=noninteractive, NO_BROWSER): through ACP that waits for input that never comes.
   for (const k of ["CI", "NO_BROWSER", "DEBIAN_FRONTEND", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]) env[k] = "";
-  let urls = null;
+  let urls = null, shim = null;
   if (!IS_WIN && openUrl) {
-    const shim = path.join(dir || quietDir(), "open-shim");
     try {
-      fs.mkdirSync(shim, { recursive: true });
+      // A new private folder (0700) each time: in a shared /tmp another user could otherwise put their own "open" there.
+      shim = fs.mkdtempSync(path.join(dir || os.tmpdir(), "kural-open-"));
       urls = path.join(shim, "urls.txt");
-      fs.writeFileSync(urls, "");
-      const script = `#!/bin/sh\nfor a in "$@"; do last="$a"; done\nprintf '%s\\n' "$last" >> ${JSON.stringify(urls)}\n`;
-      for (const n of ["open", "xdg-open"]) fs.writeFileSync(path.join(shim, n), script, { mode: 0o755 });
+      fs.writeFileSync(urls, "", { mode: 0o600 });
+      const quoted = `'${urls.replace(/'/g, "'\\''")}'`;
+      const script = `#!/bin/sh\nfor a in "$@"; do last="$a"; done\nprintf '%s\\n' "$last" >> ${quoted}\n`;
+      for (const n of ["open", "xdg-open"]) fs.writeFileSync(path.join(shim, n), script, { mode: 0o700 });
       env.PATH = `${shim}${path.delimiter}${process.env.PATH || ""}`;
     } catch { urls = null; }
   }
@@ -806,6 +819,9 @@ async function geminiLogin(bin, { openUrl, signal, dir, timeout = 6 * 60 * 1000 
     let lines = []; try { lines = fs.readFileSync(urls, "utf8").split("\n").filter((l) => /^https?:\/\//.test(l)); } catch { /* not yet */ }
     for (; opened < lines.length; opened++) openUrl(lines[opened]);
   };
+  // From the start: if Gemini's settings already say "Google" (an earlier login that wasn't finished), Gemini starts
+  // the login by itself before it even answers "initialize".
+  if (urls) poll = setInterval(flush, 300);
   try {
     // (Cancel can come at any moment, even while Gemini is still starting.)
     const stop = new Promise((res) => {
@@ -813,20 +829,27 @@ async function geminiLogin(bin, { openUrl, signal, dir, timeout = 6 * 60 * 1000 
       if (signal) { if (signal.aborted) res({ cancelled: true }); else signal.addEventListener("abort", () => res({ cancelled: true }), { once: true }); }
     });
     const done = (async () => {
-      const init = await withTimeout(rpc.call("initialize", CLIENT), 60000);
+      // A minute to start, unless it's already showing a login page (then it answers once you've logged in).
+      // Windows: Kural can't see that, so no limit but Cancel.
+      const t0 = Date.now();
+      let slow = null;
+      const init = await Promise.race([rpc.call("initialize", CLIENT), new Promise((_, rej) => {
+        slow = setInterval(() => { if (!IS_WIN && !opened && Date.now() - t0 > 60000) rej(new Error("Gemini took too long to start.")); }, 500);
+      })]).finally(() => clearInterval(slow));
       const google = (init.authMethods || []).find((m) => m.id === "oauth-personal");
       if (init.authMethods && !google) return { error: "This Gemini CLI doesn't offer a Google login." };
-      if (urls) poll = setInterval(flush, 300);
       await rpc.call("authenticate", { methodId: "oauth-personal" });
       return { ok: true };
     })().catch((e) => ({ error: e.message }));
-    return await Promise.race([done, stop]);
+    const out = await Promise.race([done, stop]);
+    if (out.ok) flush();   // (a page that's only now in the file; never after Cancel: nothing is waiting for it then)
+    return out;
   } catch (e) {
     return { error: e.message };
   } finally {
     clearInterval(poll); clearTimeout(timer);
-    flush();
     rpc.kill();
+    if (shim) fs.rm(shim, { recursive: true, force: true }, () => {});
   }
 }
 

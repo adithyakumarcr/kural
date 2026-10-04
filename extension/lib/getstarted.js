@@ -183,7 +183,8 @@ class GetStarted {
     const cliInfo = Object.fromEntries(CLI_IDS.map((id) => [id, { label: CLIS[id].label, short: CLIS[id].short, program: CLIS[id].program, what: CLIS[id].what,
       facts: CLIS[id].facts, install: CLIS[id].install, installAlt: CLIS[id].installAlt, set: !!this.rec[id] }]));
     this.panel.webview.postMessage({ type: "state", ...this.s, cliInfo, ready: this.ready, claudeReady: this.claudeReady, localSet: this.rec.local ? this.rec.local.model : null,
-      waiting: this.waiting, install, platform: process.platform, memory: totalMemoryGB(),
+      // (While Kural itself is installing or logging in, the page always shows it, whatever the polling is doing.)
+      waiting: this.installing ? `install-${this.installing}` : this.loggingIn ? `login-${this.loggingIn}` : this.waiting, install, platform: process.platform, memory: totalMemoryGB(),
       tabModel: (LOCAL_MODELS.find((m) => m.id === (cfg().get("tabCompletion.localModel") || LOCAL_MODELS[1].id)) || LOCAL_MODELS[1]) });
   }
 
@@ -462,7 +463,7 @@ class GetStarted {
       } else if (this.s.clis[id].login.state !== "ok") {
         vscode.window.showInformationMessage(`Kural: ${c.program} is installed. Next: log in.`, "Log in").then((pick) => { if (pick === "Log in") this.loginCli(id); });
       }
-    } finally { this.installing = null; }
+    } finally { this.installing = null; this.post(); }
   }
 
   // A question from the installer, as a pop-up. The answer is what gets typed (null = stop the install).
@@ -519,7 +520,7 @@ class GetStarted {
         if (pick === "Try again") this.loginCli(id);
         if (pick === "Log in in a terminal") this.loginInTerminal(id);
       });
-    } finally { this.loggingIn = null; }
+    } finally { this.loggingIn = null; this.post(); }
   }
 
   loginInTerminal(id) {

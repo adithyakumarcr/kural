@@ -20,7 +20,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-install-test-"));
     assert.strictEqual(promptIn("\x1b[1mProceed?\x1b[0m [y/n]").kind, "yesno");
   });
   await check("ordinary output isn't a question", async () => {
-    for (const t of ["added 112 packages in 9s", "==> Pouring gemini-cli--0.62.0.arm64_sequoia.bottle.tar.gz\n", "npm warn deprecated foo@1.0: use bar", "Why? Because.\n"])
+    for (const t of ["added 112 packages in 9s", "==> Pouring gemini-cli--0.62.0.arm64_sequoia.bottle.tar.gz\n", "npm warn deprecated foo@1.0: use bar", "Why? Because.\n", "Proceed? (y)\n", "==> Password: \n"])
       assert.strictEqual(promptIn(t), null, t);
   });
 
