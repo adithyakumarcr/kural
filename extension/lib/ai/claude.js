@@ -15,8 +15,8 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 
-const { initLog, log } = require("../log");
-const usage = require("./usage");   // (re-exported below: older code imports log from here)
+const { initLog, log } = require("../log");   // (re-exported below: older code imports log from here)
+const usage = require("./usage");
 
 const LOGIN_RE = /not logged in|log ?in|invalid api key|api key|oauth|credential|401/i;
 

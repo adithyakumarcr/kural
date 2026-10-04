@@ -51,7 +51,7 @@ function current(provider) {
   const s = state.get(provider);
   if (!s) return null;
   const now = Date.now();
-  const windows = (s.windows || []).map((w) => w.resetsAt && w.resetsAt <= now ? { ...w, usedPercent: 0, reset: true } : w);
+  const windows = (s.windows || []).map((w) => w.resetsAt && w.resetsAt <= now ? { ...w, usedPercent: 0, resetsAt: null, reset: true } : w);
   const tokens = s.tokens && s.tokens.day === new Date().toDateString() ? s.tokens : null;
   return { ...s, windows, tokens };
 }

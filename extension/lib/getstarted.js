@@ -93,6 +93,10 @@ class GetStarted {
     const shell = findClaude.lookInShell();   // in the background: where your terminal finds claude
     if (!this.ready) { shell.then(() => this.open()); return; }
     if (this.rec.claude) setTimeout(() => this.quickCheck(), 2500);
+    // Codex / Gemini: is the program still where it was (or where the setting now says)? Updates the saved path.
+    setTimeout(async () => {
+      for (const id of CLI_IDS) if (this.rec[id]) { try { await this.checkCli(id); } catch (e) { log(`get started: ${id}: ${e.message}`); } }
+    }, 3500);
   }
 
   // What's broken with Claude now, if anything: "missing" | "broken" | "login" | null. No request to Claude.
@@ -132,7 +136,7 @@ class GetStarted {
     this.autoTested = null;
     this.changed();
     // (Working with a model on this computer? Then Claude being broken doesn't need the page right now.)
-    if (!brain.isLocal(brain.currentModel())) this.open("claude");
+    if (brain.engineOf(brain.currentModel()) === "claude") this.open("claude");
   }
 
   // You logged out (Account menu): the Claude models wait until you log in again; the page shows the Log in step.
@@ -424,6 +428,7 @@ class GetStarted {
       case "recheck":
         if (this.s.test.state === "fail") this.s.test = { state: "idle" };
         if (this.s.local.test.state === "fail") this.s.local.test = { state: "idle" };
+        for (const id of CLI_IDS) if (this.s.clis[id].test.state === "fail") { this.s.clis[id].test = { state: "idle" }; this[`autoTested_${id}`] = null; }
         this.autoTested = null; await this.refresh(); break;
       case "install": {
         const i = checks.installFor(process.platform);

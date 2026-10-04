@@ -405,7 +405,9 @@
     const msg = S.tab.messages[i], k = msg.blocks.length - 1;
     const out = listEl.querySelector(`[data-i="${i}"] .answer`);
     const prev = out && (k === 0 ? null : out.querySelector(`[data-b="${k - 1}"]`));
-    if (!out || (k > 0 && !prev) || pending !== null) return scheduleRerender(i);
+    // (A permission or question card also changes the line under the answer ("Waiting for your OK above"): redraw.)
+    if (pending === i) return;   // a redraw of this answer is coming anyway
+    if (!out || (k > 0 && !prev) || pending !== null || msg.blocks[k].k === "perm" || msg.blocks[k].k === "question") return rerender(i);
     // A previous live thinking box is finished once something comes after it.
     if (prev && msg.blocks[k - 1].k === "think") prev.replaceWith(blockNode(msg, msg.blocks[k - 1], k - 1));
     const node = blockNode(msg, msg.blocks[k], k);

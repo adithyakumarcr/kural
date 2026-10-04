@@ -585,7 +585,12 @@ class ChatView {
     return roles.length ? teamMembers(0, roles, tab.teamStyle).length : tab.team;
   }
   // When this changes, the tab's Claude restarts (same conversation) before your next message.
-  procKey(tab) { return `${isClaude(tab.model) ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${cfg().get("chat.fullClaudeCodeSetup")}|${ws.key()}|${this.setupVersion}`; }
+  // (Claude Code's setup and its reloads only matter to Claude: other programs don't restart for them.)
+  procKey(tab) {
+    const claude = isClaude(tab.model);
+    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}` +
+      (claude ? `|${cfg().get("chat.fullClaudeCodeSetup")}|${this.setupVersion}` : "");
+  }
 
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
   // came back to Kural (connectors added on claude.ai don't leave a file to watch): reload
@@ -837,7 +842,14 @@ class ChatView {
       if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) { /* already running with it */ } else r = null;
     }
     if (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab)) r = this.startProc(tab);
-    if (!r) { reply.running = false; reply.error = "missing"; tab.status = "idle"; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); vscode.commands.executeCommand("kural.install"); return; }
+    if (!r) {   // the program didn't start (moved, uninstalled): say which, and open its steps in Get started
+      const p = brain.providerOf(tab.model);
+      reply.running = false; tab.status = "idle";
+      reply.error = p.id === "claude" ? "missing" : `${p.label} didn't start. Check it in Get started (it may have been moved or uninstalled).`;
+      this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs();
+      vscode.commands.executeCommand("kural.getStarted", p.id === "ollama" ? "local" : p.id);
+      return;
+    }
     if (tab.pendingModel && isClaude(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;

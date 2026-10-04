@@ -139,7 +139,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Mode changes mid-answer: `modeChangedMidAnswer` (Auto resolves waiting permission cards; Plan/Ask apply next message). Scrolling follows only while
   you're at the bottom (`stick`); scrolled up, a "Latest" button appears. Pictures: `fileSrc()` turns a path into the
   webview's address (`S.pics` = `{base, root}` from `filesFor()`; `localResourceRoots` = media, project folders,
-  globalStorage, tmp); web pictures load only on click (a picture URL can carry data away). Don't reuse `S.files`: it's
+  globalStorage, tmp, home; the CSP lets the page load pictures only); web pictures load only on click (a picture URL can carry data away). Don't reuse `S.files`: it's
   the @-mention file list (a clash there hid every picture). Links: `a.link[data-url]` → `openUrl` (http/https only).
 - **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel and split panels beside the code
   (`openSplit`, WebviewPanel "kural.chatEditor", restored by a serializer from saved `splitIds`). Each pane has its own
