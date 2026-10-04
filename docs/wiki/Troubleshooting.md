@@ -15,8 +15,8 @@
   If it keeps asking, [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you
   were doing.
 - **Mac asks for your login keychain password ("Kural wants to use … Safe Storage"):** Kural itself keeps nothing
-  in the keychain any more, and it turns off the GitHub integration's silent sign-in checks (branch protection, avatars,
-  its own login for `git push`) that caused this in projects cloned from GitHub; pushing uses Git's own login, like in
+  in the keychain any more, and it turns off VS Code's silent GitHub sign-in checks that caused this at every start (the
+  Copilot account lookup; branch protection, avatars and the GitHub login for `git push` in GitHub projects); pushing uses Git's own login, like in
   a terminal. Click **Deny**. If it still appears,
   [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you were doing.
 - **"This client is no longer supported for Gemini Code Assist for individuals":** that's Google's old Gemini CLI,
