@@ -67,7 +67,7 @@ function lookInShell() {
   if (IS_WIN) return Promise.resolve(null);
   return new Promise((resolve) => {
     // -i -l: an interactive login shell reads ~/.bashrc / ~/.zshrc too, where nvm and others add to PATH.
-    execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v claude"], { timeout: 8000, encoding: "utf8" }, (err, stdout) => {
+    execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v claude"], { cwd: os.tmpdir(), timeout: 8000, encoding: "utf8" }, (err, stdout) => {
       const line = String(stdout || "").trim().split("\n").pop() || "";
       const found = path.isAbsolute(line) && fs.existsSync(line) ? line : null;
       if (found !== shellFound) log(`claude ${found ? `found by your shell: ${found}` : "not found by your shell"}`);
@@ -120,7 +120,7 @@ function supportedFlags(bin) {
   const known = { bin };
   for (let i = 0; i <= left.length; i++) {
     const args = ["-p", "--output-format", "stream-json", "--verbose", ...left.flatMap((k) => OPTIONAL_FLAGS[k])];
-    const r = spawnSync(bin, args, { input: "", timeout: 8000, encoding: "utf8", env: cleanEnv({}), windowsHide: true });
+    const r = spawnSync(bin, args, { cwd: os.tmpdir(), input: "", timeout: 8000, encoding: "utf8", env: cleanEnv({}), windowsHide: true });
     if (r.error || r.status === null) break;                    // couldn't tell: use none of them
     const bad = /unknown option '([^']+)'/.exec(`${r.stdout || ""}${r.stderr || ""}`);
     if (!bad) { for (const k of left) known[k] = true; break; }
@@ -211,7 +211,7 @@ class ClaudeProcess {
     while ((i = this.buf.indexOf("\n")) >= 0) {
       const line = this.buf.slice(0, i).replace(/\r$/, "");
       this.buf = this.buf.slice(i + 1);
-      if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `${this.opts.name} ${line}\n`); } catch { /* debugging only */ } }
+      if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `${this.opts.name} ${line}\n`, { mode: 0o600 }); } catch { /* debugging only */ } }
       let msg;
       try { msg = JSON.parse(line); } catch { continue; }
       if (msg.type === "control_response" && msg.response && this.pending.has(msg.response.request_id)) {

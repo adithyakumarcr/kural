@@ -22,6 +22,7 @@ const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
 const { Devices } = require("./lib/devices");
 const brain = require("./lib/ai");
+const ws = require("./lib/workspace");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
@@ -36,7 +37,8 @@ function openClaudeCode() {
   const t = vscode.window.createTerminal({
     name: "Claude Code",
     shellPath: win ? "powershell.exe" : undefined,
-    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    // No folder open: Kural's work folder, never your home folder (Claude Code looks through the folder it starts in).
+    cwd: ws.root() || ws.workDir(),
     location: { viewColumn: vscode.ViewColumn.Beside },
   });
   t.show();

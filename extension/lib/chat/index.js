@@ -13,6 +13,7 @@ const { projectInstructions } = require("./project");
 const { ChangeTracker } = require("./changes");
 const ws = require("../workspace");
 const { Attachments } = require("./attachments");
+const { within, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("../ai/ollama");
 const brain = require("../ai");
@@ -80,7 +81,7 @@ class ChatView {
     this.context = context;
     this.apply = apply;          // (code, uri, ask) => Promise   (Apply button on code blocks)
     this.activity = null;        // what you've been doing, for Tab (activity.js); set by extension.js
-    this.tickets = new Tickets(() => this.root());   // Jira search for "+ → Link ticket"
+    this.tickets = new Tickets(() => vscode.workspace.isTrusted ? this.root() : ws.workDir());   // Jira search for "+ → Link ticket"
     this.version = context.extension.packageJSON.version;
     // Where chats are shown: the side panel, plus any chats opened beside the code (Split). Each pane
     // shows one tab: { id, kind: "side" | "editor", webview, panel?, ready, queue, activeId }.
@@ -110,14 +111,16 @@ class ChatView {
     const c = this.context;
     this.changes.register(c);
     watchFontScale(c, (m) => this.post(m));
-    watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (cfg().get("chat.fullClaudeCodeSetup")) this.setupChanged("changed"); });
+    watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (fullSetup()) this.setupChanged("changed"); });
     let lastFocusReload = Date.now();
     c.subscriptions.push(vscode.window.onDidChangeWindowState((st) => {
-      if (!st.focused || !cfg().get("chat.fullClaudeCodeSetup") || Date.now() - lastFocusReload < 60000) return;
+      if (!st.focused || !fullSetup() || Date.now() - lastFocusReload < 60000) return;
       lastFocusReload = Date.now();
       this.setupChanged("may have changed while you were away");
     }));
     const refreshFiles = debounce(() => { this.files = null; if (this.panes.some((p) => p.ready)) this.sendFiles(); }, 1500);
+    // You trusted this folder: Claude restarts with your full setup.
+    c.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => this.setupChanged("trusted")));
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
     watcher.onDidCreate(refreshFiles); watcher.onDidDelete(refreshFiles);
     c.subscriptions.push(
@@ -477,12 +480,23 @@ class ChatView {
     view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
   }
 
-  // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (attachments,
-  // pictures a model made), the temp folder and your home folder (a picture you attached from Downloads, say). Only
-  // pictures: the page's rules (CSP) let it load nothing else, and nothing it loads can be sent anywhere.
+  // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (pictures a
+  // model made), the temp folder (pasted screenshots), and each picture you attached from elsewhere (Downloads, say),
+  // that file only. Not your whole home folder: an answer could then show (and so open) anything in Documents or
+  // Desktop, and on a Mac that makes macOS ask about Kural. Only pictures: the page's rules (CSP) let it load nothing
+  // else, and nothing it loads can be sent anywhere.
   resourceRoots() {
+    const pics = new Set(this.picFiles || []);
+    for (const t of this.tabs) for (const m of t.messages || []) for (const a of m.attachments || []) if (a.kind === "image" && a.path) pics.add(a.path);
     return [vscode.Uri.joinPath(this.context.extensionUri, "media"), ...ws.folders().map((f) => vscode.Uri.file(f.path)),
-      this.context.globalStorageUri, vscode.Uri.file(os.tmpdir()), vscode.Uri.file(os.homedir())];
+      this.context.globalStorageUri, vscode.Uri.file(os.tmpdir()), ...[...pics].slice(-200).map((f) => vscode.Uri.file(f))];
+  }
+  // A picture you attached from outside the project: the pages may show it now.
+  allowPictures(items) {
+    const add = items.filter((a) => a.kind === "image" && a.path && !ws.mayUse(a.path)).map((a) => a.path);
+    if (!add.length) return;
+    this.picFiles = [...(this.picFiles || []), ...add].slice(-200);
+    for (const p of this.panes) p.webview.options = { ...p.webview.options, localResourceRoots: this.resourceRoots() };
   }
   // For the page: how to turn a file path into an address it can load (fileSrc in media/chat.js).
   filesFor(webview) {
@@ -566,7 +580,9 @@ class ChatView {
 
   async sendFiles() {
     if (!this.files) {
-      const uris = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/__pycache__/**,**/.venv/**,**/venv/**,**/.mypy_cache/**,**/.pytest_cache/**}", 20000);
+      // Your home folder open as the project: not into Desktop, Documents, Music, Photos… (macOS asks about each).
+      const home = ws.folders().some((f) => isHomeOrAbove(f.path)) ? HOME_PROTECTED.map((n) => `,${n}/**`).join("") : "";
+      const uris = await vscode.workspace.findFiles("**/*", `{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/__pycache__/**,**/.venv/**,**/venv/**,**/.mypy_cache/**,**/.pytest_cache/**${home}}`, 20000);
       this.files = uris.map((u) => vscode.workspace.asRelativePath(u)).sort();
     }
     this.post({ type: "files", files: this.files });
@@ -610,7 +626,7 @@ class ChatView {
   procKey(tab) {
     const claude = isClaude(tab.model);
     return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
-      (claude ? `|${cfg().get("chat.fullClaudeCodeSetup")}|${this.setupVersion}` : "");
+      (claude ? `|${fullSetup()}|${this.setupVersion}` : "");
   }
 
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
@@ -726,13 +742,13 @@ class ChatView {
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); }
     this.endDevice(old);
-    const full = cfg().get("chat.fullClaudeCodeSetup");
+    const full = fullSetup();
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
     const editing = tab.mode === "agent" || tab.mode === "auto";
     const team = this.teamSize(tab);
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map() };
     // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
-    r.teamFile = team ? path.join(os.tmpdir(), `kural-team-${tab.id}-${Date.now()}.json`) : null;
+    r.teamFile = team ? path.join(privateTmp("teams"), `${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
@@ -751,13 +767,15 @@ class ChatView {
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
-      tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
+      // else, onPermission.)
+      tools, allowedTools: [...(editing ? ["WebSearch"] : []), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
       mcpServers: team || dev ? { ...(team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
         ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root() || ws.workDir(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
-    }, local ? { tools: localTools, allowedTools: ["Read", "Grep", "Glob"], capabilities: this.localReady.get(tab.model) || [],
+    }, local ? { tools: localTools, allowedTools: ["Read", "Grep", "Glob"], readRoots: ws.aiRoots(), capabilities: this.localReady.get(tab.model) || [],
       store: brain.localStore(this.context) } : null, {
       onMessage: (m) => { if (r.stale) return; r.gotOutput = true; this.onClaude(tab, r, m); },
       onPermission: (req) => r.stale ? { allow: false, message: "Stopped." } : this.onPermission(tab, r, req),
@@ -903,7 +921,11 @@ class ChatView {
     delete tab.carryOver;
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + await this.buildPrompt(text, contexts), attachIds);
-    if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
+    if (meta.length) {
+      user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta });
+      // What you attached the AI may read without asking, even outside the project (onPermission).
+      tab.granted = [...new Set([...(tab.granted || []), ...meta.map((a) => a.path).filter(Boolean)])].slice(-50);
+    }
     r.pendingSend = prompt;
     r.proc.send(prompt);
     log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
@@ -1205,7 +1227,7 @@ class ChatView {
   }
 
   showSetup(tab, setup) {
-    setup.full = !!cfg().get("chat.fullClaudeCodeSetup");
+    setup.full = !!fullSetup();
     // Announce a connector that wasn't there before (not on the very first report).
     const known = tab.knownServers ? new Set(tab.knownServers) : null;
     // (Kural's own servers, the device's tools and the team's board, aren't news.)
@@ -1301,7 +1323,17 @@ class ChatView {
         if (open && open.isDirty) await open.save();
         this.changes.snapshot(turn, file);
       }
-      return { allow: true };
+      // Inside your project (or Kural's own work folder, the temp folder): no asking, that's what Agent mode is for.
+      // Anywhere else (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks) a write can make the
+      // computer run something later, so it asks like a command does (Auto still doesn't ask).
+      // (agy only tells, `notice`: it doesn't wait for an answer, so no card.)
+      if (!file || req.notice || ws.mayUse(file, true)) return { allow: true };
+    }
+    // Reading inside your project: no asking. Elsewhere (your Documents, Desktop…) it asks, like a command: on a Mac
+    // reading there also makes macOS ask about Kural.
+    if (READ_TOOLS.includes(req.tool_name)) {
+      const where = input.file_path || input.path;
+      if (!where || ws.mayUse(where) || within(where, tab.granted || [])) return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
     // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
@@ -1455,6 +1487,7 @@ class ChatView {
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
+        this.allowPictures(items);
         if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
@@ -1494,6 +1527,7 @@ class ChatView {
       case "attachData": { const a = this.attachments.addData(m.name, m.data); if (a && pane) this.postTo(pane, { type: "attached", items: [a] }); break; }
       case "attachUris": {
         const items = (m.uris || []).map((u) => { try { return this.attachments.add(vscode.Uri.parse(u).fsPath); } catch { return null; } }).filter(Boolean);
+        this.allowPictures(items);
         if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
@@ -1702,8 +1736,14 @@ function permDetail(tool, input) {
   if (tool === "DeviceCommand") return input.command || "";
   if (tool === "DeviceWrite") return `${input.path || ""}\n\n${String(input.content || "").slice(0, 600)}${String(input.content || "").length > 600 ? "\n…" : ""}`;
   if (tool === "WebFetch") return input.url || "";
+  if (EDIT_TOOLS.has(tool)) return `${input.file_path || input.notebook_path || ""}\n(outside this project)`;
+  if (READ_TOOLS.includes(tool)) return `${input.file_path || input.path || ""}\n(outside this project)`;
   return JSON.stringify(input).slice(0, 300);
 }
+
+// Your full Claude Code setup (your MCP servers, hooks, skills, and the project's .claude settings) only in a folder
+// you trust: a project's own .claude/settings.json can run commands (hooks), and Kural starts Claude early.
+function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 

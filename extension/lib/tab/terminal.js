@@ -18,6 +18,7 @@
 const vscode = require("vscode");
 const { execFile } = require("child_process");
 const { log } = require("../ai/claude");
+const { isHomeOrAbove, hasControl } = require("../paths");
 
 const DIFF_CHARS = 3500;
 
@@ -62,7 +63,11 @@ async function gitContext(cwd, wantDiff) {
   const hit = gitCache.get(key);
   if (hit && Date.now() - hit.at < 4000) return hit;
   let text = "", since = 0, files = [];
-  const status = await run("git", ["status", "--short", "--branch"], cwd);
+  // A repo at your home folder (dotfiles) or above: `git status` would look through all of home (Desktop, Documents,
+  // Music…, and macOS asks about each). Not worth it for a suggestion.
+  const top = (await run("git", ["rev-parse", "--show-toplevel"], cwd)).trim();
+  if (top && isHomeOrAbove(top)) { const r = { at: Date.now(), text: "", since: 0, files: [] }; gitCache.set(key, r); return r; }
+  const status = top ? await run("git", ["--no-optional-locks", "status", "--short", "--branch"], cwd) : "";
   if (status) {
     text = `git status:\n${status.split("\n").slice(0, 25).join("\n")}`;
     const remotes = (await run("git", ["remote"], cwd)).trim().split("\n").filter(Boolean);
@@ -137,7 +142,8 @@ function tidyIntent(answer) {
   // A commit written as a heredoc (git commit -m "$(cat <<'EOF' … EOF)"): one line with its first line of message.
   const h = /^(git\s+commit\b[^\n]*?)(-[a-z]*m)\s+"\$\(cat\s+<<-?'?(\w+)'?\s*\n([\s\S]*?)\n\s*\3/.exec(full);
   if (h) { const msg = (h[4].split(/\r?\n/).find((l) => l.trim()) || "").trim().replace(/"/g, '\\"'); return msg ? `${h[1]}${h[2]} "${msg}"` : ""; }
-  let s = full.replace(/^\s*\$\s/, "").split(/\r?\n/)[0].trim();
+  let s = full.replace(/^\s*\$\s/, "").split(/\r?\n/)[0].trim().replace(/\t/g, " ");
+  if (hasControl(s)) return "";   // (a hidden carriage return or escape could run something without Enter)
   if ((s.replace(/\\"/g, "").match(/"/g) || []).length % 2) s += '"';
   return s;
 }
@@ -152,7 +158,8 @@ function tidy(answer, typed) {
   let s = String(answer || "").replace(/<\|[a-z_]+\|>/g, "");   // the local model's markers, e.g. <|endoftext|>
   const m = /<cmd>([\s\S]*?)(<\/cmd>|$)/.exec(s);
   if (m) s = m[1];
-  s = s.replace(/^\s*\$\s/, "").split(/\r?\n/)[0].replace(/\s+$/, "");
+  s = s.replace(/^\s*\$\s/, "").split(/\r?\n/)[0].replace(/\s+$/, "").replace(/\t/g, " ");
+  if (hasControl(s)) return "";
   // (The local model writes only what comes after the cursor; viaLocal puts the typed part in front.)
   if (!s.startsWith(typed) || s.length <= typed.length) return "";
   // The model sometimes forgets the closing quote of a commit message: an odd number of " means one is open.

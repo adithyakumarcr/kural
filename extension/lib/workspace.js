@@ -24,6 +24,15 @@ function workDir() {
   try { fs.mkdirSync(dir, { recursive: true }); } catch { /* exists, or the temp folder: still usable */ }
   return dir;
 }
+// Where the AI may read (and, in Agent mode, change) files without asking: your project folders, Kural's work folder,
+// the temp folder (attachments). Reading also Kural's storage (pictures a model made). Anywhere else asks you first.
+function aiRoots(write = false) {
+  const os = require("os");
+  const store = scratch ? path.dirname(scratch) : null;
+  return [...folders().map((f) => f.path), workDir(), os.tmpdir(),
+    ...(write ? [path.join(os.homedir(), ".claude", "plans")] : [store])].filter(Boolean);
+}
+function mayUse(file, write = false) { return require("./paths").within(file, aiRoots(write)); }
 function extraDirs() { return folders().slice(1).map((f) => f.path); }
 function key() { return folders().map((f) => f.path).join("|"); }
 
@@ -74,4 +83,4 @@ function promptNote() {
     `. Your working directory is the first one. A path written as <folder name>/... is inside that folder.`;
 }
 
-module.exports = { workDir, setWorkDir, folders, root, extraDirs, key, label, resolve, promptNote };
+module.exports = { workDir, setWorkDir, aiRoots, mayUse, folders, root, extraDirs, key, label, resolve, promptNote };

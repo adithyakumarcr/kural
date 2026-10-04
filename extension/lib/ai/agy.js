@@ -26,6 +26,7 @@
 
 const fs = require("fs");
 const os = require("os");
+const { privateTmp } = require("../paths");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
@@ -34,7 +35,7 @@ const usage = require("./usage");
 const IS_WIN = process.platform === "win32";
 const MIN_VERSION = "1.1.15";   // stream-json input
 const RAW_LOG = process.env.KURAL_RAW_LOG;   // debugging: every line to and from agy
-const raw = (dir, line) => { if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `agy ${dir} ${line}\n`); } catch { /* debugging only */ } } };
+const raw = (dir, line) => { if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `agy ${dir} ${line}\n`, { mode: 0o600 }); } catch { /* debugging only */ } } };
 let log = () => {};
 const setLog = (f) => { log = f || (() => {}); };
 
@@ -61,7 +62,7 @@ async function findAgy(chosenPath) {
 // `command -v agy` in an interactive login shell (its installer adds ~/.local/bin to PATH there). Up to 8 s.
 function fromShell() {
   return new Promise((resolve) => {
-    const p = execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v agy"], { timeout: 8000, encoding: "utf8" }, (_e, stdout) => {
+    const p = execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v agy"], { cwd: os.tmpdir(), timeout: 8000, encoding: "utf8" }, (_e, stdout) => {
       const line = String(stdout || "").trim().split("\n").pop() || "";
       resolve(path.isAbsolute(line) && isFile(line) ? line : null);
     });
@@ -91,9 +92,7 @@ function cleanEnv(extra) {
 
 // An empty folder for questions that aren't about a project (agy looks around its folder).
 function quietDir() {
-  const d = path.join(os.tmpdir(), `kural-agy-${process.getuid ? process.getuid() : "u"}`);
-  try { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); } catch { /* exists */ }
-  return d;
+  return privateTmp("agy");   // (only you can open it: lib/paths.js)
 }
 
 const older = (a, b) => { const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); return false; };
@@ -461,7 +460,7 @@ class AgyAgent {
       this.turn.segment = "";   // the final answer is what comes after the last tool
       // A file about to change: let the chat keep a copy first (for Undo). agy doesn't wait, so it's a best effort.
       if ((d.name === "Edit" || d.name === "Write") && d.input.file_path && this.h.onPermission && (this.mode === "agent" || this.mode === "auto")) {
-        Promise.resolve(this.h.onPermission({ tool_name: fs.existsSync(d.input.file_path) ? "Edit" : "Write", input: { file_path: d.input.file_path }, tool_use_id: t.id })).catch(() => {});
+        Promise.resolve(this.h.onPermission({ tool_name: fs.existsSync(d.input.file_path) ? "Edit" : "Write", input: { file_path: d.input.file_path }, tool_use_id: t.id, notice: true })).catch(() => {});
       }
       this.emit({ type: "assistant", message: { role: "assistant", model: this.model || "antigravity", content: [{ type: "tool_use", id: t.id, name: t.name, input: t.input }] } });
     }

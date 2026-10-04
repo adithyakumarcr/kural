@@ -12,7 +12,10 @@ const MAX_PDF = 30 * 1024 * 1024;
 const MAX_TEXT = 120 * 1024;
 const THUMB_MAX = 3 * 1024 * 1024;       // pictures up to this size get a preview in the chat box
 
-const dir = path.join(os.tmpdir(), "kural-attachments");
+// Pasted or dropped data: a folder only you can open (a fixed name in the shared temp folder could be taken by
+// someone else first, and its files would be readable by others).
+const dir = () => privateTmp("attachments");
+const { privateTmp } = require("../paths");
 const newId = () => Math.random().toString(36).slice(2, 10);
 
 function kindOf(file, size) {
@@ -54,10 +57,10 @@ class Attachments {
   addData(name, base64) {
     const id = newId();
     const safe = (name || "file").replace(/[\\/:*?"<>|]/g, "_").slice(0, 120) || "file";
-    const d = path.join(dir, id);
-    fs.mkdirSync(d, { recursive: true });
+    const d = path.join(dir(), id);
+    fs.mkdirSync(d, { recursive: true, mode: 0o700 });
     const file = path.join(d, safe);
-    fs.writeFileSync(file, Buffer.from(base64 || "", "base64"));
+    fs.writeFileSync(file, Buffer.from(base64 || "", "base64"), { mode: 0o600 });
     return this.add(file);
   }
 

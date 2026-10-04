@@ -13,6 +13,7 @@
 
 const fs = require("fs");
 const os = require("os");
+const { privateTmp } = require("../paths");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
@@ -93,7 +94,7 @@ async function findCodex(chosenPath) {
 // `command -v codex` in an interactive login shell (reads .zshrc/.bashrc, where nvm adds to PATH). Up to 8 s.
 function fromShell() {
   return new Promise((resolve) => {
-    const p = execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v codex"], { timeout: 8000, encoding: "utf8" }, (err, stdout) => {
+    const p = execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v codex"], { cwd: os.tmpdir(), timeout: 8000, encoding: "utf8" }, (err, stdout) => {
       const line = String(stdout || "").trim().split("\n").pop() || "";
       resolve(path.isAbsolute(line) ? resolveBin(line) : null);
     });
@@ -107,7 +108,7 @@ function run(bin, args, timeout = 20000) {
     const c = command(bin, args);
     let p;
     try {
-      p = execFile(c.file, c.args, { env: { ...process.env, ...c.env }, timeout, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout, stderr) =>
+      p = execFile(c.file, c.args, { cwd: os.tmpdir(), env: { ...process.env, ...c.env }, timeout, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout, stderr) =>
         resolve({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: stdout || "", stderr: stderr || "",
           error: error && (error.killed ? Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }) : typeof error.code === "string" ? error : null) }));
     } catch (e) { resolve({ status: null, stdout: "", stderr: "", error: e }); return; }
@@ -206,7 +207,7 @@ class AppServer {
     this.exited = false;
     const c = command(bin, [...mcpConfig(mcpServers), "app-server"]);
     // Its own process group (not on Windows), so stopping it also stops the commands it started.
-    this.proc = spawn(c.file, c.args, { cwd: cwd || os.tmpdir(), env: { ...process.env, ...(env || {}), ...c.env },
+    this.proc = spawn(c.file, c.args, { cwd: cwd || privateTmp("codex"), env: { ...process.env, ...(env || {}), ...c.env },
       stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
     this.proc.stdout.setEncoding("utf8");
     this.proc.stdout.on("data", (d) => this.onData(d));
@@ -227,7 +228,7 @@ class AppServer {
   write(o) {
     if (this.exited) return;
     const line = JSON.stringify(o);
-    if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `${this.name} >> ${line}\n`); } catch { /* debugging only */ } }
+    if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `${this.name} >> ${line}\n`, { mode: 0o600 }); } catch { /* debugging only */ } }
     this.proc.stdin.write(line + "\n");
   }
 
@@ -258,7 +259,7 @@ class AppServer {
       const line = this.buf.slice(0, i).replace(/\r$/, "");
       this.buf = this.buf.slice(i + 1);
       if (!line.trim()) continue;
-      if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `${this.name} << ${line}\n`); } catch { /* debugging only */ } }
+      if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `${this.name} << ${line}\n`, { mode: 0o600 }); } catch { /* debugging only */ } }
       let m;
       try { m = JSON.parse(line); } catch { continue; }
       if (m.method && m.id !== undefined && m.id !== null) this.answer(m);            // Codex asks us
@@ -641,7 +642,7 @@ class CodexAgent {
       if (b.type === "text") text += (text ? "\n\n" : "") + b.text;
       else if (b.type === "image" && b.source && b.source.data) {
         const ext = (/image\/(\w+)/.exec(b.source.media_type || "") || [, "png"])[1].replace("jpeg", "jpg");
-        const f = path.join(os.tmpdir(), `kural-codex-${crypto.randomUUID()}.${ext}`);
+        const f = path.join(privateTmp("pictures"), `${crypto.randomUUID()}.${ext}`);
         try { fs.writeFileSync(f, Buffer.from(b.source.data, "base64")); items.push({ type: "localImage", path: f }); temp.push(f); } catch { /* skip it */ }
       } else if (b.type === "document") text += `\n\n(A PDF was attached: ${b.title || "document"}. Codex can't read PDFs here.)`;
     }

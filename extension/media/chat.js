@@ -610,7 +610,9 @@
 
   function permNode(b) {
     const what = b.tool === "Bash" ? "Run this command?" : b.tool === "WebFetch" ? "Open this web page?"
-      : b.tool === "DeviceCommand" ? `Run this on ${b.where || "the device"}?` : b.tool === "DeviceWrite" ? `Write this file on ${b.where || "the device"}?` : `Use ${prettyTool(b.tool)}?`;
+      : b.tool === "DeviceCommand" ? `Run this on ${b.where || "the device"}?` : b.tool === "DeviceWrite" ? `Write this file on ${b.where || "the device"}?`
+      : b.tool === "Write" || b.tool === "Edit" || b.tool === "NotebookEdit" ? "Change this file?"
+      : b.tool === "Read" ? "Read this file?" : b.tool === "Grep" || b.tool === "Glob" ? "Look through this folder?" : `Use ${prettyTool(b.tool)}?`;
     const card = el("div", { class: `perm ${b.state}` }, el("div", { class: "perm-q" }, b.agent ? el("span", { class: "perm-agent" }, typeof b.agent === "number" ? `Agent ${b.agent}` : b.agent) : null, what), el("pre", {}, b.detail));
     if (b.state === "pending") {
       const always = el("input", { type: "checkbox", id: `al-${b.pid}` });

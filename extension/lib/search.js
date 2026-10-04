@@ -111,12 +111,18 @@ class SearchView {
   // ---------- Ask ----------
   // Ask uses the model picked in the chat: a Claude model through Claude Code, a model on your computer through
   // Kural's own engine (same tools, read-only, and the answer as JSON).
+  // It reads only inside your project: anything else is refused (nobody is there to ask, and on a Mac reading your
+  // Documents or Desktop would make macOS ask about Kural).
   makeProc(model, handlers) {
+    const onPermission = (req) => {
+      const where = req.input && (req.input.file_path || req.input.path);
+      return !where || ws.mayUse(where) ? { allow: true } : { allow: false, message: "Ask only looks inside the project." };
+    };
     return brain.makeAgent(model, {
-      name: "ask", effort: "low", noThinking: true, safeMode: true,
-      appendSystemPrompt: ASK_PROMPT + ws.promptNote(), tools: ["Read", "Grep", "Glob"], allowedTools: ["Read", "Grep", "Glob"],
+      name: "ask", effort: "low", noThinking: true, safeMode: true, hostPermissions: true,
+      appendSystemPrompt: ASK_PROMPT + ws.promptNote(), tools: ["Read", "Grep", "Glob"],
       cwd: this.root(), jsonSchema: SCHEMA, addDirs: ws.extraDirs(),
-    }, { tools: ["Read", "Grep", "Glob"], allowedTools: ["Read", "Grep", "Glob"], effort: "low" }, handlers);
+    }, { tools: ["Read", "Grep", "Glob"], allowedTools: ["Read", "Grep", "Glob"], effort: "low" }, { ...handlers, onPermission });
   }
 
   // Start the next one now, so the next question doesn't wait for it to start (for the chat's current model).
