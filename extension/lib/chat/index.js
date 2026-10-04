@@ -45,6 +45,7 @@ const localName = (model) => String(model).slice("ollama:".length);
 const validModel = (m) => valid(MODELS, m) || ((/^ollama:./.test(m || "") || !!cliOf(m)) && m.length < 200);
 // Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "agy" (Gemini).
 const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("../ai/clis");
+const { splitLevel } = require("../ai/agy");
 const engineOf = (m) => brain.engineOf(m);
 // A linked device's tools need the model's program to take Kural's MCP server and ask Kural before each command:
 // Claude Code and Codex do; Kural's own engine (Ollama) has no MCP, and Gemini (Antigravity) can't ask.
@@ -215,6 +216,10 @@ class ChatView {
     if (!tab.engine && tab.messages && tab.messages.length) tab.engine = engineOf(tab.model);
     if (tab.engine === "local") tab.engine = "ollama";   // (its old name)
     if (!valid(EFFORTS, tab.effort)) tab.effort = d.effort;
+    // A Gemini model saved with its level in the name ("agy:gemini-3.8-flash-high"): the model, and the level becomes
+    // the intensity (the menu lists each Gemini model once now).
+    const lv = cliOf(tab.model) === "agy" && splitLevel(cliModel(tab.model));
+    if (lv) { tab.model = `agy:${lv.base}`; tab.effort = { minimal: "low", xhigh: "max" }[lv.level] || lv.level; }
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
     if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)

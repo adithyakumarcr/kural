@@ -46,7 +46,8 @@ if (!args.length) {
   return;
 }
 if (args[0] === "--version") { console.log("1.2.7"); process.exit(0); }
-if (args[0] === "models") { console.log("gemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.8-pro-high\tGemini 3.8 Pro (High)"); process.exit(0); }
+if (args[0] === "models") { console.log(["gemini-3.8-flash-low\tGemini 3.8 Flash (Low)", "gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)",
+  "gemini-3.8-flash-high\tGemini 3.8 Flash (High)", "gemini-3.8-pro-high\tGemini 3.8 Pro (High)", "claude-sonnet-5\tClaude Sonnet 5"].join("\n")); process.exit(0); }
 const printed = flag("--print");
 if (printed !== undefined) {
   if (state() === "loggedout") notLoggedIn();

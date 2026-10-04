@@ -172,6 +172,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mi.on .check { border-color: var(--accent); }
 .seg { display: flex; gap: 2px; margin: 2px 8px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
 .seg button { flex: 1; background: none; border: 0; border-radius: 5px; font-size: calc(11.5px * var(--fs, 1)); padding: 3px 0; color: var(--muted); }
+.mi-note { font-size: calc(10.5px * var(--fs, 1)); color: var(--muted); padding: 2px 10px 4px; line-height: 1.35; }
 .seg button.on { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--vscode-foreground); font-weight: 600; }
 .seg button:hover:not(.on) { background: var(--hover); }
 .sep { height: 1px; background: var(--border); margin: 4px 2px; }

@@ -967,7 +967,8 @@
         ...localMenuItems(t),
         ...cliMenuItems(t, false),
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
-        el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
+        el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
+        levelNote(t),
         el("div", { class: "mh" }, "Mood"),
         el("div", { class: "seg mood" }, S.moods.map((md) => el("button", { class: t.mood === md.id ? "on" : "", title: md.hint, onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label))),
         el("div", { class: "sep" }),
@@ -992,6 +993,27 @@
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }
   }
+  // A Gemini model comes in thinking levels (agy lists "… (Low)", "… (High)"): the intensity picks one. Which levels
+  // this model has, and what each intensity button runs.
+  const LEVEL_NEAR = { low: ["low", "minimal", "medium", "high"], medium: ["medium", "high", "low"], high: ["high", "medium", "xhigh", "low"], max: ["max", "xhigh", "high", "medium", "low"] };
+  function geminiLevels(t) {
+    const c = /^agy:(.+)$/.exec(t.model || ""); if (!c) return null;
+    const cli = (S.clis || []).find((x) => x.id === "agy");
+    const m = cli && cli.models.find((x) => x.id === c[1]);
+    return m && m.efforts && Object.keys(m.efforts).length ? m.efforts : null;
+  }
+  const cap = (w) => w[0].toUpperCase() + w.slice(1);
+  function levelHint(t, effort) {
+    const lv = geminiLevels(t); if (!lv) return "";
+    const got = (LEVEL_NEAR[effort] || []).find((x) => lv[x]);
+    return got ? `Runs ${modelLabel(t.model)} (${cap(got)})` : "";
+  }
+  function levelNote(t) {
+    const lv = geminiLevels(t); if (!lv) return null;
+    const order = ["minimal", "low", "medium", "high", "xhigh", "max"].filter((x) => lv[x]);
+    return el("div", { class: "mi-note" }, `${modelLabel(t.model)} thinks at ${order.map(cap).join(", ")}: the intensity picks the nearest.`);
+  }
+
   // ---------- Gemini and Codex ----------
   // Set up: a section with their models (from the program itself). Not set up: one line each at the end that opens
   // Get started for it.

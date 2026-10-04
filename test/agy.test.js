@@ -42,7 +42,12 @@ function chat(opts = {}) {
 (async () => {
   await check("version, models, login check, limits", async () => {
     assert.strictEqual(await agy.agyVersion(BIN), "1.2.7");
-    assert.deepStrictEqual((await agy.agyModels(BIN)).map((m) => m.id), ["gemini-3.8-flash-high", "gemini-3.8-pro-high"]);
+    // One entry per model; its thinking levels go to the intensity.
+    const models = await agy.agyModels(BIN);
+    assert.deepStrictEqual(models.map((m) => [m.id, m.label]), [["gemini-3.8-flash", "Gemini 3.8 Flash"], ["gemini-3.8-pro", "Gemini 3.8 Pro"], ["claude-sonnet-5", "Claude Sonnet 5"]]);
+    assert.deepStrictEqual(Object.keys(models[0].efforts), ["low", "medium", "high"]);
+    assert.ok(!models[2].efforts);
+    assert.deepStrictEqual(agy.groupModels(models), models);   // (grouping twice changes nothing)
     const a = await agy.agyAuth(BIN);
     assert.strictEqual(a.loggedIn, true); assert.strictEqual(a.email, "tester@example.com");
     const l = await agy.agyLimits(BIN);
@@ -133,6 +138,22 @@ function chat(opts = {}) {
     const t = await agy.agyTest(BIN, { cwd: project });
     assert.strictEqual(t.ok, false); assert.strictEqual(t.login, true);
     fs.writeFileSync(process.env.FAKE_AGY_FILE, "ok");
+  });
+
+  await check("the intensity picks Gemini's thinking level", async () => {
+    const models = await agy.agyModels(BIN);
+    const v = (id, e) => agy.variantFor(models, id, e);
+    assert.strictEqual(v("gemini-3.8-flash", "low"), "gemini-3.8-flash-low");
+    assert.strictEqual(v("gemini-3.8-flash", "medium"), "gemini-3.8-flash-medium");
+    assert.strictEqual(v("gemini-3.8-flash", "max"), "gemini-3.8-flash-high");      // (no Max: the highest there is)
+    assert.strictEqual(v("gemini-3.8-pro", "low"), "gemini-3.8-pro-high");          // (only High)
+    assert.strictEqual(v("claude-sonnet-5", "high"), "claude-sonnet-5");            // (no levels)
+    assert.strictEqual(v("gemini-3.8-flash-high", "low"), "gemini-3.8-flash-high"); // (an exact id stays)
+    const c = chat({ model: "gemini-3.8-flash", models, effort: "low" });
+    c.a.start();
+    assert.match((await c.ask("hi")).result, /You said: hi/);
+    assert.strictEqual(lastArgs()[lastArgs().indexOf("--model") + 1], "gemini-3.8-flash-low");
+    c.a.kill();
   });
 
   await check("a message sent while agy restarts (new model) is answered; one that can't start fails once, not forever", async () => {
