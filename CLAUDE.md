@@ -66,11 +66,17 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Devices over SSH** (`lib/devices/`): `ssh.js` (no vscode) runs the computer's own `ssh` with password auth through
   `SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`; the askpass prints `KURAL_SSH_PW`, set only in that ssh's env), Kural's
   own known_hosts (accept-new: trust on first use), ControlMaster reuse on Mac/Linux (ControlPath under /tmp: macOS
-  allows 104 characters), `reuse:false` for login checks. `index.js`: devices in globalState `kural.devices.v1`,
+  allows 104 characters), `reuse:false` for login checks. `run()` answers at once on timeout/abort (with a reused
+  connection, "close" waits for the device's command); `runLimited` adds the device's `timeout` in `$SHELL`; `qp()` keeps
+  `~/` meaning home; `forgetKey` matches hashed known_hosts lines too (Ubuntu hashes them). `index.js`: devices in globalState `kural.devices.v1`,
   passwords in `context.secrets` (never elsewhere). A chat with `tab.device` gets the `device` MCP server
   (`device-mcp.js`, a relay) whose calls come back to `bridge.js` (a private socket, a token per chat); Kural asks per
   mode (`approveDevice` → permission card "Run this on <name>?"), so the tools are pre-allowed for Claude, Codex gets
-  `default_tools_approval_mode="approve"` and Gemini's `mcp__gemini__<tool>` are auto-allowed. Not for Ollama models (no
+  `default_tools_approval_mode="approve"`, and for Gemini they're named `kural_device_<tool>` (`KURAL_DEVICE_PREFIX`;
+  ACP doesn't say which server a tool is from) and auto-allowed as `mcp__gemini__kural_device_<tool>`. "Allow all" on a
+  device card sets `tab.allowAllDevice` (that device only), never `tab.allowAll`. Unlinking, Stop, a model/engine switch
+  and closing the tab end the token (`endDevice`), which aborts its running commands. The device terminal is
+  `isTransient` (VS Code would save its env, with the password, to restore it). Not for Ollama models (no
   MCP in Kural's engine). Tests: `test/devices.test.js` with `test/fake-ssh.js` (`KURAL_SSH_BIN`). Real check: a local
   sshd (`apt install openssh-server`, `sshd -p 2222`).
 - **Usage meter** (`lib/ai/usage.js` hub, drawn by `lib/account.js`): Claude Code sends `rate_limit_event`

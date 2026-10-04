@@ -38,6 +38,7 @@ class Bridge {
   }
 
   stop() {
+    for (const s of this.sessions.values()) s.ctl.abort();
     if (this.server) { try { this.server.close(); } catch { /* closed */ } this.server = null; }
     if (!IS_WIN && this.where) { try { fs.unlinkSync(this.where); } catch { /* gone */ } }
     this.sessions.clear();
@@ -45,14 +46,15 @@ class Bridge {
 
   // A chat linked to a device: its token, and the MCP server to give its AI.
   // approve(tool, args) -> Promise<{ allow, message? }>.
-  session({ deviceId, name, approve }) {
+  session({ deviceId, name, approve, prefix }) {
     this.start();
     const token = crypto.randomBytes(24).toString("hex");
-    this.sessions.set(token, { deviceId, name, approve });
+    this.sessions.set(token, { deviceId, name, approve, ctl: new AbortController() });
     return { token, server: { command: process.execPath, args: [MCP],
-      env: { ELECTRON_RUN_AS_NODE: "1", KURAL_DEVICE_SOCKET: this.where, KURAL_DEVICE_TOKEN: token, KURAL_DEVICE_NAME: name || "the device" } } };
+      env: { ELECTRON_RUN_AS_NODE: "1", KURAL_DEVICE_SOCKET: this.where, KURAL_DEVICE_TOKEN: token, KURAL_DEVICE_NAME: name || "the device", ...(prefix ? { KURAL_DEVICE_PREFIX: prefix } : {}) } } };
   }
-  end(token) { this.sessions.delete(token); }
+  // The chat stopped, unlinked or closed: what's still running for it on the device stops too.
+  end(token) { const s = this.sessions.get(token); if (s) { s.ctl.abort(); this.sessions.delete(token); } }
 
   connection(c) {
     let buf = "";
@@ -83,22 +85,26 @@ class Bridge {
     const found = await this.lookup(s.deviceId);
     if (!found) return { text: "The linked device was removed from Kural.", isError: true };
     const { dev, password } = found;
+    const signal = s.ctl.signal;
+    if (signal.aborted) return { text: "This chat isn't linked to a device (any more).", isError: true };
     if (tool === "run_command") {
       if (!args.command) return { text: "No command given.", isError: true };
       const secs = Math.min(Math.max(Number(args.timeout_seconds) || 120, 1), 1800);
-      const r = await this.ssh.run(dev, password, String(args.command), { timeout: secs * 1000 });
+      const r = await this.ssh.runLimited(dev, password, String(args.command), secs, { signal });
+      if (signal.aborted) return { text: "Stopped (the chat stopped or the device was unlinked).", isError: true };
+      if (r.code === 124) r.timedOut = true;   // the device's `timeout` stopped it
       if (r.code === 255 && !r.stdout) return { text: `Couldn't reach the device: ${explain(r)}`, isError: true };   // (ssh's own failure)
       return { text: commandText(r, secs), isError: r.code !== 0 };
     }
     if (tool === "read_file") {
-      const r = await this.ssh.readFile(dev, password, String(args.path || ""));
+      const r = await this.ssh.readFile(dev, password, String(args.path || ""), { signal });
       return r.code === 0 ? { text: r.stdout + (r.cut ? "\n(cut: the file is longer)" : "") } : { text: r.stderr || "Couldn't read it.", isError: true };
     }
     if (tool === "write_file") {
-      const r = await this.ssh.writeFile(dev, password, String(args.path || ""), String(args.content == null ? "" : args.content));
+      const r = await this.ssh.writeFile(dev, password, String(args.path || ""), String(args.content == null ? "" : args.content), { signal });
       return r.code === 0 ? { text: `Wrote ${args.path} (${Buffer.byteLength(String(args.content || ""))} bytes).` } : { text: r.stderr || "Couldn't write it.", isError: true };
     }
-    const r = await this.ssh.listDir(dev, password, String(args.path || "."));
+    const r = await this.ssh.listDir(dev, password, String(args.path || "."), { signal });
     return r.code === 0 ? { text: r.stdout } : { text: r.stderr || "Couldn't list it.", isError: true };
   }
 }

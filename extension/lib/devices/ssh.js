@@ -13,6 +13,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const crypto = require("crypto");
 const { spawn } = require("child_process");
 
 const IS_WIN = process.platform === "win32";
@@ -20,6 +21,8 @@ const MAX_OUT = 200 * 1024;      // what a command may print before Kural cuts i
 
 // 'it''s' quoting for the device's shell (devices run Linux: POSIX sh).
 const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
+// A path for the device's shell: quoted, but a leading ~/ still means the home folder (models often write ~/x).
+const qp = (p) => { p = String(p); return p === "~" ? '"$HOME"' : p.startsWith("~/") ? `"$HOME"/${q(p.slice(2))}` : q(p); };
 
 class Ssh {
   // dir: Kural's folder for askpass and known_hosts. bin: the ssh program (tests use a stand-in).
@@ -66,8 +69,11 @@ class Ssh {
       let out = "", err = "", cut = false, done = false, timedOut = false;
       const p = spawn(this.bin, [...this.args(dev, { reuse }), command], { env: this.env(password), windowsHide: true });
       const finish = (code) => { if (done) return; done = true; clearTimeout(timer); resolve({ code, stdout: out, stderr: err.trim(), timedOut, cut }); };
-      const timer = setTimeout(() => { timedOut = true; try { p.kill(); } catch { /* gone */ } }, timeout);
-      if (signal) signal.addEventListener("abort", () => { try { p.kill(); } catch { /* gone */ } }, { once: true });
+      // Timeout or Stop: answer at once. (Waiting for "close" isn't enough: with a reused connection the shared one keeps
+      // ssh's output open until the device's command ends, which for `tail -f` is never.)
+      const stop = (why) => { if (done) return; if (why === "timeout") timedOut = true; else err += "Stopped."; try { p.kill(); } catch { /* gone */ } finish(null); };
+      const timer = setTimeout(() => stop("timeout"), timeout);
+      if (signal) { if (signal.aborted) setImmediate(() => stop("abort")); else signal.addEventListener("abort", () => stop("abort"), { once: true }); }
       p.stdout.on("data", (d) => { if (out.length < MAX_OUT) out += d; else cut = true; });
       p.stderr.on("data", (d) => { if (err.length < 20000) err += d; });
       p.on("error", (e) => { err += e.code === "ENOENT" ? "There's no ssh program on this computer." : e.message; finish(-1); });
@@ -85,10 +91,16 @@ class Ssh {
   }
 
   // A device whose key changed (reinstalled, a new SD card): forget the old key, so the next connection trusts the new one.
+  // (Lines may be hashed, "|1|salt|hash": Ubuntu's ssh_config has HashKnownHosts yes. Those are compared by hashing.)
   forgetKey(dev) {
     try {
-      const host = (dev.port || 22) === 22 ? dev.host : `[${dev.host}]:${dev.port}`;
-      const keep = fs.readFileSync(this.knownHosts, "utf8").split("\n").filter((l) => l && l.split(/\s/)[0].split(",").indexOf(host) < 0);
+      const host = Number(dev.port || 22) === 22 ? dev.host : `[${dev.host}]:${dev.port}`;
+      const matches = (field) => field.split(",").some((h) => {
+        const m = /^\|1\|([^|]+)\|(.+)$/.exec(h);
+        if (!m) return h === host;
+        return crypto.createHmac("sha1", Buffer.from(m[1], "base64")).update(host).digest("base64") === m[2];
+      });
+      const keep = fs.readFileSync(this.knownHosts, "utf8").split("\n").filter((l) => l && !matches(l.split(/\s/)[0]));
       fs.writeFileSync(this.knownHosts, keep.join("\n") + (keep.length ? "\n" : ""));
     } catch { /* nothing remembered */ }
     this.close(dev);
@@ -104,12 +116,21 @@ class Ssh {
   terminalArgs(dev) { return this.args(dev, { tty: true }); }
 
   // Files on the device, through plain shell commands (every Linux has them).
-  readFile(dev, pw, file) { return this.run(dev, pw, `cat -- ${q(file)}`, { timeout: 60000 }); }
-  writeFile(dev, pw, file, content) {
-    const dir = path.posix.dirname(file);
-    return this.run(dev, pw, `mkdir -p -- ${q(dir)} && cat > ${q(file)}`, { input: content, timeout: 60000 });
+  readFile(dev, pw, file, opts = {}) { return this.run(dev, pw, `cat -- ${qp(file)}`, { timeout: 60000, ...opts }); }
+  writeFile(dev, pw, file, content, opts = {}) {
+    const dir = path.posix.dirname(String(file));
+    return this.run(dev, pw, `mkdir -p -- ${qp(dir)} && cat > ${qp(file)}`, { input: content, timeout: 60000, ...opts });
   }
-  listDir(dev, pw, dir) { return this.run(dev, pw, `ls -la -- ${q(dir || ".")}`, { timeout: 30000 }); }
+  listDir(dev, pw, dir, opts = {}) { return this.run(dev, pw, `ls -la -- ${qp(dir || ".")}`, { timeout: 30000, ...opts }); }
+
+  // A command with a time limit on the device too: otherwise `tail -f` would keep running there after Kural gave up.
+  // (`timeout` is in every Linux; if a device lacks it, the command just runs without the limit.)
+  runLimited(dev, pw, command, secs, opts = {}) {
+    // (In the device user's own shell, $SHELL, like a command typed there: bash's `source` works.)
+    const c = q(command);
+    return this.run(dev, pw, `if command -v timeout >/dev/null 2>&1; then exec timeout -k 5 ${secs} "\${SHELL:-/bin/sh}" -c ${c}; else exec "\${SHELL:-/bin/sh}" -c ${c}; fi`,
+      { timeout: (secs + 3) * 1000, ...opts });
+  }
 }
 
 // ssh's errors in plain words.
@@ -125,4 +146,4 @@ function explain(r) {
   return e.split("\n").filter(Boolean).slice(-2).join(" ") || `ssh stopped (exit code ${r.code}).`;
 }
 
-module.exports = { Ssh, explain, q };
+module.exports = { Ssh, explain, q, qp };

@@ -10,6 +10,7 @@ const command = args[args.indexOf(target) + 1] || "";
 if (/@nowhere$/.test(target)) { process.stderr.write("ssh: Could not resolve hostname nowhere: Name or service not known\n"); process.exit(255); }
 const pw = spawnSync(process.env.SSH_ASKPASS || "false", [], { encoding: "utf8" }).stdout.replace(/\r?\n$/, "");
 if (pw !== (process.env.FAKE_SSH_PASSWORD || "secret")) { process.stderr.write(`${target}: Permission denied (password).\n`); process.exit(255); }
-const p = spawn("sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"], cwd: process.env.FAKE_SSH_HOME || process.cwd() });
+const p = spawn("sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"], cwd: process.env.FAKE_SSH_HOME || process.cwd(),
+  env: { ...process.env, HOME: process.env.FAKE_SSH_HOME || process.env.HOME, SHELL: "/bin/sh" } });
 process.stdin.pipe(p.stdin);
 p.on("close", (code) => process.exit(code));

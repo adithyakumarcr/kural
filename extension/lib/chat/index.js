@@ -52,6 +52,8 @@ const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "B
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
 const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
+const GEMINI_DEVICE = "kural_device_";   // Gemini sees them as kural_device_<tool> (it doesn't say which server a tool is from)
+const DEVICE_TOOL_RE = new RegExp(`^mcp__(?:device__|gemini__${GEMINI_DEVICE})(${DEVICE_TOOLS.join("|")})$`);
 
 
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
@@ -276,6 +278,7 @@ class ChatView {
     if (!tab) return;
     const r = this.runtime.get(id);
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
+    this.endDevice(r);
     this.runtime.delete(id);
     const i = this.tabs.indexOf(tab);
     this.tabs.splice(i, 1);
@@ -336,6 +339,12 @@ class ChatView {
     const where = t && t.workspace && t.workspace.open;
     if (!where || !fs.existsSync(where)) { vscode.window.showWarningMessage(`Kural: the folder of "${t ? t.workspace.name : "this chat"}" isn't on this computer anymore.`); return; }
     vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(where), { forceNewWindow: true });
+  }
+
+  // The running model's way to the linked device ends (its token stops working in the bridge).
+  endDevice(r) {
+    if (r && r.deviceToken && this.devices) this.devices.endSession(r.deviceToken);
+    if (r) r.deviceToken = null;
   }
 
   // Delete a chat for good: from this window, History, and every workspace.
@@ -714,7 +723,7 @@ class ChatView {
   startProc(tab, fresh = false) {
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); }
-    if (old && old.deviceToken && this.devices) { this.devices.endSession(old.deviceToken); old.deviceToken = null; }
+    this.endDevice(old);
     const full = cfg().get("chat.fullClaudeCodeSetup");
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
     const editing = tab.mode === "agent" || tab.mode === "auto";
@@ -730,8 +739,9 @@ class ChatView {
     // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
     // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
     // this computer: Kural's own engine has no MCP.
-    const dev = tab.device && this.devices && !isLocal(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args)) : null;
-    if (dev) r.deviceToken = dev.token;
+    const dev = tab.device && this.devices && !isLocal(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args),
+      { prefix: engineOf(tab.model) === "gemini" ? GEMINI_DEVICE : "" }) : null;
+    if (dev) { r.deviceToken = dev.token; r.deviceDevice = tab.device; }
     const deviceTools = dev ? DEVICE_TOOLS.map((t) => `mcp__device__${t}`) : [];
     const local = isLocal(tab.model);
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
@@ -847,6 +857,7 @@ class ChatView {
       tab.sessionId = newSessionId(); tab.started = false;
       const old = this.runtime.get(tab.id);
       if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
+      this.endDevice(old);
     }
     tab.engine = engine;
     let r = this.runtime.get(tab.id);
@@ -1246,6 +1257,7 @@ class ChatView {
       r.stale = true;
       if (r.proc) r.proc.kill();
       r.proc = null;
+      this.endDevice(r);
       for (const res of r.perms.values()) res(false);
       r.perms.clear();
     }
@@ -1292,13 +1304,16 @@ class ChatView {
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
     // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
-    // (Gemini names MCP tools mcp__gemini__<tool>.)
-    if (tab.device && new RegExp(`^mcp__(device|gemini)__(${DEVICE_TOOLS.join("|")})$`).test(req.tool_name)) return { allow: true };
+    // (Gemini names MCP tools mcp__gemini__<tool>; the device's are kural_device_<tool> there, so your own server's
+    // "run_command" isn't mistaken for them.)
+    if (tab.device && DEVICE_TOOL_RE.test(req.tool_name)) return { allow: true };
     // Reading Jira (the linked ticket, a search) changes nothing, so it doesn't ask. Writing to Jira
     // (comments, status changes, new issues) still asks below.
     if (isAtlassianRead(req.tool_name)) return { allow: true };
     if (req.tool_name === "AskUserQuestion") return this.askUser(tab, r, req);
-    if (tab.mode === "auto" || tab.allowAll) return { allow: true };
+    // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
+    const onDevice = req.tool_name === "DeviceCommand" || req.tool_name === "DeviceWrite";
+    if (tab.mode === "auto" || (onDevice ? !!tab.device && tab.allowAllDevice === tab.device : tab.allowAll)) return { allow: true };
     // Agent mode: running commands, fetching web pages ask you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
@@ -1451,6 +1466,10 @@ class ChatView {
       case "devices": if (pane) this.postTo(pane, { type: "devices", list: this.deviceList() }); break;
       case "linkDevice": if (tab) {
         tab.device = m.id && this.devices && this.devices.get(m.id) ? m.id : null;
+        tab.allowAllDevice = null;   // a new link asks again
+        // Unlinked (or another device) mid-answer: the running model loses the device at once, not at the next message.
+        const run = this.runtime.get(tab.id);
+        if (run && run.deviceDevice !== tab.device) this.endDevice(run);
         log(`chat ${tab.id}: ${tab.device ? `linked device ${this.devices.get(tab.device).name}` : "device unlinked"}`);
         this.save(); this.postTabs();
         if (tab.status === "idle") this.warm(tab); else this.post({ type: "flash", text: "The device is linked from your next message" });
@@ -1543,7 +1562,11 @@ class ChatView {
       case "setTeam": tab.team = TEAM_SIZES.includes(m.team) ? m.team : 0; this.remember(tab); this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab); break;
       case "permission": {
         const r = this.runtime.get(tab.id);
-        if (m.always) { tab.allowAll = true; this.post({ type: "allowAll", tabId: tab.id }); }
+        if (m.always) {
+          const b = r && r.turn && r.turn.reply.blocks.find((x) => x.k === "perm" && x.pid === m.pid);
+          if (b && b.where) tab.allowAllDevice = tab.device;   // only this device, only while it's linked
+          else { tab.allowAll = true; this.post({ type: "allowAll", tabId: tab.id }); }
+        }
         const res = r && r.perms.get(m.pid);
         if (res) { r.perms.delete(m.pid); res(!!m.allow); }
         break;
@@ -1661,9 +1684,8 @@ function toolDetail(name, input, root) {
     case "Bash": return input.command || "";
     case "WebSearch": return input.query || "";
     case "WebFetch": return input.url || "";
-    case "mcp__device__run_command": case "mcp__gemini__run_command": return input.command || "";
-    case "mcp__device__read_file": case "mcp__device__write_file": case "mcp__device__list_dir":
-    case "mcp__gemini__read_file": case "mcp__gemini__write_file": case "mcp__gemini__list_dir": return input.path || "~";
+    case "mcp__device__run_command": return input.command || "";
+    case "mcp__device__read_file": case "mcp__device__write_file": case "mcp__device__list_dir": return input.path || "~";
     case "mcp__team__post": return `${cap(input.from)} → ${input.to === "all" ? "everyone" : cap(input.to)}: ${input.message || ""}`;
     case "mcp__team__read": return `${cap(input.name)} checks messages${input.wait_seconds ? " and waits for a reply" : ""}`;
     default: return "";

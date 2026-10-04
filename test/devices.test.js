@@ -11,6 +11,7 @@ fs.chmodSync(fake, 0o755);
 process.env.KURAL_SSH_BIN = fake;
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "kural-dev-test-"));
 process.env.FAKE_SSH_HOME = home;
+const crypto = require("crypto");
 const { Ssh, explain, q } = require("../extension/lib/devices/ssh");
 const { Bridge } = require("../extension/lib/devices/bridge");
 
@@ -50,6 +51,29 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
     assert.strictEqual(r.timedOut, true);
     assert.match(explain(r), /didn't answer in time/);
   });
+  await check("a timeout answers at once even while something still holds ssh's output (a reused connection)", async () => {
+    const t0 = Date.now();
+    const r = await ssh.run(dev, "secret", "sleep 3 & sleep 3", { timeout: 300 });
+    assert.strictEqual(r.timedOut, true);
+    assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0} ms`);
+  });
+  await check("the device's own time limit stops a command that never ends", async () => {
+    const r = await ssh.runLimited(dev, "secret", "echo started; sleep 30", 1);
+    assert.match(r.stdout, /started/); assert.strictEqual(r.code, 124);
+  });
+  await check("~/ paths mean the home folder (not a folder named ~)", async () => {
+    assert.strictEqual((await ssh.writeFile(dev, "secret", "~/tilde/a.txt", "hi")).code, 0);
+    assert.ok(fs.existsSync(path.join(home, "tilde", "a.txt")));
+    assert.ok(!fs.existsSync(path.join(home, "~")));
+    assert.strictEqual((await ssh.readFile(dev, "secret", "~/tilde/a.txt")).stdout, "hi");
+  });
+  await check("Forget its key: plain and hashed (Ubuntu's HashKnownHosts) lines", async () => {
+    const salt = crypto.randomBytes(20);
+    const hashed = (h) => `|1|${salt.toString("base64")}|${crypto.createHmac("sha1", salt).update(h).digest("base64")}`;
+    fs.writeFileSync(ssh.knownHosts, `rpi.local ssh-ed25519 AAA1\n${hashed("rpi.local")} ssh-ed25519 AAA2\n${hashed("[rpi.local]:2222")} ssh-ed25519 AAA3\nother ssh-ed25519 AAA4\n`);
+    ssh.forgetKey(dev);
+    assert.deepStrictEqual(fs.readFileSync(ssh.knownHosts, "utf8").trim().split("\n").map((l) => l.split(" ")[2]), ["AAA3", "AAA4"]);
+  });
 
   // The bridge and the MCP server together, like Claude Code / Codex / Gemini use them.
   const asked = [];
@@ -82,12 +106,30 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
     assert.strictEqual((await tool("read_file", { path: "notes/todo.txt" })).content[0].text, "buy solder");
     assert.deepStrictEqual(asked, ["write_file"]);
   });
-  await check("MCP: another chat's (or a stale) token gets nothing", async () => {
+  await check("MCP: unlinking stops a command that's still running", async () => {
+    const t0 = Date.now();
+    const p = tool("run_command", { command: "sleep 20" });
+    await new Promise((r) => setTimeout(r, 300));
     bridge.end(s.token);
+    const r = await p;
+    assert.match(r.content[0].text, /Stopped/); assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+  });
+  await check("MCP: another chat's (or a stale) token gets nothing", async () => {
     const r = await tool("list_dir", { path: "." });
     assert.match(r.content[0].text, /isn't linked/);
   });
-  mcp.kill(); bridge.stop();
+  mcp.kill();
+  await check("MCP for Gemini: the tools carry a prefix (Gemini doesn't say which server a tool is from)", async () => {
+    const g = bridge.session({ deviceId: "d1", name: "rpi", prefix: "kural_device_", approve: async () => ({ allow: true }) });
+    const m = spawn(process.execPath, g.server.args, { env: { ...process.env, ...g.server.env } });
+    const lines = []; let buf = "";
+    m.stdout.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\n")) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
+    const ask = (id, method, params) => new Promise((done) => { m.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n"); const t = setInterval(() => { const x = lines.find((l) => l.id === id); if (x) { clearInterval(t); done(x); } }, 20); });
+    assert.deepStrictEqual((await ask(1, "tools/list", {})).result.tools.map((t) => t.name), ["kural_device_run_command", "kural_device_read_file", "kural_device_write_file", "kural_device_list_dir"]);
+    assert.match((await ask(2, "tools/call", { name: "kural_device_run_command", arguments: { command: "echo via-gemini" } })).result.content[0].text, /via-gemini/);
+    m.kill(); bridge.end(g.token);
+  });
+  bridge.stop();
   fs.rmSync(home, { recursive: true, force: true });
   console.log(fail ? `devices: ${fail} FAILED` : "devices: ALL PASS");
   process.exit(fail ? 1 : 0);

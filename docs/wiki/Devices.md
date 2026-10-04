@@ -38,12 +38,14 @@ unlink). Then ask in plain words: "what's using the CPU on the Pi?", "copy this 
 "read the log in /var/log/robot.log and tell me why it crashed".
 
 - **Agent mode:** Kural asks before each command and each file write on the device ("Run this on rpi-lab?"). Reading
-  files and listing folders just happen.
+  files and listing folders just happen. **Allow everything on rpi-lab in this chat** on that card stops the asking for
+  this device until you unlink it. (Allowing all commands on your own computer doesn't cover the device.)
 - **Auto mode:** commands and writes run without asking.
 - **Plan and Ask modes:** nothing is run or changed on the device.
 - Works with Claude, ChatGPT (Codex) and Gemini models. A model on your own computer (Ollama) can't use a device yet.
 - Each command is its own shell: `cd` doesn't carry over (the AI knows). Programs that never end (a server) should be
-  started in the background.
+  started in the background. A command has a time limit (2 minutes unless the AI asks for more, at most 30); when it
+  runs out, the command is stopped on the device too. Stop, or unlinking the device, stops it at once.
 
 The first connection trusts the device's key and remembers it (like answering "yes" in a terminal). If the key changes
 later (you reinstalled the device, a new SD card), Kural refuses to connect, because someone could be pretending to be

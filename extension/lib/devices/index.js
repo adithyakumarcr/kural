@@ -88,10 +88,10 @@ class Devices {
   }
 
   // A chat linked to a device: the MCP server for its AI (see bridge.js) and the token to end it with.
-  session(id, approve) {
+  session(id, approve, { prefix } = {}) {
     const dev = this.get(id);
     if (!dev) return null;
-    return this.bridge.session({ deviceId: id, name: `${dev.name} (${dev.user}@${dev.host})`, approve });
+    return this.bridge.session({ deviceId: id, name: `${dev.name} (${dev.user}@${dev.host})`, approve, prefix });
   }
   endSession(token) { if (token) this.bridge.end(token); }
 
@@ -112,7 +112,9 @@ class Devices {
     const env = this.ssh.env(password);
     const t = vscode.window.createTerminal({ name: `${dev.name} (SSH)`, shellPath: this.ssh.bin, shellArgs: this.ssh.terminalArgs(dev),
       env: { SSH_ASKPASS: env.SSH_ASKPASS, SSH_ASKPASS_REQUIRE: "force", DISPLAY: env.DISPLAY, KURAL_SSH_PW: password },
-      iconPath: new vscode.ThemeIcon("remote") });
+      iconPath: new vscode.ThemeIcon("remote"),
+      // Not restored after a restart: VS Code saves a restorable terminal's settings, env (the password) included, to disk.
+      isTransient: true });
     t.show();
   }
 

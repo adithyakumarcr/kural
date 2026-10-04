@@ -471,9 +471,9 @@
   }, 1000);
 
   const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page" };
-  // A linked device's tools (Gemini names them mcp__gemini__…).
+  // A linked device's tools (Gemini: mcp__gemini__kural_device_…).
   const DEVICE_VERB = { run_command: "Device command", read_file: "Read on device", write_file: "Wrote on device", list_dir: "Listed on device" };
-  const deviceVerb = (name) => { const m = /^mcp__(?:device|gemini)__(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
+  const deviceVerb = (name) => { const m = /^mcp__(?:device__|gemini__kural_device_)(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
   // "mcp__claude_ai_Notion__notion-search" -> "Notion · notion-search"
   function prettyTool(name) {
     const m = /^mcp__(.+?)__(.+)$/.exec(name || "");
@@ -616,7 +616,7 @@
       card.append(el("div", { class: "perm-row" },
         el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: always.checked }) }, "Run"),
         el("button", { class: "cb", onclick: () => post({ type: "permission", pid: b.pid, allow: false }) }, "Skip"),
-        el("label", { class: "always", for: `al-${b.pid}` }, always, " Allow all commands in this chat")));
+        el("label", { class: "always", for: `al-${b.pid}` }, always, b.where ? ` Allow everything on ${b.where} in this chat` : " Allow all commands in this chat")));
     } else card.append(el("div", { class: "perm-state" }, b.state === "allowed" ? [icon("check"), " Allowed"] : [icon("close"), " Skipped"]));
     return card;
   }
