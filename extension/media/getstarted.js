@@ -149,10 +149,11 @@
     else one = step(1, `Install ${C.program}`, installing ? "waiting" : i.state === "broken" ? "fail" : "todo",
       i.state === "broken" ? [el("p", {}, "Found ", el("code", {}, i.path), ", but it doesn't run. Install it again:")]
         : el("p", {}, `${C.program} is the official program for ${C.short}. Kural runs it in the background with its own login, so there's no key to paste.`),
-      installing ? el("p", { class: "note" }, "Installing in the terminal below. This page updates by itself when it's done.")
-        : el("div", { class: "row" }, ib("Install for me", "installCli", "primary"), el("span", { class: "muted" }, "runs the official install in a terminal")),
+      installing ? el("p", { class: "note" }, "Installing (progress at the bottom right). If the install asks something, Kural asks you in a pop-up. This page updates by itself when it's done.")
+        : el("div", { class: "row" }, ib("Install for me", "installCli", "primary"), el("span", { class: "muted" }, "with Homebrew or npm, whichever this computer has")),
       el("p", { class: "muted small" }, "Or paste this into a terminal yourself:"), code(C.install),
       C.installAlt ? el("p", { class: "muted small" }, "Or: ", el("code", {}, C.installAlt)) : null,
+      installing ? null : el("p", { class: "muted small" }, il("Install in a terminal instead", "installCliTerminal")),
       el("p", { class: "muted small" }, /npm/.test(C.install) ? "npm comes with Node.js (nodejs.org). " : "", il("Install guide", "cliDocs"), " · ",
         i.chosen ? ["Not found at ", el("code", {}, i.chosenPath), " · ", il("Find it automatically", "forgetCliPath")] : il(`Already installed? Choose the ${id} file…`, "chooseCli")));
     // 2. Logged in
@@ -162,8 +163,9 @@
     else if (l.state === "ok") two = step(2, "Log in", "ok", el("p", {}, "Logged in", [l.email, l.method, l.plan].filter(Boolean).length ? el("span", { class: "muted" }, ` · ${[l.email, l.plan || l.method].filter(Boolean).join(" · ")}`) : ""));
     else two = step(2, "Log in", loggingIn ? "waiting" : l.state === "unknown" ? "warn" : "todo",
       el("p", {}, l.state === "unknown" ? `Kural can't tell whether ${C.short} is logged in. The test (step 3) will tell.` : `Log in to ${C.short} once. Kural uses the same login as ${C.program}.`),
-      loggingIn ? el("p", { class: "note" }, "Finish logging in in the terminal below (it opens your browser). This page updates by itself.")
-        : el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, "in a terminal; it opens your browser")));
+      loggingIn ? el("p", { class: "note" }, "Finish logging in in your browser. This page updates by itself.")
+        : [el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, "opens the login page in your browser")),
+          el("p", { class: "muted small" }, il("Log in in a terminal instead", "loginCliTerminal"))]);
     // 3. Test
     const t = st.test;
     let three;

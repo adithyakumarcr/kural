@@ -2,6 +2,12 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Installing and logging in to Codex and Gemini without a terminal.** **Install for me** now uses whatever your
+  computer has (Homebrew on a Mac, otherwise npm), runs in the background, and turns any question the installer asks
+  into a pop-up. On a Mac without Homebrew or Node.js, Kural says so and opens Node.js's download page instead of
+  failing in a terminal. **Log in** opens the login page in your browser directly; Gemini's login no longer waits
+  behind a menu and a "[Y/n]" in a terminal.
+
 - **Devices over SSH.** Working on a Raspberry Pi or a board computer? **+ → Link device** saves it once (name,
   address, username, password) and links it to the chat. The AI can then run commands and read and write files on it,
   asking you first in Agent mode. Click the device's chip for a terminal on it. The password is stored encrypted by

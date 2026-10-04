@@ -130,6 +130,45 @@ function loginCommand(bin) {
   return [c.file === bin ? q(bin) : `node ${q(bin)}`, "login"].join(" ");
 }
 
+// Log in without a terminal, the way Codex's own editor extension does: Codex gives the login page's address, Kural
+// opens it in your browser (openUrl), and Codex waits for the browser to come back to it (localhost:1455).
+// Resolves { ok } or { error } or { cancelled }.
+async function codexLogin(bin, { openUrl, signal, timeout = 10 * 60 * 1000 } = {}) {
+  let s = null, timer = null, loginId = null;
+  try {
+    let finish;
+    const finished = new Promise((r) => (finish = r));
+    s = new AppServer(bin, { name: "codex-login" }, {
+      onNotification: (method, p) => {
+        if (method === "account/login/completed" && (!loginId || !p.loginId || p.loginId === loginId))
+          finish(p.success ? { ok: true } : { error: p.error || "The login didn't finish." });
+      },
+      onExit: () => finish({ error: lastLine(s && s.stderr) || "Codex stopped." }),
+    });
+    // (Cancel can come at any moment, even before the page opens.)
+    const stop = new Promise((res) => {
+      timer = setTimeout(() => res({ error: "The login wasn't finished in time. Try again." }), timeout);
+      if (signal) { if (signal.aborted) res({ cancelled: true }); else signal.addEventListener("abort", () => res({ cancelled: true }), { once: true }); }
+    });
+    const start = (async () => {
+      await s.init();
+      const r = await s.request("account/login/start", { type: "chatgpt" });
+      if (!r.authUrl) return { error: "Codex didn't give a login page." };
+      loginId = r.loginId;
+      openUrl(r.authUrl);
+      return finished;
+    })();
+    const out = await Promise.race([start, stop]);
+    if (!out.ok && loginId) await Promise.race([s.request("account/login/cancel", { loginId }).catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
+    return out;
+  } catch (e) {
+    return { error: e.message };
+  } finally {
+    clearTimeout(timer);
+    if (s) s.kill();
+  }
+}
+
 async function codexLogout(bin) {
   const r = await run(bin, ["logout"]);
   if (r.error || r.status !== 0) return { error: ((r.error && r.error.message) || r.stderr.trim() || r.stdout.trim() || `exit code ${r.status}`).split("\n").pop().slice(0, 200) };
@@ -863,4 +902,4 @@ function commandTool(item, cwd) {
 }
 
 module.exports = { CodexAgent, findCodex, codexVersion, codexAuth, codexLogout, codexRateLimits, codexModels, codexTest, askCodex,
-  loginCommand, setLog, NOT_LOGGED_IN, _test: { AppServer, unwrapShell, editInput, friendlyError, windowLabel, rateReport, resolveBin, command, limits } };
+  loginCommand, codexLogin, setLog, NOT_LOGGED_IN, _test: { AppServer, unwrapShell, editInput, friendlyError, windowLabel, rateReport, resolveBin, command, limits } };

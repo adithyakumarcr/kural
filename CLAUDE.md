@@ -59,7 +59,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Undo). Gemini: ACP (`gemini --acp`, JSON-RPC 2.0), kept in its "default" mode so edits and commands ask Kural; Kural's
   instructions go into the first message (`<kural_instructions>`); `--skip-trust`. Neither does agent teams or Claude
   Code's setup (`isClaude()` in the chat). Set up in Get started (`rec.codex`/`rec.gemini`: bin, models) →
-  `brain.setCli()`. Tests: `test/fake-codex.js`, `test/fake-gemini.js` (state via `FAKE_CODEX_STATE` /
+  `brain.setCli()`. **Install** (`lib/ai/install.js`, no vscode): no terminal; Homebrew on a Mac if present, else npm
+  (PATH from your shell: a Dock-started app has a short PATH), Node too old/missing → pop-up with nodejs.org; npm
+  EACCES → retry with `--prefix ~/.npm-global`. Output pauses ending in a question (`promptIn`: [y/N], (y), "press
+  RETURN", "Password:") → a modal pop-up, the answer written to the installer's stdin. **Login** without a terminal:
+  Codex `account/login/start {type:"chatgpt"}` → `authUrl` (Kural opens it) → `account/login/completed`; Gemini ACP
+  `authenticate {methodId:"oauth-personal"}` (no "[Y/n]" consent in ACP mode), with Kural's own `open`/`xdg-open`
+  first on PATH so Kural gets the URL and opens it (`vscode.env.openExternal`); CI / NO_BROWSER / DEBIAN_FRONTEND /
+  SSH_* cleared, else Gemini switches to a paste-a-code flow that hangs ACP. Notifications there are never awaited
+  while `installing`/`loggingIn` is set. Terminal ways stay as fallbacks (`installCliTerminal`, `loginCliTerminal`). Tests: `test/fake-codex.js`, `test/fake-gemini.js` (state via `FAKE_CODEX_STATE` /
   `FAKE_GEMINI_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.geminiPath` pointing at
   the fakes. The real programs were only checked logged out: verify streaming, approvals and tool names with real
   accounts when you can.

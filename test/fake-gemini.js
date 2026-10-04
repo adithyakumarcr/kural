@@ -6,6 +6,7 @@
 // State: $FAKE_GEMINI_STATE, or else the file $FAKE_GEMINI_FILE (default <tmp>/kural-fake-gemini-state):
 //   ok         logged in (default)
 //   loggedout  session/new and session/load fail the way Gemini CLI does without a login
+// "authenticate" (Google) opens a login page with open / xdg-open from PATH, then logs in after 1 s.
 // Every message it receives is added to $FAKE_GEMINI_LOG (one JSON per line), so a test can see what Kural sent.
 // Conversations it knows (for session/load) are kept in $FAKE_GEMINI_SESSIONS (default <tmp>/kural-fake-gemini-sessions.json).
 //
@@ -107,7 +108,16 @@ function handle(m) {
     case "initialize":
       return reply(m.id, { protocolVersion: 1, authMethods: [{ id: "oauth-personal", name: "Log in with Google" }, { id: "gemini-api-key", name: "Gemini API key" }, { id: "vertex-ai", name: "Vertex AI" }],
         agentInfo: { name: "gemini-cli", title: "Gemini CLI", version: "0.62.0" }, agentCapabilities: { loadSession: true, promptCapabilities: { image: true, audio: true, embeddedContext: true } } });
-    case "authenticate": return reply(m.id, {});
+    case "authenticate": {
+      // The Google login: opens the login page with the system's opener (found on PATH, like Gemini CLI's), then
+      // "the browser comes back" after 1 s and it's logged in.
+      if (p.methodId === "oauth-personal") {
+        try { require("child_process").spawn(process.platform === "darwin" ? "open" : "xdg-open", ["https://accounts.example/o/oauth2/auth?fake=1"], { stdio: "ignore", detached: true }).on("error", () => {}); } catch { /* no opener */ }
+        setTimeout(() => { if (!process.env.FAKE_GEMINI_STATE) fs.writeFileSync(stateFile, "ok"); reply(m.id, {}); }, 1000);
+        return;
+      }
+      return reply(m.id, {});
+    }
     case "session/new": {
       if (state === "loggedout") return fail(m.id, -32000, "Gemini API key is missing or not configured.");
       const sessionId = crypto.randomUUID();

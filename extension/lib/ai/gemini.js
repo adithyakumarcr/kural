@@ -776,6 +776,60 @@ async function geminiTest(bin, { cwd, model, env } = {}) {
   }
 }
 
+// Log in with Google without a terminal. In a terminal, Gemini CLI first shows a login menu and a "continue? [Y/n]"
+// question, and opens the browser only after both (easy to miss). Through ACP it's one request: "authenticate" with
+// the Google way. Gemini then opens the login page and waits (up to 5 minutes) until the browser comes back to it.
+// To be sure the page opens, Kural hands Gemini its own "open" / "xdg-open" (a tiny script first on PATH that gives
+// Kural the address), and opens it with openUrl(url). Windows: Gemini opens it itself.
+// Resolves { ok } or { error } or { cancelled }.
+async function geminiLogin(bin, { openUrl, signal, dir, timeout = 6 * 60 * 1000 } = {}) {
+  const env = {};
+  // Gemini prints a code to paste instead of opening a browser when it thinks there's no screen (CI, SSH,
+  // DEBIAN_FRONTEND=noninteractive, NO_BROWSER): through ACP that waits for input that never comes.
+  for (const k of ["CI", "NO_BROWSER", "DEBIAN_FRONTEND", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]) env[k] = "";
+  let urls = null;
+  if (!IS_WIN && openUrl) {
+    const shim = path.join(dir || quietDir(), "open-shim");
+    try {
+      fs.mkdirSync(shim, { recursive: true });
+      urls = path.join(shim, "urls.txt");
+      fs.writeFileSync(urls, "");
+      const script = `#!/bin/sh\nfor a in "$@"; do last="$a"; done\nprintf '%s\\n' "$last" >> ${JSON.stringify(urls)}\n`;
+      for (const n of ["open", "xdg-open"]) fs.writeFileSync(path.join(shim, n), script, { mode: 0o755 });
+      env.PATH = `${shim}${path.delimiter}${process.env.PATH || ""}`;
+    } catch { urls = null; }
+  }
+  const rpc = new Rpc(bin, ["--acp", "--skip-trust"], { cwd: quietDir(), env }, { onRequest: (m) => rpc.fail(m.id, -32601, "No.") });
+  let poll = null, timer = null, opened = 0;
+  const flush = () => {
+    if (!urls) return;
+    let lines = []; try { lines = fs.readFileSync(urls, "utf8").split("\n").filter((l) => /^https?:\/\//.test(l)); } catch { /* not yet */ }
+    for (; opened < lines.length; opened++) openUrl(lines[opened]);
+  };
+  try {
+    // (Cancel can come at any moment, even while Gemini is still starting.)
+    const stop = new Promise((res) => {
+      timer = setTimeout(() => res({ error: "The login wasn't finished in time. Try again." }), timeout);
+      if (signal) { if (signal.aborted) res({ cancelled: true }); else signal.addEventListener("abort", () => res({ cancelled: true }), { once: true }); }
+    });
+    const done = (async () => {
+      const init = await withTimeout(rpc.call("initialize", CLIENT), 60000);
+      const google = (init.authMethods || []).find((m) => m.id === "oauth-personal");
+      if (init.authMethods && !google) return { error: "This Gemini CLI doesn't offer a Google login." };
+      if (urls) poll = setInterval(flush, 300);
+      await rpc.call("authenticate", { methodId: "oauth-personal" });
+      return { ok: true };
+    })().catch((e) => ({ error: e.message }));
+    return await Promise.race([done, stop]);
+  } catch (e) {
+    return { error: e.message };
+  } finally {
+    clearInterval(poll); clearTimeout(timer);
+    flush();
+    rpc.kill();
+  }
+}
+
 // An empty folder for questions that aren't about a project: Gemini CLI looks around its folder at start, and in
 // your home folder that makes macOS ask for Photos, Music…
 function quietDir() {
@@ -785,5 +839,5 @@ function quietDir() {
 }
 function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini took too long to answer.")), ms).unref())]); }
 
-module.exports = { GeminiAgent, findGemini, geminiVersion, geminiAuth, geminiLogout, geminiModels, geminiTest, askGemini, loginCommand,
+module.exports = { GeminiAgent, findGemini, geminiVersion, geminiAuth, geminiLogout, geminiModels, geminiTest, askGemini, loginCommand, geminiLogin,
   NOT_LOGGED_IN, _test: { describe, changedPart, authSync, readJsonc, cmdTarget, launch, resultText } };

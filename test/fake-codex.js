@@ -5,7 +5,9 @@
 // Its state comes from $FAKE_CODEX_STATE, or else from the file $FAKE_CODEX_FILE (default <tmp>/kural-fake-codex-state):
 //   ok         logged in with ChatGPT (Plus), answers
 //   loggedout  account/read says no account; limits need a login
-// `logout` switches the state file to "loggedout"; `login` waits 1 s, then switches it to "ok".
+// `logout` switches the state file to "loggedout"; `login` (and app-server's account/login/start) waits 1 s, then
+// switches it to "ok".
+let loginTimer = null;
 // Threads it started are remembered in $FAKE_CODEX_FILE + ".threads" (so thread/resume can find them).
 // What a turn does depends on your message:
 //   "hello"         reasoning (streamed summary), then text in pieces, plus a rate-limit update
@@ -97,6 +99,15 @@ function handle(m) {
     }
     case "turn/interrupt": { const t = turns.get(p.turnId); if (t) t.interrupted = true; return reply({}); }
     case "account/logout": fs.writeFileSync(file, "loggedout"); return reply({});
+    // The browser login: the page's address, then (as if you finished in the browser) logged in after 1 s.
+    case "account/login/start": {
+      if (p.type !== "chatgpt") return fail("only chatgpt");
+      const loginId = "login-1";
+      reply({ type: "chatgpt", loginId, authUrl: "https://auth.example/oauth/authorize?fake=1" });
+      loginTimer = setTimeout(() => { fs.writeFileSync(file, "ok"); out({ method: "account/login/completed", params: { loginId, success: true, error: null } }); }, 1000);
+      return;
+    }
+    case "account/login/cancel": clearTimeout(loginTimer); out({ method: "account/login/completed", params: { loginId: p.loginId, success: false, error: "Login was not completed" } }); return reply({ status: "canceled" });
     default: return fail(`unknown method ${m.method}`);
   }
 }

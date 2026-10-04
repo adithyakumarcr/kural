@@ -14,6 +14,9 @@ Codex CLI with a ChatGPT plan), Gemini (Google's Gemini CLI with a Google accoun
 model on their computer (Ollama, offline, no account). Features and how to use them:
 - Get started (Command Palette: "Kural: Get Started"): pick Claude, ChatGPT (Codex), Gemini or your own model; Kural
   checks each step (install, log in or download a model, a test request). Any one is enough; all can be set up.
+  For Codex and Gemini, "Install for me" installs in the background with Homebrew or npm (whichever the computer has;
+  without either it points to Node.js's installer), and any question the installer asks comes as a pop-up; "Log in"
+  opens the login page in the browser, no terminal needed (a terminal login is still offered as a fallback).
 - Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking), Plan
   (a plan, then "Build it"), Ask (answers only). @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku, ChatGPT (Codex)

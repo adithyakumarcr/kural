@@ -11,8 +11,10 @@
 //     3. A test request works   → one request to that model through Kural's engine
 //
 //   ChatGPT (Codex), Gemini   OpenAI's Codex CLI / Google's Gemini CLI with their own login (lib/ai/clis.js):
-//     1. Installed              → "Install for me" runs the official npm / Homebrew install in a terminal
-//     2. Logged in              → "Log in" starts the program's own login in a terminal (it opens the browser)
+//     1. Installed              → "Install for me": Homebrew or npm, whichever this computer has, in the background;
+//                                 any question the installer asks becomes a pop-up (lib/ai/install.js)
+//     2. Logged in              → "Log in": the program's own login without a terminal; Kural opens the login page
+//                                 in your browser (codexLogin / geminiLogin). A terminal login stays as a fallback.
 //     3. A test request works   → one tiny request, sent the way Kural sends them
 //
 // Kural is "set up" when one of them passed (remembered on this computer). Until then the chat shows "Set up Kural
@@ -31,6 +33,7 @@ const { LocalAgent } = require("./ai/engine");
 const brain = require("./ai");
 const { CLIS, IDS: CLI_IDS } = require("./ai/clis");
 const ws = require("./workspace");
+const installer = require("./ai/install");
 
 const KEY = "kural.setup.v2";   // { claude: { bin, version, at, authSaid } | null, local: { model, at } | null,
                                 //   codex / gemini: { bin, version, at, models } | null }
@@ -264,7 +267,8 @@ class GetStarted {
     brain.setCli(id, { account: a.email || a.method || "" });
     if (S.login.state === "no") S.test = { state: "blocked" };
     else if (S.test.state === "blocked") S.test = { state: "idle" };
-    if (this.waiting === `install-${id}` && S.install.state === "ok") this.wait(S.login.state === "no" ? `login-${id}` : null);
+    // Installed: the page shows the Log in button next (logging in starts when you click it, not by itself).
+    if (this.waiting === `install-${id}` && S.install.state === "ok") this.wait(null);
     if (this.waiting === `login-${id}` && S.login.state === "ok") this.wait(null);
     // Installed and logged in, and you chose it: test it once by itself.
     if (this.s.path === id && S.test.state === "idle" && S.login.state !== "no" && this[`autoTested_${id}`] !== bin) { this[`autoTested_${id}`] = bin; setImmediate(() => this.testCli(id)); }
@@ -402,20 +406,136 @@ class GetStarted {
     t.sendText(text);
   }
 
+  // ---------- Codex / Gemini: install and log in without a terminal ----------
+
+  // Install in the background (lib/ai/install.js). Questions the installer asks become pop-ups. No Homebrew and no
+  // Node.js: say so, and offer Node.js's download page (its installer is a normal Mac/Windows app).
+  async installCli(id) {
+    const c = CLIS[id];
+    if (this.installing) return;
+    this.installing = id;
+    this.wait(`install-${id}`);
+    try {
+      const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Installing ${c.program}`, cancellable: true }, (progress, token) => {
+        const ac = new AbortController();
+        token.onCancellationRequested(() => ac.abort());
+        let last = 0;
+        return installer.install(id, {
+          signal: ac.signal,
+          onPlan: (plan) => { log(`get started: installing ${c.program}: ${plan.text}`); progress.report({ message: plan.text }); },
+          onOutput: (text) => {
+            for (const l of text.split(/\r?\n/)) if (l.trim()) log(`  ${l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").slice(0, 300)}`);
+            if (Date.now() - last > 1000) { last = Date.now(); const l = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split(/\r?\n|\r/).map((x) => x.trim()).filter(Boolean).pop(); if (l) progress.report({ message: l.slice(0, 80) }); }
+          },
+          ask: (q) => this.askInstaller(c, q),
+        });
+      });
+      if (r.plan && r.plan.missing) {
+        this.wait(null);
+        const why = r.plan.old ? `${c.program} needs Node.js ${r.plan.need} or newer; this computer has Node.js ${r.plan.old}.`
+          : `${c.program} installs with npm, which comes with Node.js${process.platform === "darwin" ? " (or with Homebrew)" : ""}, and neither is on this computer.`;
+        const pick = await vscode.window.showWarningMessage(`Kural: ${why}`, { modal: true,
+          detail: "Install Node.js (a normal installer from nodejs.org), then click Install for me again." }, "Get Node.js");
+        if (pick === "Get Node.js") vscode.env.openExternal(vscode.Uri.parse("https://nodejs.org/en/download"));
+        return;
+      }
+      if (r.cancelled) { log(`get started: ${c.program} install cancelled`); this.wait(null); return; }
+      if (!r.ok) {
+        log(`get started: ${c.program} install failed (exit ${r.code})`);
+        this.wait(null);
+        // (Not awaited: an ignored notification must not keep "installing" set.)
+        vscode.window.showErrorMessage(`Kural couldn't install ${c.program}: ${installer.failure(r.output)}`, "Show details", "Try in a terminal").then((pick) => {
+          if (pick === "Show details") vscode.commands.executeCommand("kural.showLog");
+          if (pick === "Try in a terminal") this.installInTerminal(id);
+        });
+        return;
+      }
+      log(`get started: ${c.program} installed`);
+      await this.refresh();
+      // Installed somewhere Kural doesn't look by itself (an unusual npm folder): say so, and let you point to it.
+      if (this.s.clis[id].install.state !== "ok") {
+        this.wait(null);
+        vscode.window.showWarningMessage(`Kural: ${c.program} was installed, but Kural can't find the ${id} program. Choose the file it was installed to.`, `Choose the ${id} file…`, "Show details").then((pick) => {
+          if (pick === "Show details") vscode.commands.executeCommand("kural.showLog");
+          else if (pick) this.onMessage({ type: "chooseCli", id });
+        });
+      } else if (this.s.clis[id].login.state !== "ok") {
+        vscode.window.showInformationMessage(`Kural: ${c.program} is installed. Next: log in.`, "Log in").then((pick) => { if (pick === "Log in") this.loginCli(id); });
+      }
+    } finally { this.installing = null; }
+  }
+
+  // A question from the installer, as a pop-up. The answer is what gets typed (null = stop the install).
+  async askInstaller(c, q) {
+    const detail = `${c.program}'s install asks:\n\n${q.question}`;
+    if (q.kind === "secret" || q.kind === "text") {
+      // ("text": a question Kural doesn't recognise; the installer has been waiting for 20 s.)
+      const v = await vscode.window.showInputBox({ title: `Installing ${c.program}: the install is waiting for an answer`, prompt: q.question,
+        password: q.kind === "secret", ignoreFocusOut: true, placeHolder: q.kind === "text" ? "Your answer (Esc: don't answer; Cancel in the progress message stops the install)" : undefined });
+      // A guessed question left unanswered (it may not be one) changes nothing; an unanswered password stops it.
+      if (v === undefined) return q.kind === "text" ? undefined : null;
+      return v;
+    }
+    if (q.kind === "enter") {
+      const pick = await vscode.window.showInformationMessage(`Installing ${c.program}`, { modal: true, detail }, "Continue");
+      return pick ? "" : null;
+    }
+    const pick = await vscode.window.showInformationMessage(`Installing ${c.program}`, { modal: true, detail }, "Yes", "No");
+    return pick === "Yes" ? "y" : pick === "No" ? "n" : null;
+  }
+
+  installInTerminal(id) {
+    const c = CLIS[id];
+    this.terminal(`Install ${c.program}`, process.platform === "win32" ? `${c.install}; Write-Host 'Done. Back to Kural.'` : `${c.install} && echo 'Done. Back to Kural.'`);
+    this.wait(`install-${id}`);
+  }
+
+  // Log in: the program's own login, without a terminal. Kural opens the login page in your browser and waits.
+  async loginCli(id) {
+    const c = CLIS[id], S = this.s.clis[id];
+    if (this.loggingIn) return;
+    this.loggingIn = id;
+    S.test = { state: "idle" }; this[`autoTested_${id}`] = null;
+    this.wait(`login-${id}`);
+    try {
+      let opened = false;
+      const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Log in to ${c.short} in your browser`, cancellable: true }, (progress, token) => {
+        const ac = new AbortController();
+        token.onCancellationRequested(() => ac.abort());
+        progress.report({ message: "opening the login page…" });
+        return c.login(S.bin, { signal: ac.signal, openUrl: (url) => {
+          opened = true;
+          log(`get started: opening ${c.short}'s login page`);
+          vscode.env.openExternal(vscode.Uri.parse(url));
+          progress.report({ message: "waiting for you to finish in the browser (Cancel to stop)" });
+        } });
+      });
+      log(`get started: ${c.short} login: ${r.ok ? "done" : r.cancelled ? "cancelled" : r.error}`);
+      await this.refresh();
+      if (r.ok || S.login.state === "ok") { this.wait(null); return; }
+      this.wait(null);
+      if (r.cancelled) return;
+      vscode.window.showErrorMessage(`Kural: the ${c.short} login didn't finish${opened ? "" : " (the login page didn't open)"}: ${r.error}`, "Try again", "Log in in a terminal").then((pick) => {
+        if (pick === "Try again") this.loginCli(id);
+        if (pick === "Log in in a terminal") this.loginInTerminal(id);
+      });
+    } finally { this.loggingIn = null; }
+  }
+
+  loginInTerminal(id) {
+    this.terminal(`Log in to ${CLIS[id].short}`, CLIS[id].loginCommand(this.s.clis[id].bin));
+    this.s.clis[id].test = { state: "idle" }; this[`autoTested_${id}`] = null;
+    this.wait(`login-${id}`);
+  }
+
   async onMessage(m) {
     switch (m.type) {
       case "ready": this.post(); break;
       case "path": this.s.path = m.path === "local" || CLI_IDS.includes(m.path) ? m.path : "claude"; this.post(); await this.refresh(); break;
-      case "installCli": if (CLIS[m.id]) {
-        const c = CLIS[m.id];
-        this.terminal(`Install ${c.program}`, process.platform === "win32" ? `${c.install}; Write-Host 'Done. Back to Kural.'` : `${c.install} && echo 'Done. Back to Kural.'`);
-        this.wait(`install-${m.id}`);
-      } break;
-      case "loginCli": if (CLIS[m.id] && this.s.clis[m.id].bin) {
-        this.terminal(`Log in to ${CLIS[m.id].short}`, CLIS[m.id].loginCommand(this.s.clis[m.id].bin));
-        this.s.clis[m.id].test = { state: "idle" }; this[`autoTested_${m.id}`] = null;
-        this.wait(`login-${m.id}`);
-      } break;
+      case "installCli": if (CLIS[m.id]) await this.installCli(m.id); break;
+      case "installCliTerminal": if (CLIS[m.id]) this.installInTerminal(m.id); break;
+      case "loginCli": if (CLIS[m.id] && this.s.clis[m.id].bin) await this.loginCli(m.id); break;
+      case "loginCliTerminal": if (CLIS[m.id] && this.s.clis[m.id].bin) this.loginInTerminal(m.id); break;
       case "testCli": if (CLIS[m.id]) await this.testCli(m.id); break;
       case "cliDocs": if (CLIS[m.id]) vscode.env.openExternal(vscode.Uri.parse(CLIS[m.id].docs)); break;
       case "chooseCli": if (CLIS[m.id]) {
