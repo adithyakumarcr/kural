@@ -51,6 +51,8 @@ function activate(context) {
   // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
   // AI work without a project open happens in Kural's own folder, never in your home folder (see workspace.js).
   require("./lib/workspace").setWorkDir(require("path").join(context.globalStorageUri.fsPath, "work"));
+  brain.setStore(require("path").join(context.globalStorageUri.fsPath, "cli-chats"));   // (Codex / Gemini conversation ids)
+  require("./lib/ai/codex").setLog(log);
   getStarted = new GetStarted(context);
   getStarted.register();
 
@@ -76,7 +78,7 @@ function activate(context) {
       login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted"],
       missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted"],
     }[state];
-    if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, or your own model with Ollama): open Get started", "kural.getStarted"]; return; }
+    if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, ChatGPT, Gemini, or your own model with Ollama): open Get started", "kural.getStarted"]; return; }
     [status.text, status.tooltip, status.command] = on || state === "login" || state === "missing"
       ? look : ["$(circle-slash) Tab Completion", tabCard(false), "kural.tabPanel.focus"];
   };

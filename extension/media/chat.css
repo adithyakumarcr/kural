@@ -163,6 +163,8 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mi:hover { background: var(--hover); }
 .mi.on .mi-label { font-weight: 600; }
 .mi-hint { color: var(--muted); font-size: calc(11px * var(--fs, 1)); margin-left: auto; padding-left: 10px; white-space: nowrap; }
+.mi > .mi-label:not(.ln) { white-space: nowrap; flex-shrink: 0; }
+.mi > .mi-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .check { width: 15px; height: 15px; display: grid; place-items: center; font-size: calc(10px * var(--fs, 1)); border: 1px solid var(--border); color: var(--accent); flex-shrink: 0; }
 .check.radio { border-radius: 50%; } .check.box { border-radius: 4px; }
 /* The chosen dot is drawn, not a "●" character: a font puts that character slightly off-centre. */
@@ -271,7 +273,9 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 
 /* Claude's thinking (summaries) */
 .think { margin: 4px 0 8px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); }
-.think-head { cursor: pointer; display: inline-flex; align-items: center; gap: 5px; user-select: none; }
+.think-head { cursor: pointer; display: flex; align-items: center; gap: 5px; user-select: none; min-width: 0; }
+.think-label { flex: none; }
+.think-line { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: .75; font-style: italic; }
 .think-head:hover { color: var(--fg, inherit); }
 .think-caret::before { font-family: codicon; content: "\eab6"; display: inline-block; width: 1em; vertical-align: -2px; }
 .think.open .think-caret::before { content: "\eab4"; }
@@ -407,3 +411,9 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 .img-remote { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 6px; border: 1px dashed var(--border); color: var(--muted); cursor: pointer; }
 .img-remote:hover { color: var(--vscode-foreground); }
 .img-missing { color: var(--muted); font-style: italic; }
+
+/* Back (History, Models on this computer): a clear button at the top left. */
+.back-btn { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; padding: 3px 10px 3px 7px; border-radius: 6px; border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--vscode-foreground) 6%, transparent); color: var(--vscode-foreground); font-size: calc(12px * var(--fs, 1)); font-weight: 600; cursor: pointer; }
+.back-btn:hover { background: var(--hover); border-color: var(--accent); }
+.back-btn .codicon { font-size: 14px; }

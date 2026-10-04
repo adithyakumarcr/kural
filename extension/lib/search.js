@@ -162,19 +162,19 @@ class SearchView {
           this.current = null;
           slot.proc.kill();
           if (msg.is_error) {
-            this.post({ type: "error", id, message: !brain.isLocal(slot.model) && LOGIN_RE.test(msg.result || "") ? "Claude isn't logged in. Open Kural: Get Started." : (msg.result || "Something went wrong.") });
+            this.post({ type: "error", id, message: !brain.isLocal(slot.model) && LOGIN_RE.test(msg.result || "") ? `${brain.providerOf(slot.model).label} isn't logged in. Open Kural: Get Started.` : (msg.result || "Something went wrong.") });
             return;
           }
           const out = msg.structured_output || safeJson(msg.result) || { answer: msg.result || "", results: [] };
           const results = verify(out.results || []);
           log(`ask: "${q}" → ${results.length} places in ${Date.now() - t0} ms`);
-          this.post({ type: "askResult", id, answer: out.answer || "", results, ms: Date.now() - t0, model: brain.isLocal(slot.model) ? brain.localName(slot.model) : slot.model[0].toUpperCase() + slot.model.slice(1) });
+          this.post({ type: "askResult", id, answer: out.answer || "", results, ms: Date.now() - t0, model: brain.engineOf(slot.model) === "claude" ? slot.model[0].toUpperCase() + slot.model.slice(1) : slot.model.replace(/^(ollama|codex|gemini):/, "") });
         }
       },
       onExit: (info) => {
         if (this.current && this.current.id === id) {
           this.current = null;
-          this.post({ type: "error", id, message: info.login ? "Claude isn't logged in. Open Kural: Get Started." : "The model stopped unexpectedly. See View → Output → Kural." });
+          this.post({ type: "error", id, message: info.login ? `${brain.providerOf(slot.model).label} isn't logged in. Open Kural: Get Started.` : "The model stopped unexpectedly. See View → Output → Kural." });
         }
       },
     };
@@ -185,7 +185,13 @@ class SearchView {
 }
 
 
-function safeJson(s) { try { return JSON.parse(s); } catch { return null; } }
+// The answer as JSON. Models without a JSON-answer option (Codex, Gemini) may wrap it in a code fence or a sentence:
+// take the outermost {…}.
+function safeJson(s) {
+  try { return JSON.parse(s); } catch { /* not plain JSON */ }
+  const m = /\{[\s\S]*\}/.exec(String(s || ""));
+  try { return m ? JSON.parse(m[0]) : null; } catch { return null; }
+}
 
 // Check Claude's places against the real files: add the actual line text, drop places that don't exist.
 function verify(results) {

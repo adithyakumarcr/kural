@@ -14,10 +14,15 @@ files, runs commands and answers. With code selected, Ctrl+L adds it to your mes
 
 Every file change shows under the answer: open the before/after, **keep** it or **undo** it.
 
+You can change the mode while an answer is running. Agent → Auto: the commands waiting for your OK run at once, and
+later ones don't ask. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
+your next message, because which tools the model has is fixed when it starts.
+
 ## The model menu (bottom of the chat)
 
-- **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, or a model **on this computer** (see [[Your Own Model]]).
-  You can switch in the middle of a conversation; the new model gets the conversation so far.
+- **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, **ChatGPT (Codex)** and **Gemini** models (see
+  [[ChatGPT and Gemini]]), or a model **on this computer** (see [[Your Own Model]]). You can switch in the middle of a
+  conversation; the new model gets the conversation so far.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
   Medium / High / Max).
 - **Mood.**
@@ -40,12 +45,14 @@ Every file change shows under the answer: open the before/after, **keep** it or 
 
 ## In the answer
 
-- **Thinking.** A short summary of the model's thinking, above the answer; click it to read it all.
+- **Thinking.** One steady line above the answer: "Thinking…" with the model's latest thought, then "Thought for 12 s".
+  Click it to read all of it.
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.
 - **Code blocks** have **Copy**, **Insert** (at your cursor) and **Apply** (Kural applies it to the file and you review
   it, like [[Inline Edit]]).
 - **Pictures.** Pictures in an answer are shown: a picture file from your project, one the model read, or one an image
-  model made. A picture from the internet shows **Load image** first: loading it would tell that website you read this
+  model made. Ask "show me @chart.png" and the chat shows it. Pictures you attach or mention with @ show in your
+  message. A picture from the internet shows **Load image** first: loading it would tell that website you read this
   answer.
 - **Links** open in your browser; `file.py:12` style references open the file at that line.
 - **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;

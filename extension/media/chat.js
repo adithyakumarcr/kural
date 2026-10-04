@@ -37,7 +37,17 @@
   const dir = (p) => { const i = (p || "").lastIndexOf("/"); return i > 0 ? p.slice(0, i) : ""; };
   const post = (m) => vscode.postMessage(m);
   // "Sonnet", or for a model on this computer (Ollama) "qwen3-coder:30b · local".
-  const modelLabel = (id) => /^ollama:/.test(id || "") ? `${id.slice(7)} · local` : (S.models.find((m) => m.id === id) || { label: id || "?" }).label;
+  // "opus" → "Opus"; "ollama:qwen3:8b" → "qwen3:8b · local"; "codex:gpt-6.1-sol" → its name in Codex's list.
+  const modelLabel = (id) => {
+    if (/^ollama:/.test(id || "")) return `${id.slice(7)} · local`;
+    const c = /^(codex|gemini):(.*)$/.exec(id || "");
+    if (c) {
+      const cli = (S.clis || []).find((x) => x.id === c[1]) || { short: c[1], models: [] };
+      const m = cli.models.find((x) => x.id === c[2]);
+      return c[2] === "default" ? `${cli.short} (default)` : m ? m.label : c[2];
+    }
+    return (S.models.find((m) => m.id === id) || { label: id || "?" }).label;
+  };
   const gb = (bytes) => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(bytes >= 1e10 ? 0 : 1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
   const FRIENDS = ["Rachel", "Ross", "Monica", "Chandler", "Joey", "Phoebe"];
   const roleLabel = (id) => (S.roles.find((r) => r.id === id) || { label: id }).label;
@@ -52,6 +62,10 @@
 
   // Icons: Codicons (VS Code's own icon set, media/codicons), so Kural looks like the editor around it. Never emoji.
   const ICON_ALIAS = { clock: "history", plus: "add" };
+  // Text from elsewhere (model descriptions from ollama.com…) without emoji: Kural shows icons from one set only.
+  const noEmoji = (s) => String(s || "").replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{200D}\u{20E3}]/gu, "").replace(/\s{2,}/g, " ").trim();
+  // "Back" at the top left of a page that covers the chat (History, Models on this computer): a real button, easy to see.
+  const backBtn = (onclick, title = "Back to the chat") => el("button", { class: "back-btn", title, onclick: () => onclick() }, icon("arrow-left"), " Back");
   const icon = (name, cls = "") => el("i", { class: `codicon codicon-${ICON_ALIAS[name] || name}${cls ? ` ${cls}` : ""}`, "aria-hidden": "true" });
 
   function ago(t) {
@@ -72,10 +86,12 @@
     if (/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[A-Za-z]:[\\/]/.test(p) && !/^file:/i.test(p)) return null;   // http(s) and other schemes
     const F = S.pics || {};   // { base, root } (from the extension: filesFor)
     let abs = p.replace(/^file:\/\//i, "").replace(/\\/g, "/");
+    if (/^~\//.test(abs) && F.home) abs = String(F.home).replace(/\\/g, "/").replace(/\/$/, "") + abs.slice(1);
     if (!/^\//.test(abs) && !/^[A-Za-z]:\//.test(abs)) abs = `${String(F.root || "").replace(/\\/g, "/").replace(/\/$/, "")}/${abs.replace(/^\.\//, "")}`;
     if (/^[A-Za-z]:\//.test(abs)) abs = `/${abs[0].toLowerCase()}:${abs.slice(2)}`;   // C:/x → /c:/x (Windows)
     return F.base ? F.base + abs.split("/").map((x, i) => i === 0 ? x : encodeURIComponent(x)).join("/") : null;
   }
+  const IMG_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
   // ![alt](src) → the picture. A web picture waits for a click: loading it would tell that website you read this (a
   // model can be tricked into writing a picture link that carries your data away).
   function imageHtml(alt, src) {
@@ -284,8 +300,7 @@
     const pinned = items.filter((h) => h.pinned), rest = items.filter((h) => !h.pinned);
     const group = (label, list) => list.length ? [el("div", { class: "h-group" }, label), ...list.map(historyItem)] : [];
     historyEl.replaceChildren(
-      el("div", { class: "h-head" }, el("span", { class: "h-title" }, "All chats"), el("span", { class: "h-count" }, S.history.length ? String(S.history.length) : ""),
-        el("span", { class: "spacer" }), el("button", { class: "cb", onclick: () => closeHistory() }, "Back")),
+      el("div", { class: "h-head" }, backBtn(closeHistory), el("span", { class: "h-title" }, "All chats"), el("span", { class: "h-count" }, S.history.length ? String(S.history.length) : "")),
       search, scope,
       items.length ? el("div", { class: "h-list" }, ...group("Pinned", pinned), ...group(pinned.length ? "Chats" : "", rest))
         : el("div", { class: "h-empty" }, S.history.length ? "No chats match." : "Your chats show up here, from every workspace."));
@@ -318,7 +333,7 @@
       listEl.append(el("div", { class: "empty" },
         el("div", { class: "logo" }, "{K}"),
         el("div", { class: "brand setup-title" }, "Set up Kural first"),
-        el("div", { class: "setup-text" }, "Pick where Kural's AI comes from: Claude, or your own model on this computer. Kural checks that it works."),
+        el("div", { class: "setup-text" }, "Pick where Kural's AI comes from: Claude, ChatGPT (Codex), Gemini, or your own model on this computer. Kural checks that it works."),
         el("button", { class: "cb big solid", onclick: () => post({ type: "getStarted" }) }, "Get started")));
     } else if (!t || !t.messages.length) {
       // Home: the name, what it is, one line, three hints. The rest is in the menus.
@@ -352,11 +367,14 @@
     if (!b || !wrap) return rerender(i);
     if (b.k === "text") wrap.replaceChildren(...markdown(b.text, !msg.running));
     else if (b.k === "think") {
-      const body = wrap.querySelector(".think-body");
+      const body = wrap.querySelector(".think-body"), line = wrap.querySelector(".think-line");
       if (!body) return rerender(i);
-      const end = body.scrollHeight - body.scrollTop - body.clientHeight < 16;   // following its end?
-      body.textContent = b.text;
-      if (end) body.scrollTop = body.scrollHeight;
+      if (line) line.textContent = lastLine(b.text);
+      if (b._open) {   // (closed: nothing to draw until you open it)
+        const end = body.scrollHeight - body.scrollTop - body.clientHeight < 16;   // following its end?
+        body.textContent = b.text;
+        if (end) body.scrollTop = body.scrollHeight;
+      } else body.textContent = b.text;
     } else return rerender(i);
     follow();
   }
@@ -369,6 +387,33 @@
       el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"), pillLabel(ctx));
   }
 
+  // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock), and a
+  // new block is added without redrawing the others (appendBlock).
+  function blockNode(m, b, k) {
+    const w = el("div", { class: "blk", "data-b": k });
+    if (b.k === "text") w.append(...markdown(b.text, !m.running));
+    else if (b.k === "tool") w.append(toolNode(b));
+    else if (b.k === "perm") w.append(permNode(b));
+    else if (b.k === "agent") w.append(agentNode(b));
+    else if (b.k === "question") w.append(questionNode(b));
+    else if (b.k === "think") w.append(thinkNode(b, m.running && !b.done));
+    else if (b.k === "image") w.append(imageNode(b));
+    return w;
+  }
+  // A new block at the end of an answer that's on screen: added after the last block; the rest stays as it is.
+  function appendBlock(i) {
+    const msg = S.tab.messages[i], k = msg.blocks.length - 1;
+    const out = listEl.querySelector(`[data-i="${i}"] .answer`);
+    const prev = out && (k === 0 ? null : out.querySelector(`[data-b="${k - 1}"]`));
+    if (!out || (k > 0 && !prev) || pending !== null) return scheduleRerender(i);
+    // A previous live thinking box is finished once something comes after it.
+    if (prev && msg.blocks[k - 1].k === "think") prev.replaceWith(blockNode(msg, msg.blocks[k - 1], k - 1));
+    const node = blockNode(msg, msg.blocks[k], k);
+    const after = k === 0 ? (out.querySelector(".team-note") || null) : out.querySelector(`[data-b="${k - 1}"]`);
+    if (after) after.after(node); else out.prepend(node);
+    follow();
+  }
+
   function messageNode(m, i) {
     if (m.role === "user") {
       return el("div", { class: "msg user", "data-i": i },
@@ -376,6 +421,10 @@
           m.mode && m.mode !== "agent" ? el("span", { class: `mode-tag ${m.mode}` }, modeLabel(m.mode)) : null,
           (m.contexts || []).map((c) => el("span", { class: "ctx" }, icon("file"), " ", c.name || base(c.path)))) : null,
         el("div", { class: "bubble" }, (m.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)),
+          // Pictures you mentioned with @: shown, like attached ones.
+          ((pics) => pics.length ? el("div", { class: "att-row" }, pics.map((c) => el("img", { class: "att-photo", src: fileSrc(c.path), alt: base(c.path),
+            title: `Open ${base(c.path)}`, onclick: () => post({ type: "openFile", path: c.path }) }))) : null)(
+            (m.segments || []).filter((s) => s.t !== "text" && s.ctx && s.ctx.kind !== "selection" && IMG_RE.test(s.ctx.path || "") && fileSrc(s.ctx.path)).map((s) => s.ctx)),
           (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
             a.kind === "image" && fileSrc(a.path)
               ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.path }) })
@@ -385,18 +434,7 @@
     const out = el("div", { class: "answer" });
     const last = i === S.tab.messages.length - 1;
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
-    (m.blocks || []).forEach((b, k) => {
-      // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock).
-      const w = el("div", { class: "blk", "data-b": k });
-      if (b.k === "text") w.append(...markdown(b.text, !m.running));
-      else if (b.k === "tool") w.append(toolNode(b));
-      else if (b.k === "perm") w.append(permNode(b));
-      else if (b.k === "agent") w.append(agentNode(b));
-      else if (b.k === "question") w.append(questionNode(b));
-      else if (b.k === "think") w.append(thinkNode(b, m.running && !b.done));
-      else if (b.k === "image") w.append(imageNode(b));
-      out.append(w);
-    });
+    (m.blocks || []).forEach((b, k) => out.append(blockNode(m, b, k)));
     const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
     const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
     if (m.running && waiting) out.append(el("div", { class: "working" }, el("span", { class: "wait-dot" }), asking ? "Waiting for your answer above" : "Waiting for your OK above"));
@@ -408,7 +446,7 @@
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
     if (m.note) out.append(el("div", { class: "note" }, m.note));
     if (m.error === "stopped") out.append(el("div", { class: "note" }, "Stopped."));
-    else if (m.error === "login") out.append(el("div", { class: "note warn" }, "Claude isn't logged in. ", el("button", { class: "cb primary", onclick: () => post({ type: "login" }) }, "Get started")));
+    else if (m.error === "login") out.append(el("div", { class: "note warn" }, `${m.errorWho || "Claude"} isn't logged in. `, el("button", { class: "cb primary", onclick: () => post({ type: "login", tabId: S.tab.id }) }, "Log in")));
     else if (m.error === "missing") out.append(el("div", { class: "note warn" }, "Claude isn't set up yet. Open Kural: Get Started, or pick a model on your computer."));
     else if (m.error) out.append(el("div", { class: "note warn" }, m.error, " ", el("button", { class: "cb", onclick: () => post({ type: "showLog" }) }, "Open log")));
     if (m.planReady) out.append(el("div", { class: "plan-bar" },
@@ -452,15 +490,17 @@
       pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), onclick: () => post({ type: "openFile", path: file }) }) : null);
   }
 
-  // Claude's thinking (short summaries). Open while it thinks; afterwards one line you can click to open.
+  // The model's thinking (short summaries). Always one line, so nothing around it moves while it thinks: "Thinking…"
+  // with its latest sentence, then "Thought for 12 s". Click to read all of it.
+  const lastLine = (t) => { const s = String(t || "").trim().split(/\n+/).filter(Boolean); return s.length ? s[s.length - 1].replace(/^[*#\s]+|\*+$/g, "") : ""; };
   function thinkNode(b, live) {
     const secs = b.ms ? Math.max(1, Math.round(b.ms / 1000)) : 0;
-    const node = el("div", { class: `think${live || b._open ? " open" : ""}${live ? " live" : ""}` });
+    const node = el("div", { class: `think${b._open ? " open" : ""}${live ? " live" : ""}` });
     node.append(
       el("div", { class: "think-head", onclick: () => { b._open = !node.classList.contains("open"); node.classList.toggle("open", b._open); } },
-        el("span", { class: "think-caret" }), live ? "Thinking…" : secs ? `Thought for ${secs} s` : "Thought"),
+        el("span", { class: "think-caret" }), el("span", { class: "think-label" }, live ? "Thinking…" : secs ? `Thought for ${secs} s` : "Thought"),
+        live ? el("span", { class: "think-line" }, lastLine(b.text)) : null),
       el("div", { class: "think-body" }, b.text));
-    if (live) requestAnimationFrame(() => { const body = node.querySelector(".think-body"); if (body) body.scrollTop = body.scrollHeight; });
     return node;
   }
 
@@ -842,7 +882,7 @@
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
-      const local = /^ollama:/.test(t.model || "");
+      const local = /^(ollama|codex|gemini):/.test(t.model || "");   // (not Claude: no agent teams, no Claude Code setup)
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
       items = [el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
         el("div", { class: `mi ${t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
@@ -850,7 +890,9 @@
           closeMenu(); } },
           el("span", { class: `check radio${t.model === m.id ? " on" : ""}` }),
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, S.claudeReady ? m.hint : "set up Claude…"))),
+        ...cliMenuItems(t, true),
         ...localMenuItems(t),
+        ...cliMenuItems(t, false),
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         el("div", { class: "mh" }, "Mood"),
@@ -876,6 +918,30 @@
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
   }
+  // ---------- Codex and Gemini ----------
+  // Set up: a section with their models (from the program itself). Not set up: one line each at the end that opens
+  // Get started for it.
+  function cliMenuItems(t, readyOnes) {
+    const out = [];
+    for (const c of S.clis || []) {
+      if (!!c.ready !== readyOnes) continue;
+      if (!c.ready) {
+        out.push(el("div", { class: "mi dim", onclick: () => { post({ type: "getStarted", path: c.id }); closeMenu(); } },
+          el("span", { class: "mi-icon" }, icon("add")), el("span", { class: "mi-label" }, `Use ${c.label}`), el("span", { class: "mi-hint" }, "set up…")));
+        continue;
+      }
+      out.push(el("div", { class: "mh" }, c.label, el("span", { class: "mh-key" }, c.account || "cloud")));
+      const models = c.models.length ? c.models : [{ id: "default", label: `${c.short} (its default model)` }];
+      for (const m of models.slice(0, 8)) {
+        const id = `${c.id}:${m.id}`;
+        out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, title: m.description || "", onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
+          el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln" }, m.label),
+          el("span", { class: "mi-hint" }, m.isDefault ? "default" : "")));
+      }
+    }
+    return out;
+  }
+
   // ---------- models on this computer (Ollama) ----------
   // In the model menu: the installed models that can chat (they need tools), and the way to get more.
   function localMenuItems(t) {
@@ -919,7 +985,7 @@
     const search = el("input", { class: "h-search", placeholder: "Search Ollama's models (ones that can use tools)…", value: S.localQuery || "",
       onkeydown: (e) => { if (e.key === "Enter") { S.localQuery = e.target.value; S.localSearching = true; post({ type: "localSearch", q: e.target.value }); renderLocal(); } else if (e.key === "Escape") closeLocal(); } });
     const kids = [
-      el("div", { class: "h-head" }, el("span", { class: "h-title" }, "Models on this computer"), el("span", { class: "spacer" }), el("button", { class: "cb", onclick: () => closeLocal() }, "Back")),
+      el("div", { class: "h-head" }, backBtn(closeLocal), el("span", { class: "h-title" }, "Models on this computer")),
       el("div", { class: "lm-note" }, "They run on your computer with Ollama: private, free, and they work offline. Slower and less capable than the big cloud models; bigger ones need more memory",
         memory ? ` (this computer has ${memory} GB).` : "."),
     ];
@@ -954,10 +1020,10 @@
       for (const m of R.results) {
         const local = m.sizes;   // (cloud-only models are already left out)
         kids.push(el("div", { class: "lm-item" },
-          el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, m.name), el("span", { class: "spacer" }), m.pulls ? el("span", { class: "h-when" }, `${m.pulls} pulls`) : null),
-          m.description ? el("div", { class: "lm-desc" }, m.description) : null,
+          el("div", { class: "lm-row" }, el("span", { class: "lm-name" }, noEmoji(m.name)), el("span", { class: "spacer" }), m.pulls ? el("span", { class: "h-when" }, `${m.pulls} pulls`) : null),
+          m.description ? el("div", { class: "lm-desc" }, noEmoji(m.description)) : null,
           el("div", { class: "lm-sizes" },
-            ...m.capabilities.filter((c) => c !== "cloud").map((c) => el("span", { class: "lm-cap" }, c)),
+            ...m.capabilities.filter((c) => c !== "cloud").map((c) => el("span", { class: "lm-cap" }, noEmoji(c))),
             ...local.map((z) => {
               const name = `${m.name}:${z.size}`, have = L && L.models.some((x) => x.name === name), busy = !!pulls[name];
               const tooBig = memory && z.memory && z.memory > memory;
@@ -1110,7 +1176,7 @@
     if (m.type === "fontScale") { setFs(m.value); return; }
     switch (m.type) {
       case "config":
-        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false;
+        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false; S.clis = m.clis || [];
         S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.pics = m.pics || S.pics;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "tabs":
@@ -1120,7 +1186,7 @@
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
-      case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; renderAll(); if (S.menu) openMenu.refresh(); break;
+      case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
       case "full": S.tab = m.tab; renderAll(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
@@ -1142,10 +1208,10 @@
         const i = lastAssistant(); if (i < 0) break;
         const msg = S.tab.messages[i];
         let b = msg.blocks[msg.blocks.length - 1];
-        if (!b || b.k !== "text") { b = { k: "text", text: "" }; msg.blocks.push(b); b.text += m.text; scheduleRerender(i); break; }
+        if (!b || b.k !== "text") { b = { k: "text", text: "" }; msg.blocks.push(b); b.text += m.text; appendBlock(i); break; }
         b.text += m.text; schedulePatch(i, msg.blocks.length - 1);
       } break;
-      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i].blocks.push(m.block); scheduleRerender(i); } } break;
+      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i].blocks.push(m.block); appendBlock(i); } } break;
       case "thinkDelta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
         const blocks = S.tab.messages[i].blocks, b = blocks[blocks.length - 1];

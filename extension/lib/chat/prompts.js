@@ -5,7 +5,9 @@ const FORMAT =
   " When a decision is really the user's (several reasonable approaches, unclear requirements), ask with " +
   "AskUserQuestion: short options, recommended one first. Don't ask about things you can find out yourself." +
   " Format answers in Markdown. Use a Markdown table (with a header row and a |---| separator row, each row on " +
-  "its own line) whenever you compare things or list values with properties, e.g. parameters and their defaults.";
+  "its own line) whenever you compare things or list values with properties, e.g. parameters and their defaults." +
+  " The chat shows pictures: to show one (a picture file, a chart you made, one the user asks to see), write " +
+  "![short description](absolute path or https address) in your answer. Saying you showed it isn't enough.";
 
 const PROMPTS = {
   ask:

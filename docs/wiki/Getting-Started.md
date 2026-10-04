@@ -16,7 +16,8 @@ a brand-new user (your Kural settings and chats move to a backup folder first).
 
 ## 2. Get started: where Kural's AI comes from
 
-The first time Kural opens, the **Get started** page asks you to pick one. Either is enough; you can add the other later.
+The first time Kural opens, the **Get started** page asks you to pick one: Claude, ChatGPT (Codex), Gemini or your own
+model. Any one is enough; you can add others later.
 Kural checks every step and helps with it. Until one way passes, nothing runs in the background, so there are no errors.
 
 ### Claude
@@ -32,6 +33,11 @@ Kural checks every step and helps with it. Until one way passes, nothing runs in
 1. **Ollama.** **Get Ollama** (on Ubuntu it runs the installer; on a Mac or Windows it opens the download page).
 2. **A model.** Pick one you have, or download one that fits your computer's memory (the page suggests a few).
 3. **A test.** One request to that model, the way Kural will use it.
+
+### ChatGPT (Codex) or Gemini
+
+The same three steps for OpenAI's Codex CLI or Google's Gemini CLI: installed (**Install for me**), logged in (**Log
+in** starts the program's own login in a terminal), and a test. See [[ChatGPT and Gemini]].
 
 ### Optional
 

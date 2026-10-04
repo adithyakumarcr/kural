@@ -367,6 +367,16 @@
           "default": "",
           "markdownDescription": "Where the `claude` program (Claude Code) is. Leave empty to find it automatically; set it only if Kural can't find yours (Get started → *Choose the claude file…*)."
         },
+        "kural.codexPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where the `codex` program (OpenAI's Codex CLI) is. Leave empty to find it automatically."
+        },
+        "kural.geminiPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where the `gemini` program (Google's Gemini CLI) is. Leave empty to find it automatically."
+        },
         "kural.tabCompletion.enabled": {
           "type": "boolean",
           "default": true,

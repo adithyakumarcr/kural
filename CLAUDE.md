@@ -1,8 +1,9 @@
 # Kural Code Editor — notes for Claude Code
 
 Kural Code Editor (by Adithya Chinnakkonda; formerly ClaudeX) is VSCodium rebranded, plus a built-in extension (`extension/`) with
-an AI assistant. Two engines: **Claude** (the user's own `claude` CLI, headless, with its login: no API key) and **your
-own model** (Ollama on the user's computer, run by Kural's own engine: no Claude, no account, offline).
+an AI assistant. Providers (lib/ai/index.js `PROVIDERS`): **Claude** (the user's own `claude` CLI, headless, with its
+login: no API key), **Codex** (`codex app-server`, the user's ChatGPT login), **Gemini** (`gemini --acp`, Google login or
+API key), and **your own model** (Ollama on the user's computer, run by Kural's own engine: no account, offline).
 **Identity:** Kural is its own product, not "Claude". UI text says Kural ("Ask Kural to change something…", "Kural
 searches…"); "Claude" appears only where it means Claude (its models in the menu, the Claude way in Get started,
 Claude Code itself). The completion feature is called **Tab Completion** (never "Kural Tab").
@@ -31,6 +32,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
     (no vscode) — install/login/test checks, `claudeAuth` (email, org, plan), `claudeLogout`. `claude-setup.js` —
     notices Claude Code setup changes. `engine.js` (`LocalAgent`) + `tools.js` — Kural's own engine for Ollama models
     (no vscode inside; same methods and stream-json events as `ClaudeProcess`). `ollama.js` — Ollama API, search.
+    `codex.js`, `gemini.js` — Codex / Gemini agents and helpers; `clis.js` — both described once (install, login, test,
+    models, usage page). `usage.js` — the usage hub (no vscode).
   - `lib/chat/` — `index.js` the chat backend (tabs, modes, models, questions, permissions, panes); `prompts.js`
     (modes, `MOODS`, mood prompts); `team.js` (roles, team prompts) + `team-mcp.js` (the agents' board); `guide.js`
     (what Kural can do, appended to every chat's prompt); `archive.js` (History), `attachments.js`, `tickets.js`
@@ -48,6 +51,22 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - `.github/workflows/build.yml` — tests + all three builds; a `v*` tag publishes a Release.
 
 ## Things that are easy to break
+- **Codex and Gemini** (`lib/ai/codex.js`, `lib/ai/gemini.js`, described once in `lib/ai/clis.js`; no vscode inside):
+  each is an agent class with `LocalAgent`'s methods that turns the program's protocol into Claude Code's stream-json
+  events, so the chat needs no special code. Model ids `codex:<id>` / `gemini:<id>` (`default` = the program's own).
+  Codex: `codex app-server`, one JSON object per line, approval `untrusted` + workspace-write sandbox in Agent/Auto
+  (read-only in Plan/Ask), so commands and file changes come to Kural's `onPermission` (files: "Edit"/"Write" first, for
+  Undo). Gemini: ACP (`gemini --acp`, JSON-RPC 2.0), kept in its "default" mode so edits and commands ask Kural; Kural's
+  instructions go into the first message (`<kural_instructions>`); `--skip-trust`. Neither does agent teams or Claude
+  Code's setup (`isClaude()` in the chat). Set up in Get started (`rec.codex`/`rec.gemini`: bin, models) →
+  `brain.setCli()`. Tests: `test/fake-codex.js`, `test/fake-gemini.js` (state via `FAKE_CODEX_STATE` /
+  `FAKE_GEMINI_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.geminiPath` pointing at
+  the fakes. The real programs were only checked logged out: verify streaming, approvals and tool names with real
+  accounts when you can.
+- **Usage meter** (`lib/ai/usage.js` hub, drawn by `lib/account.js`): Claude Code sends `rate_limit_event`
+  (`unifiedWindows.five_hour/seven_day.utilization`) after every answer; `ClaudeProcess.onData` and `claudeTest` report
+  it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini: tokens from each answer's `_meta.quota`.
+  Saved in globalState `kural.usage.v1` so the bar shows the last numbers at startup.
 - **Account** (`lib/account.js`): status item (plan) + QuickPick menu. Who's logged in comes from `claude auth status
   --json` (email, orgName, subscriptionType), never from the Keychain (Claudemeter, removed, read the Keychain: prompts
   after every update, then failures). Log out = `claude auth logout` → `getStarted.loggedOut()` (locks Claude); once a new
@@ -114,7 +133,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
   chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
 - **Chat page streaming** (`media/chat.js`): blocks are wrapped in `.blk[data-b]`; deltas patch one block per frame
-  (`schedulePatch`/`patchBlock`), not the whole message (that made thinking jitter). Scrolling follows only while
+  (`schedulePatch`/`patchBlock`), a new block is added with `appendBlock` (no full redraw). Thinking is always ONE line
+  ("Thinking… <latest sentence>", then "Thought for N s"; click to open): Claude's summarized thinking arrives in
+  paragraph bursts every few seconds, and a box that grew with it and collapsed afterwards made the whole answer jump.
+  Mode changes mid-answer: `modeChangedMidAnswer` (Auto resolves waiting permission cards; Plan/Ask apply next message). Scrolling follows only while
   you're at the bottom (`stick`); scrolled up, a "Latest" button appears. Pictures: `fileSrc()` turns a path into the
   webview's address (`S.pics` = `{base, root}` from `filesFor()`; `localResourceRoots` = media, project folders,
   globalStorage, tmp); web pictures load only on click (a picture URL can carry data away). Don't reuse `S.files`: it's
