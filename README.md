@@ -274,15 +274,20 @@ cursor.
 - **Ask (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get the exact `file:line` places. (For plain text
   search, use VS Code's own search, Ctrl+Shift+F.)
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
-- **Usage meter** (status bar). `Claude 45% · 24%`: the 5-hour and weekly limits used (orange from 80 %, red from
-  95 %; hover for reset times). Gemini and Codex show their limits the same way.
+- **AI Usage** (bottom panel, next to Terminal). Each limit in words: "5-hour limit 50% used, resets in 42 min",
+  "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex. The status bar shows the chat's AI the
+  same way (`Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h`; orange from 80 %, red from 95 %); click it for
+  the panel.
+- **Asks before leaving your project.** The AI reads and changes your project's files freely; a file anywhere else gets
+  a "Read this file?" / "Change this file?" card first. Kural never looks through Desktop, Documents, Downloads, Music
+  or Photos by itself, so a Mac doesn't ask you about them.
 - **Account** (person icon in the status bar). For Claude, Google Gemini and ChatGPT (Codex): who you're logged in as and your
   plan, the usage page, switch account, log out; and check for updates.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
   chat. When you add one, Kural reloads Claude in the same conversation.
-- **Kural Dark and Kural Light themes** (pick one: Command Palette → *Preferences: Color Theme*), and the same
-  text size in the menus, side bar and chat as in the code. In Kural Light every text color is checked to be easy to
-  read (at least 4.5:1 contrast, the WCAG AA level). With *Window › Auto Detect Color Scheme* on, Kural follows your
+- **Kural Dark and Kural Light themes** (pick one: Command Palette → *Preferences: Color Theme*): like VS Code's own,
+  code in many colors, purple only for buttons and focus; and the same text size in the menus, side bar and chat as in
+  the code. Every text color is checked to be easy to read (at least 4.5:1 contrast, the WCAG AA level). With *Window › Auto Detect Color Scheme* on, Kural follows your
   computer's light/dark mode.
 
 ## Keyboard shortcuts
@@ -386,7 +391,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/edit/           Ctrl+K and Apply (inline.js), red/green review, diff
   lib/getstarted.js   Get started; lib/account.js the Account menu; lib/updates.js updates; lib/search.js Ask
   media/              the panels' pages (HTML/CSS/JS) and the Codicons icon font
-  themes/             Kural Dark, Kural Light
+  themes/             Kural Dark, Kural Light (written by scripts/make-themes.py)
 scripts/              shared rebranding, logo, icons, release notes, push-wiki.sh
 installer/            the Windows installer (NSIS)
 make-deb.sh           Ubuntu .deb    build-mac.sh  Mac app    build-win.sh  Windows

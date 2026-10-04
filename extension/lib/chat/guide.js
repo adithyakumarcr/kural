@@ -27,7 +27,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking), Plan
   (a plan, then "Build it"), Ask (answers only). @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku, Google Gemini and
-  ChatGPT (Codex) models, or a model on this computer; intensity Low to Max; moods (Explorer, Critic, Learn: teaches you
+  ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
+  level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Each change
   can be reviewed, kept or undone. Pictures in answers are shown. The clock button: every chat from every workspace
@@ -47,13 +48,20 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("push this to the fix/login branch", "commit with message fixed the login") and Kural suggests the command.
-- Usage meter (status bar): "Claude 45% · 24%" is the 5-hour and weekly limit used; Gemini and Codex
-  their limits the same way.
-  Orange from 80 %, red from 95 %. Hover for reset times.
+- AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
+  "5-hour limit 50% used, resets in 42 min", "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex.
+  The status bar shows the chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"), the
+  others short; orange from 80 %, red from 95 %; click it for the panel.
+- Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
+  Inside the project it doesn't ask (Agent mode still asks before commands). Kural never looks through Desktop,
+  Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
+- In a folder you haven't trusted (VS Code's Restricted Mode), its settings can't pick programs or modes for Kural, and
+  its Claude Code setup (hooks, MCP servers) isn't loaded.
 - Account (status bar, person icon): for Claude, Google Gemini and ChatGPT (Codex): who you're logged in as, plan, usage
   page, switch account, log out, log in.
 - Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or the Account menu.
-- Themes: Kural Dark and Kural Light (Preferences: Color Theme).
+- Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
+  buttons and focus.
 - Full guide: ${WIKI}
 If they ask for something Kural doesn't have, say so plainly (don't pretend), suggest the closest thing it has, and
 invite them to ask for it as a feature, with this link: [Ask for this feature](${ISSUES}).`;
