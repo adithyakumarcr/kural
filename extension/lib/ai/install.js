@@ -15,6 +15,8 @@ const IS_MAC = process.platform === "darwin", IS_WIN = process.platform === "win
 const PACKAGES = {
   codex: { npm: "@openai/codex", brew: "codex", node: 18 },
   gemini: { npm: "@google/gemini-cli", brew: "gemini-cli", node: 20 },
+  // Antigravity: no Homebrew formula, no npm package: Google's own installer script (one program, no Node.js).
+  agy: { script: { unix: "https://antigravity.google/cli/install.sh", win: "https://antigravity.google/cli/install.ps1" } },
 };
 
 // A Mac app started from the Dock gets a short PATH (no /opt/homebrew/bin, no nvm). Your shell's PATH has them all.
@@ -70,6 +72,14 @@ async function installPlan(id) {
   const env = { ...process.env, PATH,
     // No questions where there's a choice: Homebrew's installers, npx.
     NONINTERACTIVE: "1", npm_config_yes: "true", npm_config_fund: "false", npm_config_audit: "false", npm_config_update_notifier: "false" };
+  if (pkg.script) {
+    // The vendor's installer, the way its page says to run it (downloaded by curl / PowerShell, run at once).
+    if (IS_WIN) return { how: "script", file: "powershell.exe", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `irm ${pkg.script.win} | iex`], env, text: `irm ${pkg.script.win} | iex` };
+    const curl = which("curl", PATH), bash = which("bash", PATH);
+    if (!curl || !bash) return { missing: "curl", text: `curl -fsSL ${pkg.script.unix} | bash` };
+    // (pipefail: a failed download must fail the install, not run bash on nothing and "succeed".)
+    return { how: "script", file: bash, args: ["-c", `set -o pipefail; curl -fsSL ${pkg.script.unix} | bash`], env, text: `curl -fsSL ${pkg.script.unix} | bash` };
+  }
   if (IS_MAC) {
     const brew = which("brew", PATH);
     if (brew) return { how: "brew", file: brew, args: ["install", pkg.brew], env, text: `brew install ${pkg.brew}` };
@@ -158,19 +168,32 @@ function userPrefixPlan(plan) {
 }
 const noPermission = (out) => /EACCES|EPERM|permission denied/i.test(out || "");
 
+// Where npm puts programs (`npm prefix -g`: <prefix>/bin, or <prefix> itself on Windows), so Kural can find what it
+// just installed even when that folder isn't on Kural's PATH.
+function npmBinDir(plan) {
+  const m = plan.args.indexOf("--prefix");
+  const given = m >= 0 ? plan.args[m + 1] : null;
+  return new Promise((resolve) => {
+    if (given) { resolve(IS_WIN ? given : path.join(given, "bin")); return; }
+    const c = execFile(plan.file, ["prefix", "-g"], { env: plan.env, timeout: 15000, encoding: "utf8", windowsHide: true, shell: IS_WIN && /\.cmd$/i.test(plan.file) },
+      (e, out) => { const p = String(out || "").trim().split("\n").pop(); resolve(e || !p ? null : IS_WIN ? p : path.join(p, "bin")); });
+    try { c.stdin.end(); } catch { /* gone */ }
+  });
+}
+
 // The whole install: the plan, then a retry into ~/.npm-global if npm had no permission.
+// Resolves { ok, code, output, cancelled, plan, binDir? (npm: the folder the program went into) }.
 async function install(id, opts = {}) {
   const plan = await installPlan(id);
   if (plan.missing) return { ok: false, plan };
   if (opts.onPlan) opts.onPlan(plan);
-  let r = await runInstall(plan, opts);
+  let r = await runInstall(plan, opts), used = plan;
   if (!r.ok && !r.cancelled && plan.how === "npm" && !IS_WIN && noPermission(r.output)) {
-    const again = userPrefixPlan(plan);
-    if (opts.onPlan) opts.onPlan(again);
-    r = await runInstall(again, opts);
-    return { ...r, plan: again };
+    used = userPrefixPlan(plan);
+    if (opts.onPlan) opts.onPlan(used);
+    r = await runInstall(used, opts);
   }
-  return { ...r, plan };
+  return { ...r, plan: used, binDir: r.ok && used.how === "npm" ? await npmBinDir(used) : null };
 }
 
 // The last lines of a failed install, for the message.

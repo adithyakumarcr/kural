@@ -732,6 +732,9 @@ function resultText(content) {
 
 function friendly(e) {
   const s = String((e && e.message) || e || "");
+  // Since 26 Sept 2026 Gemini CLI refuses personal Google accounts and points to Antigravity.
+  if (/no longer supported for Gemini Code Assist for individuals|migrate to the Antigravity/i.test(s))
+    return "Google no longer lets personal Google accounts use Gemini CLI (since 26 Sept 2026). Use Antigravity instead: Get started → Antigravity, with the same Google account. (Gemini CLI still works with a Gemini API key or a company account.)";
   if ((e && e.login) || LOGIN_RE.test(s)) return NOT_LOGGED_IN;
   if (/\b429\b|rate limit|quota|resource_exhausted/i.test(s)) return `Gemini's usage limit was reached. Try again later, or pick another Gemini model. (${s})`;
   if (/ENOENT|spawn/i.test(s)) return "Kural can't start the gemini program. Check that Gemini CLI is installed (npm install -g @google/gemini-cli).";

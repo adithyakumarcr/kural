@@ -54,6 +54,7 @@ function activate(context) {
   require("./lib/workspace").setWorkDir(require("path").join(context.globalStorageUri.fsPath, "work"));
   brain.setStore(require("path").join(context.globalStorageUri.fsPath, "cli-chats"));   // (Codex / Gemini conversation ids)
   require("./lib/ai/codex").setLog(log);
+  require("./lib/ai/agy").setLog(log);
   getStarted = new GetStarted(context);
   getStarted.register();
 

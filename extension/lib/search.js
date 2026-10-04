@@ -168,7 +168,7 @@ class SearchView {
           const out = msg.structured_output || safeJson(msg.result) || { answer: msg.result || "", results: [] };
           const results = verify(out.results || []);
           log(`ask: "${q}" → ${results.length} places in ${Date.now() - t0} ms`);
-          this.post({ type: "askResult", id, answer: out.answer || "", results, ms: Date.now() - t0, model: brain.engineOf(slot.model) === "claude" ? slot.model[0].toUpperCase() + slot.model.slice(1) : slot.model.replace(/^(ollama|codex|gemini):/, "") });
+          this.post({ type: "askResult", id, answer: out.answer || "", results, ms: Date.now() - t0, model: brain.engineOf(slot.model) === "claude" ? slot.model[0].toUpperCase() + slot.model.slice(1) : slot.model.replace(/^[a-z]+:/, "") });
         }
       },
       onExit: (info) => {

@@ -40,7 +40,8 @@
   // "opus" → "Opus"; "ollama:qwen3:8b" → "qwen3:8b · local"; "codex:gpt-6.1-sol" → its name in Codex's list.
   const modelLabel = (id) => {
     if (/^ollama:/.test(id || "")) return `${id.slice(7)} · local`;
-    const c = /^(codex|gemini):(.*)$/.exec(id || "");
+    const c = /^([a-z]+):(.*)$/.exec(id || "");
+    if (c && !(S.clis || []).some((x) => x.id === c[1])) return id;
     if (c) {
       const cli = (S.clis || []).find((x) => x.id === c[1]) || { short: c[1], models: [] };
       const m = cli.models.find((x) => x.id === c[2]);
@@ -333,7 +334,7 @@
       listEl.append(el("div", { class: "empty" },
         el("div", { class: "logo" }, "{K}"),
         el("div", { class: "brand setup-title" }, "Set up Kural first"),
-        el("div", { class: "setup-text" }, "Pick where Kural's AI comes from: Claude, ChatGPT (Codex), Gemini, or your own model on this computer. Kural checks that it works."),
+        el("div", { class: "setup-text" }, "Pick where Kural's AI comes from: Claude, ChatGPT (Codex), Antigravity (Google), Gemini, or your own model on this computer. Kural checks that it works."),
         el("button", { class: "cb big solid", onclick: () => post({ type: "getStarted" }) }, "Get started")));
     } else if (!t || !t.messages.length) {
       // Home: the name, what it is, one line, three hints. The rest is in the menus.
@@ -898,7 +899,7 @@
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
-      const local = /^(ollama|codex|gemini):/.test(t.model || "");   // (not Claude: no agent teams, no Claude Code setup)
+      const local = /^[a-z]+:/.test(t.model || "");   // (not Claude: no agent teams, no Claude Code setup)
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
       items = [el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
         el("div", { class: `mi ${t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
@@ -1079,8 +1080,8 @@
     return parts.join("; ") + (editing ? "" : " (Agent and Auto modes)");
   }
 
-  // "+ → Link device": your saved devices (SSH), link one to this chat, or add one. The password goes to Kural, which
-  // keeps it encrypted (VS Code's SecretStorage); this page never gets it back.
+  // "+ → Link device": your saved devices (SSH), link one to this chat, or add one. The password goes to Kural once, to
+  // put Kural's SSH key on the device; it isn't saved anywhere.
   function deviceItems(t) {
     const local = /^ollama:/.test(t.model || "");
     if (!S.deviceUI) S.deviceUI = { adding: !(S.devices || []).length && S.devicesLoaded, busy: false, error: "" };
@@ -1130,7 +1131,7 @@ ${d.system}` : ""}`,
         U.busy ? el("span", { class: "ticket-status" }, el("span", { class: "dots small" }, el("span"), el("span"), el("span")), " Connecting…")
           : el("button", { class: "cb primary solid", onclick: submit }, "Connect & save"),
         el("span", { class: "spacer" }),
-        el("span", { class: "dev-note" }, icon("lock"), " The password is stored encrypted")));
+        el("span", { class: "dev-note" }, icon("key"), " Used once to set up a key on the device. Not saved.")));
   }
 
   // "+ → Link ticket": search Jira (through your Atlassian connector) and link one ticket to this chat.

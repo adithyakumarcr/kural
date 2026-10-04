@@ -21,51 +21,70 @@ const ssh = new Ssh({ dir: path.join(home, ".kural-ssh") });
 const dev = { host: "rpi.local", port: 22, user: "pi" };
 
 (async () => {
-  await check("the right password: connected, and what the device is", async () => {
-    const t = await ssh.test(dev, "secret");
-    assert.strictEqual(t.ok, true); assert.ok(t.system.length > 0);
+  await check("before setup, Kural's key isn't accepted", async () => {
+    const t = await ssh.test(dev);
+    assert.strictEqual(t.ok, false); assert.match(t.error, /no longer accepts Kural's key/);
   });
-  await check("a wrong password: said in plain words", async () => {
-    const t = await ssh.test(dev, "nope");
+  await check("a wrong password: said in plain words, nothing installed", async () => {
+    const t = await ssh.installKey(dev, "nope");
     assert.strictEqual(t.ok, false); assert.match(t.error, /username or password is wrong/);
+    assert.ok(!fs.existsSync(path.join(home, ".ssh", "authorized_keys")));
   });
   await check("an unknown address: said in plain words", async () => {
-    const t = await ssh.test({ ...dev, host: "nowhere" }, "secret");
+    const t = await ssh.installKey({ ...dev, host: "nowhere" }, "secret");
     assert.strictEqual(t.ok, false); assert.match(t.error, /No device with that name/);
   });
-  await check("the password never goes on ssh's command line", async () => {
-    assert.ok(!ssh.args(dev).some((a) => /secret/.test(a)));
+  await check("the right password puts Kural's key on the device once; then the key works on its own", async () => {
+    const t = await ssh.installKey(dev, "secret");
+    assert.strictEqual(t.ok, true, t.error); assert.ok(t.system.length > 0);
+    await ssh.installKey(dev, "secret");   // twice: still one line
+    const keys = fs.readFileSync(path.join(home, ".ssh", "authorized_keys"), "utf8").trim().split("\n");
+    assert.strictEqual(keys.length, 1); assert.match(keys[0], /^ssh-ed25519 /);
+    assert.strictEqual((fs.statSync(ssh.key).mode & 0o077), 0, "the private key is readable only by you");
+    assert.strictEqual((await ssh.test(dev)).ok, true);
+  });
+  await check("a lost .pub is made again from the key (not a new key that would cut off every device)", async () => {
+    const before = fs.readFileSync(`${ssh.key}.pub`, "utf8").trim();
+    fs.unlinkSync(`${ssh.key}.pub`);
+    assert.strictEqual((await ssh.ensureKey()).split(" ").slice(0, 2).join(" "), before.split(" ").slice(0, 2).join(" "));
+    assert.strictEqual((await ssh.test(dev)).ok, true);
+  });
+  await check("the password never goes on ssh's command line; key logins never ask anything", async () => {
+    assert.ok(!ssh.args(dev, { password: true }).some((a) => /secret/.test(a)));
     assert.strictEqual(ssh.env("secret").KURAL_SSH_PW, "secret");
     assert.strictEqual(ssh.env("secret").SSH_ASKPASS_REQUIRE, "force");
+    assert.strictEqual(ssh.env(null).KURAL_SSH_PW, undefined);
+    const a = ssh.args(dev).join(" ");
+    assert.match(a, /-i \S+id_ed25519/); assert.match(a, /BatchMode=yes/); assert.match(a, /PasswordAuthentication=no/);
   });
   await check("write, read and list a file (quotes and spaces in names are safe)", async () => {
     const name = "it's a file.txt";
-    const w = await ssh.writeFile(dev, "secret", `sub dir/${name}`, "line 1\nline 2\n");
+    const w = await ssh.writeFile(dev, null, `sub dir/${name}`, "line 1\nline 2\n");
     assert.strictEqual(w.code, 0, w.stderr);
-    assert.strictEqual((await ssh.readFile(dev, "secret", `sub dir/${name}`)).stdout, "line 1\nline 2\n");
-    assert.match((await ssh.listDir(dev, "secret", "sub dir")).stdout, /it's a file/);
+    assert.strictEqual((await ssh.readFile(dev, null, `sub dir/${name}`)).stdout, "line 1\nline 2\n");
+    assert.match((await ssh.listDir(dev, null, "sub dir")).stdout, /it's a file/);
     assert.strictEqual(q("a'b"), "'a'\\''b'");
   });
   await check("a command that runs too long is stopped", async () => {
-    const r = await ssh.run(dev, "secret", "sleep 5", { timeout: 300 });
+    const r = await ssh.run(dev, null, "sleep 5", { timeout: 300 });
     assert.strictEqual(r.timedOut, true);
     assert.match(explain(r), /didn't answer in time/);
   });
   await check("a timeout answers at once even while something still holds ssh's output (a reused connection)", async () => {
     const t0 = Date.now();
-    const r = await ssh.run(dev, "secret", "sleep 3 & sleep 3", { timeout: 300 });
+    const r = await ssh.run(dev, null, "sleep 3 & sleep 3", { timeout: 300 });
     assert.strictEqual(r.timedOut, true);
     assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0} ms`);
   });
   await check("the device's own time limit stops a command that never ends", async () => {
-    const r = await ssh.runLimited(dev, "secret", "echo started; sleep 30", 1);
+    const r = await ssh.runLimited(dev, null, "echo started; sleep 30", 1);
     assert.match(r.stdout, /started/); assert.strictEqual(r.code, 124);
   });
   await check("~/ paths mean the home folder (not a folder named ~)", async () => {
-    assert.strictEqual((await ssh.writeFile(dev, "secret", "~/tilde/a.txt", "hi")).code, 0);
+    assert.strictEqual((await ssh.writeFile(dev, null, "~/tilde/a.txt", "hi")).code, 0);
     assert.ok(fs.existsSync(path.join(home, "tilde", "a.txt")));
     assert.ok(!fs.existsSync(path.join(home, "~")));
-    assert.strictEqual((await ssh.readFile(dev, "secret", "~/tilde/a.txt")).stdout, "hi");
+    assert.strictEqual((await ssh.readFile(dev, null, "~/tilde/a.txt")).stdout, "hi");
   });
   await check("Forget its key: plain and hashed (Ubuntu's HashKnownHosts) lines", async () => {
     const salt = crypto.randomBytes(20);
@@ -77,7 +96,7 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
 
   // The bridge and the MCP server together, like Claude Code / Codex / Gemini use them.
   const asked = [];
-  const bridge = new Bridge(ssh, async (id) => id === "d1" ? { dev, password: "secret" } : null);
+  const bridge = new Bridge(ssh, async (id) => id === "d1" ? { dev, password: null } : id === "old" ? { error: "old needs to be set up again" } : null);
   const s = bridge.session({ deviceId: "d1", name: "rpi", approve: async (tool, args) => { asked.push(tool); return args.command === "rm -rf ~" ? { allow: false, message: "Skipped by the user." } : { allow: true }; } });
   const mcp = spawn(process.execPath, s.server.args, { env: { ...process.env, ...s.server.env } });
   let out = "", waiters = [];
@@ -128,6 +147,18 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
     assert.deepStrictEqual((await ask(1, "tools/list", {})).result.tools.map((t) => t.name), ["kural_device_run_command", "kural_device_read_file", "kural_device_write_file", "kural_device_list_dir"]);
     assert.match((await ask(2, "tools/call", { name: "kural_device_run_command", arguments: { command: "echo via-gemini" } })).result.content[0].text, /via-gemini/);
     m.kill(); bridge.end(g.token);
+  });
+  await check("a device saved by an older Kural (no key yet): the AI is told it needs setting up, nothing is asked or run", async () => {
+    const asked = [];
+    const o = bridge.session({ deviceId: "old", name: "old", approve: async (t) => { asked.push(t); return { allow: true }; } });
+    const r = await bridge.call({ token: o.token, tool: "run_command", args: { command: "echo hi" } });
+    assert.match(r.text, /set up again/); assert.strictEqual(r.isError, true); assert.deepStrictEqual(asked, []);
+  });
+  await check("removing the device takes Kural's key off it", async () => {
+    fs.appendFileSync(path.join(home, ".ssh", "authorized_keys"), "ssh-ed25519 AAAAother someone@else\n");
+    await ssh.removeKey(dev);
+    assert.deepStrictEqual(fs.readFileSync(path.join(home, ".ssh", "authorized_keys"), "utf8").trim().split("\n"), ["ssh-ed25519 AAAAother someone@else"]);
+    assert.strictEqual((await ssh.test(dev)).ok, false);
   });
   bridge.stop();
   fs.rmSync(home, { recursive: true, force: true });

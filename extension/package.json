@@ -393,6 +393,11 @@
           "default": "",
           "markdownDescription": "Where the `gemini` program (Google's Gemini CLI) is. Leave empty to find it automatically."
         },
+        "kural.agyPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where the `agy` program (Google's Antigravity CLI) is. Leave empty to find it automatically."
+        },
         "kural.tabCompletion.enabled": {
           "type": "boolean",
           "default": true,
@@ -522,6 +527,9 @@
     ],
     "configurationDefaults": {
       "workbench.colorTheme": "Kural Dark",
+      "github.branchProtection": false,
+      "github.showAvatar": false,
+      "github.gitAuthentication": false,
       "workbench.preferredDarkColorTheme": "Kural Dark",
       "workbench.preferredLightColorTheme": "Kural Light",
       "workbench.secondarySideBar.defaultVisibility": "visible",

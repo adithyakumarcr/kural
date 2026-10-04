@@ -16,7 +16,7 @@ a brand-new user (your Kural settings and chats move to a backup folder first).
 
 ## 2. Get started: where Kural's AI comes from
 
-The first time Kural opens, the **Get started** page asks you to pick one: Claude, ChatGPT (Codex), Gemini or your own
+The first time Kural opens, the **Get started** page asks you to pick one: Claude, ChatGPT (Codex), Antigravity, Gemini or your own
 model. Any one is enough; you can add others later.
 Kural checks every step and helps with it. Until one way passes, nothing runs in the background, so there are no errors.
 
@@ -34,10 +34,11 @@ Kural checks every step and helps with it. Until one way passes, nothing runs in
 2. **A model.** Pick one you have, or download one that fits your computer's memory (the page suggests a few).
 3. **A test.** One request to that model, the way Kural will use it.
 
-### ChatGPT (Codex) or Gemini
+### ChatGPT (Codex), Antigravity or Gemini
 
-The same three steps for OpenAI's Codex CLI or Google's Gemini CLI: installed (**Install for me**), logged in (**Log
-in** starts the program's own login in a terminal), and a test. See [[ChatGPT and Gemini]].
+The same three steps for OpenAI's Codex CLI, Google's Antigravity CLI or Google's Gemini CLI: installed (**Install for
+me** installs in the background and shows what it's doing), logged in (**Log in** opens the login page in your browser),
+and a test. A personal Google account goes with Antigravity. See [[ChatGPT and Gemini]].
 
 ### Optional
 
