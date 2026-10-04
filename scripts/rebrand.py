@@ -42,6 +42,13 @@ def main(app, platform):
         if site not in trusted:
             trusted.append(site)
     d["linkProtectionTrustedDomains"] = trusted
+    # VS Code looks for a GitHub login at every start (its "default account", for Copilot). That wakes the GitHub
+    # login extension, which reads its saved login from the keychain: on a Mac, "Kural wants to use … Kural Safe
+    # Storage", again after every update. Kural has no Copilot, so point that lookup at a provider that doesn't exist.
+    agent = d.get("defaultChatAgent") or {}
+    for kind in ("default", "enterprise"):
+        if isinstance(agent.get("provider", {}).get(kind), dict):
+            agent["provider"][kind]["id"] = "kural-no-default-account"
     save(p, d)
 
     # 2. The window/dock name on Linux ("codium" otherwise).

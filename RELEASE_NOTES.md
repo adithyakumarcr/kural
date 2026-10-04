@@ -8,9 +8,9 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
   with Google's installer, logs in (on its own screen, in a terminal Kural closes by itself) and tests it; its models
   are in the model menu, its weekly limits in the status bar. It can't ask before acting, so in Agent mode it edits
   files but runs no commands (the answer says which it skipped); Auto runs them.
-- **No more keychain password prompts on the Mac.** The prompt for "VSCodium Safe Storage" came from VS Code's GitHub
-  integration quietly checking for a GitHub login (branch protection, avatars) in projects cloned from GitHub. Kural
-  turns those checks off; pushing to GitHub from Source Control uses Git's own login, like in a terminal.
+- **No more keychain password prompts on the Mac.** The prompt for "… Safe Storage" came from VS Code quietly looking
+  for a GitHub login at every start (for Copilot, which Kural doesn't have) and, in projects cloned from GitHub, for
+  branch protection and avatars. Kural turns those lookups off; pushing to GitHub from Source Control uses Git's own login, like in a terminal.
 - **Devices log in with an SSH key; the password isn't saved.** The password is used once, when you add a device, to
   put Kural's own SSH key on it (like `ssh-copy-id`); after that Kural logs in with the key. Nothing goes into the
   keychain. **Set up again** puts the key back after reinstalling a device; **Remove** takes it off.

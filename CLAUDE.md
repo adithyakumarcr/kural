@@ -55,7 +55,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   triggers them (and again after each update). The built-in GitHub extension did, silently, in any GitHub repo
   (branch protection, avatars, git auth): package.json `configurationDefaults` turns `github.branchProtection`,
   `github.showAvatar`, `github.gitAuthentication` off. Don't use `context.secrets` in Kural. `rebrand.py` renames the
-  app (package.json `name` → Kural; it was "VSCodium", whose name Electron gives its keychain item).
+  app (package.json `name` → Kural; it was "VSCodium", whose name Electron gives its keychain item). The main
+  trigger, at EVERY start in any folder: VS Code's DefaultAccount service (Copilot's account) asks for GitHub sessions,
+  which activates github-authentication, which reads `github.auth` from secret storage. `rebrand.py` points
+  product.json `defaultChatAgent.provider.{default,enterprise}.id` at a provider that doesn't exist. Check: start
+  with `--log trace`; no `[mainThreadSecretState]` lines in the logs (Linux shows the same calls).
 - **Google Gemini = Antigravity** (`lib/ai/agy.js`, id/prefix `agy`; shown as "Google Gemini", short "Gemini"):
   Google's `agy` CLI. Google's Gemini CLI (`gemini --acp`) was a provider until Oct 2026; it was removed because it
   refuses personal Google accounts since 26 Sept 2026 ("no longer supported for Gemini Code Assist for individuals").
