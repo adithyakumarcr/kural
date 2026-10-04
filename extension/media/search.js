@@ -27,6 +27,9 @@
   const base = (p) => p.split("/").pop();
   const dir = (p) => { const i = p.lastIndexOf("/"); return i > 0 ? p.slice(0, i) : ""; };
 
+  // Icons: Codicons (VS Code's icon set, media/codicons). Never emoji.
+  const icon = (name) => el("i", { class: `codicon codicon-${name}`, "aria-hidden": "true" });
+
   // ---------- layout ----------
   const input = el("textarea", { class: "q", rows: 1, spellcheck: "false" });
   const goBtn = el("button", { class: "go", onclick: () => (S.running ? post({ type: "cancel" }) : run()) });
@@ -36,7 +39,7 @@
 
   function renderTop() {
     input.placeholder = "Ask where something is…  e.g. variable for operator box pause?";
-    goBtn.textContent = S.running ? "■" : "↑";
+    goBtn.replaceChildren(icon(S.running ? "debug-stop" : "arrow-up"));
     goBtn.title = S.running ? "Stop" : "Ask (Enter)";
   }
 
@@ -99,7 +102,7 @@
     for (const g of groups) {
       const closed = S.collapsed.has(g.file);
       results.append(el("div", { class: "file", onclick: () => { closed ? S.collapsed.delete(g.file) : S.collapsed.add(g.file); renderResults(); } },
-        el("span", { class: "twisty" }, closed ? "▸" : "▾"),
+        el("span", { class: "twisty" }, icon(closed ? "chevron-right" : "chevron-down")),
         el("span", { class: "fname" }, base(g.file)), el("span", { class: "fdir" }, dir(g.file)),
         el("span", { class: "badge" }, g.matches.length)));
       if (closed) continue;

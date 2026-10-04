@@ -2,6 +2,34 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Account menu** (person icon in the status bar). Shows who's logged in to Claude and your plan, opens your usage
+  page, and lets you **switch account**, **log out** or **log in**. It replaces Claudemeter, which read your login from
+  the macOS Keychain: the Mac asked for permission again after every update, and then it stopped working.
+- **Updates are checked by themselves** once a day; a new version is offered in a small notification, never installed
+  without asking. **Check for Updates** is also in the Chat panel's **…** menu and the Account menu, in case the Help
+  menu doesn't show it (reported on the Mac). Setting `kural.updates.autoCheck`.
+- **The Mac asks only for what Kural needs.** No more requests for Apple Music, Photos or other private folders: with no
+  project open, Kural's AI works in its own folder instead of your home folder, and never looks through your Music,
+  Pictures or Library folders. The Mac build no longer allows camera or microphone use at all.
+- **Terminal: plain words become commands.** Type `push this code to fix/code-editor branch` or `commit with message
+  added the low stock check`, and Kural suggests `git push origin HEAD:fix/code-editor` or
+  `git commit -m "Added the low stock check"`. Tab puts it in place of your words; Enter runs it.
+- **Learn mood** (replaces Teacher). It first asks which ideas behind your question you already know, explains only the
+  others, answers the question, then checks you got it with a short question.
+- **Pictures in the chat.** Pictures in answers show: from your project, ones the model read, ones an image model made.
+  Pictures from the internet wait for a click (loading one would tell that website you read the answer). Images you
+  attach show as thumbnails.
+- **Smoother answers.** Thinking and text no longer jitter while they stream, and the chat doesn't pull you down while
+  you're reading further up; **Latest** brings you back. The "See log" note during long thinking is gone.
+- **Links in answers open** in your browser, and long addresses wrap instead of widening the chat.
+- **Kural knows its own features.** Ask the chat "can Kural …?" or "how do I …?". If Kural can't do it, it says so and
+  links to a feature request. Every feature is also explained in the new
+  [Kural wiki](https://github.com/adithyakumarcr/kural/wiki).
+- **One icon set, no emoji.** Every Kural panel uses VS Code's own icons (Codicons).
+- **Tab Completion panel, simpler.** The speed check is gone; the panel shows how long the last suggestion took. It
+  shows only the model choice for the engine you picked. Suggestions when you place the cursor, and learning from your
+  work, are always on (no more switches).
+
 - **Use Kural with your own model, without Claude.** Kural now runs models on your computer (Ollama) with its own
   engine, not through Claude Code: no Claude account, no subscription, no internet. It reads and edits files, searches
   your project, asks before running commands, and keeps or undoes each change, like with Claude. Before, local models
@@ -9,13 +37,13 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
 - **Ask, Ctrl+K, Apply and commit messages use the chat's model.** Pick a model once, in the chat. (Their separate
   model settings are gone.) Switch a chat between Claude and a local model and the conversation carries over.
 - **Kural's own name.** The chat says "Ask Kural to change something…", Ask says "Kural searches your project", and
-  Kural Tab is now **Tab Complete**. "Claude" appears where you pick Claude's models.
+  Kural Tab is now **Tab Completion**. "Claude" appears where you pick Claude's models.
 - **Get started.** Without Claude Code (or without a login) Kural used to show errors whenever you used the chat, Tab
   or Ctrl+K. Now a **Get started** page opens the first time and asks where Kural's AI comes from. **Claude**: it checks
   that Claude Code is installed (**Install for me** runs Anthropic's official installer), that you're logged in (**Log
   in** opens your browser), and sends one tiny test request. **Your own model**: Ollama, a model that fits your
   computer (pick or download one), and a test request. Either way unlocks Kural; until then nothing runs in the
-  background, so there are no errors. Git and a Tab Complete model are shown as optional. If Claude Code breaks later (removed, logged out), the page opens again at that step. **Kural: Get Started**
+  background, so there are no errors. Git and a Tab Completion model are shown as optional. If Claude Code breaks later (removed, logged out), the page opens again at that step. **Kural: Get Started**
   opens it any time.
 - **Kural finds Claude Code in more places.** Opened from the Dock or a menu, Kural didn't get your terminal's PATH, so
   an install it doesn't know about (e.g. npm under nvm) wasn't found. Now it asks your login shell too, and Get started

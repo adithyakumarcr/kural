@@ -12,18 +12,19 @@
 //
 // Kural is "set up" when one of them passed (remembered on this computer). Until then the chat shows "Set up Kural
 // first". Claude processes only start once the Claude way passed (claude.js setSetupGate): no background errors for
-// people who don't use Claude. Optional extras: Git, and a Tab Complete model.
+// people who don't use Claude. Optional extras: Git, and a Tab Completion model.
 // On later starts a quick check of Claude (no request) runs in the background if Claude was set up; if something
 // broke (Claude Code removed, logged out), the Claude models wait for it and the page says why.
 
 const vscode = require("vscode");
 const os = require("os");
-const { findClaude, cleanEnv, setSetupGate, log } = require("./claude");
-const checks = require("./checks");
-const { installOllama, LOCAL_MODELS } = require("./local");
-const { Ollama, memoryGB, totalMemoryGB } = require("./ollama");
-const { LocalAgent } = require("./engine");
-const brain = require("./brain");
+const { findClaude, cleanEnv, setSetupGate, log } = require("./ai/claude");
+const checks = require("./ai/claude-checks");
+const { installOllama, LOCAL_MODELS } = require("./tab/local");
+const { Ollama, memoryGB, totalMemoryGB } = require("./ai/ollama");
+const { LocalAgent } = require("./ai/engine");
+const brain = require("./ai");
+const ws = require("./workspace");
 
 const KEY = "kural.setup.v2";   // { claude: { bin, version, at, authSaid } | null, local: { model, at } | null }
 const OLD_KEY = "kural.setup.v1";
@@ -123,6 +124,21 @@ class GetStarted {
     if (!brain.isLocal(brain.currentModel())) this.open("claude");
   }
 
+  // You logged out (Account menu): the Claude models wait until you log in again; the page shows the Log in step.
+  loggedOut() {
+    this.problem = null;   // (lock() again even if it was locked for something else)
+    this.lock("login");
+  }
+
+  // Log in to Claude now (Account menu: Log in, Switch account): the page at the Claude steps, and the login
+  // terminal open. When the login is done, the test runs by itself and Claude is unlocked.
+  async signIn() {
+    this.open("claude");
+    while (this.refreshing) await new Promise((r) => setTimeout(r, 100));   // (open() started a check)
+    await this.refresh();
+    if (this.s.login.state !== "ok") await this.onMessage({ type: "login" });
+  }
+
   open(path) {
     if (path) this.s.path = path;
     if (this.panel) { this.panel.reveal(); this.refresh(); return; }
@@ -133,8 +149,8 @@ class GetStarted {
     const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     const uri = (f) => p.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     p.webview.html = `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${p.webview.cspSource}; script-src 'nonce-${nonce}';">
-<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("getstarted.css")}"></head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${p.webview.cspSource}; font-src ${p.webview.cspSource}; script-src 'nonce-${nonce}';">
+<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("getstarted.css")}"></head>
 <body><div id="app"></div><script nonce="${nonce}" src="${uri("getstarted.js")}"></script></body></html>`;
     p.webview.onDidReceiveMessage((m) => this.onMessage(m).catch((e) => log(`get started: ${e.stack}`)));
     p.onDidDispose(() => { this.panel = null; this.wait(null); });
@@ -289,7 +305,8 @@ class GetStarted {
     this.post();
   }
 
-  cwd() { const root = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0]; return root ? root.uri.fsPath : os.homedir(); }
+  // (No folder open: Kural's own empty folder, never your home folder — see workspace.js workDir.)
+  cwd() { return ws.root() || ws.workDir(); }
 
   // Poll while you install or log in, so the page turns green by itself.
   wait(what) {

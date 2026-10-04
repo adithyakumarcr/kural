@@ -29,7 +29,7 @@ header { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
 .logo { width: 48px; height: 48px; flex-shrink: 0; border-radius: 13px; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); color: var(--on-accent);
   font-weight: 700; display: grid; place-items: center; font-family: var(--vscode-editor-font-family); }
 
-/* steps: a mark on the left (number, ✓, ✕, !, spinner) joined by a line */
+/* steps: a mark on the left (number, or an icon: done, failed, warning; a spinner) joined by a line */
 .step { display: flex; gap: 14px; position: relative; padding-bottom: 20px; }
 .step:not(:has(+ .go))::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: 2px; width: 2px; background: var(--border); }
 .mark { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px;
@@ -98,3 +98,6 @@ pre.err { white-space: pre-wrap; word-break: break-word; margin: 6px 0; padding:
 .bar { display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--accent); }
 .go.nopath { margin-left: 0; }
+
+.codicon { vertical-align: -2px; }
+.mark .codicon { vertical-align: 0; font-size: 14px; }

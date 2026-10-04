@@ -1,9 +1,9 @@
-// Agent team roles and the instructions Kural gives the lead (extension/lib/chat.js teamPrompt).
+// Agent team roles and the instructions Kural gives the lead (extension/lib/chat/team.js).
 const assert = require("assert");
 const Module = require("module");
 const load = Module._load;
 Module._load = function (r, ...a) { return r === "vscode" ? new Proxy({}, { get: () => new Proxy(function () {}, { get: () => () => {} }) }) : load.call(this, r, ...a); };
-const { _test: { teamPrompt, ROLES } } = require("../extension/lib/chat.js");
+const { _test: { teamPrompt, ROLES } } = require("../extension/lib/chat/index.js");
 
 let fail = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };

@@ -5,7 +5,11 @@ an AI assistant. Two engines: **Claude** (the user's own `claude` CLI, headless,
 own model** (Ollama on the user's computer, run by Kural's own engine: no Claude, no account, offline).
 **Identity:** Kural is its own product, not "Claude". UI text says Kural ("Ask Kural to change something…", "Kural
 searches…"); "Claude" appears only where it means Claude (its models in the menu, the Claude way in Get started,
-Claude Code itself). The completion feature is called **Tab Complete** (never "Kural Tab").
+Claude Code itself). The completion feature is called **Tab Completion** (never "Kural Tab").
+**Icons:** no emoji anywhere (UI, messages, docs). Webview pages use Codicons (`icon("name")` in the page scripts,
+`<i class="codicon codicon-…">`); VS Code UI uses `$(name)`. Every webview CSP needs `font-src ${webview.cspSource}`.
+**The feature guide:** `lib/chat/guide.js` tells the chat what Kural can do. When you add, change or remove a feature,
+change `guide.js` and `docs/wiki/` in the same pull request.
 Read `README.md` for the features. This file is how the code works and how to change it safely.
 
 ## The owner
@@ -16,25 +20,44 @@ this folder and installs; `./install.sh --ext` when only `extension/` changed; `
 new user: Kural's data is moved to `~/kural-backup-<date>` first), or the release download.
 
 ## Layout
+Feature folders; a new feature gets its own file or folder, wired in `extension.js`.
 - `extension/` — plain JavaScript, no build step, no npm dependencies at runtime.
-  - `extension.js` wires everything; status bar "Tab Complete" opens `lib/tabpanel.js` (bottom panel: switch, slider, model).
-  - `lib/brain.js` — which engine answers: the chat's model decides for the chat, Ask, Ctrl+K/Apply and commit messages
-    (`makeAgent`, `Session`, `usable`). `lib/engine.js` (`LocalAgent`) + `lib/tools.js` — Kural's own engine for Ollama
-    models (no vscode inside; behaves like `ClaudeProcess`: same methods, same stream-json events).
-  - `lib/claude.js` — `ClaudeProcess` (one `claude -p --input-format stream-json` process) and
-    `ClaudeSession` (pool of warm processes for one-shot questions: tab completion, Ctrl+K).
-  - `lib/chat.js` — the chat panel backend: tabs, history, modes, moods, models, agent teams, questions,
-    permissions, setup reload. `media/chat.js` + `media/chat.css` — the panel UI (a webview).
-  - `lib/completion.js` — tab completion; `lib/terminal-tab.js` — Tab in the terminal; `lib/activity.js` — what Tab learns from your work. `lib/team-mcp.js` — the agents' message board (tiny MCP server).
-  - `lib/updates.js` (Help → Check for Updates), `lib/attachments.js`, `lib/tickets.js` (+ → Link ticket, Jira via Atlassian connector), `lib/workspace.js` (multi-root),
-    `lib/setup.js` (notices Claude Code setup changes), `lib/search.js` (Ask), `lib/ui.js` (font size).
-  - `lib/getstarted.js` — the Get started page (editor tab, `media/getstarted.*`): Claude or your own model;
-    `lib/checks.js` (no vscode) — the Claude checks.
+  - `extension.js` wires everything; status bar "Tab Completion" opens `lib/tab/panel.js` (bottom panel: switch,
+    slider, engine, the engine's model, last suggestion's time).
+  - `lib/ai/` — where answers come from. `index.js`: the `PROVIDERS` table (claude, ollama; each `owns(model)`,
+    `ready()`, `agent()`, `ask()`), `makeAgent`, `Session`, `usable`: the chat's model decides for the chat, Ask,
+    Ctrl+K/Apply, commit messages and terminal plain words. `claude.js` — `ClaudeProcess` (one `claude -p
+    --input-format stream-json` process) and `ClaudeSession` (warm pool for one-shot questions). `claude-checks.js`
+    (no vscode) — install/login/test checks, `claudeAuth` (email, org, plan), `claudeLogout`. `claude-setup.js` —
+    notices Claude Code setup changes. `engine.js` (`LocalAgent`) + `tools.js` — Kural's own engine for Ollama models
+    (no vscode inside; same methods and stream-json events as `ClaudeProcess`). `ollama.js` — Ollama API, search.
+  - `lib/chat/` — `index.js` the chat backend (tabs, modes, models, questions, permissions, panes); `prompts.js`
+    (modes, `MOODS`, mood prompts); `team.js` (roles, team prompts) + `team-mcp.js` (the agents' board); `guide.js`
+    (what Kural can do, appended to every chat's prompt); `archive.js` (History), `attachments.js`, `tickets.js`
+    (Jira), `changes.js`. UI: `media/chat.js` + `media/chat.css` (a webview).
+  - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
+    `activity.js` (what Tab learns), `panel.js`.
+  - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
+  - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item + menu),
+    `lib/updates.js` (updates), `lib/search.js` (Ask), `lib/workspace.js` (folders; `workDir()` when none is open),
+    `lib/log.js`, `lib/ui.js` (font size).
+  - `media/codicons/` — the Codicons icon font (CC BY 4.0) for every Kural page.
+- `docs/wiki/` — the GitHub wiki's pages; `scripts/push-wiki.sh` publishes them.
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
   `make-deb.sh` (Ubuntu), `build-mac.sh` (Apple Silicon), `build-win.sh` (Windows, runs on Linux).
 - `.github/workflows/build.yml` — tests + all three builds; a `v*` tag publishes a Release.
 
 ## Things that are easy to break
+- **Account** (`lib/account.js`): status item (plan) + QuickPick menu. Who's logged in comes from `claude auth status
+  --json` (email, orgName, subscriptionType), never from the Keychain (Claudemeter, removed, read the Keychain: prompts
+  after every update, then failures). Log out = `claude auth logout` → `getStarted.loggedOut()` (locks Claude); once a new
+  login passes its test, `chat.setupChanged()` (new processes with the new login; not earlier, or a process started
+  while logged out would be kept). Switch = log out + `getStarted.signIn()` (login terminal;
+  the page polls, runs the test, unlocks). `test/fake-claude.js` does `auth logout` too.
+- **No home-folder scans** (macOS asks for Music, Photos… when a process walks those folders): with no folder open,
+  AI work runs in `ws.workDir()` (globalStorage/work), never `~`; `tools.walk` skips home's private folders
+  (`HOME_PRIVATE`). `build-mac.sh` drops the camera/microphone entitlements but keeps
+  Info.plist's usage texts (without them macOS kills the app when any extension touches that device).
 - **Get started gate** (`lib/getstarted.js`): two ways, either is enough (globalState `kural.setup.v2` =
   `{claude, local}`): Claude's test passed (`claudeReady`, and nothing broke since) or a local model's test passed
   (`localModel`). `ready` = either. Claude processes only start when `claudeReady` (`setSetupGate` → `ClaudeProcess.start`
@@ -84,19 +107,25 @@ new user: Kural's data is moved to `~/kural-backup-<date>` first), or the releas
   and `--forward-subagent-text`. Old Claude Code refuses unknown flags, so `supportedFlags()` probes once
   (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. Debug raw output: start Kural with
   `KURAL_RAW_LOG=/tmp/raw.jsonl`.
-- **Jira tickets** (`lib/tickets.js`): no Jira login in Kural. Search = a Haiku `claude` helper with the full setup
+- **Jira tickets** (`lib/chat/tickets.js`): no Jira login in Kural. Search = a Haiku `claude` helper with the full setup
   (so the Atlassian connector is there), only Atlassian tools allowed, JSON answer. claude.ai connectors connect in the
   background after Claude starts: `waitForAtlassian()` polls `mcp_status` until it's connected before asking (asking at
   once gave "Atlassian tools not available"). The helper is reused between searches, stopped after 5 idle minutes. `tab.ticket` is saved with the
   chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
   chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
-- **Panes** (`lib/chat.js`): a chat can show in several webviews: the side panel and split panels beside the code
+- **Chat page streaming** (`media/chat.js`): blocks are wrapped in `.blk[data-b]`; deltas patch one block per frame
+  (`schedulePatch`/`patchBlock`), not the whole message (that made thinking jitter). Scrolling follows only while
+  you're at the bottom (`stick`); scrolled up, a "Latest" button appears. Pictures: `fileSrc()` turns a path into the
+  webview's address (`S.pics` = `{base, root}` from `filesFor()`; `localResourceRoots` = media, project folders,
+  globalStorage, tmp); web pictures load only on click (a picture URL can carry data away). Don't reuse `S.files`: it's
+  the @-mention file list (a clash there hid every picture). Links: `a.link[data-url]` → `openUrl` (http/https only).
+- **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel and split panels beside the code
   (`openSplit`, WebviewPanel "kural.chatEditor", restored by a serializer from saved `splitIds`). Each pane has its own
   `activeId`; `this.activeId` is a getter for the pane being handled (`this.pane`) or the one you used last
   (`focusPane`). `post()` goes to every pane (each shows what's about its own tab), except `ONE_PANE` replies
   (full, attached, flash…) to the current pane. A reply sent after an `await` uses `postTo(pane, …)`. Use
   `shown(id)` for "is this tab on screen", never `tab.id === this.activeId`.
-- **History** (`lib/archive.js`, no vscode inside): every chat in full, all workspaces, in
+- **History** (`lib/chat/archive.js`, no vscode inside): every chat in full, all workspaces, in
   `globalStorage/kural.kural/chats/`: `<id>.json` + `<id>.meta.json` (one file per chat, so several windows can save at
   once; `deleted.json` keeps deleted ids so a window that still has one open can't bring it back; pinned is re-read
   from disk before a save). `save()` archives open tabs (only if changed); workspaceState keeps only this window's open
@@ -109,7 +138,7 @@ new user: Kural's data is moved to `~/kural-backup-<date>` first), or the releas
   with +, paste, or Shift+drag from the editor's own explorer.
 - **Keyboard shortcuts in the chat**: VS Code's `focusedView` isn't set for webviews, so the page reports
   focus itself (`kural.chatFocused` context key).
-- **Tab completion engines**: `lib/local.js` (Ollama, raw FIM prompt `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>`
+- **Tab completion engines**: `lib/tab/local.js` (Ollama, raw FIM prompt `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>`
   for qwen2.5-coder base models; `tidyLocal()` trims its output) and Claude (`ClaudeSession`). Engine "auto" uses
   local when Ollama has the model, else Claude; in Auto, `race()` gives local a 350 ms head start, then Claude, first
   real answer wins. Local requests use short context (1500/400 chars) and few tokens: CPU-only machines are slow.
@@ -117,33 +146,41 @@ new user: Kural's data is moved to `~/kural-backup-<date>` first), or the releas
   (modes via /tmp/rec/fake-mode: {"delay": ms} or {"empty": true}).
 - **Tab completion speed (Claude)**: model time (~0.6 s, Haiku, thinking off) dominates. Don't add work before the
   request. Two warm processes (`pool: 2`), early return on `</insert>`, type-through reuse.
-- **Tab in the terminal** (`lib/terminal-tab.js`): a terminal completion provider (proposed API
+- **Tab in the terminal** (`lib/tab/terminal.js`): a terminal completion provider (proposed API
   `terminalCompletionProvider`, in package.json `enabledApiProposals`; fine for a built-in extension). The terminal
   waits for every provider before showing its list (up to 5 s), so Kural never waits: cache or nothing, then asks the
   model after a pause (Tab speed slider), cancels stale asks, and reopens the list
   (`workbench.action.terminal.triggerSuggest`) when the answer comes. Same engine/model as editor Tab; own Claude
-  session ("terminal", `<cmd>…</cmd>`). For `git commit` it adds the staged (else unstaged) diff. package.json
-  `configurationDefaults` turns on the terminal's suggest-while-typing (VS Code's default is off).
-- **Tab learns from your work** (`lib/activity.js`, no vscode inside; fed by extension.js and chat.js): per workspace
+  session ("terminal", `<cmd>…</cmd>`). For `git commit` it adds the staged (else unstaged) diff (the chat's model).
+  package.json `configurationDefaults` turns on the terminal's suggest-while-typing (VS Code's default is off).
+  **Plain words** ("push this to main"): `plainWords()` (no shell syntax, first word not a path; after a program on PATH
+  two `PERSONAL` words, else one `FILLER` word: a wrong guess replaces the user's line, so keep it strict) → the chat's
+  model with `INTENT_SYSTEM_PROMPT` (`wordsSession`); `tidyIntent` keeps one line. The suggestion list hides items
+  whose label doesn't fuzzy-match the typed text, so `suggestionItem()` gives such items an empty replacement range
+  (always shown) and `inputData` = DEL × typed characters + the command (what the terminal gets on Tab; VS Code's own
+  items use it, the extension API passes it through with `...item`). `inputData` isn't public API: after a VSCodium
+  update, check that "push this to main" + Tab still replaces the words.
+- **Tab learns from your work** (`lib/tab/activity.js`, no vscode inside; fed by extension.js and chat.js): per workspace
   (`workspaceState` "kural.activity.v1"): chat asks + changed files (`finishReply`; Undo removes the file; "Build it"
   uses the plan's question), Ctrl+K/Apply you accepted (`review.onDone(meta)`), accepted Tab suggestions (the inline item's
   `command` "kural.tab.accepted"), terminal commands (never ones matching `SECRET`); this session only: recent edits.
   `tabNote()` goes before the editor Tab prompt (Claude only; keep it short, it costs speed); `terminalNote()` into the
   terminal prompt: usual commands, or for a commit the work since the last commit on the changed files, plus
-  `git log -8` subjects for style. Setting `kural.tabCompletion.learn`; Forget in the Tab panel / command.
+  `git log -8` subjects for style. Always on (no setting); "Kural: Forget What Tab Completion Learned" clears it.
   Live check: `node test/personal.live.js` (same request with and without the note, real Haiku).
-- **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/code-reply.js`): leading spaces at the very start of a
+- **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/edit/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
-- **Local models** (`tab.model` = `"ollama:<name>"`): Kural's own engine (`lib/engine.js`), never Claude Code (that
+- **Local models** (`tab.model` = `"ollama:<name>"`): Kural's own engine (`lib/ai/engine.js`), never Claude Code (that
   needed Claude installed and its env tricks). It calls Ollama's `/api/chat` (streamed; `tools`; `think` for thinking
-  models; `options.num_ctx` = setting `kural.localModels.contextLength`), runs the tools in `lib/tools.js` (Read, Write,
+  models; `options.num_ctx` = setting `kural.localModels.contextLength`), runs the tools in `lib/ai/tools.js` (Read, Write,
   Edit, Glob, Grep, Bash, AskUserQuestion: Claude Code's names and inputs, so the chat shows them and Undo works;
   file paths made absolute before the permission check) and emits Claude Code's stream-json events. Conversations are
   saved in globalStorage `local-chats/<session>.json` (resume). `jsonSchema` (Ask) = one more request with `format`.
   Agent teams and Claude Code connectors/skills: Claude only (`teamSize` is 0 for local; the menu says so). Switching a
   chat between Claude and local starts a new session with `carryOver` (the transcript). `prepareLocal`: Ollama running,
   ≥ `MIN_VERSION` (0.8: streamed tool calls), model downloaded, has "tools". Ctrl+K/Apply/commits with a local model:
-  one non-streamed `/api/chat` (`brain.askLocal`). Tab Complete keeps its own engine (FIM model or Claude Haiku).
+  one non-streamed `/api/chat` (`askLocal` in `lib/ai/index.js`). Pictures an Ollama model returns become
+  `kural_image` events, saved under globalStorage `images/` and shown in the answer. Tab Completion keeps its own engine (FIM model or Claude Haiku).
   Search reads ollama.com/search?c=tools (no API; `parseSearch` reads list items loosely; cloud-only = no sizes → left
   out), falling back to `SUGGESTED`. Test without Ollama: `node test/fake-ollama-chat.js 11434` (`/api/chat` scripted:
   "read the readme" → Read call; "add a line to notes" → Edit; `format` → JSON; non-streamed → `<code>`/`<cmd>` replies)
@@ -157,8 +194,12 @@ new user: Kural's data is moved to `~/kural-backup-<date>` first), or the releas
 - product.json `checksums` cover VS Code's core JS files (VS Code calls the install "corrupt" if they change).
   The one exception: `rebrand.py` `add_update_menu()` adds Help → Check for Updates to workbench.desktop.main.js
   (extensions can't add to the Help menu) and rewrites that file's checksum (sha256, base64, no "="). It only patches
-  if the old checksum matches and the anchor ("Ask @vscode" Help item) is found; otherwise it skips with a warning.
-- **Updates** (`lib/updates.js`): newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
+  if the old checksum matches and the anchor ("Ask @vscode" Help item) is found; otherwise it skips with a
+  `::warning::` (shows in the CI summary). Because a menu patch can silently miss, updates are also checked daily and
+  reachable from the Chat panel's … menu and the Account menu.
+- **Updates** (`lib/updates.js`): `autoCheck()` once a day (globalState `kural.update.lastCheck`, setting
+  `kural.updates.autoCheck`), quiet unless there's a newer version (non-modal offer, not awaited: an ignored
+  notification must not keep `busy` set, or Check for Updates silently does nothing); newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
   (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then restart.
   Mac/Windows: a detached script waits for Kural's main process (`process.ppid`) to quit, swaps the app / runs the setup,
   starts Kural. The script clears `CachedProfilesData/*/extensions.builtin.cache` (else the restarted Kural shows the

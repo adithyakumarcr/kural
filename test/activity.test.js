@@ -1,6 +1,6 @@
-// What Tab learns from your work (extension/lib/activity.js): what it remembers, and the notes it builds.
+// What Tab learns from your work (extension/lib/tab/activity.js): what it remembers, and the notes it builds.
 const assert = require("assert");
-const { Activity } = require("../extension/lib/activity");
+const { Activity } = require("../extension/lib/tab/activity");
 
 let fail = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };

@@ -1,9 +1,9 @@
-// Kural's own engine (extension/lib/engine.js + tools.js) against a stand-in Ollama (test/fake-ollama-chat.js):
+// Kural's own engine (extension/lib/ai/engine.js + tools.js) against a stand-in Ollama (test/fake-ollama-chat.js):
 // no Claude, no internet.
 const assert = require("assert");
 const fs = require("fs"), os = require("os"), path = require("path");
-const { LocalAgent } = require("../extension/lib/engine");
-const { Tools, globRegex } = require("../extension/lib/tools");
+const { LocalAgent } = require("../extension/lib/ai/engine");
+const { Tools, globRegex } = require("../extension/lib/ai/tools");
 const fake = require("./fake-ollama-chat");
 
 let fail = 0;

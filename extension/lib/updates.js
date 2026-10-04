@@ -1,4 +1,5 @@
-// Help → Check for Updates…: install the newest Kural release from GitHub (also alpha, beta and rc).
+// Help → Check for Updates… (also in the Chat panel's … menu and the Account menu), and once a day by itself:
+// install the newest Kural release from GitHub (also alpha, beta and rc).
 //
 // 1. Ask GitHub for the releases and pick the newest version (1.2.0 > 1.2.0-rc.1 > 1.2.0-beta.2 > 1.2.0-alpha.3).
 // 2. Download the file for this computer: Ubuntu .deb, Mac .zip, Windows setup .exe.
@@ -11,9 +12,11 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
-const { log } = require("./claude");
+const { log } = require("./ai/claude");
 
 const REPO = "adithyakumarcr/kural";
+const LAST_CHECK = "kural.update.lastCheck";
+const DAY = 24 * 60 * 60 * 1000;
 
 // "1.2.0-beta.2" → { nums: [1,2,0], pre: ["beta", 2] }
 function parseVersion(v) {
@@ -120,37 +123,73 @@ class Updater {
     if (this.busy) return;
     this.busy = true;
     try { await this.run(); }
-    catch (e) {
-      log(`update: ${e.stack || e.message}`);
-      vscode.window.showErrorMessage(`Kural couldn't update: ${e.message}`, "Open releases page")
-        .then((p) => p && vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${REPO}/releases`)));
-    } finally { this.busy = false; }
+    catch (e) { log(`update: ${e.stack || e.message}`); this.failed(e); }
+    finally { this.busy = false; }
   }
 
-  async run() {
-    const releases = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Checking for Kural updates…" }, async () => {
-      const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Kural" } });
-      if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-      return res.json();
-    });
+  failed(e) {
+    vscode.window.showErrorMessage(`Kural couldn't update: ${e.message}`, "Open releases page")
+      .then((p) => p && vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${REPO}/releases`)));
+  }
+
+  // By itself: a minute after Kural starts, then every few hours, it asks GitHub at most once a day (setting
+  // kural.updates.autoCheck). Quiet: nothing on screen unless there's a new version, which it offers in a small
+  // notification (not a window in your way).
+  autoCheck() {
+    const tick = async () => {
+      if (!vscode.workspace.getConfiguration("kural").get("updates.autoCheck")) return;
+      const last = this.context.globalState.get(LAST_CHECK) || 0;
+      if (this.busy || Date.now() - last < DAY) return;
+      this.busy = true;
+      try { await this.context.globalState.update(LAST_CHECK, Date.now()); await this.run(true); }
+      catch (e) { log(`update: automatic check: ${e.message}`); }   // (offline, say: try again tomorrow)
+      finally { this.busy = false; }
+    };
+    const first = setTimeout(tick, 60 * 1000);
+    const every = setInterval(tick, 4 * 60 * 60 * 1000);
+    this.context.subscriptions.push({ dispose: () => { clearTimeout(first); clearInterval(every); } });
+  }
+
+  async releases() {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Kural" } });
+    if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+    return res.json();
+  }
+
+  async run(quiet = false) {
+    const releases = quiet ? await this.releases()
+      : await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Checking for Kural updates…" }, () => this.releases());
     const rel = newestRelease(releases);
     log(`update: you have ${this.version}; newest on GitHub: ${rel ? rel.version : "none"}`);
     if (!rel || compareVersions(rel.version, this.version) <= 0) {
-      vscode.window.showInformationMessage(`Kural is up to date (${this.version}).`);
+      if (!quiet) vscode.window.showInformationMessage(`Kural is up to date (${this.version}).`);
       return;
     }
     const asset = assetFor(rel.assets);
     if (!asset) {
+      if (quiet) return;
       const p = await vscode.window.showWarningMessage(`Kural ${rel.version} is out, but has no download for this computer.`, "Open release");
       if (p) vscode.env.openExternal(vscode.Uri.parse(rel.html_url));
       return;
     }
+    // The automatic check doesn't wait for your answer: a notification you ignore would otherwise keep Kural "busy",
+    // and Check for Updates would do nothing.
+    if (quiet) { this.offer(rel, asset, true).catch((e) => { log(`update: ${e.stack || e.message}`); this.failed(e); }); return; }
+    await this.offer(rel, asset, false);
+  }
+
+  async offer(rel, asset, quiet) {
     const kind = /-(alpha|beta|rc)/i.exec(rel.version);
     const pick = await vscode.window.showInformationMessage(
       `Kural ${rel.version}${kind ? ` (${kind[1].toLowerCase()} test version)` : ""} is available. You have ${this.version}. Install it now? Kural restarts afterwards.`,
-      { modal: true }, "Install and restart", "What's new");
+      { modal: !quiet }, "Install and restart", "What's new", ...(quiet ? ["Later"] : []));
     if (pick === "What's new") { vscode.env.openExternal(vscode.Uri.parse(rel.html_url)); return; }
-    if (pick !== "Install and restart") return;
+    if (pick !== "Install and restart" || this.installing) return;
+    this.installing = true;   // (two offers answered "Install": only one download)
+    try { await this.fetchAndInstall(rel, asset); } finally { this.installing = false; }
+  }
+
+  async fetchAndInstall(rel, asset) {
 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-update-"));
     const file = path.join(dir, asset.name);

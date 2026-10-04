@@ -1,7 +1,7 @@
 {
   "name": "kural",
   "displayName": "Kural",
-  "description": "Kural Code Editor's AI: Tab Complete, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude (your Claude Code login) or your own model on this computer (Ollama, offline).",
+  "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude (your Claude Code login) or your own model on this computer (Ollama, offline).",
   "version": "1.1.0-alpha.3",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
@@ -29,7 +29,7 @@
     "commands": [
       {
         "command": "kural.tab.forget",
-        "title": "Kural: Forget What Tab Complete Learned (This Workspace)"
+        "title": "Kural: Forget What Tab Completion Learned (This Workspace)"
       },
       {
         "command": "kural.chat.open",
@@ -73,7 +73,7 @@
       },
       {
         "command": "kural.toggleTab",
-        "title": "Kural: Turn Tab Complete On/Off"
+        "title": "Kural: Turn Tab Completion On/Off"
       },
       {
         "command": "kural.openClaudeCode",
@@ -82,8 +82,15 @@
       },
       {
         "command": "kural.getStarted",
-        "title": "Kural: Get Started",
-        "icon": "$(rocket)"
+        "title": "Get Started",
+        "icon": "$(rocket)",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.account",
+        "title": "Account: Usage, Switch Account, Log Out",
+        "icon": "$(account)",
+        "category": "Kural"
       },
       {
         "command": "kural.login",
@@ -129,7 +136,7 @@
       },
       {
         "command": "kural.tabSpeed",
-        "title": "Kural: Tab Complete Speed"
+        "title": "Kural: Tab Completion Speed"
       },
       {
         "command": "kural.reloadSetup",
@@ -164,7 +171,7 @@
       "panel": [
         {
           "id": "kural-tab",
-          "title": "Tab Complete",
+          "title": "Tab Completion",
           "icon": "media/chat-icon.svg"
         }
       ]
@@ -189,7 +196,7 @@
         {
           "type": "webview",
           "id": "kural.tabPanel",
-          "name": "Tab completion"
+          "name": "Tab Completion"
         }
       ]
     },
@@ -214,6 +221,21 @@
           "command": "kural.showLog",
           "when": "view == kural.chat",
           "group": "navigation@4"
+        },
+        {
+          "command": "kural.account",
+          "when": "view == kural.chat",
+          "group": "9_kural@1"
+        },
+        {
+          "command": "kural.getStarted",
+          "when": "view == kural.chat",
+          "group": "9_kural@2"
+        },
+        {
+          "command": "kural.checkForUpdates",
+          "when": "view == kural.chat",
+          "group": "9_kural@3"
         }
       ],
       "editor/title": [
@@ -348,7 +370,7 @@
         "kural.tabCompletion.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Tab Complete: show suggestions as grey text as you type. Tab accepts."
+          "description": "Tab Completion: show suggestions as grey text as you type. Tab accepts."
         },
         "kural.tabCompletion.model": {
           "type": "string",
@@ -358,19 +380,14 @@
             "sonnet",
             "opus"
           ],
-          "description": "Claude model for Tab Complete (when it uses Claude). Haiku is fastest (about half a second)."
+          "description": "Claude model for Tab Completion (when it uses Claude). Haiku is fastest (about half a second)."
         },
         "kural.tabCompletion.debounceMs": {
           "type": "number",
           "default": 75,
           "minimum": 0,
           "maximum": 2000,
-          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set from Tab Complete in the status bar."
-        },
-        "kural.tabCompletion.onCursorMove": {
-          "type": "boolean",
-          "default": true,
-          "description": "Also suggest when you place the cursor at the end of a line or on an empty line."
+          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set from Tab Completion in the status bar."
         },
         "kural.chat.model": {
           "type": "string",
@@ -403,9 +420,9 @@
             "ask"
           ],
           "enumDescriptions": [
-            "Claude edits files; asks before running commands",
-            "Claude edits files and runs commands without asking",
-            "Claude writes a plan first; click Build it to carry it out",
+            "Kural edits files; asks before running commands",
+            "Kural edits files and runs commands without asking",
+            "Kural writes a plan first; click Build it to carry it out",
             "Answers only; nothing changes"
           ],
           "description": "Mode for your very first chat. After that, new chats use whatever you picked last."
@@ -435,12 +452,12 @@
             "Always the local model (Claude only if Ollama isn't available)",
             "Always Claude"
           ],
-          "description": "What writes Tab Complete suggestions. Easiest to set in the Tab Complete panel (click Tab Complete in the status bar)."
+          "description": "What writes Tab Completion suggestions. Easiest to set in the Tab Completion panel (click Tab Completion in the status bar)."
         },
         "kural.tabCompletion.localModel": {
           "type": "string",
           "default": "qwen2.5-coder:1.5b-base",
-          "description": "Ollama model for local Tab Complete suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:0.5b-base / 1.5b-base / 3b-base)."
+          "description": "Ollama model for local Tab Completion suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:0.5b-base / 1.5b-base / 3b-base)."
         },
         "kural.tabCompletion.ollamaUrl": {
           "type": "string",
@@ -453,15 +470,15 @@
           "minimum": 16384,
           "markdownDescription": "How many tokens a model on your computer (Ollama) can look at in the chat: your conversation, the files it read, Kural's instructions. 32k works well; more needs more memory."
         },
-        "kural.tabCompletion.learn": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Make Tab more personal: it's told what you've been doing in this workspace — what you asked the chat and which files it changed, Ctrl+K and Apply changes you accepted, suggestions you accepted, files you edited, commands you run (never ones with passwords or tokens). Commit messages then say why you changed things, in your own style. Kept only on this computer, per workspace. **Kural: Forget What Tab Learned** clears it."
-        },
         "kural.tabCompletion.terminal": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
+        },
+        "kural.updates.autoCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for a new Kural version once a day (it asks before installing anything)."
         }
       }
     },
@@ -514,7 +531,7 @@
     "terminal": {
       "completionProviders": [
         {
-          "description": "Tab Complete: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
+          "description": "Tab Completion: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
         }
       ]
     }

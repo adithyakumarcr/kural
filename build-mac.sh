@@ -48,6 +48,14 @@ def edit(path, **changes):
     with open(path, "wb") as f: plistlib.dump(d, f)
 edit(f"{app}/Contents/Info.plist", CFBundleName="Kural", CFBundleDisplayName="Kural", CFBundleExecutable="Kural",
      CFBundleIdentifier="com.kural", CFBundleIconFile="Kural.icns")
+# The texts macOS shows if something asks for a permission. They don't ask for anything by themselves, and they stay:
+# without one, macOS closes the whole app when an extension tries that device. Kural itself uses none of them, and the
+# signature below doesn't allow camera or microphone (macOS just says no). The prompts people saw (Music, Photos…) came
+# from walking the home folder, which Kural no longer does.
+with open(f"{app}/Contents/Info.plist", "rb") as f: d = plistlib.load(f)
+for k in [k for k in d if k.endswith("UsageDescription")]:
+    d[k] = d[k].replace("Visual Studio Code", "Kural")
+with open(f"{app}/Contents/Info.plist", "wb") as f: plistlib.dump(d, f)
 for h in glob.glob(f"{app}/Contents/Frameworks/Kural Helper*.app"):
     name = os.path.basename(h)[:-4]                       # "Kural Helper (GPU)"
     with open(f"{h}/Contents/Info.plist", "rb") as f: ident = plistlib.load(f).get("CFBundleIdentifier", "")
@@ -78,7 +86,7 @@ else
       echo '</dict></plist>'; } > "$f"; }
   E="$WORK/entitlements"; mkdir -p "$E"
   DLV=cs.disable-library-validation
-  ent "$E/main.plist"     cs.allow-jit device.audio-input device.camera automation.apple-events $DLV
+  ent "$E/main.plist"     cs.allow-jit automation.apple-events $DLV   # (no camera or microphone: Kural doesn't use them)
   ent "$E/renderer.plist" cs.allow-jit $DLV
   ent "$E/plugin.plist"   cs.allow-jit cs.allow-unsigned-executable-memory $DLV
   ent "$E/plain.plist"    $DLV

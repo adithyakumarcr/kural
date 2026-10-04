@@ -43,12 +43,13 @@ def main(app, platform):
     d["desktopName"] = f"{NAME}.desktop"
     save(pkg, d)
 
-    # 3. Built-in extensions: Kural + Claudemeter.
+    # 3. Built-in extension: Kural. (Claudemeter, included in earlier versions, is gone: Kural's Account item replaces
+    #    it. Remove it from an older unpacked app too.)
     ext = os.path.join(app, "extensions")
-    for src, dst in (("extension", NAME), (os.path.join("vendor", "claudemeter"), "claudemeter")):
-        target = os.path.join(ext, dst)
-        shutil.rmtree(target, ignore_errors=True)
-        shutil.copytree(os.path.join(ROOT, src), target, ignore=shutil.ignore_patterns("README.md") if dst == "claudemeter" else None)
+    shutil.rmtree(os.path.join(ext, "claudemeter"), ignore_errors=True)
+    target = os.path.join(ext, NAME)
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(os.path.join(ROOT, "extension"), target)
     # Kural's license (MIT + Commons Clause) travels with every copy of the app, as the license requires.
     shutil.copy(os.path.join(ROOT, "LICENSE"), os.path.join(ext, NAME, "LICENSE"))
 
@@ -106,12 +107,12 @@ def add_update_menu(app):
     if b"kural.checkForUpdates" in data:
         return
     if sums.get(rel) != fingerprint(data):
-        print("warning: unexpected workbench fingerprint; Help → Check for Updates not added")
+        print("::warning::unexpected workbench fingerprint; Help → Check for Updates not added")
         return
     text = data.decode("utf-8")
     m = HELP_ITEM.search(text)
     if not m:
-        print("warning: Help menu code not found; Help → Check for Updates not added")
+        print("::warning::Help menu code not found; Help → Check for Updates not added")
         return
     registry, ids = m.group(1), m.group(2)
     item = (f'{registry}.appendMenuItem({ids}.MenubarHelpMenu,{{command:{{id:"kural.checkForUpdates",'

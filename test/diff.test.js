@@ -1,7 +1,7 @@
 // Unit tests for the line diff behind every red/green review. No Claude needed.
 // Run: node test/diff.test.js
 const path = require("path");
-const { diffLines } = require(path.resolve(__dirname, "../extension/lib/diff.js"));
+const { diffLines } = require(path.resolve(__dirname, "../extension/lib/edit/diff.js"));
 
 const show = (o) => o.map((x) => ({ same: " ", add: "+", del: "-" })[x.op] + x.text).join("\n");
 const cases = [

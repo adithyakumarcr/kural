@@ -13,6 +13,17 @@ function folders() {
 }
 
 function root() { const f = folders(); return f.length ? f[0].path : undefined; }
+
+// Where AI work happens when no folder is open: an empty folder of Kural's own. Never your home folder: a program
+// that looks through your home folder makes macOS ask for Music, Photos, Documents… ("Kural would like to access
+// Apple Music"). setWorkDir is called once at startup (Kural's storage folder); the temp folder is the fallback.
+let scratch = null;
+function setWorkDir(dir) { scratch = dir; }
+function workDir() {
+  const dir = scratch || path.join(require("os").tmpdir(), "kural-work");
+  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* exists, or the temp folder: still usable */ }
+  return dir;
+}
 function extraDirs() { return folders().slice(1).map((f) => f.path); }
 function key() { return folders().map((f) => f.path).join("|"); }
 
@@ -63,4 +74,4 @@ function promptNote() {
     `. Your working directory is the first one. A path written as <folder name>/... is inside that folder.`;
 }
 
-module.exports = { folders, root, extraDirs, key, label, resolve, promptNote };
+module.exports = { workDir, setWorkDir, folders, root, extraDirs, key, label, resolve, promptNote };

@@ -40,7 +40,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tab-new:hover { background: var(--hover); color: var(--vscode-foreground); }
 
 /* ---------- conversation ---------- */
-.body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .list { flex: 1; overflow-y: auto; padding: 14px 14px 8px; }
 .msg { margin-bottom: 16px; }
 .msg.user .bubble { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 11px; white-space: pre-wrap; word-wrap: break-word; }
@@ -54,6 +54,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .answer code.ref { color: var(--vscode-textLink-foreground); cursor: pointer; }
 .answer code.ref:hover { text-decoration: underline; }
 .answer .link { color: var(--vscode-textLink-foreground); }
+.answer a.link { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.answer a.link:hover { color: var(--vscode-textLink-activeForeground); }
+.answer { overflow-wrap: break-word; }   /* a long web address wraps instead of widening the chat */
 .tool { color: var(--muted); font-size: calc(12px * var(--fs, 1)); margin: 0 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tool-name { color: var(--vscode-foreground); opacity: .85; }
 .tool-file { cursor: pointer; } .tool-file:hover { text-decoration: underline; }
@@ -259,7 +262,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .team-msg { margin: 3px 0; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(12px * var(--fs, 1)); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .team-who { font-weight: 600; color: var(--accent-hi); }
 /* The agents' discussion, in the answer itself: a bit bigger than inside a card */
-.answer > .team-msg { margin: 6px 0; padding: 6px 10px; font-size: calc(13px * var(--fs, 1)); }
+.answer > .team-msg, .answer > .blk > .team-msg { margin: 6px 0; padding: 6px 10px; font-size: calc(13px * var(--fs, 1)); }
 .agent-activity { font-size: calc(11px * var(--fs, 1)); color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .agent-say, .agent-think { margin: 3px 0; font-size: calc(12px * var(--fs, 1)); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
 .agent-think { color: var(--muted); font-style: italic; }
@@ -270,8 +273,8 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .think { margin: 4px 0 8px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); }
 .think-head { cursor: pointer; display: inline-flex; align-items: center; gap: 5px; user-select: none; }
 .think-head:hover { color: var(--fg, inherit); }
-.think-caret::before { content: "▸"; display: inline-block; width: 1em; }
-.think.open .think-caret::before { content: "▾"; }
+.think-caret::before { font-family: codicon; content: "\eab6"; display: inline-block; width: 1em; vertical-align: -2px; }
+.think.open .think-caret::before { content: "\eab4"; }
 .think.live .think-head { color: var(--accent-hi); }
 .think-body { display: none; margin: 4px 0 0 6px; padding: 2px 0 2px 10px; border-left: 2px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-style: italic; }
 .think.open .think-body { display: block; }
@@ -319,12 +322,12 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mh-btn:hover { text-decoration: underline; }
 .setup-sum { cursor: pointer; color: var(--muted); gap: 5px; }
 .setup-sum:hover { color: var(--vscode-foreground); }
-.setup-sum.open .think-caret::before { content: "▾"; }
+.setup-sum.open .think-caret::before { content: "\eab4"; }
 .warn-tri { color: var(--yellow); }
 .setup-row { padding: 2px 8px 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: calc(12px * var(--fs, 1)); }
 .srv { padding: 0 7px; border-radius: 10px; font-size: calc(11.5px * var(--fs, 1)); border: 1px solid var(--border); }
-.srv.ok::before { content: "● "; color: var(--green); }
-.srv.bad::before { content: "● "; color: var(--yellow); }
+.srv.ok::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--green); }
+.srv.bad::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--yellow); }
 /* roles and moods */
 .roles { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 6px; align-items: center; }
 .roles-h { font-size: calc(10.5px * var(--fs, 1)); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 2px; }
@@ -382,3 +385,25 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 /* "Set up Kural first" (before Get started has passed) */
 .setup-text { margin: 10px auto 16px; max-width: 250px; color: var(--muted); text-align: center; }
 .setup-title { font-size: calc(18px * var(--fs, 1)); }
+
+/* Codicons inside text: line up with the words around them. */
+.codicon { font-size: 1.05em; vertical-align: -2px; }
+.mi-icon .codicon, .att-icon .codicon { vertical-align: -3px; }
+
+/* Streaming: each block of an answer in its own wrapper (no box of its own), so only that block is redrawn. */
+.blk { display: contents; }
+/* Scrolled up while an answer streams in: a button to jump back to the latest. */
+.jump { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 5; display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--menu); color: var(--vscode-foreground);
+  font-size: calc(12px * var(--fs, 1)); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+.jump.hidden { display: none; }
+/* Keep what you're reading still when something above it changes size (e.g. a finished thinking box folds up). */
+.list { overflow-anchor: auto; }
+
+/* Pictures: from the answer (Markdown images, ones a model made, an image file it read) and ones you attached. */
+.md-img { display: block; max-width: 100%; max-height: 360px; margin: 6px 0; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; }
+.tool-img { max-height: 160px; }
+.att-photo { max-width: 160px; max-height: 120px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; margin: 4px 4px 0 0; }
+.img-remote { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 6px; border: 1px dashed var(--border); color: var(--muted); cursor: pointer; }
+.img-remote:hover { color: var(--vscode-foreground); }
+.img-missing { color: var(--muted); font-style: italic; }

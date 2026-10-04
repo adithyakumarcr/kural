@@ -6,8 +6,8 @@ const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("./ui");
 const fs = require("fs");
 const path = require("path");
-const { log, LOGIN_RE } = require("./claude");
-const brain = require("./brain");
+const { log, LOGIN_RE } = require("./ai/claude");
+const brain = require("./ai");
 
 const SCHEMA = {
   type: "object",
@@ -77,8 +77,8 @@ class SearchView {
     const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     const uri = (f) => view.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     view.webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';">
-<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("search.css")}"></head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; font-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';">
+<meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("search.css")}"></head>
 <body><div id="app"></div><script nonce="${nonce}" src="${uri("search.js")}"></script></body></html>`;
     view.webview.onDidReceiveMessage((m) => this.onMessage(m).catch((e) => log(`search: ${e.stack}`)));
     view.onDidDispose(() => { this.view = null; });

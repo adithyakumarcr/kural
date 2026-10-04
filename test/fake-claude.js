@@ -6,7 +6,7 @@
 //   loggedout  `auth status` says not logged in; requests fail with "Not logged in · Please run /login"
 //   nocredit   logged in, but requests fail (no Claude Code access on the account)
 //   old        an old Claude Code without `auth status` (prints text, not JSON)
-// `auth login` waits 3 s, then switches the state file to "ok" (like finishing the login in the browser).
+// `auth logout` switches the state file to "loggedout". `auth login` waits 3 s, then switches the state file to "ok" (like finishing the login in the browser).
 // Use it in Kural: setting "kural.claudePath": "/path/to/test/fake-claude.js".
 const fs = require("fs"), os = require("os"), path = require("path");
 const file = process.env.FAKE_CLAUDE_FILE || path.join(os.tmpdir(), "kural-fake-claude-state");
@@ -17,9 +17,11 @@ const args = process.argv.slice(2);
 if (args[0] === "--version") { console.log(state === "old" ? "1.0.30 (Claude Code)" : "2.1.300 (Claude Code)"); process.exit(0); }
 if (args[0] === "auth" && args[1] === "status") {
   if (state === "old") { console.log("auth status is not a command I know."); process.exit(0); }
-  console.log(JSON.stringify({ loggedIn: state !== "loggedout", authMethod: state === "loggedout" ? "none" : "claude.ai", apiProvider: "firstParty" }, null, 2));
+  const who = state === "loggedout" ? {} : { email: process.env.FAKE_CLAUDE_EMAIL || "tester@example.com", orgName: "Tester's Organization", subscriptionType: "pro" };
+  console.log(JSON.stringify({ loggedIn: state !== "loggedout", authMethod: state === "loggedout" ? "none" : "claude.ai", apiProvider: "firstParty", ...who }, null, 2));
   process.exit(state === "loggedout" ? 1 : 0);
 }
+if (args[0] === "auth" && args[1] === "logout") { fs.writeFileSync(file, "loggedout"); console.log("Successfully logged out."); process.exit(0); }
 if (args[0] === "auth" && args[1] === "login") {
   console.log("Opening your browser to log in…  (fake: logged in after 3 s)");
   setTimeout(() => { fs.writeFileSync(file, "ok"); console.log("Login successful."); process.exit(0); }, 3000);

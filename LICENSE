@@ -42,7 +42,7 @@ This license covers the Kural code in this repository (extension/, make-deb.sh,
 test/, assets/). Parts it builds on have their own licenses:
 
 - VSCodium / Code - OSS, downloaded by make-deb.sh: MIT (see the app's LICENSE files)
-- Claudemeter (vendor/claudemeter): MIT, (c) HYPERI PTY LIMITED — see vendor/claudemeter/LICENSE.txt
+- Codicons (extension/media/codicons): icons CC BY 4.0, code MIT, (c) Microsoft — see the LICENSE files there
 - Claude Code is not included; Kural uses the copy you install from Anthropic.
 
 ---------------------------------------------------------------------------
@@ -53,4 +53,5 @@ Kural's releases include software by others, under their own licenses (the
 Commons Clause above does not apply to them):
 
 - VSCodium / Visual Studio Code (MIT): https://github.com/VSCodium/vscodium
-- Claudemeter (MIT): vendor/claudemeter/LICENSE.txt
+- Codicons, the icon font (icons CC BY 4.0, code MIT): https://github.com/microsoft/vscode-codicons,
+  extension/media/codicons/LICENSE-icons and LICENSE-code
