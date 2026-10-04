@@ -1,4 +1,4 @@
-// The linked device's tools for the AI (an MCP server, one per chat linked to a device). Claude Code, Codex and Gemini
+// The linked device's tools for the AI (an MCP server, one per chat linked to a device). Claude Code and Codex
 // start it like any MCP server; it only passes each call on to Kural, which asks you first when your chat's mode says so
 // and then runs it over SSH (lib/devices/index.js). The password never comes here.
 // Plain Node, no packages: Kural runs it with its own executable (ELECTRON_RUN_AS_NODE=1).
@@ -8,14 +8,11 @@
 //         write_file(path, content)               create or replace a file (folders are made as needed)
 //         list_dir(path)                          ls -la
 //
-// Env: KURAL_DEVICE_SOCKET (where Kural listens), KURAL_DEVICE_TOKEN (which chat this is), KURAL_DEVICE_NAME,
-// KURAL_DEVICE_PREFIX (Gemini: tools are named kural_device_run_command…, because Gemini doesn't say which MCP server a
-// tool is from, and Kural must not mistake your own server's "run_command" for the device's).
+// Env: KURAL_DEVICE_SOCKET (where Kural listens), KURAL_DEVICE_TOKEN (which chat this is), KURAL_DEVICE_NAME.
 
 const net = require("net");
 
 const NAME = process.env.KURAL_DEVICE_NAME || "the device";
-const PREFIX = process.env.KURAL_DEVICE_PREFIX || "";
 const TOOLS = [
   { name: "run_command", description: `Run a shell command on ${NAME} (Linux) over SSH and get its output and exit code. Each call is a new shell: ` +
       "cd and environment variables don't carry over (use `cd dir && …`). Don't start programs that never end (servers): run them with nohup … & or a timeout.",
@@ -51,10 +48,9 @@ async function handle(msg) {
     return send({ jsonrpc: "2.0", id, result: { protocolVersion: (params && params.protocolVersion) || "2024-11-05",
       capabilities: { tools: {} }, serverInfo: { name: "kural-device", version: "1.0.0" } } });
   }
-  if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map((t) => ({ ...t, name: PREFIX + t.name })) } });
+  if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS } });
   if (method === "tools/call") {
-    const name = String(params.name || "");
-    const r = await ask(PREFIX && name.startsWith(PREFIX) ? name.slice(PREFIX.length) : name, params.arguments || {});
+    const r = await ask(String(params.name || ""), params.arguments || {});
     return send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: String(r.text || "") }], isError: !!r.isError } });
   }
   if (method === "ping") return send({ jsonrpc: "2.0", id, result: {} });

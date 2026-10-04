@@ -2,8 +2,8 @@
 
 Kural Code Editor (by Adithya Chinnakkonda; formerly ClaudeX) is VSCodium rebranded, plus a built-in extension (`extension/`) with
 an AI assistant. Providers (lib/ai/index.js `PROVIDERS`): **Claude** (the user's own `claude` CLI, headless, with its
-login: no API key), **Codex** (`codex app-server`, the user's ChatGPT login), **Gemini** (`gemini --acp`, Google login or
-API key), and **your own model** (Ollama on the user's computer, run by Kural's own engine: no account, offline).
+login: no API key), **Google Gemini** (Google's Antigravity CLI `agy`, the user's Google account; provider id `agy`),
+**Codex** (`codex app-server`, the user's ChatGPT login), and **your own model** (Ollama on the user's computer, run by Kural's own engine: no account, offline).
 **Identity:** Kural is its own product, not "Claude". UI text says Kural ("Ask Kural to change something…", "Kural
 searches…"); "Claude" appears only where it means Claude (its models in the menu, the Claude way in Get started,
 Claude Code itself). The completion feature is called **Tab Completion** (never "Kural Tab").
@@ -32,7 +32,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
     (no vscode) — install/login/test checks, `claudeAuth` (email, org, plan), `claudeLogout`. `claude-setup.js` —
     notices Claude Code setup changes. `engine.js` (`LocalAgent`) + `tools.js` — Kural's own engine for Ollama models
     (no vscode inside; same methods and stream-json events as `ClaudeProcess`). `ollama.js` — Ollama API, search.
-    `codex.js`, `gemini.js` — Codex / Gemini agents and helpers; `clis.js` — both described once (install, login, test,
+    `agy.js`, `codex.js` — Gemini (Antigravity) / Codex agents and helpers; `clis.js` — both described once (install, login, test,
     models, usage page). `usage.js` — the usage hub (no vscode).
   - `lib/chat/` — `index.js` the chat backend (tabs, modes, models, questions, permissions, panes); `prompts.js`
     (modes, `MOODS`, mood prompts); `team.js` (roles, team prompts) + `team-mcp.js` (the agents' board); `guide.js`
@@ -56,9 +56,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (branch protection, avatars, git auth): package.json `configurationDefaults` turns `github.branchProtection`,
   `github.showAvatar`, `github.gitAuthentication` off. Don't use `context.secrets` in Kural. `rebrand.py` renames the
   app (package.json `name` → Kural; it was "VSCodium", whose name Electron gives its keychain item).
-- **Antigravity** (`lib/ai/agy.js`, id/prefix `agy`): Google's `agy` CLI, for personal Google accounts (Gemini CLI
-  refuses them since 26 Sept 2026: "no longer supported for Gemini Code Assist for individuals"; gemini.js `friendly()`
-  explains that). No ACP: stream-json like Claude Code (`--input-format/--output-format stream-json
+- **Google Gemini = Antigravity** (`lib/ai/agy.js`, id/prefix `agy`; shown as "Google Gemini", short "Gemini"):
+  Google's `agy` CLI. Google's Gemini CLI (`gemini --acp`) was a provider until Oct 2026; it was removed because it
+  refuses personal Google accounts since 26 Sept 2026 ("no longer supported for Gemini Code Assist for individuals").
+  Old chats with `gemini:` models fall back to the default model (`validModel`). No ACP: stream-json like Claude Code (`--input-format/--output-format stream-json
   --disable-slash-commands --print-timeout 12h --add-dir <cwd>`; `--add-dir` is load-bearing). Events: `init`
   (conversation_id), `step_update` (agent_response `text_delta`; tool `tool_info.{name,parameters,output,error}`),
   `result` (ends a turn; `usage` adds up per process). **No approvals possible**: Ask = default, Plan = `--mode plan`,
@@ -73,30 +74,23 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   closing it when logged in. Limits: `--print /usage`. Install: Google's script (`install.js` `script` plan). Test with
   `test/fake-agy.js` (`kural.agyPath`; state in `FAKE_AGY_FILE`/tmp). Never checked against the real agy (blocked here):
   verify event names and tool parameter names with a real account (`KURAL_RAW_LOG=/tmp/raw.jsonl` logs agy's lines).
-- **Codex and Gemini** (`lib/ai/codex.js`, `lib/ai/gemini.js`, described once in `lib/ai/clis.js`; no vscode inside):
-  each is an agent class with `LocalAgent`'s methods that turns the program's protocol into Claude Code's stream-json
-  events, so the chat needs no special code. Model ids `codex:<id>` / `gemini:<id>` (`default` = the program's own).
+- **Codex** (`lib/ai/codex.js`; with agy described once in `lib/ai/clis.js`; no vscode inside): like agy, an agent class
+  with `LocalAgent`'s methods that turns the program's protocol into Claude Code's stream-json events, so the chat needs
+  no special code. Model ids `codex:<id>` / `agy:<id>` (`default` = the program's own).
   Codex: `codex app-server`, one JSON object per line, approval `untrusted` + workspace-write sandbox in Agent/Auto
   (read-only in Plan/Ask), so commands and file changes come to Kural's `onPermission` (files: "Edit"/"Write" first, for
-  Undo). Gemini: ACP (`gemini --acp`, JSON-RPC 2.0), kept in its "default" mode so edits and commands ask Kural; Kural's
-  instructions go into the first message (`<kural_instructions>`); `--skip-trust`. Neither does agent teams or Claude
-  Code's setup (`isClaude()` in the chat). Set up in Get started (`rec.codex`/`rec.gemini`: bin, models) →
+  Undo). Neither Codex nor agy does agent teams or Claude Code's setup (`isClaude()` in the chat). Set up in Get started
+  (`rec.codex`/`rec.agy`: bin, models) →
   `brain.setCli()`. **Install** (`lib/ai/install.js`, no vscode): no terminal; Homebrew on a Mac if present, else npm
   (PATH from your shell: a Dock-started app has a short PATH), Node too old/missing → pop-up with nodejs.org; npm
   EACCES → retry with `--prefix ~/.npm-global`. Output pauses ending in a question (`promptIn`: [y/N], (y), "press
-  RETURN", "Password:") → a modal pop-up, the answer written to the installer's stdin. **Login** without a terminal:
-  Codex `account/login/start {type:"chatgpt"}` → `authUrl` (Kural opens it) → `account/login/completed`; Gemini ACP
-  `authenticate {methodId:"oauth-personal"}` (no "[Y/n]" consent in ACP mode), with Kural's own `open`/`xdg-open`
-  first on PATH so Kural gets the URL and opens it (`vscode.env.openExternal`); CI / NO_BROWSER / DEBIAN_FRONTEND /
-  SSH_* cleared, else Gemini switches to a paste-a-code flow that hangs ACP. The shim is a fresh `mkdtemp` folder,
-  polled from spawn on (with `selectedType: oauth-personal` but no creds, Gemini starts the login before answering
-  `initialize`). The install shows live on the page (`this.run`: command, lines, quiet time; Stop; a 3-minute-quiet
+  RETURN", "Password:") → a modal pop-up, the answer written to the installer's stdin. **Login** without a terminal for Codex:
+  `account/login/start {type:"chatgpt"}` → `authUrl` (Kural opens it) → `account/login/completed`. The install shows live on the page (`this.run`: command, lines, quiet time; Stop; a 3-minute-quiet
   notification), since a silent install looks stuck. `refresh()` numbers each ask and returns after the first check
-  that started after it (returning at once while a check ran gave callers the old state). `Rpc` runs Gemini in its own process group and kills the group (+SIGKILL after 2 s): Gemini re-spawns
-  itself as a child that ignores SIGTERM while waiting for a login. Notifications there are never awaited
-  while `installing`/`loggingIn` is set. Terminal ways stay as fallbacks (`installCliTerminal`, `loginCliTerminal`). Tests: `test/fake-codex.js`, `test/fake-gemini.js` (state via `FAKE_CODEX_STATE` /
-  `FAKE_GEMINI_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.geminiPath` pointing at
-  the fakes. The real programs were only checked logged out: verify streaming, approvals and tool names with real
+  that started after it (returning at once while a check ran gave callers the old state). Notifications there are never awaited
+  while `installing`/`loggingIn` is set. Terminal ways stay as fallbacks (`installCliTerminal`, `loginCliTerminal`). Tests: `test/fake-codex.js`, `test/fake-agy.js` (state via `FAKE_CODEX_STATE` /
+  `FAKE_AGY_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.agyPath` pointing at
+  the fakes. The real programs were only checked logged out (agy not at all): verify streaming, approvals and tool names with real
   accounts when you can.
 - **Devices over SSH** (`lib/devices/`): `ssh.js` (no vscode) runs the computer's own `ssh` with **Kural's own key**
   (`<globalStorage>/ssh/id_ed25519`, made by `ssh-keygen`; `-i`, IdentitiesOnly, BatchMode, no password auth). The
@@ -113,16 +107,16 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `~/` meaning home; `forgetKey` matches hashed known_hosts lines too (Ubuntu hashes them). `index.js`: devices in globalState `kural.devices.v1`. A chat with `tab.device` gets the `device` MCP server
   (`device-mcp.js`, a relay) whose calls come back to `bridge.js` (a private socket, a token per chat); Kural asks per
   mode (`approveDevice` → permission card "Run this on <name>?"), so the tools are pre-allowed for Claude, Codex gets
-  `default_tools_approval_mode="approve"`, and for Gemini they're named `kural_device_<tool>` (`KURAL_DEVICE_PREFIX`;
-  ACP doesn't say which server a tool is from) and auto-allowed as `mcp__gemini__kural_device_<tool>`. "Allow all" on a
+  `default_tools_approval_mode="approve"`. "Allow all" on a
   device card sets `tab.allowAllDevice` (that device only), never `tab.allowAll`. Unlinking, Stop, a model/engine switch
   and closing the tab end the token (`endDevice`), which aborts its running commands. The device terminal is
-  `isTransient`. Only for Claude, Codex and Gemini (`deviceOk`): Ollama has no MCP in Kural's engine, and Antigravity can't
+  `isTransient`. Only for Claude and Codex (`deviceOk`): Ollama has no MCP in Kural's engine, and Gemini (agy) can't
   ask before a command. Tests: `test/devices.test.js` with `test/fake-ssh.js` (`KURAL_SSH_BIN`). Real check: a local
   sshd (`apt install openssh-server`, `sshd -p 2222`).
 - **Usage meter** (`lib/ai/usage.js` hub, drawn by `lib/account.js`): Claude Code sends `rate_limit_event`
   (`unifiedWindows.five_hour/seven_day.utilization`) after every answer; `ClaudeProcess.onData` and `claudeTest` report
-  it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini: tokens from each answer's `_meta.quota`.
+  it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini (agy): `--print /usage` weekly limits, and
+  tokens per answer.
   Saved in globalState `kural.usage.v1` so the bar shows the last numbers at startup.
 - **Account** (`lib/account.js`): status item (plan) + QuickPick menu. Who's logged in comes from `claude auth status
   --json` (email, orgName, subscriptionType), never from the Keychain (Claudemeter, removed, read the Keychain: prompts

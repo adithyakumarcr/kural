@@ -1,7 +1,7 @@
-// Installing Codex CLI / Gemini CLI without a terminal. No vscode here (lib/getstarted.js shows the progress and the
+// Installing Codex CLI / Antigravity CLI (Google Gemini) without a terminal. No vscode here (lib/getstarted.js shows the progress and the
 // pop-ups).
 //
-// Why not a terminal: the official one-liner ("brew install gemini-cli") fails on a Mac without Homebrew, and any
+// Why not a terminal: an official one-liner ("brew install codex") fails on a Mac without Homebrew, and any
 // question the installer asks ("continue? [y/N]", "press RETURN") waits in a terminal you may not even be looking at.
 // So Kural picks the way this computer can actually do (Homebrew if it's there, else npm from Node.js), runs it in the
 // background, and turns every question it asks into a pop-up (ask()), writing your answer back to it.
@@ -14,7 +14,6 @@ const { spawn, execFile } = require("child_process");
 const IS_MAC = process.platform === "darwin", IS_WIN = process.platform === "win32";
 const PACKAGES = {
   codex: { npm: "@openai/codex", brew: "codex", node: 18 },
-  gemini: { npm: "@google/gemini-cli", brew: "gemini-cli", node: 20 },
   // Antigravity: no Homebrew formula, no npm package: Google's own installer script (one program, no Node.js).
   agy: { script: { unix: "https://antigravity.google/cli/install.sh", win: "https://antigravity.google/cli/install.ps1" } },
 };

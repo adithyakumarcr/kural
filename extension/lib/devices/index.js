@@ -100,10 +100,10 @@ class Devices {
   }
 
   // A chat linked to a device: the MCP server for its AI (see bridge.js) and the token to end it with.
-  session(id, approve, { prefix } = {}) {
+  session(id, approve) {
     const dev = this.get(id);
     if (!dev) return null;
-    return this.bridge.session({ deviceId: id, name: `${dev.name} (${dev.user}@${dev.host})`, approve, prefix });
+    return this.bridge.session({ deviceId: id, name: `${dev.name} (${dev.user}@${dev.host})`, approve });
   }
   endSession(token) { if (token) this.bridge.end(token); }
 

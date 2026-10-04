@@ -1,10 +1,9 @@
-// Installing and logging in to Codex / Gemini without a terminal (extension/lib/ai/install.js, codexLogin,
-// geminiLogin): questions become pop-ups, the login page opens in the browser.
+// Installing and logging in to Codex without a terminal (extension/lib/ai/install.js, codexLogin): questions become
+// pop-ups, the login page opens in the browser. (Gemini through Antigravity: test/agy.test.js.)
 const assert = require("assert");
 const fs = require("fs"), os = require("os"), path = require("path");
 const { promptIn, runInstall, failure, _test } = require("../extension/lib/ai/install");
 const { codexLogin } = require("../extension/lib/ai/codex");
-const { geminiLogin } = require("../extension/lib/ai/gemini");
 
 let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
@@ -83,20 +82,6 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-install-test-"));
     const r = await codexLogin(path.join(__dirname, "fake-codex.js"), { openUrl: () => ac.abort(), signal: ac.signal });
     assert.deepStrictEqual(r, { cancelled: true });
   });
-  if (process.platform !== "win32") {
-    await check("Gemini: Kural gets the login page's address (its own open / xdg-open) and opens it", async () => {
-      process.env.FAKE_GEMINI_FILE = path.join(tmp, "gemini-state");
-      fs.writeFileSync(process.env.FAKE_GEMINI_FILE, "loggedout");
-      // Gemini CLI won't open a browser in CI or over SSH: Kural clears those for the login.
-      const saved = process.env.CI; process.env.CI = "1";
-      const r = await geminiLogin(path.join(__dirname, "fake-gemini.js"), { dir: tmp, openUrl: (u) => opened.push(u) });
-      if (saved === undefined) delete process.env.CI; else process.env.CI = saved;
-      assert.deepStrictEqual(r, { ok: true });
-      await new Promise((res) => setTimeout(res, 400));
-      assert.match(opened.pop() || "", /^https:\/\/accounts\.example\//);
-      assert.strictEqual(fs.readFileSync(process.env.FAKE_GEMINI_FILE, "utf8"), "ok");
-    });
-  }
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(fail ? `install: ${fail} FAILED` : "install: ALL PASS");
   process.exit(fail ? 1 : 0);

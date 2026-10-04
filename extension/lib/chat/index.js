@@ -42,22 +42,21 @@ const TEAM_SIZES = [2, 3, 4, 5];
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
 const validModel = (m) => valid(MODELS, m) || ((/^ollama:./.test(m || "") || !!cliOf(m)) && m.length < 200);
-// Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "gemini".
+// Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "agy" (Gemini).
 const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("../ai/clis");
 const engineOf = (m) => brain.engineOf(m);
 // A linked device's tools need the model's program to take Kural's MCP server and ask Kural before each command:
-// Claude Code, Codex and Gemini CLI do; Kural's own engine (Ollama) has no MCP, and Antigravity can't ask.
-const deviceOk = (m) => ["claude", "codex", "gemini"].includes(engineOf(m));
+// Claude Code and Codex do; Kural's own engine (Ollama) has no MCP, and Gemini (Antigravity) can't ask.
+const deviceOk = (m) => ["claude", "codex"].includes(engineOf(m));
 const isClaude = (m) => engineOf(m) === "claude";
-const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Gemini", "Your own model"
+const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
 const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
-const GEMINI_DEVICE = "kural_device_";   // Gemini sees them as kural_device_<tool> (it doesn't say which server a tool is from)
-const DEVICE_TOOL_RE = new RegExp(`^mcp__(?:device__|gemini__${GEMINI_DEVICE})(${DEVICE_TOOLS.join("|")})$`);
+const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 
 
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
@@ -631,7 +630,7 @@ class ChatView {
   // Saved devices for the + menu (no passwords: Kural logs in with its own SSH key).
   deviceList() { return this.devices ? this.devices.list().map((d) => ({ id: d.id, name: d.name, host: d.host, port: d.port, user: d.user, system: d.system || "" })) : []; }
 
-  // Codex and Gemini for the model menu: set up or not, and their models.
+  // Gemini and Codex for the model menu: set up or not, and their models.
   cliInfo() {
     return CLI_IDS.map((id) => ({ id, label: CLIS[id].label, short: CLIS[id].short, ready: brain.providerOf(`${id}:x`).ready(),
       models: brain.cli[id].models || [], account: brain.cli[id].account || "" }));
@@ -742,8 +741,7 @@ class ChatView {
     // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
     // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
     // this computer: Kural's own engine has no MCP.
-    const dev = tab.device && this.devices && deviceOk(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args),
-      { prefix: engineOf(tab.model) === "gemini" ? GEMINI_DEVICE : "" }) : null;
+    const dev = tab.device && this.devices && deviceOk(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args)) : null;
     if (dev) { r.deviceToken = dev.token; r.deviceDevice = tab.device; }
     const deviceTools = dev ? DEVICE_TOOLS.map((t) => `mcp__device__${t}`) : [];
     const local = isLocal(tab.model);
@@ -1307,8 +1305,6 @@ class ChatView {
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
     // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
-    // (Gemini names MCP tools mcp__gemini__<tool>; the device's are kural_device_<tool> there, so your own server's
-    // "run_command" isn't mistaken for them.)
     if (tab.device && DEVICE_TOOL_RE.test(req.tool_name)) return { allow: true };
     // Reading Jira (the linked ticket, a search) changes nothing, so it doesn't ask. Writing to Jira
     // (comments, status changes, new issues) still asks below.
@@ -1359,8 +1355,8 @@ class ChatView {
       }
     }
     const editing = (x) => x === "agent" || x === "auto";
-    // Antigravity can't be asked: what it may do is fixed when it starts, so every mode applies from the next message.
-    if (engineOf(tab.model) === "agy") this.post({ type: "flash", text: "Antigravity: the new mode applies from your next message" });
+    // Gemini (Antigravity) can't be asked: what it may do is fixed when it starts, so every mode applies from the next message.
+    if (engineOf(tab.model) === "agy") this.post({ type: "flash", text: "Gemini: the new mode applies from your next message" });
     else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" ? "Plan" : tab.mode === "ask" ? "Ask" : "Editing"} mode applies from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });

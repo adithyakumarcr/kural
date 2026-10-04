@@ -2,13 +2,12 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
-- **Antigravity (Google).** Google stopped personal Google accounts in Gemini CLI on 26 Sept 2026 ("This client is no
-  longer supported for Gemini Code Assist for individuals"). Kural now runs Google's **Antigravity CLI** instead, with
-  the same Google account (free, AI Pro or Ultra): Get started installs it with Google's installer, logs in (on its own
-  screen, in a terminal Kural closes by itself) and tests it; its models are in the model menu, its weekly limits in the
-  status bar. Antigravity can't ask before acting, so in Agent mode it edits files but runs no commands (the answer says
-  which it skipped); Auto runs them. Gemini CLI stays for Gemini API keys and company accounts, and its error now says
-  what happened and what to use.
+- **Google Gemini, with your Google account.** Kural runs Google's Gemini models through Google's **Antigravity CLI**,
+  with your Google account (free, AI Pro or Ultra). Google stopped personal accounts in its older Gemini CLI on 26 Sept
+  2026, so Kural uses Antigravity and calls it Google Gemini (Gemini CLI isn't offered any more). Get started installs it
+  with Google's installer, logs in (on its own screen, in a terminal Kural closes by itself) and tests it; its models
+  are in the model menu, its weekly limits in the status bar. It can't ask before acting, so in Agent mode it edits
+  files but runs no commands (the answer says which it skipped); Auto runs them.
 - **No more keychain password prompts on the Mac.** The prompt for "VSCodium Safe Storage" came from VS Code's GitHub
   integration quietly checking for a GitHub login (branch protection, avatars) in projects cloned from GitHub. Kural
   turns those checks off; pushing to GitHub from Source Control uses Git's own login, like in a terminal.
@@ -19,11 +18,10 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
   latest output, and a warning when it has printed nothing for a minute; **Stop** ends it. After 3 quiet minutes Kural
   asks whether to keep waiting.
 
-- **Installing and logging in to Codex and Gemini without a terminal.** **Install for me** now uses whatever your
-  computer has (Homebrew on a Mac, otherwise npm), runs in the background, and turns any question the installer asks
-  into a pop-up. On a Mac without Homebrew or Node.js, Kural says so and opens Node.js's download page instead of
-  failing in a terminal. **Log in** opens the login page in your browser directly; Gemini's login no longer waits
-  behind a menu and a "[Y/n]" in a terminal.
+- **Installing and logging in to Codex without a terminal.** **Install for me** uses whatever your computer has
+  (Homebrew on a Mac, otherwise npm), runs in the background, and turns any question the installer asks into a pop-up.
+  On a Mac without Homebrew or Node.js, Kural says so and opens Node.js's download page instead of failing in a
+  terminal. **Log in** opens the login page in your browser directly.
 
 - **Devices over SSH.** Working on a Raspberry Pi or a board computer? **+ → Link device** saves it once (name,
   address, username, password) and links it to the chat. The AI can then run commands and read and write files on it,
@@ -31,14 +29,14 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
   Kural's SSH key on the device and is never saved or sent to an AI. **Kural: Devices** to set it up again, forget a device's
   key or remove it.
 
-- **ChatGPT (Codex) and Gemini.** Use your ChatGPT plan (through OpenAI's Codex CLI) or your Google account / Gemini API
-  key (through Google's Gemini CLI), like Claude. Get started installs, logs in and tests them; their models are in the
+- **ChatGPT (Codex).** Use your ChatGPT plan (through OpenAI's Codex CLI), like Claude. Get started installs, logs in
+  and tests it; its models are in the
   chat's model menu; the chat edits files, runs commands (asking first in Agent mode), and Undo works. Ask, Ctrl+K,
-  commit messages and plain words in the terminal use them too. (Agent teams and Claude Code's connectors stay
+  commit messages and plain words in the terminal use it too. (Agent teams and Claude Code's connectors stay
   Claude-only.)
 - **Usage meter in the status bar, back and better.** `Claude 45% · 24%` shows the 5-hour and weekly limits used,
   orange from 80 % and red from 95 %, with reset times on hover. It comes from Claude Code itself after every answer,
-  so there are no Keychain prompts. Codex shows its limits the same way; Gemini shows tokens used today. The Account
+  so there are no Keychain prompts. Gemini and Codex show their limits the same way. The Account
   menu has a section for each provider (who's logged in, usage page, switch account, log out).
 - **Thinking no longer jumps.** Thinking is one steady line ("Thinking…" with its latest thought, then "Thought for
   12 s"; click to read it all). Before, a box grew with each burst of thinking and collapsed afterwards, so the answer

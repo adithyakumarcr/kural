@@ -1,4 +1,4 @@
-// Where the device tools' calls (device-mcp.js, started by Claude Code / Codex / Gemini) come into Kural. No vscode here.
+// Where the device tools' calls (device-mcp.js, started by Claude Code / Codex) come into Kural. No vscode here.
 //
 // Kural listens on a private local socket (a Unix socket only you can open; a named pipe on Windows). Each chat linked to
 // a device gets a random token; a call must carry it, so one chat can't use another chat's device. For each call Kural
@@ -45,12 +45,12 @@ class Bridge {
 
   // A chat linked to a device: its token, and the MCP server to give its AI.
   // approve(tool, args) -> Promise<{ allow, message? }>.
-  session({ deviceId, name, approve, prefix }) {
+  session({ deviceId, name, approve }) {
     this.start();
     const token = crypto.randomBytes(24).toString("hex");
     this.sessions.set(token, { deviceId, name, approve, ctl: new AbortController() });
     return { token, server: { command: process.execPath, args: [MCP],
-      env: { ELECTRON_RUN_AS_NODE: "1", KURAL_DEVICE_SOCKET: this.where, KURAL_DEVICE_TOKEN: token, KURAL_DEVICE_NAME: name || "the device", ...(prefix ? { KURAL_DEVICE_PREFIX: prefix } : {}) } } };
+      env: { ELECTRON_RUN_AS_NODE: "1", KURAL_DEVICE_SOCKET: this.where, KURAL_DEVICE_TOKEN: token, KURAL_DEVICE_NAME: name || "the device" } } };
   }
   // The chat stopped, unlinked or closed: what's still running for it on the device stops too.
   end(token) { const s = this.sessions.get(token); if (s) { s.ctl.abort(); this.sessions.delete(token); } }

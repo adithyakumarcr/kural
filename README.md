@@ -36,9 +36,8 @@ Its AI comes from any of these (set up one or all; you switch in the model menu)
 
 - **Claude.** Kural runs Claude Code in the background with your Claude plan: Anthropic's most capable models, your
   Claude Code settings, MCP servers, skills and `CLAUDE.md` files. No API key, nothing extra to pay for.
-- **ChatGPT (Codex), Antigravity and Gemini.** The same way, with OpenAI's Codex CLI and your ChatGPT plan, Google's
-  Antigravity CLI and your Google account, or Google's Gemini CLI with a Gemini API key or a company account. (Google
-  stopped personal accounts in Gemini CLI on 26 Sept 2026; Antigravity is their way now.)
+- **Google Gemini and ChatGPT (Codex).** The same way, with your Google account (Gemini, through Google's Antigravity
+  CLI: free, AI Pro or Ultra) or your ChatGPT plan (OpenAI's Codex CLI).
 - **Your own model.** A model on your computer through [Ollama](https://ollama.com), run by Kural's own engine. No
   account, no subscription, no internet: your code never leaves your computer.
 
@@ -87,11 +86,11 @@ with it. Either way is enough; you can add the other later.
    Console account; the free plan doesn't include Claude Code.
 3. **A test.** One tiny request to Claude (Haiku). If it fails, the page shows the error and what it means.
 
-**ChatGPT (Codex), Antigravity or Gemini**
-1. **Installed.** **Install for me** installs it in the background (Codex, Gemini: Homebrew or npm, whichever your
-   computer has; Antigravity: Google's installer). The page shows its output as it runs, warns if it goes quiet, and
+**Google Gemini or ChatGPT (Codex)**
+1. **Installed.** **Install for me** installs it in the background (Gemini: Google's installer; Codex: Homebrew or
+   npm, whichever your computer has). The page shows its output as it runs, warns if it goes quiet, and
    any question the installer asks comes as a pop-up.
-2. **Logged in.** **Log in** opens the login page in your browser. (Antigravity only logs in on its own screen: Kural
+2. **Logged in.** **Log in** opens the login page in your browser. (Gemini only logs in on its own screen: Kural
    opens it in a terminal and closes it by itself when you're done.)
 3. **A test.** One tiny request. Then their models are in the chat's model menu.
 
@@ -149,7 +148,7 @@ Also in the chat:
 - **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.
-- **Model and intensity.** Claude's Opus / Sonnet / Haiku, ChatGPT (Codex), Antigravity and Gemini models, or a model on your
+- **Model and intensity.** Claude's Opus / Sonnet / Haiku, Google Gemini and ChatGPT (Codex) models, or a model on your
   computer, and Low → Max. You can switch
   in the middle of a conversation; the new model gets the conversation so far.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Learn** teaches you: it first asks which
@@ -276,8 +275,8 @@ cursor.
   search, use VS Code's own search, Ctrl+Shift+F.)
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **Usage meter** (status bar). `Claude 45% · 24%`: the 5-hour and weekly limits used (orange from 80 %, red from
-  95 %; hover for reset times). Codex shows the same; Antigravity its weekly limits; Gemini the tokens used today.
-- **Account** (person icon in the status bar). For Claude, ChatGPT (Codex), Antigravity and Gemini: who you're logged in as and your
+  95 %; hover for reset times). Gemini and Codex show their limits the same way.
+- **Account** (person icon in the status bar). For Claude, Google Gemini and ChatGPT (Codex): who you're logged in as and your
   plan, the usage page, switch account, log out; and check for updates.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
   chat. When you add one, Kural reloads Claude in the same conversation.
@@ -377,7 +376,7 @@ owner can create release tags (`v…`). See [CONTRIBUTING.md](CONTRIBUTING.md).
 extension/            the Kural extension (plain JavaScript, no build step)
   extension.js        wires everything together
   lib/ai/             where answers come from: index.js (the provider table), claude.js (Claude Code headless),
-                      codex.js (Codex app server), agy.js (Antigravity, stream-json), gemini.js (Gemini CLI over ACP), clis.js (all three described once), install.js,
+                      codex.js (Codex app server), agy.js (Google Gemini: Antigravity, stream-json), clis.js (both described once), install.js,
                       engine.js + tools.js (Kural's own engine for models on your computer), ollama.js, usage.js
   lib/chat/           the chat: index.js (tabs, modes, models, questions, panes), prompts.js (modes, moods),
                       team.js (agent roles) + team-mcp.js (their message board), guide.js (what Kural can do),

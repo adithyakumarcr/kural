@@ -7,8 +7,8 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 
 - **Claude.** Anthropic's Claude models, through Claude Code and your Claude plan. No API key, nothing extra to pay.
 - **ChatGPT (Codex).** OpenAI's models through the Codex CLI and your ChatGPT plan.
-- **Antigravity (Google).** Google's models through the Antigravity CLI, with your Google account (free, AI Pro, Ultra).
-- **Gemini.** Google's Gemini models through the Gemini CLI, with a Gemini API key or a company account.
+- **Google Gemini.** Google's Gemini models with your Google account (free, AI Pro, Ultra), through Google's
+  Antigravity CLI.
 - **Your own model.** A model on your computer through [Ollama](https://ollama.com). No account, no internet: your code
   never leaves your computer.
 
@@ -19,7 +19,7 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 | [[Getting Started]] | Install Kural, then pick Claude or your own model |
 | [[Chat]] | The chat: modes, models, moods, files and pictures, history, two chats at once |
 | [[Multiple Agents]] | A project team (PM, Researcher, Architect, Developers, Tester), or agents that discuss |
-| [[ChatGPT and Gemini]] | Using your ChatGPT (Codex), Antigravity or Gemini account in Kural |
+| [[Google Gemini and ChatGPT]] | Using your Google account (Gemini) or ChatGPT plan (Codex) in Kural |
 | [[Your Own Model]] | Models on your computer: finding, downloading, what they can and can't do |
 | [[Tab Completion]] | Grey suggestions as you type; the Tab Completion panel; what it learns |
 | [[Terminal]] | Whole command lines in the terminal, commit messages, plain words → commands |

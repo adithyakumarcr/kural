@@ -94,7 +94,7 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
     assert.deepStrictEqual(fs.readFileSync(ssh.knownHosts, "utf8").trim().split("\n").map((l) => l.split(" ")[2]), ["AAA3", "AAA4"]);
   });
 
-  // The bridge and the MCP server together, like Claude Code / Codex / Gemini use them.
+  // The bridge and the MCP server together, like Claude Code / Codex use them.
   const asked = [];
   const bridge = new Bridge(ssh, async (id) => id === "d1" ? { dev, password: null } : id === "old" ? { error: "old needs to be set up again" } : null);
   const s = bridge.session({ deviceId: "d1", name: "rpi", approve: async (tool, args) => { asked.push(tool); return args.command === "rm -rf ~" ? { allow: false, message: "Skipped by the user." } : { allow: true }; } });
@@ -138,16 +138,6 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
     assert.match(r.content[0].text, /isn't linked/);
   });
   mcp.kill();
-  await check("MCP for Gemini: the tools carry a prefix (Gemini doesn't say which server a tool is from)", async () => {
-    const g = bridge.session({ deviceId: "d1", name: "rpi", prefix: "kural_device_", approve: async () => ({ allow: true }) });
-    const m = spawn(process.execPath, g.server.args, { env: { ...process.env, ...g.server.env } });
-    const lines = []; let buf = "";
-    m.stdout.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\n")) >= 0) { lines.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
-    const ask = (id, method, params) => new Promise((done) => { m.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n"); const t = setInterval(() => { const x = lines.find((l) => l.id === id); if (x) { clearInterval(t); done(x); } }, 20); });
-    assert.deepStrictEqual((await ask(1, "tools/list", {})).result.tools.map((t) => t.name), ["kural_device_run_command", "kural_device_read_file", "kural_device_write_file", "kural_device_list_dir"]);
-    assert.match((await ask(2, "tools/call", { name: "kural_device_run_command", arguments: { command: "echo via-gemini" } })).result.content[0].text, /via-gemini/);
-    m.kill(); bridge.end(g.token);
-  });
   await check("a device saved by an older Kural (no key yet): the AI is told it needs setting up, nothing is asked or run", async () => {
     const asked = [];
     const o = bridge.session({ deviceId: "old", name: "old", approve: async (t) => { asked.push(t); return { allow: true }; } });
