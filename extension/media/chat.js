@@ -334,7 +334,7 @@
       listEl.append(el("div", { class: "empty" },
         el("div", { class: "logo" }, "{K}"),
         el("div", { class: "brand setup-title" }, "Set up Kural first"),
-        el("div", { class: "setup-text" }, "Pick where Kural's AI comes from: Claude, ChatGPT (Codex), Antigravity (Google), Gemini, or your own model on this computer. Kural checks that it works."),
+        el("div", { class: "setup-text" }, "Pick where Kural's AI comes from: Claude, Google Gemini, ChatGPT (Codex), or your own model on this computer. Kural checks that it works."),
         el("button", { class: "cb big solid", onclick: () => post({ type: "getStarted" }) }, "Get started")));
     } else if (!t || !t.messages.length) {
       // Home: the name, what it is, one line, three hints. The rest is in the menus.
@@ -472,9 +472,9 @@
   }, 1000);
 
   const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page" };
-  // A linked device's tools (Gemini: mcp__gemini__kural_device_…).
+  // A linked device's tools.
   const DEVICE_VERB = { run_command: "Device command", read_file: "Read on device", write_file: "Wrote on device", list_dir: "Listed on device" };
-  const deviceVerb = (name) => { const m = /^mcp__(?:device__|gemini__kural_device_)(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
+  const deviceVerb = (name) => { const m = /^mcp__device__(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
   // "mcp__claude_ai_Notion__notion-search" -> "Notion · notion-search"
   function prettyTool(name) {
     const m = /^mcp__(.+?)__(.+)$/.exec(name || "");
@@ -936,7 +936,7 @@
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }
   }
-  // ---------- Codex and Gemini ----------
+  // ---------- Gemini and Codex ----------
   // Set up: a section with their models (from the program itself). Not set up: one line each at the end that opens
   // Get started for it.
   function cliMenuItems(t, readyOnes) {

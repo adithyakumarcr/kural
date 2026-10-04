@@ -4,8 +4,7 @@
 //   PROVIDERS (below), one entry each:
 //     claude  "opus" / "sonnet" / "haiku"   → Claude Code (./claude.js) with your Claude login
 //     codex   "codex:<model>"               → Codex CLI (./codex.js) with your ChatGPT login
-//     gemini  "gemini:<model>"              → Gemini CLI (./gemini.js) with a Gemini API key or a company account
-//     agy     "agy:<model>"                 → Antigravity CLI (./agy.js) with your Google account
+//     agy     "agy:<model>"                 → Google Gemini: Antigravity CLI (./agy.js) with your Google account
 //     ollama  "ollama:<name>"               → Kural's own engine (./engine.js + ./tools.js), through Ollama, offline
 //   To add a provider (LM Studio, an OpenAI-compatible server…): an entry with the same shape — owns(model),
 //   ready(), agent(…) (a conversation process with ClaudeProcess's methods and events), ask(…) (one answer) —
@@ -19,7 +18,7 @@ const ws = require("../workspace");
 const { LocalAgent, systemPrompt, post, errorText, friendly } = require("./engine");
 const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("./clis");
 
-// Codex and Gemini: where their program is and whether Get started's test passed (set by lib/getstarted.js), and the
+// Codex and Gemini (agy): where their program is and whether Get started's test passed (set by lib/getstarted.js), and the
 // models each offers (for the chat's model menu). Folder for their conversation ids (set by extension.js).
 const cli = Object.fromEntries(CLI_IDS.map((id) => [id, { bin: null, ready: false, models: [] }]));
 const setCli = (id, info) => { if (cli[id]) Object.assign(cli[id], info); };
@@ -40,7 +39,7 @@ const currentModel = () => {
   if (!providerOf(m).ready()) { const other = fallbackModel(); if (other) return other; }
   return m;
 };
-// A model that can be used now: your own model, then Codex, then Gemini (Claude's is the default anyway).
+// A model that can be used now: your own model, then Gemini, then Codex (Claude's is the default anyway).
 function fallbackModel() {
   const l = localFallback(); if (l) return l;
   for (const id of CLI_IDS) if (cli[id].ready && cli[id].bin) return `${id}:${(cli[id].models.find((x) => x.isDefault) || {}).id || "default"}`;
@@ -55,7 +54,7 @@ function usable(model = currentModel()) {
   return { why: `${p.label} isn't set up. Set it up in Get started, or pick another model in the chat's model menu.` };
 }
 
-// Codex / Gemini: Kural's opts (ClaudeProcess style) → theirs. They have no JSON-answer option, so Ask's JSON is asked for
+// Codex / Gemini (agy): Kural's opts (ClaudeProcess style) → theirs. They have no JSON-answer option, so Ask's JSON is asked for
 // in words (search.js reads it from the answer).
 function cliAgent(id, model, opts, handlers) {
   const c = cli[id];
@@ -142,7 +141,7 @@ class Session {
 
 const localStore = (context) => path.join(context.globalStorageUri.fsPath, "local-chats");
 
-// "claude" | "ollama" | "codex" | "gemini": which program has a chat's conversation.
+// "claude" | "ollama" | "codex" | "agy": which program has a chat's conversation.
 const engineOf = (model) => providerOf(model).id;
 
 module.exports = { PROVIDERS, providerOf, engineOf, isLocal, localName, currentModel, fallbackModel, setModelSource, usable, makeAgent, Session, askLocal,

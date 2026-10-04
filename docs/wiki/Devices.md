@@ -48,7 +48,7 @@ unlink). Then ask in plain words: "what's using the CPU on the Pi?", "copy this 
   this device until you unlink it. (Allowing all commands on your own computer doesn't cover the device.)
 - **Auto mode:** commands and writes run without asking.
 - **Plan and Ask modes:** nothing is run or changed on the device.
-- Works with Claude, ChatGPT (Codex) and Gemini models. Not with Antigravity (it can't ask before running a command)
+- Works with Claude and ChatGPT (Codex) models. Not with Google Gemini (it can't ask before running a command)
   or a model on your own computer (Ollama).
 - Each command is its own shell: `cd` doesn't carry over (the AI knows). Programs that never end (a server) should be
   started in the background. A command has a time limit (2 minutes unless the AI asks for more, at most 30); when it

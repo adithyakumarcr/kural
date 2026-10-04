@@ -3,7 +3,7 @@
 - [[Getting Started]]
 - [[Chat]]
 - [[Multiple Agents]]
-- [[ChatGPT and Gemini]]
+- [[Google Gemini and ChatGPT]]
 - [[Your Own Model]]
 - [[Tab Completion]]
 - [[Terminal]]

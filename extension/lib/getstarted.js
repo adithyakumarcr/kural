@@ -10,12 +10,12 @@
 //     2. A chat model           → pick one you have, or download one that fits this computer's memory
 //     3. A test request works   → one request to that model through Kural's engine
 //
-//   ChatGPT (Codex), Antigravity, Gemini   OpenAI's Codex CLI / Google's Antigravity CLI / Google's Gemini CLI with their
-//                             own login (lib/ai/clis.js):
+//   Google Gemini, ChatGPT (Codex)   Google's Antigravity CLI / OpenAI's Codex CLI with their own login (lib/ai/clis.js):
 //     1. Installed              → "Install for me": Homebrew or npm, whichever this computer has, in the background;
 //                                 any question the installer asks becomes a pop-up (lib/ai/install.js)
 //     2. Logged in              → "Log in": the program's own login without a terminal; Kural opens the login page
-//                                 in your browser (codexLogin / geminiLogin). A terminal login stays as a fallback.
+//                                 in your browser (Codex: codexLogin; Gemini: agy's own screen in a terminal that
+//                                 Kural closes by itself). A terminal login stays as a fallback.
 //     3. A test request works   → one tiny request, sent the way Kural sends them
 //
 // Kural is "set up" when one of them passed (remembered on this computer). Until then the chat shows "Set up Kural
@@ -37,7 +37,7 @@ const ws = require("./workspace");
 const installer = require("./ai/install");
 
 const KEY = "kural.setup.v2";   // { claude: { bin, version, at, authSaid } | null, local: { model, at } | null,
-                                //   codex / gemini: { bin, version, at, models } | null }
+                                //   codex / agy: { bin, version, at, models } | null }
 const OLD_KEY = "kural.setup.v1";
 const DOCS = "https://code.claude.com/docs/en/setup";
 const cfg = () => vscode.workspace.getConfiguration("kural");

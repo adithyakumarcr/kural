@@ -32,7 +32,7 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.tabCompletion.*` | | see [[Tab Completion]] |
 | `kural.localModels.contextLength` | 32768 | how much a model on your computer can look at once |
 | `kural.claudePath` | (empty) | where the `claude` program is, if Kural can't find it |
-| `kural.codexPath`, `kural.geminiPath` | (empty) | where the `codex` / `gemini` programs are, if Kural can't find them |
+| `kural.agyPath`, `kural.codexPath` | (empty) | where the `agy` (Google Gemini) / `codex` programs are, if Kural can't find them |
 | `kural.updates.autoCheck` | on | check for a new Kural version once a day |
 
 ## Themes

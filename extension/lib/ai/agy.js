@@ -1,5 +1,6 @@
-// Google's Antigravity CLI (`agy`): Google's models (Gemini and others) with your Google account (free, AI Pro, Ultra).
-// Google stopped serving personal accounts in Gemini CLI on 26 Sept 2026 and points them here. No vscode inside.
+// Google Gemini in Kural: Google's Antigravity CLI (`agy`), Google's models (Gemini and others) with your Google account
+// (free, AI Pro, Ultra). Google stopped personal accounts in Gemini CLI on 26 Sept 2026 and moved them here; Kural shows
+// it as "Google Gemini" (texts say Gemini; "Antigravity" where it's about the program itself). No vscode inside.
 //
 // agy has no protocol for editors (no ACP), so Kural runs it the way it runs Claude Code: one process per chat, in its
 // stream-json mode, and turns its events into Claude Code's stream-json events (so the chat needs no special code):
@@ -37,7 +38,7 @@ const raw = (dir, line) => { if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `ag
 let log = () => {};
 const setLog = (f) => { log = f || (() => {}); };
 
-const NOT_LOGGED_IN = "Antigravity isn't logged in. Log in from Get started (Antigravity → Log in).";
+const NOT_LOGGED_IN = "Google Gemini isn't logged in. Log in from Get started (Google Gemini → Log in).";
 const LOGIN_RE = /not logged in|no controlling terminal|You are not logged into Antigravity|auth(entication)? (error|timed out)|sign in/i;
 
 // ---------- finding and running agy ----------
@@ -75,7 +76,7 @@ function run(bin, args, { timeout = 30000, cwd } = {}) {
     try {
       p = execFile(bin, args, { cwd: cwd || quietDir(), env: cleanEnv(), timeout, encoding: "utf8", windowsHide: true, maxBuffer: 4 << 20 }, (error, stdout, stderr) =>
         resolve({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: stdout || "", stderr: stderr || "",
-          error: error && (error.killed ? Object.assign(new Error("Antigravity took too long to answer."), { code: "ETIMEDOUT" }) : typeof error.code === "string" ? error : null) }));
+          error: error && (error.killed ? Object.assign(new Error("Gemini took too long to answer."), { code: "ETIMEDOUT" }) : typeof error.code === "string" ? error : null) }));
     } catch (e) { resolve({ status: null, stdout: "", stderr: "", error: e }); return; }
     if (p.stdin) { p.stdin.on("error", () => {}); p.stdin.end(); }
   });
@@ -173,9 +174,9 @@ function friendly(text) {
   const t = String(text || "");
   if (LOGIN_RE.test(t)) return NOT_LOGGED_IN;
   const err = /AGY_ERROR:\s*(\{.*\})/.exec(t);
-  if (err) { try { const e = JSON.parse(err[1]); return `Antigravity: ${e.message || e.error || err[1]}`; } catch { /* as text */ } }
-  if (/quota|rate limit|429|RESOURCE_EXHAUSTED/i.test(t)) return "Antigravity: you've reached your plan's limit for now. It resets later (see your usage).";
-  return `Antigravity: ${lastLine(t) || "it stopped."}`;
+  if (err) { try { const e = JSON.parse(err[1]); return `Gemini: ${e.message || e.error || err[1]}`; } catch { /* as text */ } }
+  if (/quota|rate limit|429|RESOURCE_EXHAUSTED/i.test(t)) return "Gemini: you've reached your plan's limit for now. It resets later (see your usage).";
+  return `Gemini: ${lastLine(t) || "it stopped."}`;
 }
 
 // ---------- the chat: one agy per chat ----------
@@ -248,7 +249,7 @@ class AgyAgent {
     p.on("error", (e) => { this.stderr += `\n${e.message}`; });
     p.on("exit", (code) => this.onProcessExit(p, code));
     // agy says "init" ~2 s after starting (5–6 s on Windows). Not in 90 s: something is wrong (login, network).
-    this.initTimer = setTimeout(() => { if (!this.ready && this.proc === p) { this.failStart(this.stderr || "Antigravity didn't start in 90 s."); } }, 90000);
+    this.initTimer = setTimeout(() => { if (!this.ready && this.proc === p) { this.failStart(this.stderr || "Gemini (the Antigravity program) didn't start in 90 s."); } }, 90000);
   }
 
   line(text) {
@@ -268,7 +269,7 @@ class AgyAgent {
     if (id) { this.conv = id; this.remember(); }
     if (!this.announced) {
       this.announced = true;
-      this.emit({ type: "system", subtype: "init", model: (m.init && m.init.model) || this.model || "Antigravity", tools: [], mcp_servers: [] });
+      this.emit({ type: "system", subtype: "init", model: (m.init && m.init.model) || this.model || "Gemini", tools: [], mcp_servers: [] });
     }
     this.ready = true;
     this.next();
@@ -356,7 +357,7 @@ class AgyAgent {
     if (type === "tool") return this.onTool(s);
     if (s.subagent_info && Array.isArray(s.subagent_info.subagents) && s.state === "ACTIVE" && !this.turn.tools.has(`sub${s.step_index}`)) {
       // A helper agent agy started: a card, like Claude's.
-      const t = { id: `agy_${crypto.randomUUID()}`, name: "Task", input: { description: "Antigravity helper", prompt: (s.subagent_info.subagents[0] || {}).task || "" }, done: false };
+      const t = { id: `agy_${crypto.randomUUID()}`, name: "Task", input: { description: "Gemini helper", prompt: (s.subagent_info.subagents[0] || {}).task || "" }, done: false };
       this.turn.tools.set(`sub${s.step_index}`, t);
       this.closeBlock();
       this.emit({ type: "assistant", message: { role: "assistant", model: this.model || "antigravity", content: [{ type: "tool_use", id: t.id, name: t.name, input: t.input }] } });
@@ -420,7 +421,7 @@ class AgyAgent {
     const denied = this.turn.denied.filter((t) => t.name === "Bash" || /^mcp__/.test(t.name));
     if (denied.length && this.mode !== "auto") {
       const what = denied.map((t) => (t.input && t.input.command) || t.name).slice(0, 3).map((c) => `\`${String(c).slice(0, 80)}\``).join(", ");
-      const note = `\n\n(Antigravity can't ask before running a command, so in ${this.mode === "agent" ? "Agent" : this.mode === "plan" ? "Plan" : "Ask"} mode it didn't run: ${what}. Switch to Auto to let it run commands, or run them yourself.)`;
+      const note = `\n\n(Gemini can't ask before running a command here, so in ${this.mode === "agent" ? "Agent" : this.mode === "plan" ? "Plan" : "Ask"} mode it didn't run: ${what}. Switch to Auto to let it run commands, or run them yourself.)`;
       said += note;
       // (The chat shows the streamed text: the note goes there too.)
       this.open("text");
@@ -517,7 +518,7 @@ class AgyAgent {
     if (this.exited) return;
     // Stopped before it said "init" (no network, not logged in, a flag it refused): starting it again would fail the
     // same way, over and over. Answer what's waiting with the reason, and stop.
-    if (!this.started) return this.failStart(this.stderr || `Antigravity stopped (exit code ${code}).`);
+    if (!this.started) return this.failStart(this.stderr || `Gemini (the Antigravity program) stopped (exit code ${code}).`);
     if (this.busy) {
       if (this.stopped) this.endTurn({ type: "result", subtype: "error_during_execution", is_error: true, result: "Stopped." });
       else this.endTurn({ type: "result", subtype: "error", is_error: true, result: friendly(this.stderr || `stopped (exit code ${code})`) });
@@ -558,7 +559,7 @@ function askAgy(bin, { model, system, prompt, cwd, signal, timeout = 180000 } = 
       },
       onExit: (info) => end(Object.assign(new Error(info.login ? NOT_LOGGED_IN : friendly(info.stderr)), { login: !!info.login })),
     });
-    const timer = setTimeout(() => end(new Error("Antigravity took too long to answer.")), timeout);
+    const timer = setTimeout(() => end(new Error("Gemini took too long to answer.")), timeout);
     function end(err, answer) {
       if (done) return;
       done = true;

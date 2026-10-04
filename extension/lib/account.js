@@ -1,12 +1,12 @@
 // Your accounts, in the status bar:
 //   - the usage meter (like Claudemeter): "Claude 45% · 24%" (the 5-hour and weekly limits), "Codex 12% · 3%",
-//     "Gemini 1.2M tok" (tokens today). Orange from 80 %, red from 95 %. It comes from lib/ai/usage.js, which the
+//     "Gemini 13% · 1%" (Antigravity's weekly limits). Orange from 80 %, red from 95 %. It comes from lib/ai/usage.js, which the
 //     programs themselves fill: Claude Code reports its limits after every answer, Codex's app server on request.
 //   - the Account item (person icon) and its menu: per provider who's logged in, plan, usage page, switch account,
 //     log out, log in; your own model; Get started, updates, the guide.
 //
-// Kural never reads a login itself: it asks the programs (`claude auth status`, Codex's `account/read`, Gemini CLI's
-// own files' existence). (The Claudemeter extension Kural used to include read Claude's login from the macOS
+// Kural never reads a login itself: it asks the programs (`claude auth status`, Codex's `account/read`, agy's
+// `/model`). (The Claudemeter extension Kural used to include read Claude's login from the macOS
 // Keychain, which asked for permission again after every update and then failed.)
 
 const vscode = require("vscode");
@@ -19,7 +19,7 @@ const { WIKI, ISSUES } = require("./chat/guide");
 
 const USAGE = { claude: "https://claude.ai/settings/usage", apiKey: "https://console.anthropic.com/settings/usage" };
 const SAVED = "kural.usage.v1";
-const NAMES = { claude: "Claude", codex: "Codex", agy: "Antigravity", gemini: "Gemini" };
+const NAMES = { claude: "Claude", agy: "Gemini", codex: "Codex" };
 
 class Account {
   // getStarted: lib/getstarted.js; onSwitched(): Claude's running processes start again with the new login.
@@ -28,7 +28,7 @@ class Account {
     this.gs = getStarted;
     this.onSwitched = onSwitched;
     this.auth = null;                   // Claude: the last `auth status` answer (claude-checks.js claudeAuth)
-    this.cliAuth = {};                  // codex / gemini: their last answer
+    this.cliAuth = {};                  // codex / agy: their last answer
     this.item = vscode.window.createStatusBarItem("kural.account", vscode.StatusBarAlignment.Right, 101);
     this.item.name = "Kural Account";
     this.item.command = "kural.account";
@@ -227,7 +227,7 @@ class Account {
     await this.gs.signIn();
   }
 
-  // ---------- Codex, Gemini: log out, switch ----------
+  // ---------- Gemini, Codex: log out, switch ----------
   async logOutCli(id, quietly = false) {
     const C = CLIS[id];
     if (!quietly) {

@@ -19,9 +19,9 @@
   its own login for `git push`) that caused this in projects cloned from GitHub; pushing uses Git's own login, like in
   a terminal. Click **Deny**. If it still appears,
   [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you were doing.
-- **Gemini says "This client is no longer supported for Gemini Code Assist for individuals":** Google stopped personal
-  Google accounts in Gemini CLI on 26 Sept 2026. Use **Antigravity** instead (Get started → Antigravity), with the same
-  Google account. See [[ChatGPT and Gemini]].
+- **"This client is no longer supported for Gemini Code Assist for individuals":** that's Google's old Gemini CLI,
+  which stopped serving personal Google accounts on 26 Sept 2026. Kural's **Google Gemini** uses Google's newer
+  Antigravity program instead: Get started → Google Gemini, with the same Google account. See [[Google Gemini and ChatGPT]].
 - **An install seems stuck:** the Get started page shows its latest output and how long it has been quiet. **Stop**
   ends it; **Install in a terminal instead** runs the same command where you can see everything.
 - **Start over like a new user:** in the source folder, `./install.sh --fresh` (your settings and chats move to a

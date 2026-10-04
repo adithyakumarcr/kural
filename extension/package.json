@@ -388,15 +388,10 @@
           "default": "",
           "markdownDescription": "Where the `codex` program (OpenAI's Codex CLI) is. Leave empty to find it automatically."
         },
-        "kural.geminiPath": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Where the `gemini` program (Google's Gemini CLI) is. Leave empty to find it automatically."
-        },
         "kural.agyPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Where the `agy` program (Google's Antigravity CLI) is. Leave empty to find it automatically."
+          "markdownDescription": "Where the `agy` program (Google's Antigravity CLI, for Google Gemini) is. Leave empty to find it automatically."
         },
         "kural.tabCompletion.enabled": {
           "type": "boolean",

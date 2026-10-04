@@ -1,8 +1,8 @@
-// How much of each AI plan you've used: Claude's 5-hour and weekly limits, Codex's limits, Gemini's tokens. No vscode
+// How much of each AI plan you've used: Claude's 5-hour and weekly limits, Codex's and Gemini's (agy) limits. No vscode
 // here: the providers report into it (Claude Code sends `rate_limit_event` with every answer; Codex's app server sends
-// `account/rateLimits/updated`; Gemini sends token counts), and lib/usage-bar.js shows it in the status bar.
+// `account/rateLimits/updated`; agy's /usage and token counts), and lib/usage-bar.js shows it in the status bar.
 //
-// A report: { provider: "claude" | "codex" | "gemini", windows: [{ id, label, usedPercent, resetsAt (ms) }],
+// A report: { provider: "claude" | "codex" | "agy", windows: [{ id, label, usedPercent, resetsAt (ms) }],
 //             tokens?: { input, output }, plan?: "Pro" }
 // Nothing here ever reads a login or a key: only what the providers' own programs report.
 
@@ -20,7 +20,7 @@ function report(provider, info) {
   for (const f of listeners) { try { f(provider, next); } catch { /* a listener's own problem */ } }
 }
 
-// Tokens are counted per day (Gemini reports what each answer used).
+// Tokens are counted per day (agy reports what each answer used).
 function addTokens(old, t) {
   const day = new Date().toDateString();
   const base = old && old.day === day ? old : { day, input: 0, output: 0 };

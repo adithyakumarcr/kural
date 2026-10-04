@@ -1,6 +1,6 @@
 // Get started page (lib/getstarted.js sends the state; this only draws it and sends clicks back).
 // Ways to give Kural its AI: Claude (Claude Code + a Claude plan), your own model (Ollama, offline), ChatGPT (Codex CLI)
-// or Gemini (Gemini CLI). Any one is enough.
+// or Google Gemini (Antigravity CLI). Any one is enough.
 (function () {
   const vscode = acquireVsCodeApi();
   const app = document.getElementById("app");
