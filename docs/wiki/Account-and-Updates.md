@@ -1,22 +1,36 @@
 # Account and Updates
 
+## The usage meter
+
+The status bar (bottom right) shows how much of your plan you've used:
+
+| Shows | Means |
+|---|---|
+| `Claude 45% · 24%` | Claude: 45 % of the 5-hour limit and 24 % of the weekly limit used |
+| `Codex 12% · 3%` | ChatGPT (Codex): the same two limits |
+| `Gemini 1.2M tok` | Gemini: tokens used today (Gemini CLI doesn't report a share of a limit) |
+
+It turns orange from 80 % and red from 95 %. Hover for when each limit resets. The numbers come from the programs
+themselves: Claude Code sends them with every answer (so they update while you work), Codex when Kural asks (every 10
+minutes). To get Claude's numbers right now, Account menu → the usage line (one tiny request to Claude).
+
 ## Account
 
-The person icon in the status bar (bottom right) shows your Claude plan; hover for who's logged in. Click it for the
-Account menu:
+The person icon next to it shows your Claude plan; hover for who's logged in where. Click it for the Account menu, with
+a section each for Claude, ChatGPT (Codex) and Gemini:
 
-- **Who's logged in**: email, plan and organization (for a claude.ai login).
-- **See your usage**: opens your usage page in the browser (claude.ai, or the Anthropic Console for an API key).
-- **Switch account**: logs out, then opens the login in your browser; log in with the other account. Kural checks the
-  new login with a test request and carries on.
-- **Log out**: logs Claude Code out on this computer (also in the terminal). Claude models wait until you log in again;
-  your own model keeps working.
-- **Log in** (when you're logged out).
+- **Who's logged in**: email, plan, organization.
+- **Usage**: the meter's numbers; and **Usage page**, which opens the provider's own usage page in your browser.
+- **Switch account**: logs out, then starts the login again; log in with the other account. Kural checks the new login
+  with a test request and carries on.
+- **Log out**: logs that program out on this computer (also in the terminal). Its models wait until you log in again;
+  the others keep working.
+- **Log in** (when you're logged out), or **Set up** (when you haven't yet).
 - **Your own model**: which model on this computer is set up, or set one up.
 - **Get started**, **Check for updates**, **Kural guide** (this wiki), **Ask for a feature**.
 
-Kural asks Claude Code who's logged in (`claude auth status`); it never reads your login itself. Also in the Chat panel's
-**…** menu, or Command Palette → **Kural: Account**.
+Kural asks the programs who's logged in (`claude auth status`, Codex's account info, Gemini CLI's own files); it never
+reads your login itself. Also in the Chat panel's **…** menu, or Command Palette → **Kural: Account**.
 
 ## Updates
 

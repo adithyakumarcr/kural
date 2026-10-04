@@ -1,5 +1,6 @@
 // Get started page (lib/getstarted.js sends the state; this only draws it and sends clicks back).
-// Two ways to give Kural its AI: Claude (Claude Code + a Claude plan) or your own model (Ollama, offline).
+// Ways to give Kural its AI: Claude (Claude Code + a Claude plan), your own model (Ollama, offline), ChatGPT (Codex CLI)
+// or Gemini (Gemini CLI). Any one is enough.
 (function () {
   const vscode = acquireVsCodeApi();
   const app = document.getElementById("app");
@@ -134,6 +135,48 @@
     return step(3, "Test", "todo", el("p", {}, `Sends one request to ${L.chosen}, the way Kural will use it.`), el("div", { class: "row" }, btn("Run the test", "testLocal", "primary")));
   }
 
+  // ---------- Codex, Gemini (the same three steps) ----------
+  function cliSteps(id) {
+    const C = S.cliInfo[id], st = S.clis[id];
+    const ib = (label, type, cls = "") => btn(label, type, cls, { id });
+    const il = (label, type) => el("a", { href: "#", onclick: (e) => { e.preventDefault(); post({ type, id }); } }, label);
+    // 1. Installed
+    const i = st.install, installing = S.waiting === `install-${id}`;
+    let one;
+    if (i.state === "checking") one = step(1, `Install ${C.program}`, "running", el("p", { class: "muted" }, `Looking for ${C.program}…`));
+    else if (i.state === "ok") one = step(1, `Install ${C.program}`, "ok", el("p", {}, `${C.program} ${i.version}`, el("span", { class: "muted" }, ` · ${i.path}`)),
+      i.chosen ? el("p", { class: "muted small" }, "You chose this file. ", il("Find it automatically instead", "forgetCliPath")) : null);
+    else one = step(1, `Install ${C.program}`, installing ? "waiting" : i.state === "broken" ? "fail" : "todo",
+      i.state === "broken" ? [el("p", {}, "Found ", el("code", {}, i.path), ", but it doesn't run. Install it again:")]
+        : el("p", {}, `${C.program} is the official program for ${C.short}. Kural runs it in the background with its own login, so there's no key to paste.`),
+      installing ? el("p", { class: "note" }, "Installing (progress at the bottom right). If the install asks something, Kural asks you in a pop-up. This page updates by itself when it's done.")
+        : el("div", { class: "row" }, ib("Install for me", "installCli", "primary"), el("span", { class: "muted" }, "with Homebrew or npm, whichever this computer has")),
+      el("p", { class: "muted small" }, "Or paste this into a terminal yourself:"), code(C.install),
+      C.installAlt ? el("p", { class: "muted small" }, "Or: ", el("code", {}, C.installAlt)) : null,
+      installing ? null : el("p", { class: "muted small" }, il("Install in a terminal instead", "installCliTerminal")),
+      el("p", { class: "muted small" }, /npm/.test(C.install) ? "npm comes with Node.js (nodejs.org). " : "", il("Install guide", "cliDocs"), " · ",
+        i.chosen ? ["Not found at ", el("code", {}, i.chosenPath), " · ", il("Find it automatically", "forgetCliPath")] : il(`Already installed? Choose the ${id} file…`, "chooseCli")));
+    // 2. Logged in
+    const l = st.login, loggingIn = S.waiting === `login-${id}`;
+    let two;
+    if (l.state === "blocked" || l.state === "checking") two = step(2, "Log in", "todo", el("p", { class: "muted" }, "After step 1."));
+    else if (l.state === "ok") two = step(2, "Log in", "ok", el("p", {}, "Logged in", [l.email, l.method, l.plan].filter(Boolean).length ? el("span", { class: "muted" }, ` · ${[l.email, l.plan || l.method].filter(Boolean).join(" · ")}`) : ""));
+    else two = step(2, "Log in", loggingIn ? "waiting" : l.state === "unknown" ? "warn" : "todo",
+      el("p", {}, l.state === "unknown" ? `Kural can't tell whether ${C.short} is logged in. The test (step 3) will tell.` : `Log in to ${C.short} once. Kural uses the same login as ${C.program}.`),
+      loggingIn ? el("p", { class: "note" }, "Finish logging in in your browser. This page updates by itself.")
+        : [el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, "opens the login page in your browser")),
+          el("p", { class: "muted small" }, il("Log in in a terminal instead", "loginCliTerminal"))]);
+    // 3. Test
+    const t = st.test;
+    let three;
+    if (t.state === "blocked") three = step(3, "Test", "todo", el("p", { class: "muted" }, "After steps 1 and 2."));
+    else if (t.state === "running") three = step(3, "Test", "running", el("p", {}, `Asking ${C.short}…`));
+    else if (t.state === "ok") three = step(3, "Test", "ok", el("p", {}, `${C.short} answered in ${secs(t.ms)}.`), el("p", { class: "muted small" }, "Its models are in the chat's model menu."));
+    else if (t.state === "fail") three = step(3, "Test", "fail", el("p", {}, "The test request failed:"), el("pre", { class: "err" }, t.error), el("div", { class: "row" }, ib("Run the test again", "testCli", "primary")));
+    else three = step(3, "Test", "todo", el("p", {}, `Sends one tiny request to ${C.short}, the way Kural does.`), el("div", { class: "row" }, ib("Run the test", "testCli", "primary")));
+    return [one, two, three];
+  }
+
   // ---------- extras ----------
   function extra(name, have, what, ...rest) {
     return el("div", { class: "extra" },
@@ -159,10 +202,10 @@
 
   function render() {
     if (!S) return;
-    const both = S.claudeReady && S.localSet;
-    const caption = both ? "Both are set up. Switch between them in the chat's model menu."
+    const count = [S.claudeReady, !!S.localSet, ...Object.values(S.cliInfo || {}).map((c) => c.set)].filter(Boolean).length;
+    const caption = count > 1 ? `${count} are set up. Switch between them in the chat's model menu.`
       : S.ready ? "All set. Open the chat on the right and ask for a change."
-        : S.path ? "Finish the three steps to start. Until then Kural works as a plain code editor." : "Pick one to start. You can add the other later.";
+        : S.path ? "Finish the three steps to start. Until then Kural works as a plain code editor." : "Pick one to start. You can add others later.";
     app.replaceChildren(
       el("header", {},
         el("div", { class: "logo" }, "{K}"),
@@ -170,8 +213,10 @@
         el("span", { class: "spacer" }), btn("Check again", "recheck", "small")),
       el("div", { class: "choices" },
         choice("claude", "Claude", "Anthropic's Claude models: the most capable.", ["Needs a Claude plan and internet", "Agent teams, connectors, skills"], S.claudeReady),
-        choice("local", "Your own model", "A model on your computer, through Ollama.", ["Free, no account, works offline", "Your code stays on your computer"], !!S.localSet)),
-      ...(S.path === "claude" ? [claudeStep(), loginStep(), testStep()] : S.path === "local" ? [ollamaStep(), modelStep(), localTestStep()] : []),
+        choice("local", "Your own model", "A model on your computer, through Ollama.", ["Free, no account, works offline", "Your code stays on your computer"], !!S.localSet),
+        ...Object.entries(S.cliInfo || {}).map(([id, c]) => choice(id, c.label, c.what, c.facts, c.set))),
+      ...(S.path === "claude" ? [claudeStep(), loginStep(), testStep()] : S.path === "local" ? [ollamaStep(), modelStep(), localTestStep()]
+        : S.cliInfo && S.cliInfo[S.path] ? cliSteps(S.path) : []),
       el("div", { class: `go ${S.path ? "" : "nopath"}` },
         el("button", { class: "b big solid", disabled: !S.ready, onclick: () => post({ type: "done" }) }, "Start using Kural ", icon("arrow-right")),
         el("span", { class: "muted small" }, caption)),

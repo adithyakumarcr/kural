@@ -3,6 +3,8 @@
 //
 //   PROVIDERS (below), one entry each:
 //     claude  "opus" / "sonnet" / "haiku"   → Claude Code (./claude.js) with your Claude login
+//     codex   "codex:<model>"               → Codex CLI (./codex.js) with your ChatGPT login
+//     gemini  "gemini:<model>"              → Gemini CLI (./gemini.js) with your Google login or Gemini API key
 //     ollama  "ollama:<name>"               → Kural's own engine (./engine.js + ./tools.js), through Ollama, offline
 //   To add a provider (LM Studio, an OpenAI-compatible server…): an entry with the same shape — owns(model),
 //   ready(), agent(…) (a conversation process with ClaudeProcess's methods and events), ask(…) (one answer) —
@@ -14,6 +16,14 @@ const path = require("path");
 const { ClaudeProcess, ClaudeSession, isSetUp, log } = require("./claude");
 const ws = require("../workspace");
 const { LocalAgent, systemPrompt, post, errorText, friendly } = require("./engine");
+const { CLIS, cliOf, cliModel } = require("./clis");
+
+// Codex and Gemini: where their program is and whether Get started's test passed (set by lib/getstarted.js), and the
+// models each offers (for the chat's model menu). Folder for their conversation ids (set by extension.js).
+const cli = { codex: { bin: null, ready: false, models: [] }, gemini: { bin: null, ready: false, models: [] } };
+const setCli = (id, info) => { if (cli[id]) Object.assign(cli[id], info); };
+let cliStore = null;
+const setStore = (dir) => { cliStore = dir; };
 
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
@@ -23,18 +33,45 @@ const contextLength = () => cfg().get("localModels.contextLength") || 32768;
 
 let modelSource = () => "sonnet";
 let localFallback = () => null;   // the model on this computer that passed Get started's test, if any
-// The chat's model. A Claude model while only your own model is set up (an older chat, say): your own model.
+// The chat's model. One whose program isn't set up (an older chat, say): one that is.
 const currentModel = () => {
   let m; try { m = modelSource() || "sonnet"; } catch { m = "sonnet"; }
-  if (!isLocal(m) && !isSetUp()) { const l = localFallback(); if (l) return l; }
+  if (!providerOf(m).ready()) { const other = fallbackModel(); if (other) return other; }
   return m;
 };
+// A model that can be used now: your own model, then Codex, then Gemini (Claude's is the default anyway).
+function fallbackModel() {
+  const l = localFallback(); if (l) return l;
+  for (const id of ["codex", "gemini"]) if (cli[id].ready && cli[id].bin) return `${id}:${(cli[id].models.find((x) => x.isDefault) || {}).id || "default"}`;
+  return isSetUp() ? "sonnet" : null;
+}
 const setModelSource = (f, fallback) => { modelSource = f; if (fallback) localFallback = fallback; };
 
-// Can this model be used right now? { ok } or { why } (for a Claude model before Claude is set up).
+// Can this model be used right now? { ok } or { why } (for a model whose program isn't set up yet).
 function usable(model = currentModel()) {
-  if (providerOf(model).ready()) return { ok: true };
-  return { why: "Claude isn't set up. Set it up in Get started, or pick a model on your computer in the chat's model menu." };
+  const p = providerOf(model);
+  if (p.ready()) return { ok: true };
+  return { why: `${p.label} isn't set up. Set it up in Get started, or pick another model in the chat's model menu.` };
+}
+
+// Codex / Gemini: Kural's opts (ClaudeProcess style) → theirs. They have no JSON-answer option, so Ask's JSON is asked for
+// in words (search.js reads it from the answer).
+function cliAgent(id, model, opts, handlers) {
+  const c = cli[id];
+  const json = opts.jsonSchema ? `\n\nAnswer with only one JSON object (no other text, no code fence) that matches this JSON schema: ${JSON.stringify(opts.jsonSchema)}` : "";
+  return new CLIS[id].Agent({ name: opts.name, bin: c.bin, model: cliModel(model), effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
+    cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs, appendSystemPrompt: (opts.appendSystemPrompt || "") + json,
+    sessionId: opts.sessionId, resume: opts.resume, store: cliStore || path.join(os.tmpdir(), "kural-cli-chats") }, handlers);
+}
+async function askCli(id, model, system, prompt, token) {
+  const ctl = new AbortController();
+  if (token) token.onCancellationRequested(() => ctl.abort());
+  const t0 = Date.now();
+  try {
+    const text = await CLIS[id].ask(cli[id].bin, { model: cliModel(model), system, prompt, cwd: ws.root() || ws.workDir(), signal: ctl.signal });
+    log(`${CLIS[id].short}: answer in ${Date.now() - t0} ms`);
+    return text == null ? null : String(text);
+  } catch (e) { log(`${CLIS[id].short}: ${e.message}`); return null; }
 }
 
 const PROVIDERS = [
@@ -44,6 +81,9 @@ const PROVIDERS = [
       appendSystemPrompt: opts.appendSystemPrompt, effort: opts.effort, jsonSchema: opts.jsonSchema, sessionId: opts.sessionId,
       resume: opts.resume, ...local, model: localName(model), baseUrl: ollamaUrl(), contextLength: contextLength() }, handlers),
     ask: (model, system, prompt, token, quiet) => askLocal(model, system, prompt, token, quiet) },
+  ...["codex", "gemini"].map((id) => ({ id, label: CLIS[id].label, owns: (m) => cliOf(m) === id, ready: () => cli[id].ready && !!cli[id].bin,
+    agent: (model, opts, _local, handlers) => cliAgent(id, model, opts, handlers),
+    ask: (model, system, prompt, token) => askCli(id, model, system, prompt, token) })),
   { id: "claude", label: "Claude", owns: () => true, ready: () => isSetUp(),
     agent: (model, opts, _local, handlers) => new ClaudeProcess({ ...opts, model }, handlers),
     ask: null },   // (one answers come from a warm ClaudeSession: see Session)
@@ -85,9 +125,9 @@ async function askLocal(model, system, prompt, token, quiet = false) {
 class Session {
   constructor(opts, onState = () => {}) {
     this.opts = opts;
-    this.claude = new ClaudeSession({ ...opts, model: () => { const m = currentModel(); return isLocal(m) ? opts.fallbackModel() : m; } }, onState);
+    this.claude = new ClaudeSession({ ...opts, model: () => { const m = currentModel(); return engineOf(m) === "claude" ? m : opts.fallbackModel(); } }, onState);
   }
-  start() { if (!isLocal(currentModel())) return this.claude.start(); return true; }
+  start() { if (engineOf(currentModel()) === "claude") return this.claude.start(); return true; }
   stop() { this.claude.stop(); }
   ask(prompt, token) {
     const m = currentModel();
@@ -101,5 +141,8 @@ class Session {
 
 const localStore = (context) => path.join(context.globalStorageUri.fsPath, "local-chats");
 
-module.exports = { PROVIDERS, providerOf, isLocal, localName, currentModel, setModelSource, usable, makeAgent, Session, askLocal, ollamaUrl,
-  contextLength, localStore, systemPrompt };
+// "claude" | "ollama" | "codex" | "gemini": which program has a chat's conversation.
+const engineOf = (model) => providerOf(model).id;
+
+module.exports = { PROVIDERS, providerOf, engineOf, isLocal, localName, currentModel, fallbackModel, setModelSource, usable, makeAgent, Session, askLocal,
+  ollamaUrl, contextLength, localStore, systemPrompt, setCli, cli, setStore, cliOf };

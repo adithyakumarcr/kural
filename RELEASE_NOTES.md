@@ -2,6 +2,38 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Installing and logging in to Codex and Gemini without a terminal.** **Install for me** now uses whatever your
+  computer has (Homebrew on a Mac, otherwise npm), runs in the background, and turns any question the installer asks
+  into a pop-up. On a Mac without Homebrew or Node.js, Kural says so and opens Node.js's download page instead of
+  failing in a terminal. **Log in** opens the login page in your browser directly; Gemini's login no longer waits
+  behind a menu and a "[Y/n]" in a terminal.
+
+- **Devices over SSH.** Working on a Raspberry Pi or a board computer? **+ → Link device** saves it once (name,
+  address, username, password) and links it to the chat. The AI can then run commands and read and write files on it,
+  asking you first in Agent mode. Click the device's chip for a terminal on it. The password is stored encrypted by
+  your computer's own keychain and is never sent to an AI. **Kural: Devices** to change a password, forget a device's
+  key or remove it.
+
+- **ChatGPT (Codex) and Gemini.** Use your ChatGPT plan (through OpenAI's Codex CLI) or your Google account / Gemini API
+  key (through Google's Gemini CLI), like Claude. Get started installs, logs in and tests them; their models are in the
+  chat's model menu; the chat edits files, runs commands (asking first in Agent mode), and Undo works. Ask, Ctrl+K,
+  commit messages and plain words in the terminal use them too. (Agent teams and Claude Code's connectors stay
+  Claude-only.)
+- **Usage meter in the status bar, back and better.** `Claude 45% · 24%` shows the 5-hour and weekly limits used,
+  orange from 80 % and red from 95 %, with reset times on hover. It comes from Claude Code itself after every answer,
+  so there are no Keychain prompts. Codex shows its limits the same way; Gemini shows tokens used today. The Account
+  menu has a section for each provider (who's logged in, usage page, switch account, log out).
+- **Thinking no longer jumps.** Thinking is one steady line ("Thinking…" with its latest thought, then "Thought for
+  12 s"; click to read it all). Before, a box grew with each burst of thinking and collapsed afterwards, so the answer
+  jumped around. New tool lines are added without redrawing the rest of the answer.
+- **Change the mode while Kural answers.** Agent → Auto: the commands waiting for your OK run at once, and later ones
+  don't ask. Auto → Agent: Kural asks before the next command.
+- **Pictures, really.** "Show me @chart.png" now shows the picture: pictures you mention with @ appear in your message,
+  and the model is told how to show one in its answer. Pictures from anywhere in your home folder can be shown.
+- **A clear Back button** on the History and Models on this computer pages, and no emoji in model descriptions from
+  ollama.com.
+- **Fixed: the Linux build failed** (a test step looked for a file that moved).
+
 - **Account menu** (person icon in the status bar). Shows who's logged in to Claude and your plan, opens your usage
   page, and lets you **switch account**, **log out** or **log in**. It replaces Claudemeter, which read your login from
   the macOS Keychain: the Mac asked for permission again after every update, and then it stopped working.

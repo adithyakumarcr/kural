@@ -35,6 +35,13 @@ def main(app, platform):
     # VSCodium's auto-updater would replace Kural with plain VSCodium. Turn it off.
     for k in ("updateUrl", "downloadUrl", "releaseNotesUrl"):
         d.pop(k, None)
+    # The login pages Kural opens for you (Get started: Gemini, Codex) open without VS Code's "open the external
+    # website?" question first: you just clicked Log in.
+    trusted = d.get("linkProtectionTrustedDomains", [])
+    for site in ("https://accounts.google.com", "https://auth.openai.com"):
+        if site not in trusted:
+            trusted.append(site)
+    d["linkProtectionTrustedDomains"] = trusted
     save(p, d)
 
     # 2. The window/dock name on Linux ("codium" otherwise).

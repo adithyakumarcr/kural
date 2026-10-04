@@ -41,12 +41,19 @@ const TEAM_SIZES = [2, 3, 4, 5];
 // A model on your own computer (Ollama) is saved as "ollama:<name>", e.g. "ollama:qwen3-coder:30b".
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
-const validModel = (m) => valid(MODELS, m) || (isLocal(m) && m.length < 200);
+const validModel = (m) => valid(MODELS, m) || (/^(ollama|codex|gemini):./.test(m || "") && m.length < 200);
+// Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "gemini".
+const engineOf = (m) => brain.engineOf(m);
+const isClaude = (m) => engineOf(m) === "claude";
+const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Gemini", "Your own model"
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
+const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
+const GEMINI_DEVICE = "kural_device_";   // Gemini sees them as kural_device_<tool> (it doesn't say which server a tool is from)
+const DEVICE_TOOL_RE = new RegExp(`^mcp__(?:device__|gemini__${GEMINI_DEVICE})(${DEVICE_TOOLS.join("|")})$`);
 
 
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
@@ -131,6 +138,13 @@ class ChatView {
         if (s && !s.isEmpty && e.textEditor.document.uri.scheme === "file") this.lastSelection = { doc: e.textEditor.document, range: new vscode.Range(s.start, s.end) };
       }),
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
+      // Kural: Devices → "Link it to the current chat".
+      vscode.commands.registerCommand("kural.chat.linkDevice", async (id) => {
+        const t = this.active();
+        if (!t || !id) return;
+        await this.handle({ type: "linkDevice", tabId: t.id, id }, this.cur());
+        this.open();
+      }),
       vscode.commands.registerCommand("kural.chat.split", () => this.openSplit()),
       vscode.window.registerWebviewPanelSerializer("kural.chatEditor", { deserializeWebviewPanel: async (panel) => this.restoreSplit(panel) }),
       vscode.commands.registerCommand("kural.chat.newTab", () => { this.reveal(); this.newTab(true); }),
@@ -177,8 +191,7 @@ class ChatView {
   isReady() { return this.readyCheck ? this.readyCheck() : isSetUp(); }
   // A new chat's model: your last one, unless it's a Claude model and only your own model is set up (or the reverse).
   usableModel(m) {
-    const local = this.localDefault ? this.localDefault() : null;
-    if (!isLocal(m) && !isSetUp() && local) return local;
+    if (!brain.providerOf(m).ready()) { const other = brain.fallbackModel(); if (other) return other; }
     return m;
   }
 
@@ -193,7 +206,8 @@ class ChatView {
     const d = this.lastChoices();
     if (!validModel(tab.model)) tab.model = d.model;
     // Which engine has this conversation (chats from before Kural had its own engine: the one their model uses).
-    if (!tab.engine && tab.messages && tab.messages.length) tab.engine = isLocal(tab.model) ? "local" : "claude";
+    if (!tab.engine && tab.messages && tab.messages.length) tab.engine = engineOf(tab.model);
+    if (tab.engine === "local") tab.engine = "ollama";   // (its old name)
     if (!valid(EFFORTS, tab.effort)) tab.effort = d.effort;
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
@@ -264,6 +278,7 @@ class ChatView {
     if (!tab) return;
     const r = this.runtime.get(id);
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
+    this.endDevice(r);
     this.runtime.delete(id);
     const i = this.tabs.indexOf(tab);
     this.tabs.splice(i, 1);
@@ -326,6 +341,12 @@ class ChatView {
     vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(where), { forceNewWindow: true });
   }
 
+  // The running model's way to the linked device ends (its token stops working in the bridge).
+  endDevice(r) {
+    if (r && r.deviceToken && this.devices) this.devices.endSession(r.deviceToken);
+    if (r) r.deviceToken = null;
+  }
+
   // Delete a chat for good: from this window, History, and every workspace.
   deleteChat(id) {
     if (this.tab(id)) this.closeTab(id, false);
@@ -367,6 +388,7 @@ class ChatView {
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
+    device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
   viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll }; }
   postTabs() {
@@ -453,14 +475,15 @@ class ChatView {
   }
 
   // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (attachments,
-  // pictures a model made) and the temp folder. Not your whole disk.
+  // pictures a model made), the temp folder and your home folder (a picture you attached from Downloads, say). Only
+  // pictures: the page's rules (CSP) let it load nothing else, and nothing it loads can be sent anywhere.
   resourceRoots() {
     return [vscode.Uri.joinPath(this.context.extensionUri, "media"), ...ws.folders().map((f) => vscode.Uri.file(f.path)),
-      this.context.globalStorageUri, vscode.Uri.file(os.tmpdir())];
+      this.context.globalStorageUri, vscode.Uri.file(os.tmpdir()), vscode.Uri.file(os.homedir())];
   }
   // For the page: how to turn a file path into an address it can load (fileSrc in media/chat.js).
   filesFor(webview) {
-    return { base: webview.asWebviewUri(vscode.Uri.file("/")).toString().replace(/\/$/, ""), root: this.root() || "" };
+    return { base: webview.asWebviewUri(vscode.Uri.file("/")).toString().replace(/\/$/, ""), root: this.root() || "", home: os.homedir() };
   }
 
   // A picture a model made (Ollama image models): saved as a file in Kural's storage, shown in the answer.
@@ -573,14 +596,19 @@ class ChatView {
   }
 
   teamSize(tab) {
-    if (!(tab.team > 1) || isLocal(tab.model)) return 0;   // (agent teams need a Claude model)
+    if (!(tab.team > 1) || !isClaude(tab.model)) return 0;   // (agent teams need a Claude model)
     const editing = tab.mode === "agent" || tab.mode === "auto";
     if (tab.teamStyle !== "discuss" && !editing) return 0;
     const roles = tab.roles || [];
     return roles.length ? teamMembers(0, roles, tab.teamStyle).length : tab.team;
   }
   // When this changes, the tab's Claude restarts (same conversation) before your next message.
-  procKey(tab) { return `${isLocal(tab.model) ? tab.model : "claude"}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${cfg().get("chat.fullClaudeCodeSetup")}|${ws.key()}|${this.setupVersion}`; }
+  // (Claude Code's setup and its reloads only matter to Claude: other programs don't restart for them.)
+  procKey(tab) {
+    const claude = isClaude(tab.model);
+    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
+      (claude ? `|${cfg().get("chat.fullClaudeCodeSetup")}|${this.setupVersion}` : "");
+  }
 
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
   // came back to Kural (connectors added on claude.ai don't leave a file to watch): reload
@@ -588,11 +616,22 @@ class ChatView {
   // Get started passed (or something broke since): the panes show the chat (or "Set up Kural first").
   readyChanged(ready) {
     // Empty chats on a Claude model while only your own model is set up: switch them to it.
-    const local = this.localDefault ? this.localDefault() : null;
-    if (local && !isSetUp()) for (const t of this.tabs) if (!t.messages.length && !isLocal(t.model)) { t.model = local; t.modelName = null; }
+    for (const t of this.tabs) if (!t.messages.length && !brain.providerOf(t.model).ready()) {
+      const other = brain.fallbackModel(); if (other) { t.model = other; t.modelName = null; }
+    }
     this.postTabs();
-    this.post({ type: "setupReady", ready, claudeReady: isSetUp() });
+    this.post({ type: "setupReady", ready, claudeReady: isSetUp(), clis: this.cliInfo() });
     if (ready) for (const p of this.panes) { const t = this.tab(p.activeId); if (t && t.status === "idle") this.warm(t); }
+  }
+
+  // Saved devices for the + menu (no passwords: those stay in SecretStorage).
+  deviceList() { return this.devices ? this.devices.list().map((d) => ({ id: d.id, name: d.name, host: d.host, port: d.port, user: d.user, system: d.system || "" })) : []; }
+
+  // Codex and Gemini for the model menu: set up or not, and their models.
+  cliInfo() {
+    const { CLIS } = require("../ai/clis");
+    return ["codex", "gemini"].map((id) => ({ id, label: CLIS[id].label, short: CLIS[id].short, ready: brain.providerOf(`${id}:x`).ready(),
+      models: brain.cli[id].models || [], account: brain.cli[id].account || "" }));
   }
 
   setupChanged(why) {
@@ -607,7 +646,7 @@ class ChatView {
 
   // Start the tab's Claude process ahead of time, so your first message is answered quickly.
   warm(tab) {
-    if (!isLocal(tab.model) && (!isSetUp() || !findClaude())) return;   // Claude isn't set up (Get started)
+    if (!brain.providerOf(tab.model).ready() || (isClaude(tab.model) && !findClaude())) return;   // not set up (Get started)
     const r = this.runtime.get(tab.id);
     if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) return;
     if (r && r.turn && r.turn.reply.running) return;   // never restart in the middle of an answer
@@ -684,6 +723,7 @@ class ChatView {
   startProc(tab, fresh = false) {
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); }
+    this.endDevice(old);
     const full = cfg().get("chat.fullClaudeCodeSetup");
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
     const editing = tab.mode === "agent" || tab.mode === "auto";
@@ -696,15 +736,23 @@ class ChatView {
     // With your full setup, Claude can also use your skills.
     const tools = [...(editing ? AGENT_TOOLS : READ_TOOLS), ...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
     // A Claude model: Claude Code. A model on this computer: Kural's own engine, with the same tools and events.
+    // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
+    // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
+    // this computer: Kural's own engine has no MCP.
+    const dev = tab.device && this.devices && !isLocal(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args),
+      { prefix: engineOf(tab.model) === "gemini" ? GEMINI_DEVICE : "" }) : null;
+    if (dev) { r.deviceToken = dev.token; r.deviceDevice = tab.device; }
+    const deviceTools = dev ? DEVICE_TOOLS.map((t) => `mcp__device__${t}`) : [];
     const local = isLocal(tab.model);
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
-      name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true,
+      name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, mode: tab.mode,
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
-      tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : [])],
-      mcpServers: team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : null,
+      tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      mcpServers: team || dev ? { ...(team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
+        ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root() || ws.workDir(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
@@ -718,7 +766,7 @@ class ChatView {
     this.runtime.set(tab.id, r);
     if (!proc.start()) { r.proc = null; return null; }
     // Ask which connectors / MCP servers it has (they connect in the background, so twice).
-    if (full && !local) for (const ms of [1500, 7000]) setTimeout(() => { if (!r.stale && r.proc) this.checkServers(tab, r); }, ms);
+    if (full && isClaude(tab.model)) for (const ms of [1500, 7000]) setTimeout(() => { if (!r.stale && r.proc) this.checkServers(tab, r); }, ms);
     if (instr.files.length) log(`chat ${tab.id}: using instructions from ${instr.files.join(", ")}`);
     return r;
   }
@@ -739,6 +787,7 @@ class ChatView {
     if (last && last.role === "assistant" && last.running) {
       last.running = false;
       last.error = info.login ? "login" : "The model stopped unexpectedly. See View → Output → Kural.";
+      if (info.login) last.errorWho = whoOf(tab.model);
       tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(last) });
       this.postTabs(); this.save();
@@ -783,9 +832,10 @@ class ChatView {
     if (!text && !attachIds.length) return;
     if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
-    if (!isLocal(tab.model) && !isSetUp()) {   // a Claude model, but only your own model is set up
-      this.post({ type: "flash", text: "Claude isn't set up: pick a model on your computer, or set Claude up in Get started" });
-      vscode.commands.executeCommand("kural.getStarted", "claude");
+    if (!brain.providerOf(tab.model).ready()) {   // e.g. a Claude model, but only your own model is set up
+      const p = brain.providerOf(tab.model);
+      this.post({ type: "flash", text: `${p.label} isn't set up: pick another model, or set it up in Get started` });
+      vscode.commands.executeCommand("kural.getStarted", p.id === "ollama" ? "local" : p.id);
       return;
     }
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
@@ -801,12 +851,13 @@ class ChatView {
 
     // The chat was on the other engine (Claude Code ↔ Kural's own): that one has the conversation, this one doesn't.
     // A new session, and this message carries the conversation so far (everything before it).
-    const engine = isLocal(tab.model) ? "local" : "claude";
+    const engine = engineOf(tab.model);
     if (tab.engine && tab.engine !== engine) {
       if (tab.messages.length > 2) tab.carryOver = { model: true, text: ChatView.transcript({ ...tab, messages: tab.messages.slice(0, -2) }) };
       tab.sessionId = newSessionId(); tab.started = false;
       const old = this.runtime.get(tab.id);
       if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
+      this.endDevice(old);
     }
     tab.engine = engine;
     let r = this.runtime.get(tab.id);
@@ -822,8 +873,15 @@ class ChatView {
       if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) { /* already running with it */ } else r = null;
     }
     if (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab)) r = this.startProc(tab);
-    if (!r) { reply.running = false; reply.error = "missing"; tab.status = "idle"; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); vscode.commands.executeCommand("kural.install"); return; }
-    if (tab.pendingModel && !isLocal(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
+    if (!r) {   // the program didn't start (moved, uninstalled): say which, and open its steps in Get started
+      const p = brain.providerOf(tab.model);
+      reply.running = false; tab.status = "idle";
+      reply.error = p.id === "claude" ? "missing" : `${p.label} didn't start. Check it in Get started (it may have been moved or uninstalled).`;
+      this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs();
+      vscode.commands.executeCommand("kural.getStarted", p.id === "ollama" ? "local" : p.id);
+      return;
+    }
+    if (tab.pendingModel && isClaude(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
     r.turn = { snaps: {}, reply, ask };
@@ -842,7 +900,8 @@ class ChatView {
       : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
         "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
     delete tab.carryOver;
-    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
+    const deviceNote = tab.device && this.devices && !isLocal(tab.model) ? this.devices.note(tab.device) : "";
+    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
     r.pendingSend = prompt;
     r.proc.send(prompt);
@@ -1148,7 +1207,8 @@ class ChatView {
     setup.full = !!cfg().get("chat.fullClaudeCodeSetup");
     // Announce a connector that wasn't there before (not on the very first report).
     const known = tab.knownServers ? new Set(tab.knownServers) : null;
-    const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name)).map((x) => x.name) : [];
+    // (Kural's own servers, the device's tools and the team's board, aren't news.)
+    const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name) && x.name !== "device" && x.name !== "team").map((x) => x.name) : [];
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
     setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
@@ -1171,6 +1231,7 @@ class ChatView {
     r.pendingSend = null;
     if (m.subtype === "error_during_execution") reply.error = "stopped";
     else if (m.is_error) reply.error = LOGIN_RE.test(m.result || "") ? "login" : (m.result || "Something went wrong.");
+    if (reply.error === "login") reply.errorWho = whoOf(tab.model);
     for (const b of reply.blocks) {
       if (b.k === "perm" && b.state === "pending") b.state = "denied";
       if (b.k === "question" && b.state === "pending") b.state = "skipped";
@@ -1196,6 +1257,7 @@ class ChatView {
       r.stale = true;
       if (r.proc) r.proc.kill();
       r.proc = null;
+      this.endDevice(r);
       for (const res of r.perms.values()) res(false);
       r.perms.clear();
     }
@@ -1223,7 +1285,7 @@ class ChatView {
     } catch (e) { log(`chat: couldn't list changes: ${e.message}`); }
   }
 
-  patchOf(msg) { return { waitingFor: msg.waitingFor, running: msg.running, error: msg.error, changes: msg.changes, ms: msg.ms, note: msg.note, blocks: msg.blocks, planReady: msg.planReady, planBuilt: msg.planBuilt }; }
+  patchOf(msg) { return { waitingFor: msg.waitingFor, running: msg.running, error: msg.error, errorWho: msg.errorWho, changes: msg.changes, ms: msg.ms, note: msg.note, blocks: msg.blocks, planReady: msg.planReady, planBuilt: msg.planBuilt }; }
 
   // Claude (or a team member) wants to edit a file or run a command.
   async onPermission(tab, r, req) {
@@ -1241,15 +1303,22 @@ class ChatView {
       return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
+    // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
+    // (Gemini names MCP tools mcp__gemini__<tool>; the device's are kural_device_<tool> there, so your own server's
+    // "run_command" isn't mistaken for them.)
+    if (tab.device && DEVICE_TOOL_RE.test(req.tool_name)) return { allow: true };
     // Reading Jira (the linked ticket, a search) changes nothing, so it doesn't ask. Writing to Jira
     // (comments, status changes, new issues) still asks below.
     if (isAtlassianRead(req.tool_name)) return { allow: true };
     if (req.tool_name === "AskUserQuestion") return this.askUser(tab, r, req);
-    if (tab.mode === "auto" || tab.allowAll) return { allow: true };
+    // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
+    const onDevice = req.tool_name === "DeviceCommand" || req.tool_name === "DeviceWrite";
+    if (tab.mode === "auto" || (onDevice ? !!tab.device && tab.allowAllDevice === tab.device : tab.allowAll)) return { allow: true };
     // Agent mode: running commands, fetching web pages ask you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
-    const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined };
+    const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
+      where: input.device || undefined };   // (a linked device's name, for its commands and writes)
     if (turn) turn.reply.blocks.push(block);
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
@@ -1262,6 +1331,34 @@ class ChatView {
     this.post({ type: "permState", tabId: tab.id, pid, state: block.state });
     this.postTabs(); this.save();
     return allow ? { allow: true } : { allow: false, message: "The user chose not to run this. Continue without it or ask them." };
+  }
+
+  // A command or a file write on the linked device: your mode decides, like a command here. (Reads just happen.)
+  async approveDevice(tab, r, tool, args) {
+    const d = this.devices && this.devices.get(tab.device);
+    if (tab.mode === "plan" || tab.mode === "ask") return { allow: false, message: `${tab.mode === "plan" ? "Plan" : "Ask"} mode: nothing is run or changed on the device. Describe the command instead.` };
+    if (!r.turn || !r.turn.reply.running) return { allow: false, message: "The answer was stopped." };
+    return this.onPermission(tab, r, { tool_name: tool === "run_command" ? "DeviceCommand" : "DeviceWrite",
+      input: { ...args, device: d ? d.name : "the device" } });
+  }
+
+  // You changed the mode while an answer is running. Asking (Agent ↔ Auto) is decided per request, so it applies at once:
+  // to Auto, the commands waiting for your OK run now, and later ones don't ask. Which tools the model has (Plan and Ask
+  // can't edit) is fixed when it starts, so that part applies from your next message.
+  modeChangedMidAnswer(tab, was) {
+    const r = this.runtime.get(tab.id);
+    if (tab.mode === "auto" && r) {
+      const turn = r.turn;
+      for (const b of (turn && turn.reply.blocks) || []) {
+        if (b.k !== "perm" || b.state !== "pending") continue;
+        const resolve = r.perms.get(b.pid);
+        if (resolve) { r.perms.delete(b.pid); resolve(true); }
+      }
+    }
+    const editing = (x) => x === "agent" || x === "auto";
+    if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" ? "Plan" : tab.mode === "ask" ? "Ask" : "Editing"} mode applies from your next message` });
+    else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
+    else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });
   }
 
   // Claude asks you a question with options: show a card, wait for your pick.
@@ -1318,7 +1415,7 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), pics: this.filesFor(w) });
+          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
         w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
@@ -1366,6 +1463,26 @@ class ChatView {
         if (!out.cancelled && pane) this.postTo(pane, { type: "ticketResults", id: m.id, ...out });
         break;
       }
+      case "devices": if (pane) this.postTo(pane, { type: "devices", list: this.deviceList() }); break;
+      case "linkDevice": if (tab) {
+        tab.device = m.id && this.devices && this.devices.get(m.id) ? m.id : null;
+        tab.allowAllDevice = null;   // a new link asks again
+        // Unlinked (or another device) mid-answer: the running model loses the device at once, not at the next message.
+        const run = this.runtime.get(tab.id);
+        if (run && run.deviceDevice !== tab.device) this.endDevice(run);
+        log(`chat ${tab.id}: ${tab.device ? `linked device ${this.devices.get(tab.device).name}` : "device unlinked"}`);
+        this.save(); this.postTabs();
+        if (tab.status === "idle") this.warm(tab); else this.post({ type: "flash", text: "The device is linked from your next message" });
+        break;
+      }
+      case "addDevice": if (this.devices) {
+        const r = await this.devices.add(m.device || {});
+        if (pane) this.postTo(pane, { type: "deviceAdded", id: m.reqId, ok: r.ok, error: r.error || "", list: this.deviceList(), device: r.device ? { id: r.device.id } : null });
+        if (r.ok && tab) { tab.device = r.device.id; this.save(); this.postTabs(); if (tab.status === "idle") this.warm(tab); }
+        break;
+      }
+      case "deviceTerminal": if (m.id) vscode.commands.executeCommand("kural.devices.terminal", m.id); break;
+      case "manageDevices": vscode.commands.executeCommand("kural.devices"); break;
       case "linkTicket": if (tab) {
         const k = m.ticket || {};
         tab.ticket = k.key ? { key: k.key, summary: k.summary || "", type: k.type || "", status: k.status || "", url: k.url || "" } : null;
@@ -1403,12 +1520,12 @@ class ChatView {
         const was = tab.model;
         tab.model = m.model;
         const r = this.runtime.get(tab.id);
-        if (isLocal(m.model) || isLocal(was)) {
-          // To or from a model on this computer: another engine (Kural's own, or Claude Code), which doesn't have
-          // this conversation. send() notices (tab.engine) and starts a new session that carries the conversation.
-          if (tab.status === "idle" && !(tab.engine && tab.engine !== (isLocal(m.model) ? "local" : "claude"))) this.warm(tab);
+        if (engineOf(m.model) !== engineOf(was) || isLocal(m.model)) {
+          // To another program (Claude Code, Codex, Gemini, Kural's own engine), which doesn't have this conversation:
+          // send() notices (tab.engine) and starts a new session that carries the conversation.
+          if (tab.status === "idle" && !(tab.engine && tab.engine !== engineOf(m.model))) this.warm(tab);
           else this.post({ type: "flash", text: "The new model takes over with your next message" });
-        } else if (r && r.proc && !r.proc.exited) r.proc.setModel(m.model);
+        } else if (r && r.proc && !r.proc.exited) r.proc.setModel(isClaude(m.model) ? m.model : m.model.replace(/^(codex|gemini):/, "").replace(/^default$/, ""));
         // Switch right away, keeping the conversation — even in the middle of an answer:
         // Claude's next step already uses the new model.
         tab.modelName = null;
@@ -1422,8 +1539,10 @@ class ChatView {
         else this.post({ type: "flash", text: "Intensity applies from your next message" });   // set when Claude starts
       } break;
       case "setMode": if (valid(MODES, m.mode)) {
+        const was = tab.mode;
         tab.mode = m.mode; this.remember(tab);
         if (m.mode === "agent" || m.mode === "auto") this.context.globalState.update(LAST_KEY, { ...this.context.globalState.get(LAST_KEY), buildMode: m.mode });
+        if (tab.status !== "idle") this.modeChangedMidAnswer(tab, was);
         this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab);
       } break;
       case "setMood": if (valid(MOODS, m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
@@ -1443,7 +1562,11 @@ class ChatView {
       case "setTeam": tab.team = TEAM_SIZES.includes(m.team) ? m.team : 0; this.remember(tab); this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab); break;
       case "permission": {
         const r = this.runtime.get(tab.id);
-        if (m.always) { tab.allowAll = true; this.post({ type: "allowAll", tabId: tab.id }); }
+        if (m.always) {
+          const b = r && r.turn && r.turn.reply.blocks.find((x) => x.k === "perm" && x.pid === m.pid);
+          if (b && b.where) tab.allowAllDevice = tab.device;   // only this device, only while it's linked
+          else { tab.allowAll = true; this.post({ type: "allowAll", tabId: tab.id }); }
+        }
         const res = r && r.perms.get(m.pid);
         if (res) { r.perms.delete(m.pid); res(!!m.allow); }
         break;
@@ -1479,7 +1602,11 @@ class ChatView {
       }
       case "files": await this.sendFiles(); break;
       case "paste": this.post({ type: "pasted", ctx: this.pasteToRef(m.text), text: m.text }); break;
-      case "login": vscode.commands.executeCommand("kural.login"); break;
+      case "login": {   // log in to the program the chat's model needs
+        const p = tab ? brain.providerOf(tab.model) : null;
+        vscode.commands.executeCommand("kural.getStarted", !p || p.id === "claude" ? "claude" : p.id === "ollama" ? "local" : p.id);
+        break;
+      }
       case "showLog": vscode.commands.executeCommand("kural.showLog"); break;
     }
   }
@@ -1538,7 +1665,7 @@ class ChatView {
 function prettyServer(name) { return String(name).replace(/^claude[._ ]ai[_ ]/i, "").replace(/_/g, " "); }
 
 // The model's name under the input: "Opus 4.7", or "qwen3-coder:30b · local" (not its larger-context copy's name).
-function shownModel(tab, id) { return isLocal(tab.model) ? localName(tab.model) : prettyModel(id); }
+function shownModel(tab, id) { return isLocal(tab.model) ? localName(tab.model) : isClaude(tab.model) ? prettyModel(id) : String(id || "").replace(/^models\//, ""); }
 
 function prettyModel(id) {
   const m = id.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
@@ -1557,6 +1684,8 @@ function toolDetail(name, input, root) {
     case "Bash": return input.command || "";
     case "WebSearch": return input.query || "";
     case "WebFetch": return input.url || "";
+    case "mcp__device__run_command": return input.command || "";
+    case "mcp__device__read_file": case "mcp__device__write_file": case "mcp__device__list_dir": return input.path || "~";
     case "mcp__team__post": return `${cap(input.from)} → ${input.to === "all" ? "everyone" : cap(input.to)}: ${input.message || ""}`;
     case "mcp__team__read": return `${cap(input.name)} checks messages${input.wait_seconds ? " and waits for a reply" : ""}`;
     default: return "";
@@ -1569,6 +1698,8 @@ const cap = (s) => { s = String(s || "").trim(); return s ? s[0].toUpperCase() +
 
 function permDetail(tool, input) {
   if (tool === "Bash") return input.command || "";
+  if (tool === "DeviceCommand") return input.command || "";
+  if (tool === "DeviceWrite") return `${input.path || ""}\n\n${String(input.content || "").slice(0, 600)}${String(input.content || "").length > 600 ? "\n…" : ""}`;
   if (tool === "WebFetch") return input.url || "";
   return JSON.stringify(input).slice(0, 300);
 }

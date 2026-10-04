@@ -8,6 +8,7 @@
 // No vscode here (tests run without it). The caller passes the claude path and a clean environment.
 
 const { spawn, execFile } = require("child_process");
+const usage = require("./usage");
 
 // Run a program without blocking Kural (spawnSync would freeze every extension while it runs).
 // Resolves { status, stdout, stderr, error }.
@@ -85,6 +86,7 @@ function claudeTest(bin, env, { cwd, timeoutMs = 90000, model = "haiku" } = {}) 
       while ((i = out.indexOf("\n")) >= 0) {
         const line = out.slice(0, i); out = out.slice(i + 1);
         let m; try { m = JSON.parse(line); } catch { continue; }
+        if (m.type === "rate_limit_event") { const u = usage.fromClaude(m); if (u) usage.report("claude", u); continue; }   // (the usage meter)
         if (m.type !== "result") continue;
         const text = String(m.result || "").trim();
         if (m.is_error || m.subtype !== "success") finish({ ok: false, error: text || m.subtype || "Claude answered with an error.", login: LOGIN.test(text) });

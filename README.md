@@ -32,10 +32,12 @@ On top of that, Kural adds:
 - **Teams of agents.** A project team (Researcher, Architect, Developers, Tester, led by a Project Manager) that
   plans, gets your OK and builds, or agents that discuss a question and agree on an answer.
 
-Its AI comes from one of two places (or both; you switch in the model menu):
+Its AI comes from any of these (set up one or all; you switch in the model menu):
 
 - **Claude.** Kural runs Claude Code in the background with your Claude plan: Anthropic's most capable models, your
   Claude Code settings, MCP servers, skills and `CLAUDE.md` files. No API key, nothing extra to pay for.
+- **ChatGPT (Codex) and Gemini.** The same way, with OpenAI's Codex CLI and your ChatGPT plan, or Google's Gemini CLI
+  and your Google account (or a Gemini API key).
 - **Your own model.** A model on your computer through [Ollama](https://ollama.com), run by Kural's own engine. No
   account, no subscription, no internet: your code never leaves your computer.
 
@@ -83,6 +85,12 @@ with it. Either way is enough; you can add the other later.
 2. **Logged in.** **Log in** opens your browser. You need a Claude Pro, Max, Team or Enterprise plan, or an Anthropic
    Console account; the free plan doesn't include Claude Code.
 3. **A test.** One tiny request to Claude (Haiku). If it fails, the page shows the error and what it means.
+
+**ChatGPT (Codex) or Gemini**
+1. **Installed.** **Install for me** runs the official install (`npm install -g @openai/codex` or
+   `@google/gemini-cli`; Homebrew on a Mac).
+2. **Logged in.** **Log in** starts the program's own login in a terminal (it opens your browser).
+3. **A test.** One tiny request. Then their models are in the chat's model menu.
 
 **Your own model**
 1. **Ollama.** **Get Ollama** (on Ubuntu it runs the installer; on a Mac or Windows it opens the download page).
@@ -132,10 +140,14 @@ Also in the chat:
   a key like `PROJ-123`, or words. Claude then knows in every message which ticket you're working on, and reads
   its details (acceptance criteria, comments) from Jira when needed. This needs the Atlassian connector in Claude
   (claude.ai → Settings → Connectors); without it, the menu says so and how to connect it.
+- **Devices (SSH).** **+ → Link device** saves a Raspberry Pi or board computer (name, address, username, password;
+  the password is stored encrypted by your computer's keychain) and links it to the chat: the AI runs commands and
+  changes files on it, asking first in Agent mode. Click its chip for a terminal on it.
 - **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.
-- **Model and intensity.** Claude's Opus / Sonnet / Haiku or a model on your computer, and Low → Max. You can switch
+- **Model and intensity.** Claude's Opus / Sonnet / Haiku, ChatGPT (Codex) and Gemini models, or a model on your
+  computer, and Low → Max. You can switch
   in the middle of a conversation; the new model gets the conversation so far.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Learn** teaches you: it first asks which
   ideas behind your question you already know, explains the others, answers, then checks you got it.
@@ -260,8 +272,10 @@ cursor.
 - **Ask (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get the exact `file:line` places. (For plain text
   search, use VS Code's own search, Ctrl+Shift+F.)
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
-- **Account** (person icon in the status bar). Who you're logged in as and your plan; your usage, switch account,
-  log out, check for updates.
+- **Usage meter** (status bar). `Claude 45% · 24%`: the 5-hour and weekly limits used (orange from 80 %, red from
+  95 %; hover for reset times). Codex shows the same; Gemini the tokens used today.
+- **Account** (person icon in the status bar). For Claude, ChatGPT (Codex) and Gemini: who you're logged in as and your
+  plan, the usage page, switch account, log out; and check for updates.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
   chat. When you add one, Kural reloads Claude in the same conversation.
 - **Kural Dark and Kural Light themes** (pick one: Command Palette → *Preferences: Color Theme*), and the same
@@ -360,7 +374,8 @@ owner can create release tags (`v…`). See [CONTRIBUTING.md](CONTRIBUTING.md).
 extension/            the Kural extension (plain JavaScript, no build step)
   extension.js        wires everything together
   lib/ai/             where answers come from: index.js (the provider table), claude.js (Claude Code headless),
-                      engine.js + tools.js (Kural's own engine for models on your computer), ollama.js
+                      codex.js (Codex app server), gemini.js (Gemini CLI over ACP), clis.js (both described once),
+                      engine.js + tools.js (Kural's own engine for models on your computer), ollama.js, usage.js
   lib/chat/           the chat: index.js (tabs, modes, models, questions, panes), prompts.js (modes, moods),
                       team.js (agent roles) + team-mcp.js (their message board), guide.js (what Kural can do),
                       archive.js (History), attachments, tickets, changes

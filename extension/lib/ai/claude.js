@@ -16,6 +16,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const { initLog, log } = require("../log");   // (re-exported below: older code imports log from here)
+const usage = require("./usage");
 
 const LOGIN_RE = /not logged in|log ?in|invalid api key|api key|oauth|credential|401/i;
 
@@ -219,6 +220,8 @@ class ClaudeProcess {
         done(msg.response.subtype === "success" ? msg.response.response || {} : null);
         continue;
       }
+      // How much of your plan is used (sent after every answer): for the usage meter in the status bar.
+      if (msg.type === "rate_limit_event") { const u = usage.fromClaude(msg); if (u) usage.report("claude", u); continue; }
       if (msg.type === "control_request" && msg.request && msg.request.subtype === "can_use_tool") {
         this.answerPermission(msg);
         continue;
