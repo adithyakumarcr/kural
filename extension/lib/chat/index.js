@@ -203,6 +203,7 @@ class ChatView {
   }
 
   remember(tab) {
+    if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     const prev = this.context.globalState.get(LAST_KEY) || {};
     this.context.globalState.update(LAST_KEY, { ...prev, model: tab.model, effort: tab.effort, mode: tab.mode, team: tab.team || 0,
       mood: tab.mood, roles: tab.roles, teamStyle: tab.teamStyle });

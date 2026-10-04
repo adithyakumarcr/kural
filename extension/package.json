@@ -92,6 +92,12 @@
         "category": "Kural"
       },
       {
+        "command": "kural.showUsage",
+        "title": "Show AI Usage (limits and when they reset)",
+        "icon": "$(dashboard)",
+        "category": "Kural"
+      },
+      {
         "command": "kural.account",
         "title": "Account: Usage, Switch Account, Log Out",
         "icon": "$(account)",
@@ -194,6 +200,11 @@
           "id": "kural-tab",
           "title": "Tab Completion",
           "icon": "media/chat-icon.svg"
+        },
+        {
+          "id": "kural-usage",
+          "title": "AI Usage",
+          "icon": "media/usage-icon.svg"
         }
       ]
     },
@@ -218,6 +229,13 @@
           "type": "webview",
           "id": "kural.tabPanel",
           "name": "Tab Completion"
+        }
+      ],
+      "kural-usage": [
+        {
+          "type": "webview",
+          "id": "kural.usagePanel",
+          "name": "AI Usage"
         }
       ]
     },

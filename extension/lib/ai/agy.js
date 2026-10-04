@@ -270,7 +270,8 @@ function parseUsage(text) {
     if (!pct || cols.length < 2) continue;
     const remaining = /remaining/i.test(line);
     const used = remaining ? 100 - Number(pct[1]) : Number(pct[1]);
-    windows.push({ id: cols[0].toLowerCase().replace(/\W+/g, "_"), label: cols[0].replace(/ Models?$/i, ""), usedPercent: Math.max(0, Math.min(100, used)), resetsAt: null });
+    windows.push({ id: cols[0].toLowerCase().replace(/\W+/g, "_"), label: cols[0].replace(/ Models?$/i, ""), usedPercent: Math.max(0, Math.min(100, used)), resetsAt: null,
+      ...(/week/i.test(line) ? { period: "week" } : {}) });
   }
   // The one closest to its limit first: that's the one the status bar shows.
   return windows.sort((a, b) => b.usedPercent - a.usedPercent).slice(0, 4);
