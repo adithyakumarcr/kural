@@ -135,6 +135,21 @@
     return step(3, "Test", "todo", el("p", {}, `Sends one request to ${L.chosen}, the way Kural will use it.`), el("div", { class: "row" }, btn("Run the test", "testLocal", "primary")));
   }
 
+  // What an install is doing right now: the command, how long it runs, its last lines, and whether it has gone quiet.
+  function runBox(id) {
+    const R = S.run && S.run.id === id ? S.run : null;
+    if (!R) return el("p", { class: "note" }, "Installing… This page updates by itself when it's done.");
+    const mmss = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+    const quiet = R.now - R.last;
+    return el("div", { class: "run" },
+      el("div", { class: "run-head" }, spin(), el("strong", {}, "Installing"), el("code", {}, R.text || "…"), el("span", { class: "spacer" }), el("span", { class: "muted" }, mmss(R.now - R.started))),
+      el("pre", { class: "run-log" }, R.lines.length ? R.lines.join("\n") : "Starting…"),
+      quiet >= 60000
+        ? el("p", { class: "run-warn" }, icon("warning"), ` Nothing new for ${mmss(quiet)}. A big download can be quiet for a while; if it stays like this, stop it and try "Install in a terminal instead".`)
+        : el("p", { class: "muted small" }, `Last output ${Math.round(quiet / 1000)} s ago. If the install asks something, Kural asks you in a pop-up.`),
+      el("div", { class: "row" }, btn("Stop", "stopInstall"), el("a", { href: "#", onclick: (e) => { e.preventDefault(); post({ type: "showLog" }); } }, "Show the full output")));
+  }
+
   // ---------- Codex, Gemini (the same three steps) ----------
   function cliSteps(id) {
     const C = S.cliInfo[id], st = S.clis[id];
@@ -149,8 +164,8 @@
     else one = step(1, `Install ${C.program}`, installing ? "waiting" : i.state === "broken" ? "fail" : "todo",
       i.state === "broken" ? [el("p", {}, "Found ", el("code", {}, i.path), ", but it doesn't run. Install it again:")]
         : el("p", {}, `${C.program} is the official program for ${C.short}. Kural runs it in the background with its own login, so there's no key to paste.`),
-      installing ? el("p", { class: "note" }, "Installing (progress at the bottom right). If the install asks something, Kural asks you in a pop-up. This page updates by itself when it's done.")
-        : el("div", { class: "row" }, ib("Install for me", "installCli", "primary"), el("span", { class: "muted" }, "with Homebrew or npm, whichever this computer has")),
+      installing ? runBox(id)
+        : el("div", { class: "row" }, ib("Install for me", "installCli", "primary"), el("span", { class: "muted" }, /install\.(sh|ps1)/.test(C.install) ? `with ${C.short}'s official installer` : "with Homebrew or npm, whichever this computer has")),
       el("p", { class: "muted small" }, "Or paste this into a terminal yourself:"), code(C.install),
       C.installAlt ? el("p", { class: "muted small" }, "Or: ", el("code", {}, C.installAlt)) : null,
       installing ? null : el("p", { class: "muted small" }, il("Install in a terminal instead", "installCliTerminal")),
@@ -163,9 +178,13 @@
     else if (l.state === "ok") two = step(2, "Log in", "ok", el("p", {}, "Logged in", [l.email, l.method, l.plan].filter(Boolean).length ? el("span", { class: "muted" }, ` · ${[l.email, l.plan || l.method].filter(Boolean).join(" · ")}`) : ""));
     else two = step(2, "Log in", loggingIn ? "waiting" : l.state === "unknown" ? "warn" : "todo",
       el("p", {}, l.state === "unknown" ? `Kural can't tell whether ${C.short} is logged in. The test (step 3) will tell.` : `Log in to ${C.short} once. Kural uses the same login as ${C.program}.`),
-      loggingIn ? el("p", { class: "note" }, "Finish logging in in your browser. This page updates by itself.")
-        : [el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, "opens the login page in your browser")),
-          el("p", { class: "muted small" }, il("Log in in a terminal instead", "loginCliTerminal"))]);
+      loggingIn ? el("p", { class: "note" }, C.loginTerminal
+          ? `${C.short} logs in on its own screen: in the terminal below, pick the Google login (your browser opens). Kural closes the terminal by itself when you're logged in.`
+          : "Finish logging in in your browser. This page updates by itself.")
+        : C.loginTerminal
+          ? el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, `opens ${C.short}'s login screen in a terminal; it opens your browser`))
+          : [el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, "opens the login page in your browser")),
+            el("p", { class: "muted small" }, il("Log in in a terminal instead", "loginCliTerminal"))]);
     // 3. Test
     const t = st.test;
     let three;

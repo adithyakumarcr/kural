@@ -2,8 +2,7 @@
 //
 // Kural listens on a private local socket (a Unix socket only you can open; a named pipe on Windows). Each chat linked to
 // a device gets a random token; a call must carry it, so one chat can't use another chat's device. For each call Kural
-// asks the chat whether it may run (approve: your mode, the permission card), then runs it over SSH with the password,
-// which stays inside Kural.
+// asks the chat whether it may run (approve: your mode, the permission card), then runs it over SSH with Kural's key.
 
 const net = require("net");
 const os = require("os");
@@ -17,7 +16,7 @@ const IS_WIN = process.platform === "win32";
 const MCP = path.join(__dirname, "device-mcp.js");
 
 class Bridge {
-  // ssh: an Ssh (./ssh.js). lookup(deviceId) -> Promise<{ dev, password } | null>.
+  // ssh: an Ssh (./ssh.js). lookup(deviceId) -> Promise<{ dev, password: null } | { error } | null>.
   constructor(ssh, lookup) {
     this.ssh = ssh;
     this.lookup = lookup;
@@ -77,14 +76,16 @@ class Bridge {
     const args = req.args && typeof req.args === "object" ? req.args : {};
     const tool = String(req.tool || "");
     if (!["run_command", "read_file", "write_file", "list_dir"].includes(tool)) return { text: `Unknown tool ${tool}.`, isError: true };
+    // First whether the device can be reached at all (removed, or needs setting up again), then whether it may run.
+    const found = await this.lookup(s.deviceId);
+    if (!found) return { text: "The linked device was removed from Kural.", isError: true };
+    if (found.error) return { text: found.error, isError: true };
+    const { dev, password } = found;   // (password: null = Kural's SSH key)
     // Commands and writes change the device: your chat's mode decides (Agent asks you, Auto doesn't, Plan/Ask don't run them).
     if (tool === "run_command" || tool === "write_file") {
       const ok = await s.approve(tool, args);
       if (!ok || !ok.allow) return { text: (ok && ok.message) || "The user chose not to run this.", isError: true };
     }
-    const found = await this.lookup(s.deviceId);
-    if (!found) return { text: "The linked device was removed from Kural.", isError: true };
-    const { dev, password } = found;
     const signal = s.ctl.signal;
     if (signal.aborted) return { text: "This chat isn't linked to a device (any more).", isError: true };
     if (tool === "run_command") {

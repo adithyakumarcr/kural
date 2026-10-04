@@ -14,6 +14,16 @@
 - **Mac asks for access to Music, Photos or other folders:** Kural only needs your project folder. Click **Don't Allow**.
   If it keeps asking, [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you
   were doing.
+- **Mac asks for your login keychain password ("Kural wants to use … Safe Storage"):** Kural itself keeps nothing
+  in the keychain any more, and it turns off the GitHub integration's silent sign-in checks (branch protection, avatars,
+  its own login for `git push`) that caused this in projects cloned from GitHub; pushing uses Git's own login, like in
+  a terminal. Click **Deny**. If it still appears,
+  [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you were doing.
+- **Gemini says "This client is no longer supported for Gemini Code Assist for individuals":** Google stopped personal
+  Google accounts in Gemini CLI on 26 Sept 2026. Use **Antigravity** instead (Get started → Antigravity), with the same
+  Google account. See [[ChatGPT and Gemini]].
+- **An install seems stuck:** the Get started page shows its latest output and how long it has been quiet. **Stop**
+  ends it; **Install in a terminal instead** runs the same command where you can see everything.
 - **Start over like a new user:** in the source folder, `./install.sh --fresh` (your settings and chats move to a
   backup folder).
 

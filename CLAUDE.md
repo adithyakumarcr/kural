@@ -51,6 +51,26 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - `.github/workflows/build.yml` — tests + all three builds; a `v*` tag publishes a Release.
 
 ## Things that are easy to break
+- **Keychain prompts on the Mac** ("Kural wants to use … Safe Storage"): anything that reads VS Code's secret storage
+  triggers them (and again after each update). The built-in GitHub extension did, silently, in any GitHub repo
+  (branch protection, avatars, git auth): package.json `configurationDefaults` turns `github.branchProtection`,
+  `github.showAvatar`, `github.gitAuthentication` off. Don't use `context.secrets` in Kural. `rebrand.py` renames the
+  app (package.json `name` → Kural; it was "VSCodium", whose name Electron gives its keychain item).
+- **Antigravity** (`lib/ai/agy.js`, id/prefix `agy`): Google's `agy` CLI, for personal Google accounts (Gemini CLI
+  refuses them since 26 Sept 2026: "no longer supported for Gemini Code Assist for individuals"; gemini.js `friendly()`
+  explains that). No ACP: stream-json like Claude Code (`--input-format/--output-format stream-json
+  --disable-slash-commands --print-timeout 12h --add-dir <cwd>`; `--add-dir` is load-bearing). Events: `init`
+  (conversation_id), `step_update` (agent_response `text_delta`; tool `tool_info.{name,parameters,output,error}`),
+  `result` (ends a turn; `usage` adds up per process). **No approvals possible**: Ask = default, Plan = `--mode plan`,
+  Agent = `--mode accept-edits` (commands soft-denied; the answer streams a note listing them), Auto =
+  `--dangerously-skip-permissions`. Mode/model are launch flags → a new agy with `--conversation <id>` (map file
+  `agy-sessions.json`; an unknown id silently starts a new one: then the instructions go again). Stop = SIGINT (agy
+  exits; next message respawns). Text-only input: pictures are saved to a folder passed with `--add-dir`. Undo: a
+  best-effort `onPermission` Edit/Write when a tool step starts (agy doesn't wait). No login command: Get started
+  (`loginTerminal`) runs `agy` in a terminal and polls `agyAuth` (`--print /model --output-format json`, no quota),
+  closing it when logged in. Limits: `--print /usage`. Install: Google's script (`install.js` `script` plan). Test with
+  `test/fake-agy.js` (`kural.agyPath`; state in `FAKE_AGY_FILE`/tmp). Never checked against the real agy (blocked here):
+  verify event names and tool parameter names with a real account (`KURAL_RAW_LOG=/tmp/raw.jsonl` logs agy's lines).
 - **Codex and Gemini** (`lib/ai/codex.js`, `lib/ai/gemini.js`, described once in `lib/ai/clis.js`; no vscode inside):
   each is an agent class with `LocalAgent`'s methods that turns the program's protocol into Claude Code's stream-json
   events, so the chat needs no special code. Model ids `codex:<id>` / `gemini:<id>` (`default` = the program's own).
@@ -68,27 +88,32 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   first on PATH so Kural gets the URL and opens it (`vscode.env.openExternal`); CI / NO_BROWSER / DEBIAN_FRONTEND /
   SSH_* cleared, else Gemini switches to a paste-a-code flow that hangs ACP. The shim is a fresh `mkdtemp` folder,
   polled from spawn on (with `selectedType: oauth-personal` but no creds, Gemini starts the login before answering
-  `initialize`). `Rpc` runs Gemini in its own process group and kills the group (+SIGKILL after 2 s): Gemini re-spawns
+  `initialize`). The install shows live on the page (`this.run`: command, lines, quiet time; Stop; a 3-minute-quiet
+  notification), since a silent install looks stuck. `Rpc` runs Gemini in its own process group and kills the group (+SIGKILL after 2 s): Gemini re-spawns
   itself as a child that ignores SIGTERM while waiting for a login. Notifications there are never awaited
   while `installing`/`loggingIn` is set. Terminal ways stay as fallbacks (`installCliTerminal`, `loginCliTerminal`). Tests: `test/fake-codex.js`, `test/fake-gemini.js` (state via `FAKE_CODEX_STATE` /
   `FAKE_GEMINI_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.geminiPath` pointing at
   the fakes. The real programs were only checked logged out: verify streaming, approvals and tool names with real
   accounts when you can.
-- **Devices over SSH** (`lib/devices/`): `ssh.js` (no vscode) runs the computer's own `ssh` with password auth through
-  `SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`; the askpass prints `KURAL_SSH_PW`, set only in that ssh's env), Kural's
-  own known_hosts (accept-new: trust on first use), ControlMaster reuse on Mac/Linux (ControlPath under /tmp: macOS
+- **Devices over SSH** (`lib/devices/`): `ssh.js` (no vscode) runs the computer's own `ssh` with **Kural's own key**
+  (`<globalStorage>/ssh/id_ed25519`, made by `ssh-keygen`; `-i`, IdentitiesOnly, BatchMode, no password auth). The
+  password is used once by `installKey` (adding a device, "Set up again") to append the public key to the device's
+  `~/.ssh/authorized_keys`, through `SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`; the askpass prints `KURAL_SSH_PW`, set
+  only in that ssh's env), then it's gone: **nothing in the keychain** (`context.secrets` made the Mac ask for the login
+  keychain password, and again after every update: each ad-hoc-signed build is a new app to the keychain). Devices
+  saved by an older version (no `auth: "key"`) need "Set up again" once; `remove` takes the key off (`removeKey`).
+  `run(dev, null, …)` = the key; a non-null password only in `installKey`. Kural's own known_hosts (accept-new), ControlMaster reuse on Mac/Linux (ControlPath under /tmp: macOS
   allows 104 characters), `reuse:false` for login checks. `run()` answers at once on timeout/abort (with a reused
   connection, "close" waits for the device's command); `runLimited` adds the device's `timeout` in `$SHELL`; `qp()` keeps
-  `~/` meaning home; `forgetKey` matches hashed known_hosts lines too (Ubuntu hashes them). `index.js`: devices in globalState `kural.devices.v1`,
-  passwords in `context.secrets` (never elsewhere). A chat with `tab.device` gets the `device` MCP server
+  `~/` meaning home; `forgetKey` matches hashed known_hosts lines too (Ubuntu hashes them). `index.js`: devices in globalState `kural.devices.v1`. A chat with `tab.device` gets the `device` MCP server
   (`device-mcp.js`, a relay) whose calls come back to `bridge.js` (a private socket, a token per chat); Kural asks per
   mode (`approveDevice` → permission card "Run this on <name>?"), so the tools are pre-allowed for Claude, Codex gets
   `default_tools_approval_mode="approve"`, and for Gemini they're named `kural_device_<tool>` (`KURAL_DEVICE_PREFIX`;
   ACP doesn't say which server a tool is from) and auto-allowed as `mcp__gemini__kural_device_<tool>`. "Allow all" on a
   device card sets `tab.allowAllDevice` (that device only), never `tab.allowAll`. Unlinking, Stop, a model/engine switch
   and closing the tab end the token (`endDevice`), which aborts its running commands. The device terminal is
-  `isTransient` (VS Code would save its env, with the password, to restore it). Not for Ollama models (no
-  MCP in Kural's engine). Tests: `test/devices.test.js` with `test/fake-ssh.js` (`KURAL_SSH_BIN`). Real check: a local
+  `isTransient`. Only for Claude, Codex and Gemini (`deviceOk`): Ollama has no MCP in Kural's engine, and Antigravity can't
+  ask before a command. Tests: `test/devices.test.js` with `test/fake-ssh.js` (`KURAL_SSH_BIN`). Real check: a local
   sshd (`apt install openssh-server`, `sshd -p 2222`).
 - **Usage meter** (`lib/ai/usage.js` hub, drawn by `lib/account.js`): Claude Code sends `rate_limit_event`
   (`unifiedWindows.five_hour/seven_day.utilization`) after every answer; `ClaudeProcess.onData` and `claudeTest` report

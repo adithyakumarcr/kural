@@ -8,6 +8,7 @@ The status bar (bottom right) shows how much of your plan you've used:
 |---|---|
 | `Claude 45% · 24%` | Claude: 45 % of the 5-hour limit and 24 % of the weekly limit used |
 | `Codex 12% · 3%` | ChatGPT (Codex): the same two limits |
+| `Antigravity 13% · 1%` | Antigravity: its weekly limits used (Gemini models, Claude models…) |
 | `Gemini 1.2M tok` | Gemini: tokens used today (Gemini CLI doesn't report a share of a limit) |
 
 It turns orange from 80 % and red from 95 %. Hover for when each limit resets. The numbers come from the programs
@@ -17,7 +18,7 @@ minutes). To get Claude's numbers right now, Account menu → the usage line (on
 ## Account
 
 The person icon next to it shows your Claude plan; hover for who's logged in where. Click it for the Account menu, with
-a section each for Claude, ChatGPT (Codex) and Gemini:
+a section each for Claude, ChatGPT (Codex), Antigravity and Gemini:
 
 - **Who's logged in**: email, plan, organization.
 - **Usage**: the meter's numbers; and **Usage page**, which opens the provider's own usage page in your browser.

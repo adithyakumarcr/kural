@@ -41,9 +41,13 @@ const TEAM_SIZES = [2, 3, 4, 5];
 // A model on your own computer (Ollama) is saved as "ollama:<name>", e.g. "ollama:qwen3-coder:30b".
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
-const validModel = (m) => valid(MODELS, m) || (/^(ollama|codex|gemini):./.test(m || "") && m.length < 200);
+const validModel = (m) => valid(MODELS, m) || ((/^ollama:./.test(m || "") || !!cliOf(m)) && m.length < 200);
 // Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "gemini".
+const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("../ai/clis");
 const engineOf = (m) => brain.engineOf(m);
+// A linked device's tools need the model's program to take Kural's MCP server and ask Kural before each command:
+// Claude Code, Codex and Gemini CLI do; Kural's own engine (Ollama) has no MCP, and Antigravity can't ask.
+const deviceOk = (m) => ["claude", "codex", "gemini"].includes(engineOf(m));
 const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Gemini", "Your own model"
 
@@ -624,13 +628,12 @@ class ChatView {
     if (ready) for (const p of this.panes) { const t = this.tab(p.activeId); if (t && t.status === "idle") this.warm(t); }
   }
 
-  // Saved devices for the + menu (no passwords: those stay in SecretStorage).
+  // Saved devices for the + menu (no passwords: Kural logs in with its own SSH key).
   deviceList() { return this.devices ? this.devices.list().map((d) => ({ id: d.id, name: d.name, host: d.host, port: d.port, user: d.user, system: d.system || "" })) : []; }
 
   // Codex and Gemini for the model menu: set up or not, and their models.
   cliInfo() {
-    const { CLIS } = require("../ai/clis");
-    return ["codex", "gemini"].map((id) => ({ id, label: CLIS[id].label, short: CLIS[id].short, ready: brain.providerOf(`${id}:x`).ready(),
+    return CLI_IDS.map((id) => ({ id, label: CLIS[id].label, short: CLIS[id].short, ready: brain.providerOf(`${id}:x`).ready(),
       models: brain.cli[id].models || [], account: brain.cli[id].account || "" }));
   }
 
@@ -739,7 +742,7 @@ class ChatView {
     // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
     // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
     // this computer: Kural's own engine has no MCP.
-    const dev = tab.device && this.devices && !isLocal(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args),
+    const dev = tab.device && this.devices && deviceOk(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args),
       { prefix: engineOf(tab.model) === "gemini" ? GEMINI_DEVICE : "" }) : null;
     if (dev) { r.deviceToken = dev.token; r.deviceDevice = tab.device; }
     const deviceTools = dev ? DEVICE_TOOLS.map((t) => `mcp__device__${t}`) : [];
@@ -900,7 +903,7 @@ class ChatView {
       : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
         "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
     delete tab.carryOver;
-    const deviceNote = tab.device && this.devices && !isLocal(tab.model) ? this.devices.note(tab.device) : "";
+    const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
     r.pendingSend = prompt;
@@ -1356,7 +1359,9 @@ class ChatView {
       }
     }
     const editing = (x) => x === "agent" || x === "auto";
-    if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" ? "Plan" : tab.mode === "ask" ? "Ask" : "Editing"} mode applies from your next message` });
+    // Antigravity can't be asked: what it may do is fixed when it starts, so every mode applies from the next message.
+    if (engineOf(tab.model) === "agy") this.post({ type: "flash", text: "Antigravity: the new mode applies from your next message" });
+    else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" ? "Plan" : tab.mode === "ask" ? "Ask" : "Editing"} mode applies from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });
   }
@@ -1525,7 +1530,7 @@ class ChatView {
           // send() notices (tab.engine) and starts a new session that carries the conversation.
           if (tab.status === "idle" && !(tab.engine && tab.engine !== engineOf(m.model))) this.warm(tab);
           else this.post({ type: "flash", text: "The new model takes over with your next message" });
-        } else if (r && r.proc && !r.proc.exited) r.proc.setModel(isClaude(m.model) ? m.model : m.model.replace(/^(codex|gemini):/, "").replace(/^default$/, ""));
+        } else if (r && r.proc && !r.proc.exited) r.proc.setModel(isClaude(m.model) ? m.model : cliModel(m.model));
         // Switch right away, keeping the conversation — even in the middle of an answer:
         // Claude's next step already uses the new model.
         tab.modelName = null;

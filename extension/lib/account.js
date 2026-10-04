@@ -19,7 +19,7 @@ const { WIKI, ISSUES } = require("./chat/guide");
 
 const USAGE = { claude: "https://claude.ai/settings/usage", apiKey: "https://console.anthropic.com/settings/usage" };
 const SAVED = "kural.usage.v1";
-const NAMES = { claude: "Claude", codex: "Codex", gemini: "Gemini" };
+const NAMES = { claude: "Claude", codex: "Codex", agy: "Antigravity", gemini: "Gemini" };
 
 class Account {
   // getStarted: lib/getstarted.js; onSwitched(): Claude's running processes start again with the new login.

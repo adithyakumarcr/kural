@@ -20,7 +20,7 @@ your next message, because which tools the model has is fixed when it starts.
 
 ## The model menu (bottom of the chat)
 
-- **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, **ChatGPT (Codex)** and **Gemini** models (see
+- **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, **ChatGPT (Codex)**, **Antigravity** and **Gemini** models (see
   [[ChatGPT and Gemini]]), or a model **on this computer** (see [[Your Own Model]]). You can switch in the middle of a
   conversation; the new model gets the conversation so far.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for

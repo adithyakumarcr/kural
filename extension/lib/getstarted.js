@@ -10,7 +10,8 @@
 //     2. A chat model           → pick one you have, or download one that fits this computer's memory
 //     3. A test request works   → one request to that model through Kural's engine
 //
-//   ChatGPT (Codex), Gemini   OpenAI's Codex CLI / Google's Gemini CLI with their own login (lib/ai/clis.js):
+//   ChatGPT (Codex), Antigravity, Gemini   OpenAI's Codex CLI / Google's Antigravity CLI / Google's Gemini CLI with their
+//                             own login (lib/ai/clis.js):
 //     1. Installed              → "Install for me": Homebrew or npm, whichever this computer has, in the background;
 //                                 any question the installer asks becomes a pop-up (lib/ai/install.js)
 //     2. Logged in              → "Log in": the program's own login without a terminal; Kural opens the login page
@@ -40,6 +41,7 @@ const KEY = "kural.setup.v2";   // { claude: { bin, version, at, authSaid } | nu
 const OLD_KEY = "kural.setup.v1";
 const DOCS = "https://code.claude.com/docs/en/setup";
 const cfg = () => vscode.workspace.getConfiguration("kural");
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const tilde = (p) => p && p.startsWith(os.homedir()) ? "~" + p.slice(os.homedir().length) : p;
 
 // Good open models for coding with tools, biggest first; the page offers the ones that fit this computer.
@@ -181,25 +183,30 @@ class GetStarted {
     const install = checks.installFor(process.platform);
     this.s.local.pulls = Object.fromEntries(this.pulls);
     const cliInfo = Object.fromEntries(CLI_IDS.map((id) => [id, { label: CLIS[id].label, short: CLIS[id].short, program: CLIS[id].program, what: CLIS[id].what,
-      facts: CLIS[id].facts, install: CLIS[id].install, installAlt: CLIS[id].installAlt, set: !!this.rec[id] }]));
+      facts: CLIS[id].facts, install: CLIS[id].install, installAlt: CLIS[id].installAlt, loginTerminal: !!CLIS[id].loginTerminal, set: !!this.rec[id] }]));
     this.panel.webview.postMessage({ type: "state", ...this.s, cliInfo, ready: this.ready, claudeReady: this.claudeReady, localSet: this.rec.local ? this.rec.local.model : null,
       // (While Kural itself is installing or logging in, the page always shows it, whatever the polling is doing.)
-      waiting: this.installing ? `install-${this.installing}` : this.loggingIn ? `login-${this.loggingIn}` : this.waiting, install, platform: process.platform, memory: totalMemoryGB(),
+      waiting: this.installing ? `install-${this.installing}` : this.loggingIn ? `login-${this.loggingIn}` : this.waiting, install,
+      // What the install is doing right now: its last lines, how long it runs, when it last printed something.
+      run: this.run ? { id: this.run.id, text: this.run.text, lines: this.run.lines.slice(-8), started: this.run.started, last: this.run.last, now: Date.now() } : null, platform: process.platform, memory: totalMemoryGB(),
       tabModel: (LOCAL_MODELS.find((m) => m.id === (cfg().get("tabCompletion.localModel") || LOCAL_MODELS[1].id)) || LOCAL_MODELS[1]) });
   }
 
   // Check again (the page shows each step as it's found). shell: also ask your shell where claude is
   // (not on every poll: an interactive shell start is slow, and the installer puts claude where Kural looks anyway).
+  // (Asked while a check is running: wait for it, then check once more. Returning at once used to let the caller read
+  // the old state: right after an install, "not installed".)
   async refresh(shell = true) {
-    if (this.refreshing) return;
-    this.refreshing = true;
-    try {
+    if (this.refreshing) { this.refreshAgain = true; while (this.refreshing) await this.refreshing.catch(() => {}); return; }
+    this.refreshing = (async () => {
       if (this.s.path === "claude" || this.rec.claude) await this.checkClaude(shell);
       if (this.s.path === "local" || this.rec.local) await this.checkLocal();
       for (const id of CLI_IDS) if (this.s.path === id || this.rec[id]) await this.checkCli(id);
       this.post();
       this.refreshOptional();
-    } finally { this.refreshing = false; }
+    })();
+    try { await this.refreshing; } finally { this.refreshing = null; }
+    if (this.refreshAgain) { this.refreshAgain = false; await this.refresh(shell); }
     // You chose your own model and it's there: test it once by itself (like the Claude test).
     const L = this.s.local;
     if (this.s.path === "local" && L.chosen && L.models.some((m) => m.name === L.chosen) && L.test.state === "idle" && this.autoLocal !== L.chosen) {
@@ -415,22 +422,50 @@ class GetStarted {
     const c = CLIS[id];
     if (this.installing) return;
     this.installing = id;
+    // The run, shown live on the page (its output, how long, when it last printed) so you can see it isn't stuck.
+    const run = this.run = { id, text: "", lines: [], started: Date.now(), last: Date.now(), ac: new AbortController(), warned: false };
     this.wait(`install-${id}`);
+    let ticker = null;
     try {
       const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Installing ${c.program}`, cancellable: true }, (progress, token) => {
-        const ac = new AbortController();
-        token.onCancellationRequested(() => ac.abort());
-        let last = 0;
+        token.onCancellationRequested(() => run.ac.abort());
+        let lastLine = "";
+        const show = () => {
+          const secs = Math.round((Date.now() - run.started) / 1000), quiet = Math.round((Date.now() - run.last) / 1000);
+          progress.report({ message: `${lastLine.slice(0, 70) || run.text} (${mmss(secs)}${quiet >= 30 ? `, nothing new for ${mmss(quiet)}` : ""})` });
+          this.post();
+          // Nothing new for 3 minutes: say so once, with what you can do (it may just be a slow download).
+          if (quiet >= 180 && !run.warned) {
+            run.warned = true;
+            vscode.window.showWarningMessage(`Kural: installing ${c.program} has printed nothing for 3 minutes. It may still be downloading, or it may be stuck.`,
+              "Keep waiting", "Show output", "Stop").then((pick) => {
+              if (pick === "Show output") vscode.commands.executeCommand("kural.showLog");
+              if (pick === "Stop") run.ac.abort();
+              if (pick === "Keep waiting") { run.last = Date.now(); run.warned = false; }
+            });
+          }
+        };
+        ticker = setInterval(show, 1000);
         return installer.install(id, {
-          signal: ac.signal,
-          onPlan: (plan) => { log(`get started: installing ${c.program}: ${plan.text}`); progress.report({ message: plan.text }); },
+          signal: run.ac.signal,
+          onPlan: (plan) => { log(`get started: installing ${c.program}: ${plan.text}`); run.text = plan.text; run.lines.push(`$ ${plan.text}`); show(); },
           onOutput: (text) => {
-            for (const l of text.split(/\r?\n/)) if (l.trim()) log(`  ${l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").slice(0, 300)}`);
-            if (Date.now() - last > 1000) { last = Date.now(); const l = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split(/\r?\n|\r/).map((x) => x.trim()).filter(Boolean).pop(); if (l) progress.report({ message: l.slice(0, 80) }); }
+            run.last = Date.now();
+            for (const l of text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split(/\r?\n|\r/)) {
+              if (!l.trim()) continue;
+              log(`  ${l.slice(0, 300)}`);
+              run.lines.push(l.slice(0, 200)); lastLine = l.trim();
+            }
+            if (run.lines.length > 200) run.lines.splice(0, run.lines.length - 200);
           },
           ask: (q) => this.askInstaller(c, q),
         });
       });
+      if (r.plan && r.plan.missing === "curl") {
+        this.wait(null);
+        vscode.window.showWarningMessage(`Kural: ${c.program}'s installer needs curl and bash, and this computer doesn't have them. On Ubuntu: sudo apt install curl`);
+        return;
+      }
       if (r.plan && r.plan.missing) {
         this.wait(null);
         const why = r.plan.old ? `${c.program} needs Node.js ${r.plan.need} or newer; this computer has Node.js ${r.plan.old}.`
@@ -451,8 +486,13 @@ class GetStarted {
         });
         return;
       }
-      log(`get started: ${c.program} installed`);
+      log(`get started: ${c.program} installed${r.binDir ? ` (into ${r.binDir})` : ""}`);
       await this.refresh();
+      // Installed into a folder Kural doesn't look in by itself (npm's own folder, not on Kural's PATH): use that file.
+      if (this.s.clis[id].install.state !== "ok" && r.binDir) {
+        const f = [id, `${id}.cmd`, `${id}.exe`].map((n) => require("path").join(r.binDir, n)).find((p) => require("fs").existsSync(p));
+        if (f) { await cfg().update(`${id}Path`, f, vscode.ConfigurationTarget.Global); await this.refresh(); }
+      }
       // Installed somewhere Kural doesn't look by itself (an unusual npm folder): say so, and let you point to it.
       if (this.s.clis[id].install.state !== "ok") {
         this.wait(null);
@@ -463,7 +503,7 @@ class GetStarted {
       } else if (this.s.clis[id].login.state !== "ok") {
         vscode.window.showInformationMessage(`Kural: ${c.program} is installed. Next: log in.`, "Log in").then((pick) => { if (pick === "Log in") this.loginCli(id); });
       }
-    } finally { this.installing = null; this.post(); }
+    } finally { clearInterval(ticker); this.installing = null; this.run = null; this.post(); }
   }
 
   // A question from the installer, as a pop-up. The answer is what gets typed (null = stop the install).
@@ -503,6 +543,7 @@ class GetStarted {
       const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Log in to ${c.short} in your browser`, cancellable: true }, (progress, token) => {
         const ac = new AbortController();
         token.onCancellationRequested(() => ac.abort());
+        if (c.loginTerminal) { opened = true; return this.loginWithScreen(id, progress, ac.signal); }
         progress.report({ message: "opening the login page…" });
         return c.login(S.bin, { signal: ac.signal, openUrl: (url) => {
           opened = true;
@@ -523,6 +564,38 @@ class GetStarted {
     } finally { this.loggingIn = null; this.post(); }
   }
 
+  // A program that only logs in on its own screen (Antigravity: no login command): Kural runs it in a terminal (its
+  // first screen is the Google login, which opens your browser), checks every few seconds whether you're logged in,
+  // and closes the terminal by itself when you are. { ok } / { cancelled } / { error }.
+  loginWithScreen(id, progress, signal) {
+    const c = CLIS[id], S = this.s.clis[id];
+    progress.report({ message: "in the terminal below: pick the Google login; your browser opens. Kural closes the terminal when you're done." });
+    const term = vscode.window.createTerminal({ name: `Log in to ${c.short}`, shellPath: S.bin, cwd: ws.workDir(), isTransient: true,
+      iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel });
+    term.show();
+    return new Promise((resolve) => {
+      let done = false, checking = false;
+      const t0 = Date.now();
+      const end = (r) => { if (done) return; done = true; clearInterval(poll); closed.dispose(); try { term.dispose(); } catch { /* closed */ } resolve(r); };
+      const check = async () => {
+        if (checking || done) return;
+        checking = true;
+        const a = await c.auth(S.bin).catch(() => null);
+        checking = false;
+        if (a && a.loggedIn) end({ ok: true });
+        else if (Date.now() - t0 > 10 * 60 * 1000) end({ error: "The login wasn't finished in 10 minutes." });
+      };
+      const poll = setInterval(check, 4000);
+      // You closed the terminal: one last check (you may have logged in just before).
+      const closed = vscode.window.onDidCloseTerminal(async (t) => {
+        if (t !== term || done) return;
+        const a = await c.auth(S.bin).catch(() => null);
+        end(a && a.loggedIn ? { ok: true } : { cancelled: true });
+      });
+      if (signal) signal.addEventListener("abort", () => end({ cancelled: true }), { once: true });
+    });
+  }
+
   loginInTerminal(id) {
     this.terminal(`Log in to ${CLIS[id].short}`, CLIS[id].loginCommand(this.s.clis[id].bin));
     this.s.clis[id].test = { state: "idle" }; this[`autoTested_${id}`] = null;
@@ -534,6 +607,8 @@ class GetStarted {
       case "ready": this.post(); break;
       case "path": this.s.path = m.path === "local" || CLI_IDS.includes(m.path) ? m.path : "claude"; this.post(); await this.refresh(); break;
       case "installCli": if (CLIS[m.id]) await this.installCli(m.id); break;
+      case "stopInstall": if (this.run) this.run.ac.abort(); break;
+      case "showLog": vscode.commands.executeCommand("kural.showLog"); break;
       case "installCliTerminal": if (CLIS[m.id]) this.installInTerminal(m.id); break;
       case "loginCli": if (CLIS[m.id] && this.s.clis[m.id].bin) await this.loginCli(m.id); break;
       case "loginCliTerminal": if (CLIS[m.id] && this.s.clis[m.id].bin) this.loginInTerminal(m.id); break;

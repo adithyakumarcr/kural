@@ -48,6 +48,9 @@ def main(app, platform):
     pkg = os.path.join(app, "package.json")
     d = load(pkg)
     d["desktopName"] = f"{NAME}.desktop"
+    # Electron names the macOS keychain item that protects the app's saved secrets after this ("<name> Safe Storage").
+    # VSCodium's name made Kural ask for "VSCodium Safe Storage": VSCodium's item, not Kural's.
+    d["name"] = TITLE
     save(pkg, d)
 
     # 3. Built-in extension: Kural. (Claudemeter, included in earlier versions, is gone: Kural's Account item replaces

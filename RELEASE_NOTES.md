@@ -2,6 +2,23 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Antigravity (Google).** Google stopped personal Google accounts in Gemini CLI on 26 Sept 2026 ("This client is no
+  longer supported for Gemini Code Assist for individuals"). Kural now runs Google's **Antigravity CLI** instead, with
+  the same Google account (free, AI Pro or Ultra): Get started installs it with Google's installer, logs in (on its own
+  screen, in a terminal Kural closes by itself) and tests it; its models are in the model menu, its weekly limits in the
+  status bar. Antigravity can't ask before acting, so in Agent mode it edits files but runs no commands (the answer says
+  which it skipped); Auto runs them. Gemini CLI stays for Gemini API keys and company accounts, and its error now says
+  what happened and what to use.
+- **No more keychain password prompts on the Mac.** The prompt for "VSCodium Safe Storage" came from VS Code's GitHub
+  integration quietly checking for a GitHub login (branch protection, avatars) in projects cloned from GitHub. Kural
+  turns those checks off; pushing to GitHub from Source Control uses Git's own login, like in a terminal.
+- **Devices log in with an SSH key; the password isn't saved.** The password is used once, when you add a device, to
+  put Kural's own SSH key on it (like `ssh-copy-id`); after that Kural logs in with the key. Nothing goes into the
+  keychain. **Set up again** puts the key back after reinstalling a device; **Remove** takes it off.
+- **See what an install is doing.** While installing, the Get started page shows the command, how long it has run, its
+  latest output, and a warning when it has printed nothing for a minute; **Stop** ends it. After 3 quiet minutes Kural
+  asks whether to keep waiting.
+
 - **Installing and logging in to Codex and Gemini without a terminal.** **Install for me** now uses whatever your
   computer has (Homebrew on a Mac, otherwise npm), runs in the background, and turns any question the installer asks
   into a pop-up. On a Mac without Homebrew or Node.js, Kural says so and opens Node.js's download page instead of
@@ -10,8 +27,8 @@ These changes aren't in a release yet. When releasing, rename this heading to "W
 
 - **Devices over SSH.** Working on a Raspberry Pi or a board computer? **+ → Link device** saves it once (name,
   address, username, password) and links it to the chat. The AI can then run commands and read and write files on it,
-  asking you first in Agent mode. Click the device's chip for a terminal on it. The password is stored encrypted by
-  your computer's own keychain and is never sent to an AI. **Kural: Devices** to change a password, forget a device's
+  asking you first in Agent mode. Click the device's chip for a terminal on it. The password is used once to set up
+  Kural's SSH key on the device and is never saved or sent to an AI. **Kural: Devices** to set it up again, forget a device's
   key or remove it.
 
 - **ChatGPT (Codex) and Gemini.** Use your ChatGPT plan (through OpenAI's Codex CLI) or your Google account / Gemini API

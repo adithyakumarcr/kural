@@ -1,37 +1,54 @@
-# ChatGPT and Gemini
+# ChatGPT, Antigravity and Gemini
 
-Besides Claude, Kural can use **ChatGPT (Codex)** and **Gemini** with your own account. Like Claude, Kural runs the
-official program in the background and uses its login: there's no key to paste into Kural.
+Besides Claude, Kural can use **ChatGPT (Codex)**, **Antigravity (Google)** and **Gemini** with your own account. Like
+Claude, Kural runs the official program in the background and uses its login: there's no key to paste into Kural.
 
-| | ChatGPT (Codex) | Gemini |
-|---|---|---|
-| Program | [Codex CLI](https://developers.openai.com/codex/cli) (`codex`) | [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`) |
-| Account | ChatGPT Plus, Pro, Business or Enterprise (or an OpenAI API key) | a Google account (free tier) or a Gemini API key |
-| Install (Mac) | `brew install codex` | `brew install gemini-cli` |
-| Install (Ubuntu, Windows) | `npm install -g @openai/codex` | `npm install -g @google/gemini-cli` |
+| | ChatGPT (Codex) | Antigravity (Google) | Gemini |
+|---|---|---|---|
+| Program | [Codex CLI](https://developers.openai.com/codex/cli) (`codex`) | [Antigravity CLI](https://antigravity.google/docs/cli) (`agy`) | [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`) |
+| Account | ChatGPT Plus, Pro, Business or Enterprise (or an OpenAI API key) | a Google account: free, Google AI Pro or Ultra | a Gemini API key, or a company (Workspace) account |
+| Install (Mac, Ubuntu) | `brew install codex` or `npm install -g @openai/codex` | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | `brew install gemini-cli` or `npm install -g @google/gemini-cli` |
+| Install (Windows) | `npm install -g @openai/codex` | `irm https://antigravity.google/cli/install.ps1 \| iex` | `npm install -g @google/gemini-cli` |
+
+**Gemini with a personal Google account?** Google stopped that on 26 Sept 2026: Gemini CLI answers "This client is no
+longer supported for Gemini Code Assist for individuals" and points to Antigravity. Use **Antigravity** with the same
+Google account. Gemini CLI still works with a Gemini API key or a company account.
 
 ## Set it up
 
-**Get started** → **ChatGPT (Codex)** or **Gemini**. Three steps, like Claude:
+**Get started** → **ChatGPT (Codex)**, **Antigravity** or **Gemini**. Three steps, like Claude:
 
-1. **Installed.** **Install for me** installs it in the background (progress at the bottom right) with whatever this
-   computer has: Homebrew on a Mac, otherwise npm. If the installer asks something ("continue? [y/N]"), Kural asks you
-   in a pop-up and passes your answer on. Without Homebrew and Node.js, Kural says so and opens Node.js's download page
-   ([nodejs.org](https://nodejs.org): a normal installer); then click **Install for me** again. If npm isn't allowed to
-   write to its shared folder, Kural installs into `~/.npm-global` instead (no password needed).
-   Installed somewhere Kural can't find? **Choose the codex/gemini file…** (settings `kural.codexPath`,
+1. **Installed.** **Install for me** installs it in the background, and the page shows what's happening: the command,
+   how long it has been running, its latest output, and a warning if it has printed nothing for a minute (a big
+   download can be quiet; **Stop** ends it). If it's quiet for 3 minutes, Kural also asks whether to keep waiting. If
+   the installer asks something ("continue? [y/N]"), Kural asks you in a pop-up and passes your answer on.
+   - Codex and Gemini: with whatever this computer has, Homebrew on a Mac, otherwise npm. Without Homebrew and
+     Node.js, Kural says so and opens Node.js's download page ([nodejs.org](https://nodejs.org): a normal installer);
+     then click **Install for me** again. If npm isn't allowed to write to its shared folder, Kural installs into
+     `~/.npm-global` instead (no password needed).
+   - Antigravity: Google's own installer (one program, no Node.js needed).
+
+   Installed somewhere Kural can't find? **Choose the … file** (settings `kural.codexPath`, `kural.agyPath`,
    `kural.geminiPath`). **Install in a terminal instead** runs the commands above in a terminal.
-2. **Logged in.** **Log in** opens the login page in your browser (Google for Gemini, ChatGPT for Codex). Log in there;
-   the page turns green by itself. **Cancel** in the progress message stops waiting. **Log in in a terminal instead**
-   is still there if you prefer the program's own login screen.
+2. **Logged in.**
+   - Codex and Gemini: **Log in** opens the login page in your browser. Log in there; the page turns green by itself.
+     **Cancel** in the progress message stops waiting.
+   - Antigravity has no login command: it logs in on its own screen. **Log in** opens it in a terminal; pick the Google
+     login there and your browser opens. Kural checks every few seconds and closes the terminal by itself once you're
+     logged in.
 3. **A test.** One tiny request. When it passes, its models appear in the chat's model menu.
 
 ## What works
 
-- The chat in every mode: it reads and edits files, runs commands (asking first in Agent mode), and each change can be
-  kept or undone. Thinking shows like Claude's.
+- The chat in every mode: it reads and edits files, runs commands, and each change can be kept or undone.
+  - Codex and Gemini ask Kural before each command in Agent mode, like Claude.
+  - **Antigravity can't ask** before it acts (Google's program has no way to). So in **Agent** mode it edits files but
+    runs no commands; the answer says which commands it didn't run. In **Auto** it runs commands. **Plan** and **Ask**
+    change nothing. A mode change applies from your next message. Undo works for its edits on a best-effort basis.
+  - Antigravity can't read attached pictures directly: Kural saves them where it can open them and tells it where.
 - Ask, Ctrl+K, Apply, commit messages and plain words in the terminal use the chat's model, so these too.
-- The usage meter: Codex shows its 5-hour and weekly limits like Claude; Gemini shows the tokens used today.
+- The usage meter: Codex shows its 5-hour and weekly limits like Claude; Antigravity its weekly limits; Gemini the
+  tokens used today.
 - The Account menu: who's logged in, the usage page, switch account, log out.
 
 ## What needs Claude
@@ -39,5 +56,7 @@ official program in the background and uses its login: there's no key to paste i
 - [[Multiple Agents]]
 - Claude Code's connectors, MCP servers, plugins and skills
 - Linking Jira tickets
+- [[Devices]] work with Claude, Codex and Gemini, not with Antigravity (it can't ask before running a command there)
 
-Switching a chat between Claude, Codex, Gemini and your own model works: the new model gets the conversation so far.
+Switching a chat between Claude, Codex, Antigravity, Gemini and your own model works: the new model gets the
+conversation so far.

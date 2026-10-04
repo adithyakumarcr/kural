@@ -1,9 +1,13 @@
 // Talking to a device (a Raspberry Pi, a robot's computer…) over SSH, with the computer's own `ssh` program. No vscode
 // here, no npm packages.
 //
-// The password: `ssh` never takes one on its command line (anyone could read it there). It asks a small "askpass"
-// program instead (SSH_ASKPASS, SSH_ASKPASS_REQUIRE=force). Kural's askpass prints KURAL_SSH_PW, an environment value
-// that only this one `ssh` process (and its askpass) gets. The password itself is stored encrypted by lib/devices/index.js.
+// How Kural logs in: with its own SSH key (like `ssh-copy-id`), never a stored password. When you add a device, the
+// password you type is used ONCE (installKey) to put Kural's public key into the device's ~/.ssh/authorized_keys; after
+// that every connection uses the key, and the password is gone (not saved anywhere: no keychain, no file). The key
+// pair is Kural's own (<globalStorage>/ssh/id_ed25519, made by ssh-keygen, readable only by you), one for all devices.
+// That one time, `ssh` gets the password from a small "askpass" program (SSH_ASKPASS, SSH_ASKPASS_REQUIRE=force) that
+// prints KURAL_SSH_PW, an environment value only that `ssh` process has: never on a command line, where anyone could
+// read it.
 //
 // The device's key: the first connection trusts it and remembers it in Kural's own known_hosts file (like answering
 // "yes" the first time in a terminal); a later different key is refused (someone may be in between).
@@ -32,6 +36,10 @@ class Ssh {
     fs.mkdirSync(this.dir, { recursive: true });
     this.knownHosts = path.join(this.dir, "known_hosts");
     this.askpass = this.writeAskpass();
+    this.key = path.join(this.dir, "id_ed25519");
+    // ssh-keygen sits next to ssh (Windows: C:\Windows\System32\OpenSSH), else on PATH.
+    const near = path.isAbsolute(this.bin) ? path.join(path.dirname(this.bin), IS_WIN ? "ssh-keygen.exe" : "ssh-keygen") : null;
+    this.keygen = process.env.KURAL_SSH_KEYGEN || (near && fs.existsSync(near) ? near : IS_WIN ? "ssh-keygen.exe" : "ssh-keygen");
     // A short folder for reused connections: macOS allows at most 104 characters for their socket path.
     this.controlDir = IS_WIN ? null : path.join("/tmp", `kural-ssh-${process.getuid ? process.getuid() : "u"}`);
     if (this.controlDir) { try { fs.mkdirSync(this.controlDir, { recursive: true, mode: 0o700 }); fs.chmodSync(this.controlDir, 0o700); } catch { this.controlDir = null; } }
@@ -46,29 +54,36 @@ class Ssh {
     return file;
   }
 
-  // The options every connection uses. dev: { host, port, user }.
-  args(dev, { tty = false, reuse = true } = {}) {
+  // The options every connection uses. dev: { host, port, user }. password: true only for installKey's one login;
+  // otherwise Kural's key and nothing else (BatchMode: ssh never stops to ask anything).
+  args(dev, { tty = false, reuse = true, password = false } = {}) {
     const a = ["-p", String(dev.port || 22), "-o", "StrictHostKeyChecking=accept-new", "-o", `UserKnownHostsFile=${this.knownHosts}`,
-      "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "NumberOfPasswordPrompts=1", "-o", "LogLevel=ERROR",
-      "-o", "PreferredAuthentications=password,keyboard-interactive", "-o", "PubkeyAuthentication=no"];
+      "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "LogLevel=ERROR",
+      ...(password
+        ? ["-o", "NumberOfPasswordPrompts=1", "-o", "PreferredAuthentications=password,keyboard-interactive", "-o", "PubkeyAuthentication=no"]
+        : ["-i", this.key, "-o", "IdentitiesOnly=yes", "-o", "PreferredAuthentications=publickey", "-o", "PasswordAuthentication=no",
+          "-o", "KbdInteractiveAuthentication=no", "-o", "BatchMode=yes"])];
     if (reuse && this.controlDir) a.push("-o", "ControlMaster=auto", "-o", `ControlPath=${path.join(this.controlDir, "%C")}`, "-o", "ControlPersist=600");
     if (tty) a.push("-t"); else a.push("-T");
     a.push(`${dev.user}@${dev.host}`);
     return a;
   }
 
-  // The environment for `ssh` (and only it): where askpass is, and the password it prints.
+  // The environment for `ssh` (and only it). With a password (installKey): where askpass is, and what it prints.
   env(password) {
-    return { ...process.env, SSH_ASKPASS: this.askpass, SSH_ASKPASS_REQUIRE: "force", DISPLAY: process.env.DISPLAY || ":0", KURAL_SSH_PW: password || "" };
+    if (password == null) return { ...process.env };
+    return { ...process.env, SSH_ASKPASS: this.askpass, SSH_ASKPASS_REQUIRE: "force", DISPLAY: process.env.DISPLAY || ":0", KURAL_SSH_PW: password };
   }
 
   // Run one command on the device. Resolves { code, stdout, stderr, timedOut, cut }.
-  // reuse: false for a login check (a reused connection would hide a wrong password).
+  // password: null = Kural's key (always, except installKey). reuse: false for a login check (a reused connection
+  // would hide a failing login).
   run(dev, password, command, { timeout = 120000, input = null, signal, reuse = true } = {}) {
     return new Promise((resolve) => {
       let out = "", err = "", cut = false, done = false, timedOut = false;
-      const p = spawn(this.bin, [...this.args(dev, { reuse }), command], { env: this.env(password), windowsHide: true });
-      const finish = (code) => { if (done) return; done = true; clearTimeout(timer); resolve({ code, stdout: out, stderr: err.trim(), timedOut, cut }); };
+      const pw = password != null;
+      const p = spawn(this.bin, [...this.args(dev, { reuse: reuse && !pw, password: pw }), command], { env: this.env(password), windowsHide: true });
+      const finish = (code) => { if (done) return; done = true; clearTimeout(timer); resolve({ code, stdout: out, stderr: err.trim(), timedOut, cut, withKey: !pw }); };
       // Timeout or Stop: answer at once. (Waiting for "close" isn't enough: with a reused connection the shared one keeps
       // ssh's output open until the device's command ends, which for `tail -f` is never.)
       const stop = (why) => { if (done) return; if (why === "timeout") timedOut = true; else err += "Stopped."; try { p.kill(); } catch { /* gone */ } finish(null); };
@@ -83,11 +98,49 @@ class Ssh {
     });
   }
 
-  // The device answers, and what it is: { ok, system } or { ok: false, error }.
-  async test(dev, password) {
-    const r = await this.run(dev, password, "echo kural-ok; uname -srm 2>/dev/null || ver", { timeout: 25000, reuse: false });
+  // The device answers with Kural's key, and what it is: { ok, system } or { ok: false, error }.
+  async test(dev) {
+    const r = await this.run(dev, null, "echo kural-ok; uname -srm 2>/dev/null || ver", { timeout: 25000, reuse: false });
     if (r.code === 0 && /kural-ok/.test(r.stdout)) return { ok: true, system: r.stdout.replace("kural-ok", "").trim().split("\n")[0] || "" };
     return { ok: false, error: explain(r) };
+  }
+
+  // Kural's key pair, made once. Resolves the public key line ("ssh-ed25519 AAAA… kural@host").
+  async ensureKey() {
+    if (!fs.existsSync(this.key) || !fs.existsSync(`${this.key}.pub`)) {
+      for (const f of [this.key, `${this.key}.pub`]) { try { fs.unlinkSync(f); } catch { /* not there */ } }
+      const r = await new Promise((resolve) => {
+        const p = spawn(this.keygen, ["-q", "-t", "ed25519", "-N", "", "-C", `kural@${os.hostname().split(".")[0] || "computer"}`, "-f", this.key], { windowsHide: true });
+        let err = "";
+        p.stderr.on("data", (d) => { err += d; });
+        p.on("error", (e) => resolve({ code: -1, err: e.code === "ENOENT" ? "There's no ssh-keygen program on this computer." : e.message }));
+        p.on("close", (code) => resolve({ code, err }));
+      });
+      if (r.code !== 0) throw new Error(`Kural couldn't make its SSH key: ${String(r.err).trim() || `ssh-keygen stopped (${r.code})`}`);
+      try { fs.chmodSync(this.key, 0o600); } catch { /* Windows: the folder is yours only */ }
+    }
+    return fs.readFileSync(`${this.key}.pub`, "utf8").trim();
+  }
+
+  // Add a device: the password, this once, to put Kural's key on it; then a check that the key works.
+  // { ok, system } or { ok: false, error }. The password isn't kept.
+  async installKey(dev, password) {
+    let pub;
+    try { pub = await this.ensureKey(); } catch (e) { return { ok: false, error: e.message }; }
+    if (!/^ssh-ed25519 [A-Za-z0-9+/=]+( \S+)?$/.test(pub)) return { ok: false, error: "Kural's SSH key looks damaged. Remove the ssh folder in Kural's data and try again." };
+    const line = q(pub);
+    const r = await this.run(dev, password || "", "umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && " +
+      `{ grep -qxF ${line} ~/.ssh/authorized_keys || printf '%s\\n' ${line} >> ~/.ssh/authorized_keys; } && echo kural-key-ok`, { timeout: 25000, reuse: false });
+    if (r.code !== 0 || !/kural-key-ok/.test(r.stdout)) return { ok: false, error: explain(r) };
+    const t = await this.test(dev);
+    if (!t.ok) return { ok: false, error: `The password worked, but the device doesn't accept Kural's key (${t.error}). Its SSH server may not allow keys (PubkeyAuthentication no in /etc/ssh/sshd_config), or its home folder is writable by others.` };
+    return t;
+  }
+
+  // Take Kural's key off the device (when you remove it from Kural). Best effort: the device may be off.
+  async removeKey(dev) {
+    let pub; try { pub = fs.readFileSync(`${this.key}.pub`, "utf8").trim(); } catch { return; }
+    await this.run(dev, null, `f=~/.ssh/authorized_keys; [ -f "$f" ] || exit 0; umask 077; grep -vxF ${q(pub)} "$f" > "$f.kural"; cat "$f.kural" > "$f"; rm -f "$f.kural"`, { timeout: 10000, reuse: false });
   }
 
   // A device whose key changed (reinstalled, a new SD card): forget the old key, so the next connection trusts the new one.
@@ -106,13 +159,13 @@ class Ssh {
     this.close(dev);
   }
 
-  // Close a reused connection (after a password change, removing the device).
+  // Close a reused connection (after setting the key up again, removing the device).
   close(dev) {
     if (!this.controlDir) return;
-    try { spawn(this.bin, [...this.args(dev), "-O", "exit"], { stdio: "ignore", env: this.env("") }).on("error", () => {}); } catch { /* no master */ }
+    try { spawn(this.bin, [...this.args(dev), "-O", "exit"], { stdio: "ignore", env: this.env(null) }).on("error", () => {}); } catch { /* no master */ }
   }
 
-  // The command line for a terminal on the device (the terminal gets env() for the password).
+  // The command line for a terminal on the device (Kural's key; nothing secret in its environment).
   terminalArgs(dev) { return this.args(dev, { tty: true }); }
 
   // Files on the device, through plain shell commands (every Linux has them).
@@ -137,6 +190,8 @@ class Ssh {
 function explain(r) {
   const e = `${r.stderr || ""}`;
   if (r.timedOut || /timed out/i.test(e)) return "The device didn't answer in time. Is it on, and on the same network?";
+  if (r.withKey && /Permission denied/i.test(e))
+    return "The device no longer accepts Kural's key (was it reinstalled, or the key removed?). Kural: Devices → the device → Set up again.";
   if (/Permission denied/i.test(e)) return "The username or password is wrong (the device said: permission denied).";
   if (/Could not resolve hostname/i.test(e)) return "No device with that name was found. Check the address (e.g. 192.168.1.20 or raspberrypi.local).";
   if (/Connection refused/i.test(e)) return "The device refused the connection. Is SSH turned on there (on a Raspberry Pi: raspi-config → Interface Options → SSH)?";

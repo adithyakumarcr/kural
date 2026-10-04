@@ -4,7 +4,8 @@
 //   PROVIDERS (below), one entry each:
 //     claude  "opus" / "sonnet" / "haiku"   → Claude Code (./claude.js) with your Claude login
 //     codex   "codex:<model>"               → Codex CLI (./codex.js) with your ChatGPT login
-//     gemini  "gemini:<model>"              → Gemini CLI (./gemini.js) with your Google login or Gemini API key
+//     gemini  "gemini:<model>"              → Gemini CLI (./gemini.js) with a Gemini API key or a company account
+//     agy     "agy:<model>"                 → Antigravity CLI (./agy.js) with your Google account
 //     ollama  "ollama:<name>"               → Kural's own engine (./engine.js + ./tools.js), through Ollama, offline
 //   To add a provider (LM Studio, an OpenAI-compatible server…): an entry with the same shape — owns(model),
 //   ready(), agent(…) (a conversation process with ClaudeProcess's methods and events), ask(…) (one answer) —
@@ -16,11 +17,11 @@ const path = require("path");
 const { ClaudeProcess, ClaudeSession, isSetUp, log } = require("./claude");
 const ws = require("../workspace");
 const { LocalAgent, systemPrompt, post, errorText, friendly } = require("./engine");
-const { CLIS, cliOf, cliModel } = require("./clis");
+const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("./clis");
 
 // Codex and Gemini: where their program is and whether Get started's test passed (set by lib/getstarted.js), and the
 // models each offers (for the chat's model menu). Folder for their conversation ids (set by extension.js).
-const cli = { codex: { bin: null, ready: false, models: [] }, gemini: { bin: null, ready: false, models: [] } };
+const cli = Object.fromEntries(CLI_IDS.map((id) => [id, { bin: null, ready: false, models: [] }]));
 const setCli = (id, info) => { if (cli[id]) Object.assign(cli[id], info); };
 let cliStore = null;
 const setStore = (dir) => { cliStore = dir; };
@@ -42,7 +43,7 @@ const currentModel = () => {
 // A model that can be used now: your own model, then Codex, then Gemini (Claude's is the default anyway).
 function fallbackModel() {
   const l = localFallback(); if (l) return l;
-  for (const id of ["codex", "gemini"]) if (cli[id].ready && cli[id].bin) return `${id}:${(cli[id].models.find((x) => x.isDefault) || {}).id || "default"}`;
+  for (const id of CLI_IDS) if (cli[id].ready && cli[id].bin) return `${id}:${(cli[id].models.find((x) => x.isDefault) || {}).id || "default"}`;
   return isSetUp() ? "sonnet" : null;
 }
 const setModelSource = (f, fallback) => { modelSource = f; if (fallback) localFallback = fallback; };
@@ -81,7 +82,7 @@ const PROVIDERS = [
       appendSystemPrompt: opts.appendSystemPrompt, effort: opts.effort, jsonSchema: opts.jsonSchema, sessionId: opts.sessionId,
       resume: opts.resume, ...local, model: localName(model), baseUrl: ollamaUrl(), contextLength: contextLength() }, handlers),
     ask: (model, system, prompt, token, quiet) => askLocal(model, system, prompt, token, quiet) },
-  ...["codex", "gemini"].map((id) => ({ id, label: CLIS[id].label, owns: (m) => cliOf(m) === id, ready: () => cli[id].ready && !!cli[id].bin,
+  ...CLI_IDS.map((id) => ({ id, label: CLIS[id].label, owns: (m) => cliOf(m) === id, ready: () => cli[id].ready && !!cli[id].bin,
     agent: (model, opts, _local, handlers) => cliAgent(id, model, opts, handlers),
     ask: (model, system, prompt, token) => askCli(id, model, system, prompt, token) })),
   { id: "claude", label: "Claude", owns: () => true, ready: () => isSetUp(),
