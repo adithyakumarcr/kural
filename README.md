@@ -140,6 +140,9 @@ Also in the chat:
   a key like `PROJ-123`, or words. Claude then knows in every message which ticket you're working on, and reads
   its details (acceptance criteria, comments) from Jira when needed. This needs the Atlassian connector in Claude
   (claude.ai → Settings → Connectors); without it, the menu says so and how to connect it.
+- **Devices (SSH).** **+ → Link device** saves a Raspberry Pi or board computer (name, address, username, password;
+  the password is stored encrypted by your computer's keychain) and links it to the chat: the AI runs commands and
+  changes files on it, asking first in Agent mode. Click its chip for a terminal on it.
 - **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.

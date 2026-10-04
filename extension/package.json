@@ -93,6 +93,22 @@
         "category": "Kural"
       },
       {
+        "command": "kural.devices",
+        "title": "Devices (SSH): Terminal, Link to Chat, Password, Remove",
+        "category": "Kural",
+        "icon": "$(remote)"
+      },
+      {
+        "command": "kural.devices.add",
+        "title": "Add a Device (SSH)",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.devices.terminal",
+        "title": "Open a Terminal on a Device (SSH)",
+        "category": "Kural"
+      },
+      {
         "command": "kural.login",
         "title": "Kural: Log In to Claude"
       },

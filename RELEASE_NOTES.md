@@ -2,6 +2,12 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Devices over SSH.** Working on a Raspberry Pi or a board computer? **+ → Link device** saves it once (name,
+  address, username, password) and links it to the chat. The AI can then run commands and read and write files on it,
+  asking you first in Agent mode. Click the device's chip for a terminal on it. The password is stored encrypted by
+  your computer's own keychain and is never sent to an AI. **Kural: Devices** to change a password, forget a device's
+  key or remove it.
+
 - **ChatGPT (Codex) and Gemini.** Use your ChatGPT plan (through OpenAI's Codex CLI) or your Google account / Gemini API
   key (through Google's Gemini CLI), like Claude. Get started installs, logs in and tests them; their models are in the
   chat's model menu; the chat edits files, runs commands (asking first in Agent mode), and Undo works. Ask, Ctrl+K,

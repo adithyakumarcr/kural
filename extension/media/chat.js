@@ -228,7 +228,7 @@
   const modeBtn = el("button", { class: "pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
   const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
-  const attachBtn = el("button", { class: "attach", title: "Add files or link a Jira ticket. You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
+  const attachBtn = el("button", { class: "attach", title: "Add files, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const composer = el("div", { class: "composer" }, popupEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }),
       sendBtn));   // (type @ to mention a project file; + attaches anything)
@@ -471,6 +471,9 @@
   }, 1000);
 
   const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page" };
+  // A linked device's tools (Gemini names them mcp__gemini__…).
+  const DEVICE_VERB = { run_command: "Device command", read_file: "Read on device", write_file: "Wrote on device", list_dir: "Listed on device" };
+  const deviceVerb = (name) => { const m = /^mcp__(?:device|gemini)__(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
   // "mcp__claude_ai_Notion__notion-search" -> "Notion · notion-search"
   function prettyTool(name) {
     const m = /^mcp__(.+?)__(.+)$/.exec(name || "");
@@ -486,9 +489,9 @@
     const file = ["Read", "Edit", "Write", "NotebookEdit"].includes(b.name) ? b.detail.split("  (")[0] : null;
     const pic = file && b.name === "Read" && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file) ? fileSrc(file) : null;
     return el("div", { class: `tool ${b.name}` },
-      el("span", { class: "tool-name" }, TOOL_VERB[b.name] || prettyTool(b.name)), " ",
+      el("span", { class: "tool-name" }, TOOL_VERB[b.name] || deviceVerb(b.name) || prettyTool(b.name)), " ",
       file ? el("span", { class: "tool-file", onclick: () => post({ type: "openFile", path: file }) }, b.detail)
-        : b.name === "Bash" ? el("code", {}, b.detail) : el("span", {}, b.detail),
+        : b.name === "Bash" || /run_command$/.test(b.name) ? el("code", {}, b.detail) : el("span", {}, b.detail),
       pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), onclick: () => post({ type: "openFile", path: file }) }) : null);
   }
 
@@ -605,7 +608,8 @@
   }
 
   function permNode(b) {
-    const what = b.tool === "Bash" ? "Run this command?" : b.tool === "WebFetch" ? "Open this web page?" : `Use ${prettyTool(b.tool)}?`;
+    const what = b.tool === "Bash" ? "Run this command?" : b.tool === "WebFetch" ? "Open this web page?"
+      : b.tool === "DeviceCommand" ? `Run this on ${b.where || "the device"}?` : b.tool === "DeviceWrite" ? `Write this file on ${b.where || "the device"}?` : `Use ${prettyTool(b.tool)}?`;
     const card = el("div", { class: `perm ${b.state}` }, el("div", { class: "perm-q" }, b.agent ? el("span", { class: "perm-agent" }, typeof b.agent === "number" ? `Agent ${b.agent}` : b.agent) : null, what), el("pre", {}, b.detail));
     if (b.state === "pending") {
       const always = el("input", { type: "checkbox", id: `al-${b.pid}` });
@@ -638,6 +642,11 @@
   // ---------- composer ----------
   function renderChips() {
     chipsEl.replaceChildren();
+    const dv = S.tab && S.tab.device;
+    if (dv) chipsEl.append(el("span", { class: "chip ticket", title: `${dv.user}@${dv.host}\nLinked to this chat: the model can run commands and change files on it (asking you first in Agent mode).\nClick to open a terminal on it.`,
+      onclick: () => post({ type: "deviceTerminal", id: dv.id }) },
+      icon("remote"), " ", el("b", {}, dv.name), el("span", { class: "chip-dim ticket-chip-sum" }, ` · ${dv.user}@${dv.host}`),
+      el("button", { class: "chip-x", title: "Unlink this device", onclick: (e) => { e.stopPropagation(); post({ type: "linkDevice", tabId: S.tab.id, id: null }); } }, icon("close"))));
     const tk = S.tab && S.tab.ticket;
     if (tk) chipsEl.append(el("span", { class: "chip ticket", title: `${tk.key}: ${tk.summary}${tk.status ? ` (${tk.status})` : ""}\nLinked to this chat: the model knows about it in every message.${tk.url ? "\nClick to open it in Jira." : ""}`,
       onclick: () => tk.url && post({ type: "openUrl", url: tk.url }) },
@@ -866,7 +875,7 @@
     S.menu = kind;
     const t = S.tab;
     let items;
-    menuEl.classList.toggle("wide", kind === "ticket");
+    menuEl.classList.toggle("wide", kind === "ticket" || kind === "device");
     if (kind === "add") {
       const jira = (S.setups[t.id] || {}).jira || { ok: true };
       items = [
@@ -874,7 +883,12 @@
           el("span", { class: "mi-icon" }, icon("attach")), el("span", { class: "mi-label" }, "Add files"), el("span", { class: "mi-hint" }, "images, PDFs, code")),
         el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
           el("span", { class: "mi-icon" }, icon("issues")), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
-          jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected"))];
+          jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected")),
+        el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
+          el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
+          el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];
+    } else if (kind === "device") {
+      items = deviceItems(t);
     } else if (kind === "ticket") {
       items = ticketItems(t);
     } else if (kind === "mode") {
@@ -919,6 +933,7 @@
     menuEl.style.bottom = (window.innerHeight - a.top + 6) + "px";
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
+    if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }
   }
   // ---------- Codex and Gemini ----------
   // Set up: a section with their models (from the program itself). Not set up: one line each at the end that opens
@@ -1064,6 +1079,60 @@
     return parts.join("; ") + (editing ? "" : " (Agent and Auto modes)");
   }
 
+  // "+ → Link device": your saved devices (SSH), link one to this chat, or add one. The password goes to Kural, which
+  // keeps it encrypted (VS Code's SecretStorage); this page never gets it back.
+  function deviceItems(t) {
+    const local = /^ollama:/.test(t.model || "");
+    if (!S.deviceUI) S.deviceUI = { adding: !(S.devices || []).length && S.devicesLoaded, busy: false, error: "" };
+    const U = S.deviceUI;
+    const out = [el("div", { class: "mh" }, "Link a device to this chat", el("span", { class: "mh-key" }, "SSH"))];
+    if (local) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), "A model on this computer can't use a device: pick a Claude, Codex or Gemini model."));
+    if (!S.devicesLoaded) out.push(el("div", { class: "ticket-status" }, "Loading your devices…"));
+    for (const d of S.devices || []) {
+      const on = t.device && t.device.id === d.id;
+      out.push(el("div", { class: `mi ticket-row${on ? " on" : ""}`, title: `${d.user}@${d.host}${d.port !== 22 ? `:${d.port}` : ""}${d.system ? `
+${d.system}` : ""}`,
+        onclick: () => { post({ type: "linkDevice", tabId: t.id, id: d.id }); closeMenu(); input.focus(); } },
+        el("span", { class: `check radio${on ? " on" : ""}` }), el("span", { class: "ticket-key" }, d.name),
+        el("span", { class: "ticket-sum" }, `${d.user}@${d.host}`),
+        el("button", { class: "icon-btn small show", title: `Open a terminal on ${d.name}`, onclick: (e) => { e.stopPropagation(); post({ type: "deviceTerminal", id: d.id }); closeMenu(); } }, icon("terminal"))));
+    }
+    if (!U.adding) {
+      out.push(el("div", { class: "mi", onclick: () => { U.adding = true; U.error = ""; openMenu.refresh(); } },
+        el("span", { class: "mi-icon" }, icon("add")), el("span", { class: "mi-label" }, "Add a device…")));
+    } else out.push(deviceForm(t));
+    if (t.device) out.push(el("div", { class: "sep" }), el("div", { class: "mi", onclick: () => { post({ type: "linkDevice", tabId: t.id, id: null }); closeMenu(); } },
+      el("span", { class: "mi-icon" }, icon("close")), el("span", { class: "mi-label" }, `Unlink ${t.device.name}`)));
+    if ((S.devices || []).length) out.push(el("div", { class: "mi", onclick: () => { post({ type: "manageDevices" }); closeMenu(); } },
+      el("span", { class: "mi-icon" }, icon("settings-gear")), el("span", { class: "mi-label" }, "Manage devices…"), el("span", { class: "mi-hint" }, "password, remove")));
+    return out;
+  }
+  function deviceForm(t) {
+    const U = S.deviceUI;
+    if (!U.form) {
+      const f = (ph, type = "text", value = "") => el("input", { class: "ticket-q dev-in", placeholder: ph, type, value, spellcheck: "false", autocomplete: "off" });
+      U.form = { name: f("Name, e.g. rpi-lab"), host: f("Address, e.g. 192.168.1.20 or raspberrypi.local"), port: f("Port", "number", "22"),
+        user: f("Username, e.g. pi"), password: f("Password", "password") };
+      for (const i of Object.values(U.form)) i.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+      U.focus = U.form.name;
+    }
+    const F = U.form;
+    const submit = () => {
+      if (U.busy) return;
+      U.busy = true; U.error = ""; U.reqId = Date.now();
+      post({ type: "addDevice", tabId: t.id, reqId: U.reqId, device: { name: F.name.value, host: F.host.value, port: F.port.value, user: F.user.value, password: F.password.value } });
+      openMenu.refresh();
+    };
+    return el("div", { class: "dev-form" },
+      F.name, F.host, el("div", { class: "dev-row" }, F.user, F.port), F.password,
+      U.error ? el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), U.error) : null,
+      el("div", { class: "dev-row" },
+        U.busy ? el("span", { class: "ticket-status" }, el("span", { class: "dots small" }, el("span"), el("span"), el("span")), " Connecting…")
+          : el("button", { class: "cb primary solid", onclick: submit }, "Connect & save"),
+        el("span", { class: "spacer" }),
+        el("span", { class: "dev-note" }, icon("lock"), " The password is stored encrypted")));
+  }
+
   // "+ → Link ticket": search Jira (through your Atlassian connector) and link one ticket to this chat.
   function ticketItems(t) {
     const jira = (S.setups[t.id] || {}).jira || { ok: true };
@@ -1184,7 +1253,7 @@
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
-          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket }); }
+          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
@@ -1195,6 +1264,16 @@
       case "localModels": S.local = m; renderLocal(); if (S.menu === "model") openMenu.refresh(); break;
       case "localSearch": S.localSearch = m; S.localSearching = false; renderLocal(); break;
       case "localPull": if (S.local) { S.local.pulls = { ...(S.local.pulls || {}), [m.name]: { percent: m.percent, status: m.status } }; renderLocal(); } break;
+      case "devices": S.devices = m.list || []; S.devicesLoaded = true; if (S.deviceUI && !S.devices.length) S.deviceUI.adding = true; if (S.menu === "device") openMenu.refresh(); break;
+      case "deviceAdded": {
+        const U = S.deviceUI;
+        S.devices = m.list || S.devices;
+        if (!U || U.reqId !== m.id) break;
+        U.busy = false;
+        if (m.ok) { S.deviceUI = null; if (S.menu === "device") closeMenu(); input.focus(); }
+        else { U.error = m.error || "Couldn't connect."; if (S.menu === "device") openMenu.refresh(); }
+        break;
+      }
       case "ticketStatus": { const U = S.ticketUI; if (U && U.id === m.id && U.searching) { U.status = m.text; if (S.menu === "ticket") openMenu.refresh(); } break; }
       case "ticketResults": {
         const U = S.ticketUI;

@@ -63,6 +63,16 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `FAKE_GEMINI_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.geminiPath` pointing at
   the fakes. The real programs were only checked logged out: verify streaming, approvals and tool names with real
   accounts when you can.
+- **Devices over SSH** (`lib/devices/`): `ssh.js` (no vscode) runs the computer's own `ssh` with password auth through
+  `SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`; the askpass prints `KURAL_SSH_PW`, set only in that ssh's env), Kural's
+  own known_hosts (accept-new: trust on first use), ControlMaster reuse on Mac/Linux (ControlPath under /tmp: macOS
+  allows 104 characters), `reuse:false` for login checks. `index.js`: devices in globalState `kural.devices.v1`,
+  passwords in `context.secrets` (never elsewhere). A chat with `tab.device` gets the `device` MCP server
+  (`device-mcp.js`, a relay) whose calls come back to `bridge.js` (a private socket, a token per chat); Kural asks per
+  mode (`approveDevice` → permission card "Run this on <name>?"), so the tools are pre-allowed for Claude, Codex gets
+  `default_tools_approval_mode="approve"` and Gemini's `mcp__gemini__<tool>` are auto-allowed. Not for Ollama models (no
+  MCP in Kural's engine). Tests: `test/devices.test.js` with `test/fake-ssh.js` (`KURAL_SSH_BIN`). Real check: a local
+  sshd (`apt install openssh-server`, `sshd -p 2222`).
 - **Usage meter** (`lib/ai/usage.js` hub, drawn by `lib/account.js`): Claude Code sends `rate_limit_event`
   (`unifiedWindows.five_hour/seven_day.utilization`) after every answer; `ClaudeProcess.onData` and `claudeTest` report
   it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini: tokens from each answer's `_meta.quota`.

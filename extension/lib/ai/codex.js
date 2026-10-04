@@ -138,10 +138,26 @@ async function codexLogout(bin) {
 
 // ---------- the connection to `codex app-server` ----------
 
+// { device: { command, args, env } } → -c options (TOML values; JSON strings are valid TOML strings). Kural asks you before
+// a device tool runs (lib/devices/bridge.js), so Codex doesn't ask again ("approve").
+function mcpConfig(servers) {
+  const out = [];
+  for (const [name, s] of Object.entries(servers || {})) {
+    if (!/^[\w-]+$/.test(name) || !s || !s.command) continue;
+    const key = `mcp_servers.${name}`;
+    out.push("-c", `${key}.command=${JSON.stringify(s.command)}`, "-c", `${key}.args=[${(s.args || []).map((a) => JSON.stringify(String(a))).join(",")}]`);
+    const env = Object.entries(s.env || {}).map(([k, v]) => `${k}=${JSON.stringify(String(v))}`).join(",");
+    if (env) out.push("-c", `${key}.env={${env}}`);
+    out.push("-c", `${key}.default_tools_approval_mode="approve"`);
+  }
+  return out;
+}
+
 class AppServer {
   // handlers: onNotification(method, params), onRequest(method, params) -> Promise<result> (throw = an error answer),
   //   onExit(code, stderr)
-  constructor(bin, { cwd, env, name } = {}, handlers = {}) {
+  // mcpServers: { name: { command, args, env } }: MCP servers for this Codex only (Kural's device tools), as -c options.
+  constructor(bin, { cwd, env, name, mcpServers } = {}, handlers = {}) {
     this.h = handlers;
     this.name = name || "codex";
     this.ids = 0;
@@ -149,7 +165,7 @@ class AppServer {
     this.buf = "";
     this.stderr = "";
     this.exited = false;
-    const c = command(bin, ["app-server"]);
+    const c = command(bin, [...mcpConfig(mcpServers), "app-server"]);
     // Its own process group (not on Windows), so stopping it also stops the commands it started.
     this.proc = spawn(c.file, c.args, { cwd: cwd || os.tmpdir(), env: { ...process.env, ...(env || {}), ...c.env },
       stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
@@ -510,7 +526,7 @@ class CodexAgent {
   start() {
     if (!this.opts.bin || !fs.existsSync(this.opts.bin)) return false;
     try {
-      this.server = new AppServer(this.opts.bin, { cwd: this.cwd, env: this.opts.env, name: this.opts.name }, {
+      this.server = new AppServer(this.opts.bin, { cwd: this.cwd, env: this.opts.env, name: this.opts.name, mcpServers: this.opts.mcpServers }, {
         onNotification: (m, p) => this.onNotification(m, p),
         onRequest: (m, p) => this.onRequest(m, p),
         onExit: (code, stderr) => this.onServerExit(code, stderr),
@@ -765,6 +781,10 @@ class CodexAgent {
       case "item/commandExecution/requestApproval": return this.approveCommand(p);
       case "item/fileChange/requestApproval": return this.approveFiles(p);
       case "item/tool/requestUserInput": return this.askUser(p);
+      // Kural's own device tools: Kural asks you itself before one runs (lib/devices/bridge.js), so if Codex asks too, yes.
+      case "mcpServer/elicitation/request":
+        if (p && p.serverName === "device" && p.mode !== "url") return { action: "accept", content: {}, _meta: null };
+        return declineAnswer(method);
       case "execCommandApproval": {   // (the older way of asking, before v2)
         const ok = await this.permit({ tool_name: "Bash", input: { command: unwrapShell(p.command), description: p.reason || undefined }, tool_use_id: p.callId });
         return { decision: ok.allow ? "approved" : { denied: { rejection: ok.message || "The user declined." } } };

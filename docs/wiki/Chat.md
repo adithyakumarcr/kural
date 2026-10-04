@@ -41,6 +41,8 @@ your next message, because which tools the model has is fixed when it starts.
 - **+ → Link ticket** (Claude): link a Jira epic, story or task; Kural then knows which ticket you're working on in every
   message, and reads its details from Jira when needed. Needs the Atlassian connector in Claude (claude.ai → Settings →
   Connectors).
+- **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
+  it (see [[Devices]]).
 - The file you're looking at is added by itself ("current file"); click its × to leave it out.
 
 ## In the answer

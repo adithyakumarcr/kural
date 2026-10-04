@@ -1,0 +1,15 @@
+#!/usr/bin/env node
+// A stand-in for `ssh`, for testing lib/devices without a real device: it checks the password the way the real one gets
+// it (through SSH_ASKPASS, which prints KURAL_SSH_PW), then runs the command here with sh. The right password is
+// $FAKE_SSH_PASSWORD (default "secret"); the host "nowhere" fails like an unknown name.
+const { spawnSync, spawn } = require("child_process");
+const args = process.argv.slice(2);
+if (args.includes("-O")) process.exit(0);                       // "close the reused connection"
+const target = args.find((a) => /@/.test(a)) || "";
+const command = args[args.indexOf(target) + 1] || "";
+if (/@nowhere$/.test(target)) { process.stderr.write("ssh: Could not resolve hostname nowhere: Name or service not known\n"); process.exit(255); }
+const pw = spawnSync(process.env.SSH_ASKPASS || "false", [], { encoding: "utf8" }).stdout.replace(/\r?\n$/, "");
+if (pw !== (process.env.FAKE_SSH_PASSWORD || "secret")) { process.stderr.write(`${target}: Permission denied (password).\n`); process.exit(255); }
+const p = spawn("sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"], cwd: process.env.FAKE_SSH_HOME || process.cwd() });
+process.stdin.pipe(p.stdin);
+p.on("close", (code) => process.exit(code));

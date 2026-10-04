@@ -7,6 +7,7 @@
 - [[Your Own Model]]
 - [[Tab Completion]]
 - [[Terminal]]
+- [[Devices]]
 - [[Inline Edit]]
 - [[Ask]]
 - [[Account and Updates]]

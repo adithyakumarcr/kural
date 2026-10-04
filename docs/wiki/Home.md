@@ -22,6 +22,7 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 | [[Your Own Model]] | Models on your computer: finding, downloading, what they can and can't do |
 | [[Tab Completion]] | Grey suggestions as you type; the Tab Completion panel; what it learns |
 | [[Terminal]] | Whole command lines in the terminal, commit messages, plain words → commands |
+| [[Devices]] | A Raspberry Pi or board computer over SSH: link it to a chat, a terminal on it |
 | [[Inline Edit]] | Ctrl+K, and Apply from the chat |
 | [[Ask]] | Find code by describing it |
 | [[Account and Updates]] | The usage meter; who's logged in, switch account, log out; updates |

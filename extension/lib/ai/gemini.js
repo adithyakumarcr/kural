@@ -329,7 +329,7 @@ class GeminiAgent {
       if (saved && caps.loadSession) {
         try {
           await this.authenticate(init);
-          res = await this.rpc.call("session/load", { sessionId: saved, cwd: this.cwd(), mcpServers: [] });
+          res = await this.rpc.call("session/load", { sessionId: saved, cwd: this.cwd(), mcpServers: this.mcp() });
           this.gid = saved;
           this.primed = true;   // Kural's instructions are already in that conversation
         } catch (e) {
@@ -358,7 +358,7 @@ class GeminiAgent {
   // A new conversation. If Gemini says it needs a login and the environment has a key, log in with that and try once
   // more (never the Google way: that would open a browser).
   async newSession(init) {
-    const params = { cwd: this.cwd(), mcpServers: [] };
+    const params = { cwd: this.cwd(), mcpServers: this.mcp() };
     try { return await this.rpc.call("session/new", params); }
     catch (e) {
       if (!e.login || !(await this.authenticate(init))) throw e;
@@ -612,6 +612,12 @@ class GeminiAgent {
     if (this.connected && this.gid && this.model) this.rpc.call("session/set_model", { sessionId: this.gid, modelId: this.model }).catch(() => {});
   }
   request(req) { return Promise.resolve(req && req.subtype === "mcp_status" ? { mcpServers: [] } : {}); }
+
+  // opts.mcpServers ({ name: { command, args, env } }, Kural's device tools) in ACP's shape.
+  mcp() {
+    return Object.entries(this.opts.mcpServers || {}).filter(([, v]) => v && v.command)
+      .map(([name, v]) => ({ name, command: v.command, args: (v.args || []).map(String), env: Object.entries(v.env || {}).map(([k, val]) => ({ name: k, value: String(val) })) }));
+  }
   control() { return null; }
 
   // Stop: questions waiting for you are answered "cancelled", and Gemini is told to stop (a notification in ACP).

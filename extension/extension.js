@@ -20,6 +20,7 @@ const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
 const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
+const { Devices } = require("./lib/devices");
 const brain = require("./lib/ai");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
@@ -141,6 +142,11 @@ function activate(context) {
   chat.readyCheck = () => getStarted.ready;           // Claude or your own model set up
   chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
   brain.setModelSource(() => { const t = chat.active(); return t ? t.model : chat.lastChoices().model; }, () => getStarted.localModel);
+  // Devices over SSH (+ → Link device in the chat, Kural: Devices): passwords encrypted in SecretStorage.
+  const devices = new Devices(context);
+  devices.register();
+  chat.devices = devices;
+  devices.onChange(() => chat.postTabs());
   chat.register();
   // Account (status bar, person icon): who's logged in, usage, switch account, log out. A new login: Claude's
   // chat processes start again with it.

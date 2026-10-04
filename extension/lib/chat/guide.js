@@ -22,6 +22,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Each change
   can be reviewed, kept or undone. Pictures in answers are shown. The clock button: every chat from every workspace
   (search, pin, delete). The split button opens a second chat beside the code.
+- Devices over SSH (a Raspberry Pi, a board computer…): + → Link device → add one (name, address, username, password;
+  Kural checks the login and saves it; the password is stored encrypted by the computer's keychain). A chat linked to a
+  device can run commands and read/write files on it (asking first in Agent mode; Claude, Codex and Gemini models, not a
+  model on this computer). Click the device's chip for a terminal on it. Command Palette "Kural: Devices": terminal,
+  link to the chat, change the password, forget its key (after reinstalling it), remove.
 - Your own models: model menu, "Find & download models" (Ollama's models that can use tools, sized for this
   computer). They work offline.
 - Ask (left side bar, magnifier icon): describe what you're looking for in plain words; Kural lists the exact places.

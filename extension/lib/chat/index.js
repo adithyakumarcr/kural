@@ -51,6 +51,7 @@ const READ_TOOLS = ["Read", "Grep", "Glob"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
+const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
 
 
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
@@ -135,6 +136,13 @@ class ChatView {
         if (s && !s.isEmpty && e.textEditor.document.uri.scheme === "file") this.lastSelection = { doc: e.textEditor.document, range: new vscode.Range(s.start, s.end) };
       }),
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
+      // Kural: Devices → "Link it to the current chat".
+      vscode.commands.registerCommand("kural.chat.linkDevice", async (id) => {
+        const t = this.active();
+        if (!t || !id) return;
+        await this.handle({ type: "linkDevice", tabId: t.id, id }, this.cur());
+        this.open();
+      }),
       vscode.commands.registerCommand("kural.chat.split", () => this.openSplit()),
       vscode.window.registerWebviewPanelSerializer("kural.chatEditor", { deserializeWebviewPanel: async (panel) => this.restoreSplit(panel) }),
       vscode.commands.registerCommand("kural.chat.newTab", () => { this.reveal(); this.newTab(true); }),
@@ -371,6 +379,7 @@ class ChatView {
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
+    device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
   viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll }; }
   postTabs() {
@@ -588,7 +597,7 @@ class ChatView {
   // (Claude Code's setup and its reloads only matter to Claude: other programs don't restart for them.)
   procKey(tab) {
     const claude = isClaude(tab.model);
-    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}` +
+    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
       (claude ? `|${cfg().get("chat.fullClaudeCodeSetup")}|${this.setupVersion}` : "");
   }
 
@@ -605,6 +614,9 @@ class ChatView {
     this.post({ type: "setupReady", ready, claudeReady: isSetUp(), clis: this.cliInfo() });
     if (ready) for (const p of this.panes) { const t = this.tab(p.activeId); if (t && t.status === "idle") this.warm(t); }
   }
+
+  // Saved devices for the + menu (no passwords: those stay in SecretStorage).
+  deviceList() { return this.devices ? this.devices.list().map((d) => ({ id: d.id, name: d.name, host: d.host, port: d.port, user: d.user, system: d.system || "" })) : []; }
 
   // Codex and Gemini for the model menu: set up or not, and their models.
   cliInfo() {
@@ -702,6 +714,7 @@ class ChatView {
   startProc(tab, fresh = false) {
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); }
+    if (old && old.deviceToken && this.devices) { this.devices.endSession(old.deviceToken); old.deviceToken = null; }
     const full = cfg().get("chat.fullClaudeCodeSetup");
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
     const editing = tab.mode === "agent" || tab.mode === "auto";
@@ -714,6 +727,12 @@ class ChatView {
     // With your full setup, Claude can also use your skills.
     const tools = [...(editing ? AGENT_TOOLS : READ_TOOLS), ...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
     // A Claude model: Claude Code. A model on this computer: Kural's own engine, with the same tools and events.
+    // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
+    // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
+    // this computer: Kural's own engine has no MCP.
+    const dev = tab.device && this.devices && !isLocal(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args)) : null;
+    if (dev) r.deviceToken = dev.token;
+    const deviceTools = dev ? DEVICE_TOOLS.map((t) => `mcp__device__${t}`) : [];
     const local = isLocal(tab.model);
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
@@ -721,8 +740,9 @@ class ChatView {
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
-      tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : [])],
-      mcpServers: team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : null,
+      tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      mcpServers: team || dev ? { ...(team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
+        ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root() || ws.workDir(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
@@ -869,7 +889,8 @@ class ChatView {
       : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
         "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
     delete tab.carryOver;
-    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + await this.buildPrompt(text, contexts), attachIds);
+    const deviceNote = tab.device && this.devices && !isLocal(tab.model) ? this.devices.note(tab.device) : "";
+    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + await this.buildPrompt(text, contexts), attachIds);
     if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
     r.pendingSend = prompt;
     r.proc.send(prompt);
@@ -1175,7 +1196,8 @@ class ChatView {
     setup.full = !!cfg().get("chat.fullClaudeCodeSetup");
     // Announce a connector that wasn't there before (not on the very first report).
     const known = tab.knownServers ? new Set(tab.knownServers) : null;
-    const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name)).map((x) => x.name) : [];
+    // (Kural's own servers, the device's tools and the team's board, aren't news.)
+    const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name) && x.name !== "device" && x.name !== "team").map((x) => x.name) : [];
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
     setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
@@ -1269,6 +1291,9 @@ class ChatView {
       return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
+    // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
+    // (Gemini names MCP tools mcp__gemini__<tool>.)
+    if (tab.device && new RegExp(`^mcp__(device|gemini)__(${DEVICE_TOOLS.join("|")})$`).test(req.tool_name)) return { allow: true };
     // Reading Jira (the linked ticket, a search) changes nothing, so it doesn't ask. Writing to Jira
     // (comments, status changes, new issues) still asks below.
     if (isAtlassianRead(req.tool_name)) return { allow: true };
@@ -1277,7 +1302,8 @@ class ChatView {
     // Agent mode: running commands, fetching web pages ask you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
-    const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined };
+    const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
+      where: input.device || undefined };   // (a linked device's name, for its commands and writes)
     if (turn) turn.reply.blocks.push(block);
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
@@ -1290,6 +1316,15 @@ class ChatView {
     this.post({ type: "permState", tabId: tab.id, pid, state: block.state });
     this.postTabs(); this.save();
     return allow ? { allow: true } : { allow: false, message: "The user chose not to run this. Continue without it or ask them." };
+  }
+
+  // A command or a file write on the linked device: your mode decides, like a command here. (Reads just happen.)
+  async approveDevice(tab, r, tool, args) {
+    const d = this.devices && this.devices.get(tab.device);
+    if (tab.mode === "plan" || tab.mode === "ask") return { allow: false, message: `${tab.mode === "plan" ? "Plan" : "Ask"} mode: nothing is run or changed on the device. Describe the command instead.` };
+    if (!r.turn || !r.turn.reply.running) return { allow: false, message: "The answer was stopped." };
+    return this.onPermission(tab, r, { tool_name: tool === "run_command" ? "DeviceCommand" : "DeviceWrite",
+      input: { ...args, device: d ? d.name : "the device" } });
   }
 
   // You changed the mode while an answer is running. Asking (Agent ↔ Auto) is decided per request, so it applies at once:
@@ -1413,6 +1448,22 @@ class ChatView {
         if (!out.cancelled && pane) this.postTo(pane, { type: "ticketResults", id: m.id, ...out });
         break;
       }
+      case "devices": if (pane) this.postTo(pane, { type: "devices", list: this.deviceList() }); break;
+      case "linkDevice": if (tab) {
+        tab.device = m.id && this.devices && this.devices.get(m.id) ? m.id : null;
+        log(`chat ${tab.id}: ${tab.device ? `linked device ${this.devices.get(tab.device).name}` : "device unlinked"}`);
+        this.save(); this.postTabs();
+        if (tab.status === "idle") this.warm(tab); else this.post({ type: "flash", text: "The device is linked from your next message" });
+        break;
+      }
+      case "addDevice": if (this.devices) {
+        const r = await this.devices.add(m.device || {});
+        if (pane) this.postTo(pane, { type: "deviceAdded", id: m.reqId, ok: r.ok, error: r.error || "", list: this.deviceList(), device: r.device ? { id: r.device.id } : null });
+        if (r.ok && tab) { tab.device = r.device.id; this.save(); this.postTabs(); if (tab.status === "idle") this.warm(tab); }
+        break;
+      }
+      case "deviceTerminal": if (m.id) vscode.commands.executeCommand("kural.devices.terminal", m.id); break;
+      case "manageDevices": vscode.commands.executeCommand("kural.devices"); break;
       case "linkTicket": if (tab) {
         const k = m.ticket || {};
         tab.ticket = k.key ? { key: k.key, summary: k.summary || "", type: k.type || "", status: k.status || "", url: k.url || "" } : null;
@@ -1610,6 +1661,9 @@ function toolDetail(name, input, root) {
     case "Bash": return input.command || "";
     case "WebSearch": return input.query || "";
     case "WebFetch": return input.url || "";
+    case "mcp__device__run_command": case "mcp__gemini__run_command": return input.command || "";
+    case "mcp__device__read_file": case "mcp__device__write_file": case "mcp__device__list_dir":
+    case "mcp__gemini__read_file": case "mcp__gemini__write_file": case "mcp__gemini__list_dir": return input.path || "~";
     case "mcp__team__post": return `${cap(input.from)} → ${input.to === "all" ? "everyone" : cap(input.to)}: ${input.message || ""}`;
     case "mcp__team__read": return `${cap(input.name)} checks messages${input.wait_seconds ? " and waits for a reply" : ""}`;
     default: return "";
@@ -1622,6 +1676,8 @@ const cap = (s) => { s = String(s || "").trim(); return s ? s[0].toUpperCase() +
 
 function permDetail(tool, input) {
   if (tool === "Bash") return input.command || "";
+  if (tool === "DeviceCommand") return input.command || "";
+  if (tool === "DeviceWrite") return `${input.path || ""}\n\n${String(input.content || "").slice(0, 600)}${String(input.content || "").length > 600 ? "\n…" : ""}`;
   if (tool === "WebFetch") return input.url || "";
   return JSON.stringify(input).slice(0, 300);
 }
