@@ -242,7 +242,9 @@ class GetStarted {
     }
     if (this.s.login.state === "no" || this.s.claude.state !== "ok") this.s.test = { state: "blocked" };
     else if (this.s.test.state === "blocked") this.s.test = { state: "idle" };
-    if (this.waiting === "install" && this.s.claude.state === "ok") this.wait(this.s.login.state === "no" ? "login" : null);
+    // Installed: stop waiting, so step 2 shows its Log in button. (It used to go straight to "waiting for the login",
+    // which hid the button while no login had been started: the page said "finish logging in" and nothing happened.)
+    if (this.waiting === "install" && this.s.claude.state === "ok") this.wait(null);
     if (this.waiting === "login" && this.s.login.state === "ok") this.wait(null);
     // Installed and logged in (or can't tell), and you chose Claude: run the test once by itself.
     if (this.s.path === "claude" && this.s.test.state === "idle" && this.autoTested !== bin && this.s.claude.state === "ok") { this.autoTested = bin; setImmediate(() => this.test()); }

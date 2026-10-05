@@ -2,6 +2,8 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Fixed: after installing Claude Code, the Log in step got stuck.** It said "Finish logging in in your browser" but
+  no login had started, and its Log in button was hidden. Now the Log in button shows once Claude Code is installed.
 - **Kural asks before going outside your project, and never looks through your private folders.** On a Mac, an app
   that opens Desktop, Documents, Downloads, Music or Photos makes macOS ask "Kural would like to access…". Kural now
   stays inside your project: the AI reads and changes files there without asking, and anywhere else it asks you first
