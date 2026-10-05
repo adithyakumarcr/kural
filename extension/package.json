@@ -594,6 +594,7 @@
   },
   "author": "Adithya Chinnakkonda",
   "enabledApiProposals": [
-    "terminalCompletionProvider"
+    "terminalCompletionProvider",
+    "terminalDataWriteEvent"
   ]
 }

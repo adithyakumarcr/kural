@@ -207,24 +207,40 @@ function chat(opts = {}) {
     assert.strictEqual(e.a.primed, true);
   });
 
-  await check("login screen: Kural finds the Google address and the code question, and types the code in", async () => {
-    if (!fs.existsSync("/usr/bin/script") && !fs.existsSync("/bin/script")) return;   // (no `script` here)
-    fs.writeFileSync(process.env.FAKE_AGY_FILE, "loggedout");
+  // The login screen as Get started runs it: agy in a terminal (here: pipes), what it shows fed to loginSession.
+  const loginRun = (extraEnv, onCode) => new Promise((done) => {
     const seen = { urls: [], codes: 0, screen: "" };
-    await new Promise((done) => {
-      const pty = agy.loginPty(BIN, { cols: 60, rows: 20,
-        onData: (d) => { seen.screen += d; if (/Signed in/.test(seen.screen)) { pty.kill(); done(); } },
-        onUrl: (u) => seen.urls.push(u),
-        onCode: () => { seen.codes++; pty.answerCode(seen.codes === 1 ? "wrong" : "4/kural-test"); },
-        onExit: done });
-      setTimeout(() => { pty.kill(); done(); }, 15000);
-    });
-    // The address is longer than the 60-column screen: found whole anyway.
+    let p = null;
+    const session = agy.loginSession(BIN, { onUrl: (u) => seen.urls.push(u), onCode: () => { seen.codes++; onCode(seen, p, session); } });
+    const env = { ...process.env, ...extraEnv };
+    for (const [k, v] of Object.entries(session.env)) { if (v === null) delete env[k]; else env[k] = v; }
+    p = require("child_process").spawn(session.shellPath, [], { env, stdio: ["pipe", "pipe", "pipe"] });
+    const feed = (d) => { seen.screen += d; session.feed(d); };
+    p.stdout.on("data", feed); p.stderr.on("data", feed);
+    const finish = () => { clearInterval(t); clearTimeout(cap); session.dispose(); p.kill(); setTimeout(() => done(seen), 300); };
+    const t = setInterval(() => { if (/Signed in/.test(seen.screen)) finish(); }, 100);
+    const cap = setTimeout(finish, 15000);
+  });
+
+  await check("login screen: Kural finds the Google address and the code question, and types the code in", async () => {
+    fs.writeFileSync(process.env.FAKE_AGY_FILE, "loggedout");
+    const seen = await loginRun({}, (s, p, session) => { session.codeGiven(); p.stdin.write(`${s.codes === 1 ? "wrong" : "4/kural-test"}\n`); });
     assert.strictEqual(seen.urls.length, 1); assert.match(seen.urls[0], /^https:\/\/accounts\.google\.com\/.*state=xyz$/);
     assert.strictEqual(seen.codes, 2, "asked again after a wrong code");
     assert.strictEqual(fs.readFileSync(process.env.FAKE_AGY_FILE, "utf8"), "ok");
     assert.strictEqual(agy._test.asksForCode("\x1b[1mEnter the authorization code:\x1b[0m "), true);
     assert.strictEqual(agy._test.asksForCode("Signed in as you@example.com"), false);
+  });
+
+  await check("login screen: agy opening the browser itself comes to Kural (once), and a wrapped address is found whole", async () => {
+    if (process.platform === "win32") return;
+    fs.writeFileSync(process.env.FAKE_AGY_FILE, "loggedout");
+    const seen = await loginRun({ FAKE_AGY_LOGIN: "browser" }, () => {});
+    assert.strictEqual(seen.urls.length, 1); assert.match(seen.urls[0], /^https:\/\/accounts\.google\.com\//);
+    assert.strictEqual(fs.readFileSync(process.env.FAKE_AGY_FILE, "utf8"), "ok");
+    const wrapped = "To sign in, open:\r\n  https://accounts.google.com/o/oauth2/auth?client_id=x&redirect_\r\nuri=https%3A%2F%2Fa&state=xyz\r\n\r\nWaiting...";
+    assert.strictEqual(agy._test.findLoginUrl(wrapped, 0), "https://accounts.google.com/o/oauth2/auth?client_id=x&redirect_uri=https%3A%2F%2Fa&state=xyz");
+    assert.strictEqual(agy._test.findLoginUrl("Open https://accounts.google.com/o/auth?x=1\r\nThen come back", 0), "https://accounts.google.com/o/auth?x=1");
   });
 
   await check("real agy's logged-out message means \"not logged in\" (Log in, not a failed test)", async () => {

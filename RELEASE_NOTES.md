@@ -2,6 +2,10 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Fixed: logging in to Google Gemini on a Mac closed at once.** The login screen ran through a helper that quits on
+  a Mac when it isn't started from a terminal. It now runs in a normal terminal: Antigravity opens Google's login page
+  (or Kural does), and if Google shows a code, Kural asks for it in a pop-up and types it in. If the screen closes by
+  itself, Kural says what it showed.
 - **Fixed: Gemini logged out showed "Kural can't tell whether Gemini is logged in" and a failed test.** Antigravity
   says "authentication failed or timed out" when it isn't logged in; Kural now reads that as "not logged in" and shows
   the Log in step.
