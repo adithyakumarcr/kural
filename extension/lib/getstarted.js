@@ -577,58 +577,60 @@ class GetStarted {
 
   // A program that only logs in on its own screen (Antigravity: no login command): Kural runs that screen, opens the
   // login page and passes on the code (below), checks every few seconds whether you're logged in, and closes the
-  // screen by itself when you are. { ok } / { cancelled } / { error }.
+  // screen by itself when you are. If the screen closes before that (agy stopped), Kural says what it showed.
+  // { ok } / { cancelled } / { error }.
   loginWithScreen(id, progress, signal) {
     const c = CLIS[id], S = this.s.clis[id];
     progress.report({ message: "Kural opens the Google login page in your browser; log in there. Kural closes the login screen when you're done." });
-    // Mac, Linux: the screen in a pseudo-terminal Kural reads (agy.loginPty). Kural opens the login page itself and, if
-    // the screen asks for the code Google shows after you log in, asks you for it in a pop-up and types it in. The
-    // terminal shows the same screen (you can type there too). Windows: agy in a plain terminal.
-    let pty = null, opened = false, askingCode = false;
-    const shown = new vscode.EventEmitter(), gone = new vscode.EventEmitter();
+    // The login screen in a normal terminal (a real one, from the editor). Kural reads what it shows (the terminal data
+    // event): it opens the login page itself and, if the screen asks for the code Google shows after you log in, asks
+    // you for it in a pop-up and types it in. You can type in the terminal too. Without that event: you do it there.
+    let opened = false, askingCode = false, term = null;
     const askCode = async () => {
-      if (askingCode || !pty) return;
+      if (askingCode || !term) return;
       askingCode = true;
       const code = await vscode.window.showInputBox({ title: `Log in to ${c.short}`, ignoreFocusOut: true, placeHolder: "e.g. 4/0Ab…",
         prompt: `${opened ? "Log in in the browser page Kural opened" : "Log in with Google in your browser"}; Google then shows a code. Paste it here.` });
       askingCode = false;
-      if (code && code.trim() && pty) { log(`get started: ${c.short} login: code given`); pty.answerCode(code); }
+      if (code && code.trim() && term) { log(`get started: ${c.short} login: code given`); session.codeGiven(); term.sendText(`${code.trim()}\r`, false); }
     };
-    const pseudo = c.loginPty ? {
-      onDidWrite: shown.event, onDidClose: gone.event,
-      open: (dims) => {
-        pty = c.loginPty(S.bin, { cols: (dims && dims.columns) || 100, rows: (dims && dims.rows) || 30,
-          onData: (d) => shown.fire(d),
-          onUrl: (url) => { if (opened) return; opened = true; log(`get started: opening ${c.short}'s login page`); vscode.env.openExternal(vscode.Uri.parse(url)); },
-          onCode: () => askCode(),
-          onExit: () => gone.fire() });
-        if (!pty) { shown.fire("Kural can't read this screen here. Run agy in a terminal to log in.\r\n"); gone.fire(); }
-      },
-      close: () => { if (pty) pty.kill(); },
-      handleInput: (d) => { if (pty) pty.write(d); },
-    } : null;
-    const term = vscode.window.createTerminal(pseudo
-      ? { name: `Log in to ${c.short}`, pty: pseudo, isTransient: true, iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel }
-      : { name: `Log in to ${c.short}`, shellPath: S.bin, cwd: ws.workDir(), isTransient: true, iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel });
+    const session = c.loginSession ? c.loginSession(S.bin, {
+      onUrl: (url) => { if (opened) return; opened = true; log(`get started: opening ${c.short}'s login page`); vscode.env.openExternal(vscode.Uri.parse(url)); },
+      onCode: () => askCode(),
+    }) : null;
+    term = vscode.window.createTerminal({ name: `Log in to ${c.short}`, shellPath: S.bin, cwd: ws.workDir(), env: session ? session.env : undefined,
+      isTransient: true, iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel });
+    const reading = session && typeof vscode.window.onDidWriteTerminalData === "function"
+      ? vscode.window.onDidWriteTerminalData((e) => { if (e.terminal === term) session.feed(e.data); }) : null;
+    if (session && !reading) log("get started: can't read the terminal here; the login screen is all yours");
     term.show();
     return new Promise((resolve) => {
       let done = false, checking = false;
       const t0 = Date.now();
-      const end = (r) => { if (done) return; done = true; clearInterval(poll); closed.dispose(); if (pty) pty.kill(); try { term.dispose(); } catch { /* closed */ } resolve(r); };
+      const end = (r) => { if (done) return; done = true; clearInterval(poll); closed.dispose(); if (reading) reading.dispose(); if (session) session.dispose();
+        try { term.dispose(); } catch { /* closed */ } resolve(r); };
       const check = async () => {
         if (checking || done) return;
+        if (Date.now() - t0 > 10 * 60 * 1000) return end({ error: "The login wasn't finished in 10 minutes." });
         checking = true;
-        const a = await c.auth(S.bin).catch(() => null);
+        // First whether a login is saved yet (asks nothing, starts nothing); only then agy itself.
+        const saved = c.savedLogin ? await c.savedLogin().catch(() => null) : null;
+        const a = saved === false ? null : await c.auth(S.bin).catch(() => null);
         checking = false;
         if (a && a.loggedIn) end({ ok: true });
-        else if (Date.now() - t0 > 10 * 60 * 1000) end({ error: "The login wasn't finished in 10 minutes." });
       };
-      const poll = setInterval(check, 4000);
-      // You closed the terminal: one last check (you may have logged in just before).
+      const poll = setInterval(check, 3000);
+      // The screen closed: you closed it, or agy stopped. One last check (you may have logged in just before); if agy
+      // stopped by itself within a minute, say what it showed.
       const closed = vscode.window.onDidCloseTerminal(async (t) => {
         if (t !== term || done) return;
         const a = await c.auth(S.bin).catch(() => null);
-        end(a && a.loggedIn ? { ok: true } : { cancelled: true });
+        if (a && a.loggedIn) return end({ ok: true });
+        const by = t.exitStatus && t.exitStatus.reason;   // (1 = closed by you, in VS Code's TerminalExitReason)
+        const quick = Date.now() - t0 < 60000 && by !== 1;
+        const said = session ? session.lastLine() : "";
+        log(`get started: ${c.short} login screen closed (exit ${t.exitStatus ? t.exitStatus.code : "?"})${said ? `: ${said}` : ""}`);
+        end(quick ? { error: `the login screen closed by itself${said ? `: "${said.slice(0, 200)}"` : ""}` } : { cancelled: true });
       });
       if (signal) signal.addEventListener("abort", () => end({ cancelled: true }), { once: true });
     });

@@ -77,12 +77,14 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   respawns in a loop. Stop = SIGINT (agy
   exits; next message respawns). Text-only input: pictures are saved to a folder passed with `--add-dir`. Undo: a
   best-effort `onPermission` Edit/Write when a tool step starts (agy doesn't wait). No login command: Get started
-  (`loginTerminal`) runs agy's screen in a pseudo-terminal Kural reads (`loginPty`: the `script` program, Mac and Linux;
-  a `vscode.Pseudoterminal` shows it and passes your keys on). Kural opens the login address itself (found in the
-  screen, also when wrapped, or from agy's own `open`/`xdg-open` call through a PATH shim) and, when the screen waits
-  on a line asking for a code (`asksForCode`), asks for the code in an input box and types it (+Enter). Windows: agy in
-  a plain terminal. It polls `agyAuth` (`--print /model --output-format json`, no quota) and closes the screen when
-  logged in. The real screen's wording is unknown: if the code isn't asked for, widen `asksForCode`. Its login lives in
+  (`loginTerminal`) runs agy's screen in a normal terminal (`shellPath` = agy, env from `loginSession`) and reads it
+  with the proposed `onDidWriteTerminalData` (package.json `enabledApiProposals` "terminalDataWriteEvent"). Not the
+  `script` program: the Mac's `script` quits at once when not started from a terminal (the screen lived < 1 s). Kural
+  opens the login address itself (found in the screen, also when wrapped, or from agy's own `open`/`xdg-open` call
+  through a PATH shim) and, when the screen waits on a line asking for a code (`asksForCode`), asks for the code in an
+  input box and types it (`sendText(code + "\r")`). While you log in it waits on `hasSavedLogin()` (keychain item /
+  token file, asks nothing, starts no agy), then confirms with `agyAuth` (`--print /model --output-format json`) and
+  closes the screen; a screen that closes by itself within a minute is reported with its last line. The real screen's wording is unknown: if the code isn't asked for, widen `asksForCode`. Its login lives in
   the OS keyring (Mac keychain item service "gemini" / account "antigravity", made with `/usr/bin/security`; Linux
   Secret Service; Windows "gemini:antigravity"), or `~/.gemini/antigravity-cli/antigravity-oauth-token` without one, and
   survives uninstalling agy: a new agy signs in by itself. So `agyLogout` (and `scripts/from-scratch.sh`) run

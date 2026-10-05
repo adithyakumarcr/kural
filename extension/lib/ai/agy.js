@@ -152,10 +152,11 @@ function loginCommand(bin) { return /[\s"'$`\\]/.test(bin) ? (IS_WIN ? `& "${bin
 //
 // agy logs in only on its own screen (no login command). Depending on the computer it opens the browser itself, or
 // shows a Google address and waits for the code Google gives you after you log in ("authorization code"). Kural runs
-// that screen in a pseudo-terminal it can read (the `script` program, on every Mac and Linux), shows it in a Kural
-// terminal, and does the work: it opens the login page itself (from the screen, or from agy's own "open the browser"
-// call, caught by Kural's `open`/`xdg-open` first on PATH) and asks you for the code in a pop-up, then types it in.
-// You can still type in the terminal yourself. Windows has no `script`: null (Kural then uses a plain terminal).
+// that screen in a normal terminal (Get started) and reads what it shows (VS Code's terminal data event): it opens the
+// login page itself (from the screen, or from agy's own "open the browser" call, caught by a stand-in `open` /
+// `xdg-open` first on agy's PATH) and asks you for the code in a pop-up, then types it in. You can type there too.
+// (It used to run agy through the `script` program to read the screen; the Mac's `script` quits at once when it isn't
+// started from a terminal, so the login screen closed in under a second.)
 
 const ANSI = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][\w]|\x1b[=>78DEHM]/g;
 const strip = (s) => String(s || "").replace(ANSI, "");
@@ -169,7 +170,11 @@ function findLoginUrl(text, cols) {
     if (!m) continue;
     let url = m[0];
     // Wrapped: the address ran to the end of the line, and the next line goes on with address characters only.
-    for (let j = i; (lines[j] || "").trimEnd().length >= cols - 1 && /^[^\s"'<>]+$/.test((lines[j + 1] || "").trim()); j++) url += lines[j + 1].trim();
+    // (cols 0: the width isn't known; then a line that ends with the address and a next line of address characters
+    // only, with at least one of / ? = & %, count as one.)
+    const full = (l) => cols ? l.trimEnd().length >= cols - 1 : /https:\/\/\S+$|^[^\s"'<>]+$/.test(l.trimEnd());
+    const more = (l) => /^[^\s"'<>]+$/.test(l.trim()) && (cols || /[\/?=&%]/.test(l));
+    for (let j = i; full(lines[j] || "") && more(lines[j + 1] || ""); j++) url += lines[j + 1].trim();
     if (/accounts\.google\.com|oauth|auth|login|signin/i.test(url)) return url;
   }
   return null;
@@ -181,51 +186,56 @@ function asksForCode(tail) {
   return /(enter|paste|type|input|provide)[^.]{0,60}\bcode\b|\b(authori[sz]ation|verification|authenticator|auth|login)\s+code\b|\bcode\s*[:>?]\s*$/i.test(lines);
 }
 
-// The login screen in a pseudo-terminal. { write(text), kill() } or null (no `script` here).
-// onData(raw) for the terminal, onUrl(url) once per address, onCode() when it waits for the code, onExit().
-function loginPty(bin, { cols = 100, rows = 30, onData, onUrl, onCode, onExit } = {}) {
-  if (IS_WIN) return null;
-  const scriptBin = ["/usr/bin/script", "/bin/script"].find(isFile);
-  if (!scriptBin) return null;
-  const shim = fs.mkdtempSync(path.join(os.tmpdir(), "kural-agy-open-"));
-  const urls = path.join(shim, "urls.txt");
-  fs.writeFileSync(urls, "", { mode: 0o600 });
-  const quoted = `'${urls.replace(/'/g, "'\\''")}'`;
-  for (const n of ["open", "xdg-open"]) fs.writeFileSync(path.join(shim, n), `#!/bin/sh\nfor a in "$@"; do last="$a"; done\nprintf '%s\\n' "$last" >> ${quoted}\n`, { mode: 0o700 });
-  // The screen's size first (stty), then agy itself. (The pseudo-terminal is agy's; `script` copies it to us.)
-  const run = `stty cols ${Math.max(40, cols | 0)} rows ${Math.max(10, rows | 0)} 2>/dev/null; exec "$0"`;
-  const args = process.platform === "darwin" ? ["-q", "/dev/null", "/bin/sh", "-c", run, bin] : ["-qfec", `/bin/sh -c '${run}' '${bin.replace(/'/g, "'\\''")}'`, "/dev/null"];
-  const env = cleanEnv({ PATH: `${shim}${path.delimiter}${process.env.PATH || ""}`, TERM: "xterm-256color", CI: "", NO_BROWSER: "" });
-  const p = spawn(scriptBin, args, { cwd: quietDir(), env, stdio: ["pipe", "pipe", "pipe"], detached: true });
+// Is agy's login saved on this computer? true / false / null (can't tell here). Read without opening it (the keychain
+// item's name only, or the token file), so nothing asks and no agy starts: Get started waits on this while you log
+// in, instead of asking agy every few seconds (asked while logged out, agy may start a login of its own).
+async function hasSavedLogin() {
+  if (fs.existsSync(path.join(os.homedir(), ".gemini", "antigravity-cli", "antigravity-oauth-token"))) return true;
+  const code = (cmd, args) => new Promise((resolve) => {
+    try { execFile(cmd, args, { cwd: os.tmpdir(), timeout: 5000, windowsHide: true }, (e) => resolve(e ? (typeof e.code === "number" ? e.code : -1) : 0)); } catch { resolve(-1); }
+  });
+  if (process.platform === "darwin") { const r = await code("/usr/bin/security", ["find-generic-password", "-s", "gemini", "-a", "antigravity"]); return r === 0 ? true : r === 44 ? false : null; }
+  if (!IS_WIN) { const r = await code("secret-tool", ["search", "service", "gemini", "username", "antigravity"]); return r === 0 ? true : null; }
+  return null;
+}
+
+// What Get started needs to run the login screen in a terminal and read it (no vscode here):
+//   shellPath, env  for the terminal (agy itself; the stand-in `open` first on its PATH, no auto-update)
+//   feed(data)      what the screen showed (finds the login address and the question for the code)
+//   codeGiven()     after typing a code: a new question for one counts again
+//   dispose()
+// onUrl(url) once per address; onCode() when the screen waits for the code.
+function loginSession(bin, { onUrl, onCode } = {}) {
   const seen = new Set();
-  let tail = "", all = "", idle = null, asked = false;
-  const url = (u) => { if (u && !seen.has(u)) { seen.add(u); onUrl && onUrl(u); } };
-  const poll = setInterval(() => {
-    let lines = []; try { lines = fs.readFileSync(urls, "utf8").split("\n").filter((l) => /^https?:\/\//.test(l)); } catch { /* not yet */ }
-    lines.forEach(url);
-  }, 300);
-  const got = (d) => {
-    const s = String(d);
-    onData && onData(s);
-    all = (all + s).slice(-20000);
-    tail = (tail + s).slice(-3000);
-    url(findLoginUrl(all, cols));
-    clearTimeout(idle);
-    // Waiting for the code: the screen stops changing on a line that asks for it.
-    idle = setTimeout(() => { if (!asked && asksForCode(tail)) { asked = true; onCode && onCode(); } }, 600);
-  };
-  p.stdout.on("data", got);
-  p.stderr.on("data", got);
-  p.stdin.on("error", () => {});
-  let gone = false;
-  const end = () => { if (gone) return; gone = true; clearInterval(poll); clearTimeout(idle); fs.rm(shim, { recursive: true, force: true }, () => {}); onExit && onExit(); };
-  p.on("exit", end);
-  p.on("error", end);
+  const url = (u) => { if (u && /^https?:\/\//.test(u) && !seen.has(u)) { seen.add(u); onUrl && onUrl(u); } };
+  // The stand-in browser opener (Mac, Linux): agy's "open the browser" writes the address to a file Kural reads.
+  let shim = null, poll = null;
+  if (!IS_WIN) {
+    shim = fs.mkdtempSync(path.join(os.tmpdir(), "kural-agy-open-"));
+    const urls = path.join(shim, "urls.txt");
+    fs.writeFileSync(urls, "", { mode: 0o600 });
+    const quoted = `'${urls.replace(/'/g, "'\\''")}'`;
+    for (const n of ["open", "xdg-open"]) fs.writeFileSync(path.join(shim, n), `#!/bin/sh\nfor a in "$@"; do last="$a"; done\nprintf '%s\\n' "$last" >> ${quoted}\n`, { mode: 0o700 });
+    poll = setInterval(() => { try { fs.readFileSync(urls, "utf8").split("\n").forEach(url); } catch { /* not yet */ } }, 300);
+  }
+  let all = "", tail = "", idle = null, asked = false;
   return {
-    // What you (or Kural) type. A code: written, then Enter. After that, a new question for a code counts again.
-    write: (text) => { try { p.stdin.write(text); } catch { /* gone */ } },
-    answerCode: (code) => { tail = ""; asked = false; try { p.stdin.write(`${String(code).trim()}\r`); } catch { /* gone */ } },
-    kill: () => { try { process.kill(-p.pid, "SIGTERM"); } catch { /* gone */ } setTimeout(() => { try { process.kill(-p.pid, "SIGKILL"); } catch { /* gone */ } }, 1500).unref(); },
+    shellPath: bin,
+    env: { AGY_CLI_DISABLE_AUTO_UPDATE: "1", ANTIGRAVITY_AGENT: null, ANTIGRAVITY_CONVERSATION_ID: null,
+      ...(shim ? { PATH: `${shim}${path.delimiter}${process.env.PATH || ""}` } : {}) },
+    feed(d) {
+      const s = String(d);
+      all = (all + s).slice(-20000);
+      tail = (tail + s).slice(-3000);
+      url(findLoginUrl(all, 0));
+      clearTimeout(idle);
+      // Waiting for the code: the screen stops changing on a line that asks for it.
+      idle = setTimeout(() => { if (!asked && asksForCode(tail)) { asked = true; onCode && onCode(); } }, 600);
+    },
+    codeGiven() { tail = ""; asked = false; },
+    // The screen's last line (for "the login screen closed: …").
+    lastLine() { return lastLine(strip(all).replace(/\r/g, "\n")); },
+    dispose() { clearInterval(poll); clearTimeout(idle); if (shim) fs.rm(shim, { recursive: true, force: true }, () => {}); },
   };
 }
 
@@ -714,5 +724,5 @@ async function agyTest(bin, { cwd, model } = {}) {
   } catch (e) { return { ok: false, error: e.message, login: !!e.login }; }
 }
 
-module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginPty, setLog,
+module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginSession, hasSavedLogin, setLog,
   NOT_LOGGED_IN, MIN_VERSION, _test: { describe, parseUsage, friendly, findLoginUrl, asksForCode } };
