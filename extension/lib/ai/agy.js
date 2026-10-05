@@ -40,7 +40,8 @@ let log = () => {};
 const setLog = (f) => { log = f || (() => {}); };
 
 const NOT_LOGGED_IN = "Google Gemini isn't logged in. Log in from Get started (Google Gemini → Log in).";
-const LOGIN_RE = /not logged in|no controlling terminal|You are not logged into Antigravity|auth(entication)? (error|timed out)|sign in/i;
+// (The real agy 1.2.16, logged out, in print mode: "error: authentication failed or timed out".)
+const LOGIN_RE = /not logged in|no controlling terminal|You are not logged into Antigravity|auth(entication)? (error|failed|timed out)|sign in/i;
 
 // ---------- finding and running agy ----------
 

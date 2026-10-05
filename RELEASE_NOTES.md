@@ -2,6 +2,9 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Fixed: Gemini logged out showed "Kural can't tell whether Gemini is logged in" and a failed test.** Antigravity
+  says "authentication failed or timed out" when it isn't logged in; Kural now reads that as "not logged in" and shows
+  the Log in step.
 - **Fixed: logging out of Google Gemini didn't stick.** Antigravity keeps its Google login in your keychain, and a new
   Antigravity signed in with it by itself, even after logging out or reinstalling. **Log out** in the Account menu now
   removes that saved login too.
