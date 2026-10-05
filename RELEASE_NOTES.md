@@ -2,6 +2,9 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Fixed: logging out of Google Gemini didn't stick.** Antigravity keeps its Google login in your keychain, and a new
+  Antigravity signed in with it by itself, even after logging out or reinstalling. **Log out** in the Account menu now
+  removes that saved login too.
 - **Fixed: after installing Claude Code, the Log in step got stuck.** It said "Finish logging in in your browser" but
   no login had started, and its Log in button was hidden. Now the Log in button shows once Claude Code is installed.
 - **Kural asks before going outside your project, and never looks through your private folders.** On a Mac, an app
