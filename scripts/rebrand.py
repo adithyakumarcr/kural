@@ -98,43 +98,79 @@ def main(app, platform):
                     Image.open(icon).resize((size, size), Image.LANCZOS).save(tile)
         except ImportError:
             pass
-    # 6. Help → Check for Updates… (Kural's own updater, from GitHub releases).
-    add_update_menu(app)
+    # 6. VS Code's own code: Help → Check for Updates… (Kural's updater), and VS Code's Search and Output views hidden
+    #    (Kural's Search & Ask side bar does text search; Kural's log opens with "Kural: Show Log").
+    patch_workbench(app)
     print(f"rebranded {app} for {platform}")
 
 
-# Extensions can't add items to the Help menu, so the item goes into VS Code's own code, next to its
-# "Ask @vscode" Help item. VS Code checks that file against a fingerprint in product.json ("checksums")
-# and calls the install "corrupt" if it changed, so the fingerprint is updated too. If VS Code's code
-# looks different (another VSCodium version), the menu item is skipped; the command palette still has it.
+# Kural changes two things in VS Code's own code (workbench.desktop.main.js):
+#   - Help → Check for Updates…: extensions can't add items to the Help menu, so the item goes next to VS Code's
+#     "Ask @vscode" Help item.
+#   - VS Code's Search view and Output view never show: Kural's Search & Ask side bar has text search (find and
+#     replace) and Ask together, and Kural's log is "Kural: Show Log". Each view gets VS Code's own "never" condition
+#     (`when: <ContextKeyExpr>.regex("neverMatch",/doesNotMatch/)`, which the Search view already uses for a
+#     keybinding); its container is "hideIfEmpty", so the activity bar icon and the panel tab go away too.
+# VS Code checks that file against a fingerprint in product.json ("checksums") and calls the install "corrupt" if it
+# changed, so the fingerprint is updated too. If VS Code's code looks different (another VSCodium version), that part is
+# skipped with a warning (it shows in the CI summary); the rest still works (the command palette has the updater).
 HELP_ITEM = re.compile(r'(\w+)\.appendMenuItem\((\w+)\.MenubarHelpMenu,\{command:\{id:\w+\.ID,title:\w+\(\d+,"Ask @vscode"\)')
+NEVER = re.compile(r'when:([\w$]+)\.regex\("neverMatch",/doesNotMatch/\)')
+SEARCH_VIEW = re.compile(r'\{(id:[\w$]+,containerIcon:[\w$]+,name:[\w$]+\(\d+,"Search"\),ctorDescriptor:)')
+OUTPUT_VIEW = re.compile(r'\{(id:[\w$]+,name:[\w$]+\(\d+,"Output"\),containerIcon:[\w$]+,canMoveView:)')
+HIDDEN_MARK = '/*kural-hidden*/'
 
 
 def fingerprint(data):
     return base64.b64encode(hashlib.sha256(data).digest()).decode().rstrip("=")
 
 
-def add_update_menu(app):
+def add_update_menu(text):
+    if "kural.checkForUpdates" in text:
+        return text
+    m = HELP_ITEM.search(text)
+    if not m:
+        print("::warning::Help menu code not found; Help → Check for Updates not added")
+        return text
+    registry, ids = m.group(1), m.group(2)
+    item = (f'{registry}.appendMenuItem({ids}.MenubarHelpMenu,{{command:{{id:"kural.checkForUpdates",'
+            f'title:"Check for Updates..."}},group:"7_update",order:1}}),')
+    return text[:m.start()] + item + text[m.start():]
+
+
+def hide_builtin_views(text):
+    if HIDDEN_MARK in text:
+        return text
+    never = NEVER.search(text)
+    if not never:
+        print("::warning::VS Code's \"never\" condition not found; its Search and Output views stay")
+        return text
+    cond = f'{HIDDEN_MARK}when:{never.group(1)}.regex("neverMatch",/doesNotMatch/),'
+    for name, pattern in (("Search", SEARCH_VIEW), ("Output", OUTPUT_VIEW)):
+        found = list(pattern.finditer(text))
+        if len(found) != 1:
+            print(f"::warning::VS Code's {name} view found {len(found)} times (not once); it stays")
+            continue
+        m = found[0]
+        text = text[:m.start() + 1] + cond + text[m.start() + 1:]
+    return text
+
+
+def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
     with open(js_path, "rb") as f:
         data = f.read()
     product = load(pj_path)
     sums = product.get("checksums", {})
-    if b"kural.checkForUpdates" in data:
-        return
     if sums.get(rel) != fingerprint(data):
-        print("::warning::unexpected workbench fingerprint; Help → Check for Updates not added")
+        print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    m = HELP_ITEM.search(text)
-    if not m:
-        print("::warning::Help menu code not found; Help → Check for Updates not added")
+    new = hide_builtin_views(add_update_menu(text))
+    if new == text:
         return
-    registry, ids = m.group(1), m.group(2)
-    item = (f'{registry}.appendMenuItem({ids}.MenubarHelpMenu,{{command:{{id:"kural.checkForUpdates",'
-            f'title:"Check for Updates..."}},group:"7_update",order:1}}),')
-    data = (text[:m.start()] + item + text[m.start():]).encode("utf-8")
+    data = new.encode("utf-8")
     with open(js_path, "wb") as f:
         f.write(data)
     sums[rel] = fingerprint(data)

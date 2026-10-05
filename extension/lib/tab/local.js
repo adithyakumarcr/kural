@@ -7,6 +7,7 @@
 
 const vscode = require("vscode");
 const { log } = require("../ai/claude");
+const { OllamaInstaller } = require("../ai/ollama-install");
 
 const LOCAL_MODELS = [
   { id: "qwen2.5-coder:0.5b-base", label: "0.5B · fastest", size: "~400 MB" },
@@ -30,11 +31,27 @@ async function http(path, body, { timeoutMs = 4000, signal } = {}) {
   } finally { clearTimeout(t); }
 }
 
+// One installer for all of Kural (the Tab panel, Get started and the chat all can start it; they share the one job).
+const installer = new OllamaInstaller({
+  isUp: () => http("/api/version", undefined, { timeoutMs: 1500 }).then(() => true, () => false),
+  log: (m) => log(m),
+});
+
+// What the installer is doing, in words: "Downloading Ollama… 45%".
+function installText(st) {
+  if (!st) return "";
+  const pct = st.percent !== undefined ? ` ${st.percent}%` : "";
+  return st.phase === "download" ? `Downloading Ollama…${pct}` : st.phase === "install" ? `Installing Ollama…${pct}` : "Starting Ollama…";
+}
+
 class LocalEngine {
   constructor() {
     this.state = { running: false, hasModel: false, models: [], checkedAt: 0 };
     this.listeners = [];
     this.pulling = null;   // { model, percent, status }
+    this.installing = null;   // while Ollama is being installed: { phase: "download" | "install" | "start", percent, note }
+    this.steps = 0;           // during Set up: 2 when Ollama is installed first, then the model
+    installer.onProgress((st) => { this.installing = st; this.changed(); });
     this.last = null;      // the last local result, shown in the Tab panel: { ms, ok, note }
     // Has this person chosen a model on this computer for Tab (the panel's "Use a model on this computer", a download,
     // or their own model set up in Get started)? Ollama with the model already there (from an earlier install, another
@@ -113,6 +130,30 @@ class LocalEngine {
     return { ms: Date.now() - t0, output: clean, ok: clean != null && !!clean.trim() };
   }
 
+  // The Tab panel's one-click Set up: choose the local model, install and start Ollama if it isn't there (download %,
+  // install %), then download the model (%). Each step says what it's doing in the panel.
+  async setup() {
+    if (this.choose) await this.choose();
+    let s = await this.status(true);
+    this.steps = s.running ? 0 : 2;
+    this.changed();
+    try {
+      if (!s.running) {
+        try { await installer.install(); }
+        catch (e) {
+          if (e.message === "stopped") return;
+          log(`tab: installing Ollama failed: ${e.message}`);
+          offerByHand(e.message);
+          return;
+        }
+        s = await this.status(true);
+      }
+      if (s.running && !s.hasModel) await this.pull();
+    } finally { this.steps = 0; this.changed(); }
+  }
+
+  stopInstall() { installer.stop(); }
+
   // Download a model, reporting progress (0–100).
   async pull(name = model()) {
     if (this.pulling) return;
@@ -163,15 +204,35 @@ function tidyLocal(text, restOfLine) {
   return out.join("\n");
 }
 
-// Opens a terminal with the official installer for this computer.
+// Installs (or starts) Ollama from Get started and the chat, with its progress in a notification (Cancel stops it).
+// The Tab panel shows the same job in the panel itself.
 function installOllama() {
-  if (process.platform === "linux") {
+  if (installer.job) return installer.job.catch(() => {});
+  return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Kural", cancellable: true }, (progress, token) => {
+    token.onCancellationRequested(() => installer.stop());
+    let at = 0;
+    const off = installer.onProgress((st) => {
+      if (!st) return;
+      const p = st.percent || 0, inc = st.phase === "start" ? 0 : (st.phase === "download" ? p / 2 : 50 + p / 2) - at;
+      if (inc > 0) at += inc;
+      progress.report({ message: installText(st), increment: inc > 0 ? inc : undefined });
+    });
+    return installer.install()
+      .then(() => vscode.window.setStatusBarMessage("Kural: Ollama is installed and running", 5000))
+      .catch((e) => { if (e.message !== "stopped") { log(`installing Ollama failed: ${e.message}`); offerByHand(e.message); } })
+      .finally(off);
+  });
+}
+
+// Installing failed: say why, and offer the old ways (Ollama's page; on Linux its installer in a terminal).
+async function offerByHand(why) {
+  const way = process.platform === "linux" ? "Install in a terminal" : "Open ollama.com";
+  const pick = await vscode.window.showErrorMessage(`Kural couldn't install Ollama: ${why}`, way);
+  if (pick === "Install in a terminal") {
     const t = vscode.window.createTerminal({ name: "Install Ollama" });
     t.show();
     t.sendText("curl -fsSL https://ollama.com/install.sh | sh && echo 'Done. Back in Kural, click Check again in the Tab panel.'");
-  } else {
-    vscode.env.openExternal(vscode.Uri.parse("https://ollama.com/download"));
-  }
+  } else if (pick) vscode.env.openExternal(vscode.Uri.parse("https://ollama.com/download"));
 }
 
-module.exports = { LocalEngine, LOCAL_MODELS, tidyLocal, installOllama };
+module.exports = { LocalEngine, LOCAL_MODELS, tidyLocal, installOllama, installText };

@@ -816,7 +816,7 @@ class ChatView {
     r.proc = null;
     if (last && last.role === "assistant" && last.running) {
       last.running = false;
-      last.error = info.login ? "login" : "The model stopped unexpectedly. See View → Output → Kural.";
+      last.error = info.login ? "login" : "The model stopped unexpectedly. See Kural's log (Kural: Show Log).";
       if (info.login) last.errorWho = whoOf(tab.model);
       tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(last) });

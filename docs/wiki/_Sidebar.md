@@ -9,7 +9,7 @@
 - [[Terminal]]
 - [[Devices]]
 - [[Inline Edit]]
-- [[Ask]]
+- [[Search and Ask]]
 - [[Account and Updates]]
 - [[Settings and Shortcuts]]
 - [[Troubleshooting]]

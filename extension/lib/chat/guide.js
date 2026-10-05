@@ -41,11 +41,18 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   the device: asks the password once more), forget its host key, remove (also takes Kural's key off the device).
 - Your own models: model menu, "Find & download models" (Ollama's models that can use tools, sized for this
   computer). They work offline.
-- Ask (left side bar, magnifier icon): describe what you're looking for in plain words; Kural lists the exact places.
+- Search & Ask (left side bar, magnifier icon), two tabs. Search (Ctrl+Shift+F, Replace Ctrl+Shift+H): find and
+  replace in the project's files, everything VS Code's own Search did (Kural hides that one): Match Case, Whole Word,
+  Regular Expression, Preserve Case, files to include/exclude (the ... under the box), open editors only, as you type,
+  history (Up/Down), tree or list, Replace Preview (click a result while Replace is open), Replace All, dismiss,
+  right-click Copy, F4 for the next result, Open in Search Editor; Explorer: right-click a folder, Find in Folder.
+  Ask (Ctrl+Alt+A): describe what you're looking for in plain words; Kural lists the exact places.
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review red/green, Accept or Reject.
 - Tab Completion: grey suggestions as you type; Tab accepts. Click "Tab Completion" in the status bar for its panel:
   on/off (Ctrl+Alt+Space), how fast it suggests, the engine (Auto, a local model for speed, or Claude) and its model.
-  A model on this computer is used only after "Set up" there (or your own model in Get started).
+  A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
+  without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
+  then downloads the model.
   It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("push this to the fix/login branch", "commit with message fixed the login") and Kural suggests the command.
@@ -58,9 +65,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
 - In a folder you haven't trusted (VS Code's Restricted Mode), its settings can't pick programs or modes for Kural, and
   its Claude Code setup (hooks, MCP servers) isn't loaded.
-- Account (status bar, person icon): for Claude, Google Gemini and ChatGPT (Codex): who you're logged in as, plan, usage
-  page, switch account, log out, log in.
-- Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or the Account menu.
+- Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural: Settings"): a card each
+  for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
+  page, switch account, log out, log in, set up; then Kural's version and Check for updates, Get started, Tab Completion,
+  all settings, the log, the guide. Kural's log: "Kural: Show Log" (an editor tab; Kural hides VS Code's Output tab).
+- Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
   buttons and focus.
 - Full guide: ${WIKI}

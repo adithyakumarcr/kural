@@ -1,3 +1,21 @@
+## Not released yet
+
+- **Search & Ask, one side bar with two tabs.** **Search** (Ctrl+Shift+F) finds and replaces in your files with
+  everything VS Code's own Search had: Match Case, Whole Word, Regular Expression, Preserve Case, files to include and
+  exclude, open editors only, results as you type, history, tree or list, Replace Preview, Replace All, dismiss,
+  right-click Copy, F4 for the next result. **Ask** is the same as before. VS Code's own Search icon is gone.
+- **Kural Settings.** The person icon in the status bar opens a tab instead of a long pop-up list: a card each for
+  Claude, Google Gemini, ChatGPT (Codex) and your own model (who's logged in, plan, usage, switch account, log out), and
+  Kural's version, updates and links.
+- **No Output tab.** VS Code's Output tab at the bottom is gone; Kural's log opens with **Kural: Show Log** (or Kural
+  Settings → Kural's log).
+- **Ask's example** is now a general one ("where are the user's settings saved?").
+- **Fixed:** Shift+Enter in the chat made a new line below the box's edge without scrolling to it.
+- **Tab Completion: Set up installs Ollama for you.** Without Ollama, the Tab panel's Set up used to open ollama.com
+  in the browser. Now one click does everything: Kural downloads Ollama (with a percent), installs it (with a percent),
+  starts it, then downloads the model. Get started's and the chat's "Install Ollama" do the same, with a notification.
+  On Ubuntu the system asks for your password (Ollama installs for the whole computer).
+
 ## What's new in 1.1.0-alpha.4
 
 - **Tab Completion uses a model on your computer only after you chose one.** A model left over from an earlier install

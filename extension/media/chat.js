@@ -873,7 +873,23 @@
   }
   function closePopup() { S.popup = null; popupEl.classList.add("hidden"); }
 
-  input.addEventListener("input", () => { checkMention(); });
+  input.addEventListener("input", () => { checkMention(); requestAnimationFrame(caretIntoView); });
+  // A new line (Shift+Enter) or typing past the box's height: keep the line you're on in view. The box scrolls inside
+  // (max-height); without this the caret went below its edge. At the end of the text, go to the very bottom (a caret on
+  // an empty last line has no size to measure).
+  function caretIntoView() {
+    const sel = getSelection();
+    if (!sel.rangeCount || !input.contains(sel.anchorNode)) return;
+    const r = sel.getRangeAt(0);
+    const tail = document.createRange(); tail.selectNodeContents(input); tail.setStart(r.endContainer, r.endOffset);
+    if (!tail.toString().trim()) { input.scrollTop = input.scrollHeight; return; }
+    const at = r.getBoundingClientRect(), box = input.getBoundingClientRect();
+    if (!at.height) return;
+    if (at.bottom > box.bottom) input.scrollTop += at.bottom - box.bottom + 4;
+    else if (at.top < box.top) input.scrollTop -= box.top - at.top + 4;
+  }
+  // The box growing (a new line) makes the conversation above shorter: if you were at its end, stay there.
+  new ResizeObserver(() => { if (stick) toBottom(); }).observe(composer);
   input.addEventListener("keydown", (e) => {
     const P = S.popup;
     if (P) {
@@ -883,7 +899,7 @@
       if (e.key === "Escape") { e.preventDefault(); closePopup(); return; }
     }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendOrStop(); }
-    else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); }
+    else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); requestAnimationFrame(caretIntoView); }
     else if (e.key === "Escape" && S.tab && S.tab.status !== "idle") post({ type: "stop", tabId: S.tab.id });
   });
   // Pasting code copied from the editor turns it into a "main.py (L3-9)" reference.
@@ -1055,7 +1071,7 @@
     const out = [el("div", { class: "mh" }, "On this computer", el("span", { class: "mh-key" }, "Ollama · offline"))];
     if (!L) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint" }, "Looking for Ollama…")));
     else if (!L.status.running) out.push(el("div", { class: "mi", onclick: () => { post({ type: "installOllama" }); closeMenu(); } },
-      el("span", { class: "mi-icon" }, icon("cloud-download")), el("span", { class: "mi-label" }, "Get Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
+      el("span", { class: "mi-icon" }, icon("cloud-download")), el("span", { class: "mi-label" }, "Install Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
     else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, icon("warning"), ` Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
     else for (const m of L.models.filter((x) => x.chat)) {   // (models without tools can't chat: not listed)
       const id = `ollama:${m.name}`;
@@ -1093,7 +1109,7 @@
         memory ? ` (this computer has ${memory} GB).` : "."),
     ];
     if (!L) kids.push(el("div", { class: "h-empty" }, "Looking for Ollama…"));
-    else if (!L.status.running) kids.push(el("div", { class: "lm-warn" }, "Ollama isn't running. ", el("button", { class: "cb primary", onclick: () => post({ type: "installOllama" }) }, "Get Ollama"),
+    else if (!L.status.running) kids.push(el("div", { class: "lm-warn" }, "Ollama isn't running. ", el("button", { class: "cb primary", onclick: () => post({ type: "installOllama" }) }, "Install Ollama"),
       el("button", { class: "cb", onclick: () => post({ type: "localModels" }) }, "Check again")));
     else if (!L.status.ok) kids.push(el("div", { class: "lm-warn" }, icon("warning"), ` Your Ollama is ${L.status.version}. The chat needs ${L.minVersion} or newer: update Ollama.`));
     // Downloads in progress

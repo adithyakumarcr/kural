@@ -24,8 +24,13 @@
       "supported": "limited",
       "description": "In a folder you haven't trusted, Kural ignores that folder's settings for which programs to run and how much the AI may do on its own, and doesn't load the folder's Claude Code setup (hooks, MCP servers).",
       "restrictedConfigurations": [
-        "kural.claudePath", "kural.codexPath", "kural.agyPath", "kural.tabCompletion.ollamaUrl",
-        "kural.chat.mode", "kural.chat.fullClaudeCodeSetup", "kural.chat.model"
+        "kural.claudePath",
+        "kural.codexPath",
+        "kural.agyPath",
+        "kural.tabCompletion.ollamaUrl",
+        "kural.chat.mode",
+        "kural.chat.fullClaudeCodeSetup",
+        "kural.chat.model"
       ]
     }
   },
@@ -60,7 +65,7 @@
       },
       {
         "command": "kural.askSearch",
-        "title": "Kural: Ask",
+        "title": "Kural: Ask Where Something Is",
         "icon": "$(search)"
       },
       {
@@ -99,9 +104,8 @@
       },
       {
         "command": "kural.account",
-        "title": "Account: Usage, Switch Account, Log Out",
-        "icon": "$(account)",
-        "category": "Kural"
+        "title": "Kural: Settings (Accounts, Usage, Updates)",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "kural.devices",
@@ -178,13 +182,88 @@
         "command": "kural.chat.split",
         "title": "Kural: Open a Chat Beside the Code",
         "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "kural.search.find",
+        "title": "Kural: Search in Files"
+      },
+      {
+        "command": "kural.search.replace",
+        "title": "Kural: Replace in Files"
+      },
+      {
+        "command": "kural.search.inFolder",
+        "title": "Find in Folder..."
+      },
+      {
+        "command": "kural.search.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kural.search.clear",
+        "title": "Clear Search Results",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "kural.search.collapseAll",
+        "title": "Collapse All",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "kural.search.expandAll",
+        "title": "Expand All",
+        "icon": "$(expand-all)"
+      },
+      {
+        "command": "kural.search.viewAsTree",
+        "title": "View as Tree",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "kural.search.viewAsList",
+        "title": "View as List",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "kural.search.openEditor",
+        "title": "Open in Search Editor",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "kural.search.next",
+        "title": "Kural: Next Search Result"
+      },
+      {
+        "command": "kural.search.prev",
+        "title": "Kural: Previous Search Result"
+      },
+      {
+        "command": "kural.search.copy",
+        "title": "Copy"
+      },
+      {
+        "command": "kural.search.copyPath",
+        "title": "Copy Path"
+      },
+      {
+        "command": "kural.search.copyAll",
+        "title": "Copy All"
+      },
+      {
+        "command": "kural.search.reveal",
+        "title": "Reveal in Explorer View"
+      },
+      {
+        "command": "kural.search.dismiss",
+        "title": "Dismiss"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "kural-search",
-          "title": "Ask",
+          "title": "Search & Ask",
           "icon": "media/search-icon.svg"
         }
       ],
@@ -213,7 +292,7 @@
         {
           "type": "webview",
           "id": "kural.search",
-          "name": "Ask"
+          "name": "Search & Ask"
         }
       ],
       "kural": [
@@ -275,6 +354,41 @@
           "command": "kural.checkForUpdates",
           "when": "view == kural.chat",
           "group": "9_kural@3"
+        },
+        {
+          "command": "kural.search.refresh",
+          "when": "view == kural.search && kural.searchTab != ask",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kural.search.clear",
+          "when": "view == kural.search && kural.searchTab != ask && kural.searchHasResults",
+          "group": "navigation@2"
+        },
+        {
+          "command": "kural.search.openEditor",
+          "when": "view == kural.search && kural.searchTab != ask",
+          "group": "navigation@3"
+        },
+        {
+          "command": "kural.search.viewAsTree",
+          "when": "view == kural.search && kural.searchTab != ask && !kural.searchTree",
+          "group": "navigation@4"
+        },
+        {
+          "command": "kural.search.viewAsList",
+          "when": "view == kural.search && kural.searchTab != ask && kural.searchTree",
+          "group": "navigation@4"
+        },
+        {
+          "command": "kural.search.collapseAll",
+          "when": "view == kural.search && kural.searchTab != ask && kural.searchHasResults && !kural.searchCollapsed",
+          "group": "navigation@5"
+        },
+        {
+          "command": "kural.search.expandAll",
+          "when": "view == kural.search && kural.searchTab != ask && kural.searchHasResults && kural.searchCollapsed",
+          "group": "navigation@5"
         }
       ],
       "editor/title": [
@@ -307,6 +421,97 @@
         {
           "command": "kural.review.reject",
           "when": "kural.reviewPending"
+        },
+        {
+          "command": "kural.search.inFolder",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.refresh",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.clear",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.collapseAll",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.expandAll",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.viewAsTree",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.viewAsList",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.openEditor",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.copy",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.copyPath",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.copyAll",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.reveal",
+          "when": "false"
+        },
+        {
+          "command": "kural.search.dismiss",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "kural.search.copy",
+          "when": "webviewId == 'kural.search' && webviewSection == 'match'",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "kural.search.copy",
+          "when": "webviewId == 'kural.search' && webviewSection == 'file'",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "kural.search.copyPath",
+          "when": "webviewId == 'kural.search' && webviewSection =~ /^(file|match)$/",
+          "group": "1_copy@2"
+        },
+        {
+          "command": "kural.search.copyAll",
+          "when": "webviewId == 'kural.search' && webviewSection =~ /^(file|match|dir)$/",
+          "group": "1_copy@3"
+        },
+        {
+          "command": "kural.search.reveal",
+          "when": "webviewId == 'kural.search' && webviewSection =~ /^(file|match)$/",
+          "group": "2_reveal@1"
+        },
+        {
+          "command": "kural.search.dismiss",
+          "when": "webviewId == 'kural.search' && webviewSection =~ /^(file|match|dir)$/",
+          "group": "3_dismiss@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "kural.search.inFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "4_search@1"
         }
       ]
     },
@@ -396,6 +601,26 @@
         "command": "kural.toggleTab",
         "key": "ctrl+alt+space",
         "mac": "ctrl+alt+space"
+      },
+      {
+        "command": "kural.search.find",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f"
+      },
+      {
+        "command": "kural.search.replace",
+        "key": "ctrl+shift+h",
+        "mac": "cmd+shift+h"
+      },
+      {
+        "command": "kural.search.next",
+        "key": "f4",
+        "when": "kural.searchHasResults"
+      },
+      {
+        "command": "kural.search.prev",
+        "key": "shift+f4",
+        "when": "kural.searchHasResults"
       }
     ],
     "configuration": {
