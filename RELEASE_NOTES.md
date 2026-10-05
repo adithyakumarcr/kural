@@ -1,6 +1,4 @@
-## Not released yet
-
-These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
+## What's new in 1.1.0-alpha.4
 
 - **Tab Completion uses a model on your computer only after you chose one.** A model left over from an earlier install
   showed as "ready" although you never set it up. The panel now says "Not set up" with a **Set up** button until you
