@@ -22,6 +22,7 @@ const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
 const { GUIDE } = require("./guide");
+const { registerTabEditor, openBeside } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
 
 const MODELS = [
@@ -112,6 +113,7 @@ class ChatView {
   register() {
     const c = this.context;
     this.changes.register(c);
+    registerTabEditor(c, this);   // a chat tab dragged into the editor area opens there (tab-editor.js)
     watchFontScale(c, (m) => this.post(m));
     watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (fullSetup()) this.setupChanged("changed"); });
     let lastFocusReload = Date.now();
@@ -154,6 +156,7 @@ class ChatView {
         this.open();
       }),
       vscode.commands.registerCommand("kural.chat.split", () => this.openSplit()),
+      // (Panels opened by older versions come back through this serializer; new ones are tab editors, tab-editor.js.)
       vscode.window.registerWebviewPanelSerializer("kural.chatEditor", { deserializeWebviewPanel: async (panel) => this.restoreSplit(panel) }),
       vscode.commands.registerCommand("kural.chat.newTab", () => { this.reveal(); this.newTab(true); }),
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
@@ -530,13 +533,24 @@ class ChatView {
     return pane;
   }
 
-  // Split: a chat beside the code (an editor panel you can move anywhere), next to the side panel.
-  // It starts with a new chat; its tab bar switches between all your chats, like the side panel's.
+  // Split: a chat beside the code (an editor you can move anywhere), next to the side panel. Usually by dragging a chat
+  // tab into the editor area (lib/chat/tab-editor.js); the command opens a new chat that way. Its tab bar switches
+  // between all your chats, like the side panel's.
   openSplit(tabId) {
     const tab = tabId ? this.tab(tabId) : this.newTab(false);
-    const panel = vscode.window.createWebviewPanel("kural.chatEditor", tab.title, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
-      { enableScripts: true, retainContextWhenHidden: true });
-    this.adoptSplit(panel, tab.id);
+    openBeside(tab.id);
+  }
+  // A chat tab dropped in the editor area (or brought back after a restart): show it there. Like moving an editor tab
+  // in VS Code, it leaves the side panel, which shows another chat instead.
+  adoptDragged(panel, tabId) {
+    const id = tabId && this.tab(tabId) ? tabId : (this.tabs[0] || this.newTab(false)).id;
+    panel.title = this.tab(id).title;
+    for (const p of this.panes) {
+      if (p.kind === "editor" || p.activeId !== id) continue;
+      const other = this.tabs.find((t) => t.id !== id && !this.panes.some((q) => q.activeId === t.id)) || this.newTab(false);
+      this.activate(other.id, p);
+    }
+    this.adoptSplit(panel, id);
     this.save();
   }
   // After a restart VS Code brings the panel back; give it the chat it showed before.

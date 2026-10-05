@@ -235,8 +235,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   webview's address (`S.pics` = `{base, root}` from `filesFor()`; `localResourceRoots` = media, project folders,
   globalStorage, tmp, home; the CSP lets the page load pictures only); web pictures load only on click (a picture URL can carry data away). Don't reuse `S.files`: it's
   the @-mention file list (a clash there hid every picture). Links: `a.link[data-url]` → `openUrl` (http/https only).
-- **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel and split panels beside the code
-  (`openSplit`, WebviewPanel "kural.chatEditor", restored by a serializer from saved `splitIds`). Each pane has its own
+- **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel and chat editors beside the code.
+  Dragging a chat tab into the editor area makes one (`lib/chat/tab-editor.js`): the page's tab sets `ResourceURLs`
+  = `kural-chat:/<id>.kuralchat` (what VS Code's editor drop target opens), which opens in the custom editor
+  "kural.chatTab" (`adoptDragged`: the side panel moves on to another chat), so VS Code does the split zones, moving and
+  restoring after a restart. No FileSystemProvider for that scheme on purpose: with one, VS Code shows a breadcrumb bar
+  with the made-up file name. A drop on top of a webview (another chat, Get started) lands in that webview instead: drop
+  on an editor's tab bar or a text editor. Checked in the app with DOM drag events (CDP can't start a native drag in a
+  background window). Older split panels (WebviewPanel "kural.chatEditor") still come back through their serializer
+  (`restoreSplit`, `splitIds`). Each pane has its own
   `activeId`; `this.activeId` is a getter for the pane being handled (`this.pane`) or the one you used last
   (`focusPane`). `post()` goes to every pane (each shows what's about its own tab), except `ONE_PANE` replies
   (full, attached, flash…) to the current pane. A reply sent after an `await` uses `postTo(pane, …)`. Use

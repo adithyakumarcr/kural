@@ -32,7 +32,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Each change
   can be reviewed, kept or undone. Pictures in answers are shown. The clock button: every chat from every workspace
-  (search, pin, delete). The split button opens a second chat beside the code.
+  (search, pin, delete). Drag a chat tab into the editor area to
+  open it there, split like VS Code's editors (drop on a side: beside, above or below; also "Kural: Open a Chat Beside
+  the Code").
 - Devices over SSH (a Raspberry Pi, a board computer…): + → Link device → add one (name, address, username, password).
   Kural uses the password once to put its own SSH key on the device and doesn't save it anywhere (no keychain); after
   that it logs in with the key. A chat linked to a device can run commands and read/write files on it (asking first in

@@ -75,7 +75,9 @@ ins { text-decoration: none; background: var(--vscode-diffEditor-insertedTextBac
 /* ---------- Ask ---------- */
 .top { padding: 8px 10px 6px; display: grid; gap: 6px; }
 .top .box { border-radius: 6px; padding: 3px 3px 3px 7px; }
-.go { width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: calc(12px * var(--fs, 1)); font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
+/* (padding: 0: a button keeps the browser's 6 px side padding otherwise, too little room for the icon, which then
+   sits off to the right) */
+.go { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: calc(12px * var(--fs, 1)); font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
 .go .codicon { font-size: calc(14px * var(--fs, 1)); }
 .status { padding: 0 10px; }
 .answer { font-size: calc(12.5px * var(--fs, 1)); line-height: 1.5; padding: 6px 9px; margin-bottom: 6px; border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 0 6px 6px 0; }

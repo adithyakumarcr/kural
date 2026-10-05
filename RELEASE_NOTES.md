@@ -11,6 +11,12 @@
   Settings → Kural's log).
 - **Ask's example** is now a general one ("where are the user's settings saved?").
 - **Fixed:** Shift+Enter in the chat made a new line below the box's edge without scrolling to it.
+- **Split a chat by dragging its tab.** Drag a chat tab out of the Kural panel into the editor area: it opens there,
+  split like VS Code's editors (beside, above or below), and comes back after a restart. The split button is gone.
+- **A tidier Kural panel title bar:** the Claude Code button and Check for Updates are gone from it (Claude Code:
+  Ctrl+Esc; updates: Kural Settings, Help menu).
+- **Fixed: icons off centre.** The round send buttons (chat, Ask) kept the browser's own button padding, which left too
+  little room for the arrow, so it sat a few pixels right of the middle; Get started's check marks sat a little low.
 - **Tab Completion: Set up installs Ollama for you.** Without Ollama, the Tab panel's Set up used to open ollama.com
   in the browser. Now one click does everything: Kural downloads Ollama (with a percent), installs it (with a percent),
   starts it, then downloads the model. Get started's and the chat's "Install Ollama" do the same, with a notification.

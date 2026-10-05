@@ -157,8 +157,8 @@ Also in the chat:
   A picture from the internet waits for a click (loading it would tell that website you read the answer).
 - **Ask about Kural.** "How do I …?", "can Kural …?": the chat knows Kural's features, and if Kural can't do something
   it says so and links to [a feature request](https://github.com/adithyakumarcr/kural/issues/new?template=feature_request.yml).
-- **Two chats at once.** The split button (next to **+** in the Kural panel's title bar) opens a second chat beside
-  your code, with its own tabs and input. Both can work at the same time; drag it anywhere, even to another screen.
+- **Two chats at once.** Drag a chat tab out of the Kural panel into the editor area: it opens there, split like VS
+  Code's editors (beside, above or below), with its own tabs and input. Both can work at the same time.
 - **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
   need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
   its folder, or **Continue here** (a new chat here that knows the old conversation).
