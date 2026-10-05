@@ -18,7 +18,10 @@ Adithya is learning to code. Keep answers short; explain the *why* first; when f
 was wrong and why; point out mistakes plainly. Small decisions: make them and say so.
 At the end of every change, give the steps to build and install: `./install.sh` on his Mac or Ubuntu (builds from
 this folder and installs; `./install.sh --ext` when only `extension/` changed; `./install.sh --fresh` to try it as a
-new user: Kural's data is moved to `~/kural-backup-<date>` first), or the release download.
+new user: Kural's data is moved to `~/kural-backup-<date>` first; `./install.sh --from-scratch-install` for a real first
+start: `scripts/from-scratch.sh` deletes Kural's data without backup, logs Claude Code/Codex/Antigravity out, resets
+Kural's macOS permissions (`tccutil reset All com.kural`) and its keychain item, and optionally removes those programs;
+it asks before the build and deletes only after the build worked; `test/from-scratch.test.js`), or the release download.
 
 ## Layout
 Feature folders; a new feature gets its own file or folder, wired in `extension.js`.

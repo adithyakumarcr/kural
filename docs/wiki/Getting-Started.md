@@ -12,7 +12,10 @@ Download the file for your computer from [Releases](https://github.com/adithyaku
 | Windows 10 / 11 (x64) | `Kural-…-windows-x64-setup.exe` | Run it. If Windows says "Windows protected your PC": **More info → Run anyway**. No admin rights needed. |
 
 Building from the source instead: `./install.sh` in the repository (Mac or Ubuntu). `./install.sh --fresh` installs like
-a brand-new user (your Kural settings and chats move to a backup folder first).
+a brand-new user (your Kural settings and chats move to a backup folder first). `./install.sh --from-scratch-install`
+goes further, for testing a first start: Kural's data is deleted (no backup), Claude Code, Codex and Antigravity are
+logged out on the computer, the macOS permissions you gave Kural are reset, and, if you say so, those programs are
+removed too. It asks before changing anything; Ollama and its models stay.
 
 ## 2. Get started: where Kural's AI comes from
 
