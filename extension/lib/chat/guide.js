@@ -45,6 +45,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review red/green, Accept or Reject.
 - Tab Completion: grey suggestions as you type; Tab accepts. Click "Tab Completion" in the status bar for its panel:
   on/off (Ctrl+Alt+Space), how fast it suggests, the engine (Auto, a local model for speed, or Claude) and its model.
+  A model on this computer is used only after "Set up" there (or your own model in Get started).
   It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("push this to the fix/login branch", "commit with message fixed the login") and Kural suggests the command.

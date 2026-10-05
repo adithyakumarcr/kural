@@ -173,7 +173,9 @@ class Updater {
     const rel = newestRelease(releases);
     log(`update: you have ${this.version}; newest on GitHub: ${rel ? rel.version : "none"}`);
     if (!rel || compareVersions(rel.version, this.version) <= 0) {
-      if (!quiet) vscode.window.showInformationMessage(`Kural is up to date (${this.version}).`);
+      if (!quiet) vscode.window.showInformationMessage(require("./version").unreleased(this.context.extensionPath)
+        ? `No release is newer than ${this.version}. You're on a version built from the code (${require("./version").versionLabel(this.context.extensionPath, this.version)}).`
+        : `Kural is up to date (${this.version}).`);
       return;
     }
     const asset = assetFor(rel.assets);

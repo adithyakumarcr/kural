@@ -199,7 +199,7 @@ class Account {
       : { label: "$(server-environment) Set up a model on this computer", detail: "Works offline, no account", run: () => this.gs.open("local") });
     out.push(sep("Kural"));
     out.push({ label: "$(rocket) Get started", run: () => this.gs.open() });
-    out.push({ label: "$(sync) Check for updates", description: `you have ${this.context.extension.packageJSON.version}`, run: () => vscode.commands.executeCommand("kural.checkForUpdates") });
+    out.push({ label: "$(sync) Check for updates", description: `you have ${require("./version").versionLabel(this.context.extensionPath, this.context.extension.packageJSON.version)}`, run: () => vscode.commands.executeCommand("kural.checkForUpdates") });
     out.push({ label: "$(book) Kural guide", description: "what every feature does", run: () => open(WIKI) });
     out.push({ label: "$(lightbulb) Ask for a feature", run: () => open(ISSUES) });
     return out;

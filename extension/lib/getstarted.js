@@ -399,7 +399,8 @@ class GetStarted {
       try {
         const models = await this.ollama.models();
         const want = cfg().get("tabCompletion.localModel") || LOCAL_MODELS[1].id;
-        o.tabModel = models.some((m) => m.name === want || m.name === `${want}:latest`);
+        // (Downloaded and chosen for Tab: a model left over from before isn't set up until you choose it.)
+        o.tabModel = models.some((m) => m.name === want || m.name === `${want}:latest`) && (!!this.context.globalState.get("kural.tabLocal.v1") || !!this.rec.local);
         o.chatModels = models.filter((m) => m.chat).map((m) => m.name);
       } catch { /* Ollama stopped meanwhile */ }
     }

@@ -404,7 +404,7 @@
         el("div", { class: "brand-sub" }, "AI-powered code editor"),
         el("div", { class: "tagline" }, "Few words. Working code."),
         el("div", { class: "hints" }, hint("@", "mention a file"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
-        S.version ? el("div", { class: "version" }, `v${S.version}`) : null));
+        S.version ? el("div", { class: "version" }, S.version) : null));
     } else {
       t.messages.forEach((m, i) => listEl.append(messageNode(m, i)));
     }

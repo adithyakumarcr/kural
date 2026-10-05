@@ -36,6 +36,10 @@ class LocalEngine {
     this.listeners = [];
     this.pulling = null;   // { model, percent, status }
     this.last = null;      // the last local result, shown in the Tab panel: { ms, ok, note }
+    // Has this person chosen a model on this computer for Tab (the panel's "Use a model on this computer", a download,
+    // or their own model set up in Get started)? Ollama with the model already there (from an earlier install, another
+    // app) isn't a choice: until then Tab doesn't use it and the panel doesn't call it ready. (extension.js sets this.)
+    this.allowed = () => true;
   }
 
   note(ms, ok, note) { this.last = { ms, ok, note, at: Date.now() }; this.changed(); }
@@ -63,10 +67,13 @@ class LocalEngine {
     return next;
   }
 
-  async ready() { const s = await this.status(); return s.running && s.hasModel; }
+  async ready() { if (!this.allowed()) return false; const s = await this.status(); return s.running && s.hasModel; }
 
   // Load the model into memory now, so the first suggestion doesn't wait for it.
-  warm() { http("/api/generate", { model: model(), prompt: "", keep_alive: "2h" }, { timeoutMs: 60000 }).catch(() => {}); }
+  warm() {
+    if (!this.allowed()) return;
+    http("/api/generate", { model: model(), prompt: "", keep_alive: "2h" }, { timeoutMs: 60000 }).catch(() => {});
+  }
 
   // One suggestion. prefix/suffix = the file before/after the cursor; oneLine when the cursor is in
   // the middle of a line. Returns text, or null on failure (logged and shown in the Tab panel).

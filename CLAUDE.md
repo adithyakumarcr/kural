@@ -251,10 +251,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   with +, paste, or Shift+drag from the editor's own explorer.
 - **Keyboard shortcuts in the chat**: VS Code's `focusedView` isn't set for webviews, so the page reports
   focus itself (`kural.chatFocused` context key).
+- **Version label** (`lib/version.js`): `install.sh` `stamp_build` writes `extension/build.json` (gitignored: branch,
+  commit, "with changes") unless HEAD is exactly the tag `v<version>`; with it, the chat and Account menu show
+  "Unreleased version · main (abc1234)" instead of `v<version>`. Release builds (CI) never have the file. The update check
+  still compares the package version.
 - **Tab completion engines**: `lib/tab/local.js` (Ollama, raw FIM prompt `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>`
   for qwen2.5-coder base models; `tidyLocal()` trims its output) and Claude (`ClaudeSession`). Engine "auto" uses
   local when Ollama has the model, else Claude; in Auto, `race()` gives local a 350 ms head start, then Claude, first
-  real answer wins. Local requests use short context (1500/400 chars) and few tokens: CPU-only machines are slow.
+  real answer wins. The local engine counts only once chosen (`local.allowed`: globalState `kural.tabLocal.v1`, set by the
+  panel's Set up/Download, or Get started's own model): a model left over in Ollama isn't "ready". Local requests use short context (1500/400 chars) and few tokens: CPU-only machines are slow.
   Claude can't go below ~0.5 s per suggestion (measured). `test/fake-ollama.js` imitates Ollama for testing
   (modes via /tmp/rec/fake-mode: {"delay": ms} or {"empty": true}).
 - **Tab completion speed (Claude)**: model time (~0.6 s, Haiku, thinking off) dominates. Don't add work before the

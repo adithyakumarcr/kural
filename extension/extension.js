@@ -51,7 +51,7 @@ function activate(context) {
   context.subscriptions.push(output);
   const updater = new Updater(context);   // Help → Check for Updates…, and once a day by itself
   updater.autoCheck();
-  log(`Kural ${context.extension.packageJSON.version} starting; claude at ${findClaude() || "(not found)"}`);
+  log(`Kural ${require("./lib/version").versionLabel(context.extensionPath, context.extension.packageJSON.version)} starting; claude at ${findClaude() || "(not found)"}`);
   // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
   // AI work without a project open happens in Kural's own folder, never in your home folder (see workspace.js).
   require("./lib/workspace").setWorkDir(require("path").join(context.globalStorageUri.fsPath, "work"));
@@ -122,6 +122,10 @@ function activate(context) {
 
   // Tab's local engine (Ollama): checked now and every 15 s, so it's used as soon as it's there.
   const local = new LocalEngine();
+  // Tab uses a model on this computer only once you chose one (lib/tab/local.js allowed): the Tab panel's "Use a model
+  // on this computer" or Download, or your own model set up in Get started.
+  local.allowed = () => !!context.globalState.get("kural.tabLocal.v1") || !!getStarted.localModel;
+  local.choose = async () => { await context.globalState.update("kural.tabLocal.v1", true); await local.status(true); local.changed(); };
   local.status(true);
   const localTimer = setInterval(() => { if (cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status(); }, 15000);
   context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
