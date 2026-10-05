@@ -83,7 +83,8 @@ class ChatView {
     this.apply = apply;          // (code, uri, ask) => Promise   (Apply button on code blocks)
     this.activity = null;        // what you've been doing, for Tab (activity.js); set by extension.js
     this.tickets = new Tickets(() => vscode.workspace.isTrusted ? this.root() : ws.workDir());   // Jira search for "+ → Link ticket"
-    this.version = context.extension.packageJSON.version;
+    // ("v1.1.0-alpha.3", or "Unreleased version · main (…)" when built from the code: lib/version.js)
+    this.version = require("../version").versionLabel(context.extensionPath, context.extension.packageJSON.version);
     // Where chats are shown: the side panel, plus any chats opened beside the code (Split). Each pane
     // shows one tab: { id, kind: "side" | "editor", webview, panel?, ready, queue, activeId }.
     this.panes = [];

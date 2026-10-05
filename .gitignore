@@ -11,3 +11,6 @@ node_modules/
 /build
 __pycache__/
 *.pyc
+
+# Written by install.sh: which branch/commit a build from the code came from ("Unreleased version · main")
+extension/build.json

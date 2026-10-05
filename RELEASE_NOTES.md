@@ -2,6 +2,11 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Tab Completion uses a model on your computer only after you chose one.** A model left over from an earlier install
+  showed as "ready" although you never set it up. The panel now says "Not set up" with a **Set up** button until you
+  pick it (or set up your own model in Get started).
+- **Built from the code? Kural says so.** A Kural built with `./install.sh` shows "Unreleased version · main (commit)"
+  instead of the release number, in the chat and the Account menu, so you know you're not on a release.
 - **Fixed: logging in to Google Gemini on a Mac closed at once.** The login screen ran through a helper that quits on
   a Mac when it isn't started from a terminal. It now runs in a normal terminal: Antigravity opens Google's login page
   (or Kural does), and if Google shows a code, Kural asks for it in a pop-up and types it in. If the screen closes by

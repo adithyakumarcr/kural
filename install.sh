@@ -28,6 +28,24 @@ for a in "$@"; do
   esac
 done
 die() { echo "Error: $*" >&2; exit 1; }
+
+# Which code this build is from, so Kural shows "Unreleased version · main (b233785)" instead of the release number.
+# Exactly a release tag (vX.Y.Z of this version, no changes): no note, it's that release. (extension/build.json isn't
+# in git; the release builds on GitHub never have it.)
+stamp_build() {
+  local v branch commit note=extension/build.json
+  v=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' extension/package.json | head -1)
+  if command -v git >/dev/null && git rev-parse --git-dir >/dev/null 2>&1; then
+    if [ "$(git describe --exact-match --tags HEAD 2>/dev/null)" = "v$v" ] && git diff --quiet HEAD 2>/dev/null; then
+      rm -f "$note"; return 0
+    fi
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo local)
+    commit=$(git rev-parse --short HEAD 2>/dev/null || echo "")
+    git diff --quiet HEAD 2>/dev/null || commit="$commit, with changes"
+  else branch=local commit=""; fi
+  printf '{ "release": false, "branch": "%s", "commit": "%s", "version": "%s" }\n' "$branch" "$commit" "$v" > "$note"
+}
+stamp_build
 [ "$FRESH" = 1 ] && [ "$MODE" = ext ] && die "--fresh is for a full install, not with --ext."
 [ "$SCRATCH" = 1 ] && [ "$MODE" = ext ] && die "--from-scratch-install is for a full install, not with --ext."
 [ "$SCRATCH" = 1 ] && FRESH=0   # (deletes instead of moving to a backup)

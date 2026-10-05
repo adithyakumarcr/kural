@@ -45,7 +45,8 @@ class TabPanel {
       key: process.platform === "darwin" ? "⌃⌥Space" : "Ctrl+Alt+Space",
       engine: c.get("tabCompletion.engine"), lastEngine: this.lastEngine, claudeReady: isSetUp(),
       localModel: c.get("tabCompletion.localModel"), localModels: LOCAL_MODELS,
-      local: this.local ? { running: this.local.state.running, hasModel: this.local.state.hasModel, pulling: this.local.pulling, last: this.local.last } : null,
+      local: this.local ? { running: this.local.state.running, hasModel: this.local.state.hasModel, pulling: this.local.pulling, last: this.local.last,
+        allowed: this.local.allowed() } : null,
       linux: process.platform === "linux",
     };
   }
@@ -67,7 +68,8 @@ class TabPanel {
       if (m.type === "engine") { await set("tabCompletion.engine", m.value); if (this.local) this.local.status(true); }
       if (m.type === "localModel") { await set("tabCompletion.localModel", m.value); if (this.local) await this.local.status(true); }
       if (m.type === "install") installOllama();
-      if (m.type === "pull" && this.local) this.local.pull();
+      if (m.type === "pull" && this.local) { if (this.local.choose) await this.local.choose(); this.local.pull(); }
+      if (m.type === "useLocal" && this.local && this.local.choose) await this.local.choose();
       if (m.type === "check" && this.local) { await this.local.status(true); this.push(); }
       if (m.type === "getStarted") vscode.commands.executeCommand("kural.getStarted", "claude");
     });
@@ -146,11 +148,12 @@ function page(nonce, csp, codicons) {
       b.disabled = b.dataset.v === "claude" && !S.claudeReady && S.engine !== "claude";
       b.title = b.disabled ? "Set up Claude in Get started first" : "";
     }
-    const L = S.local || { running: false, hasModel: false };
-    const useLocal = S.engine !== "claude" && L.running && L.hasModel;
-    $("engineText").textContent = S.engine === "local" ? "suggestions come from the model on this computer"
+    const L = S.local || { running: false, hasModel: false, allowed: false };
+    const useLocal = S.engine !== "claude" && L.allowed && L.running && L.hasModel;
+    $("engineText").textContent = S.engine === "local" ? (useLocal ? "suggestions come from the model on this computer" : "no model on this computer set up yet: Claude meanwhile")
       : S.engine === "claude" ? "suggestions come from Claude"
-      : useLocal ? "the local model, with Claude racing it" : S.claudeReady ? "Claude, until the local model is ready" : "the local model, once it's ready";
+      : useLocal ? "the local model, with Claude racing it" : !L.allowed ? (S.claudeReady ? "Claude (no model on this computer set up)" : "a model on this computer, once you set one up")
+      : S.claudeReady ? "Claude, until the local model is ready" : "the local model, once it's ready";
     // Only the model the engine uses: Local model → its model; Claude → Claude's; Auto uses both.
     $("localRow").style.display = S.engine === "claude" ? "none" : "";
     $("claudeRow").style.display = S.engine === "local" || (S.engine === "auto" && !S.claudeReady) ? "none" : "";
@@ -159,7 +162,11 @@ function page(nonce, csp, codicons) {
     const cur = S.localModels.find((m) => m.id === S.localModel) || { size: "" };
     const acts = $("localActions"); acts.replaceChildren();
     const button = (text, type, ghost) => { const b = document.createElement("button"); b.className = "btn" + (ghost ? " ghost" : ""); b.textContent = text; b.onclick = () => send(type); acts.append(b); };
-    if (L.pulling) {
+    if (!L.allowed && !L.pulling) {
+      // Not chosen yet (a model left over from before doesn't count): say so, and offer it.
+      $("localText").innerHTML = '<span class="muted">' + ic("info") + ' Not set up. A small model on this computer makes suggestions faster and works offline.</span>';
+      button("Set up", "useLocal");
+    } else if (L.pulling) {
       $("localText").textContent = "downloading " + L.pulling.model + "… " + (L.pulling.percent || 0) + "%";
       const p = document.createElement("progress"); p.max = 100; p.value = L.pulling.percent || 0; acts.append(p);
     } else if (!L.running) {
@@ -172,7 +179,7 @@ function page(nonce, csp, codicons) {
       const last = L.last;
       $("localText").innerHTML = '<span class="ok">' + ic("pass-filled") + ' ready</span>' + (last && !last.ok ? ' <span class="warn">— last try: ' + esc(last.note) + '</span>' : '');
     }
-    $("claudeText").textContent = S.engine === "auto" ? "races the local model; the first good answer wins" : "";
+    $("claudeText").textContent = S.engine === "auto" && useLocal ? "races the local model; the first good answer wins" : "";
     const by = S.lastEngine === "local" ? "local model" : S.lastEngine === "claude" ? "Claude" : "";
     $("stats").textContent = S.last ? S.last + " ms" + (by ? " (" + by + ")" : "") + (S.median && S.median !== S.last ? " · usually " + S.median + " ms" : "") : "none yet";
   }
