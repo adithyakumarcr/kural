@@ -32,7 +32,7 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
    **Install in a terminal instead** runs the commands above in a terminal.
 2. **Logged in.**
    - Gemini: Google's program has no login command; it logs in on its own screen. **Log in** runs that screen in a
-     terminal that Kural reads: Kural opens Google's login page in your browser by itself, and when the screen asks for
+     terminal beside the Get started page (full height, so nothing is hidden below) that Kural reads: Kural opens Google's login page in your browser by itself, and when the screen asks for
      the code Google shows after you log in ("authorization code"), Kural asks you for it in a pop-up and types it in.
      (You can also type in the terminal yourself.) Kural closes the screen once you're logged in. On Windows, the screen
      opens in a plain terminal.

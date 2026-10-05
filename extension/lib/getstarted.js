@@ -599,7 +599,9 @@ class GetStarted {
       onCode: () => askCode(),
     }) : null;
     term = vscode.window.createTerminal({ name: `Log in to ${c.short}`, shellPath: S.bin, cwd: ws.workDir(), env: session ? session.env : undefined,
-      isTransient: true, iconPath: new vscode.ThemeIcon("account"), location: vscode.TerminalLocation.Panel });
+      // Beside the Get started page, full height: agy's login screen is ~24 lines, and in the bottom panel its
+      // question for the code was below the fold (you had to scroll the terminal to see it).
+      isTransient: true, iconPath: new vscode.ThemeIcon("account"), location: { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false } });
     const reading = session && typeof vscode.window.onDidWriteTerminalData === "function"
       ? vscode.window.onDidWriteTerminalData((e) => { if (e.terminal === term) session.feed(e.data); }) : null;
     if (session && !reading) log("get started: can't read the terminal here; the login screen is all yours");
