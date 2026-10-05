@@ -325,6 +325,15 @@
             if (t.id !== S.activeId) { S.focusNext = true; post({ type: "switchTab", id: t.id }); }
           },
           onauxclick: (e) => { if (e.button === 1) post({ type: "closeTab", id: t.id }); },
+          // Drag a tab into the editor area: it opens there, split like VS Code's own editors (lib/chat/tab-editor.js).
+          draggable: "true",
+          ondragstart: (e) => {
+            const uri = `kural-chat:/${t.id}.kuralchat`;
+            e.dataTransfer.effectAllowed = "copyMove";
+            e.dataTransfer.setData("ResourceURLs", JSON.stringify([uri]));
+            e.dataTransfer.setData("text/uri-list", uri);
+            e.dataTransfer.setData("text/plain", t.title);
+          },
         },
         el("span", { class: "dot" }),
         el("span", { class: "tab-title" }, t.title),

@@ -74,8 +74,10 @@ your next message, because which tools the model has is fixed when it starts.
 - **History** (clock button): every chat from every workspace, in full. Search, **pin** chats to the top, delete
   them. A chat from another workspace opens to read; **Open its folder**, or **Continue here** (a new chat here that knows
   the old conversation).
-- **Two chats at once**: the split button in the Kural panel's title bar opens a second chat beside your code. Both can
-  work at the same time; drag it anywhere, even to another screen.
+- **Two chats at once**: drag a chat tab out of the Kural panel into the editor area. It opens there, split the way VS
+  Code splits editors: drop it on a side of an editor to put it beside, above or below, or in the middle to add it as a
+  tab. Both chats can work at the same time; move it anywhere, even to another screen. It comes back after a restart.
+  (Command Palette: **Kural: Open a Chat Beside the Code** does the same with a new chat.)
 
 ## Your Claude Code setup
 

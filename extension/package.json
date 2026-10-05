@@ -17,7 +17,8 @@
     "onStartupFinished",
     "onView:kural.chat",
     "onView:kural.search",
-    "onWebviewPanel:kural.chatEditor"
+    "onWebviewPanel:kural.chatEditor",
+    "onCustomEditor:kural.chatTab"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -104,7 +105,7 @@
       },
       {
         "command": "kural.account",
-        "title": "Kural: Settings (Accounts, Usage, Updates)",
+        "title": "Kural Settings",
         "icon": "$(settings-gear)"
       },
       {
@@ -326,16 +327,6 @@
           "group": "navigation@1"
         },
         {
-          "command": "kural.chat.split",
-          "when": "view == kural.chat",
-          "group": "navigation@2"
-        },
-        {
-          "command": "kural.openClaudeCode",
-          "when": "view == kural.chat",
-          "group": "navigation@3"
-        },
-        {
           "command": "kural.showLog",
           "when": "view == kural.chat",
           "group": "navigation@4"
@@ -349,11 +340,6 @@
           "command": "kural.getStarted",
           "when": "view == kural.chat",
           "group": "9_kural@2"
-        },
-        {
-          "command": "kural.checkForUpdates",
-          "when": "view == kural.chat",
-          "group": "9_kural@3"
         },
         {
           "command": "kural.search.refresh",
@@ -815,7 +801,19 @@
           "description": "Tab Completion: one suggested command line (e.g. a commit message named from your changes), from the same model as Tab in the editor."
         }
       ]
-    }
+    },
+    "customEditors": [
+      {
+        "viewType": "kural.chatTab",
+        "displayName": "Kural Chat",
+        "selector": [
+          {
+            "filenamePattern": "*.kuralchat"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
   },
   "author": "Adithya Chinnakkonda",
   "enabledApiProposals": [
