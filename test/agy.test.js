@@ -227,6 +227,10 @@ function chat(opts = {}) {
     assert.strictEqual(agy._test.asksForCode("Signed in as you@example.com"), false);
   });
 
+  await check("real agy's logged-out message means \"not logged in\" (Log in, not a failed test)", async () => {
+    assert.strictEqual(agy._test.friendly("error: authentication failed or timed out"), agy.NOT_LOGGED_IN);
+  });
+
   await check("agy's tool names and parameters → the chat's tools", async () => {
     const d = agy._test.describe;
     assert.deepStrictEqual(d("view_file", { AbsolutePath: "/a/b.py" }, "/x"), { name: "Read", input: { file_path: "/a/b.py" } });
