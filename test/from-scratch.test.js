@@ -25,6 +25,9 @@ function setup() {
   fs.mkdirSync(path.join(home, ".kural/extensions"), { recursive: true });
   fs.mkdirSync(path.join(home, ".claude/projects"), { recursive: true }); fs.writeFileSync(path.join(home, ".claude/.credentials.json"), "{}");
   fs.mkdirSync(path.join(home, ".codex")); fs.writeFileSync(path.join(home, ".codex/auth.json"), "{}");
+  fs.mkdirSync(path.join(home, ".gemini/antigravity-cli"), { recursive: true });
+  fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/antigravity-oauth-token"), "{}");
+  fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/settings.json"), "{}");
   fs.mkdirSync(path.join(tmp, "kural-abc123/attachments"), { recursive: true });
   fs.mkdirSync(path.join(home, ".ollama/models"), { recursive: true });
   return { home, tmp, bin };
@@ -50,7 +53,9 @@ check("yes, keep the programs: logged out everywhere, Kural's data gone, the res
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
   for (const line of ["Claude Code: logged out", "Codex: logged out", "Antigravity (Google Gemini): logged out"]) assert.ok(r.stdout.includes(line), `${line}\n${r.stdout}`);
   for (const f of ["kural-fake-claude-state", "kural-fake-codex-state", "kural-fake-agy-state"]) assert.strictEqual(fs.readFileSync(path.join(s.tmp, f), "utf8"), "loggedout", f);
-  for (const p of [".config/Kural", ".kural", ".claude/.credentials.json", ".codex/auth.json", "tmp/kural-abc123"]) assert.ok(!exists(s, p), p);
+  for (const p of [".config/Kural", ".kural", ".claude/.credentials.json", ".codex/auth.json", "tmp/kural-abc123",
+    ".gemini/antigravity-cli/antigravity-oauth-token"]) assert.ok(!exists(s, p), p);
+  assert.ok(exists(s, ".gemini/antigravity-cli/settings.json"));   // (its settings aren't a login)
   for (const p of [".claude/projects", ".ollama/models", ".local/bin/claude", ".local/bin/codex", ".local/bin/agy"]) assert.ok(exists(s, p), p);
 });
 check("yes, remove the programs too: Claude Code's install and the others are gone", () => {
@@ -61,5 +66,13 @@ check("yes, remove the programs too: Claude Code's install and the others are go
   assert.ok(exists(s, ".ollama/models"));
 });
 for (const h of homes) fs.rmSync(h, { recursive: true, force: true });
+check("Gemini's saved login goes even when agy itself was already removed (it would sign the next agy in)", () => {
+  const s = setup();
+  fs.rmSync(path.join(s.bin, "agy"));
+  const r = run(s, "yes\nn");
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  assert.ok(!exists(s, ".gemini/antigravity-cli/antigravity-oauth-token"), r.stdout);
+  assert.match(r.stdout, /Antigravity \(Google Gemini\): logged out/);
+});
 console.log(fail ? `from-scratch: ${fail} FAILED` : "from-scratch: ALL PASS");
 process.exit(fail ? 1 : 0);

@@ -82,17 +82,31 @@ logout_codex() {
   local b; b=$(find_bin codex) || b=""
   if [ -n "$b" ]; then limited 30 "$b" logout >/dev/null 2>&1 || true; fi
   gone "${CODEX_HOME:-$HOME/.codex}/auth.json"
+  # (Codex can keep its login in the keychain instead of auth.json: "Codex Auth". Only there if you turned that on.)
+  if [ "$IS_MAC" = 1 ]; then for _ in 1 2 3 4 5; do security delete-generic-password -s "Codex Auth" >/dev/null 2>&1 && say "deleted Codex's keychain login" || break; done; fi
   if [ -n "$b" ] && limited 30 "$b" login status 2>&1 | grep -qi "logged in using"; then say "Codex: still logged in. Run: codex logout"
   elif [ -n "$b" ]; then say "Codex: logged out"; else say "Codex: not installed (nothing to log out)"; fi
 }
 
+# Antigravity keeps its Google login in the system's keyring, not in a file it removes on uninstall: on a Mac the
+# keychain item "gemini" / "antigravity" (made with the `security` program, so removing it asks nothing), on Linux the
+# Secret Service, and in ~/.gemini/antigravity-cli/antigravity-oauth-token where there's no keyring (SSH). So the login
+# survived both `agy --print /logout` (which may not run slash commands when printing) and removing agy, and a new agy
+# logged in by itself. Now: /logout if agy is there, then the saved login itself, always.
 logout_agy() {
   local b; b=$(find_bin agy) || b=""
-  if [ -z "$b" ]; then say "Antigravity (Google Gemini): not installed (nothing to log out)"; return; fi
-  limited 60 "$b" --print /logout --output-format json >/dev/null 2>&1 || true
-  if limited 60 "$b" --print /model --output-format json 2>/dev/null | grep -q '"status": *"SUCCESS"'; then
-    say "Antigravity (Google Gemini): still logged in. Run agy in a terminal and type /logout"
+  [ -n "$b" ] && { limited 60 "$b" --print /logout --output-format json >/dev/null 2>&1 || true; }
+  local left=0
+  if [ "$IS_MAC" = 1 ]; then
+    for _ in 1 2 3; do security delete-generic-password -s gemini -a antigravity >/dev/null 2>&1 && say "deleted Antigravity's keychain login" || break; done
+    security find-generic-password -s gemini -a antigravity >/dev/null 2>&1 && left=1
+  elif command -v secret-tool >/dev/null; then
+    secret-tool clear service gemini username antigravity >/dev/null 2>&1 || true
+  fi
+  gone "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+  if [ "$left" = 1 ]; then say "Antigravity (Google Gemini): its keychain login is still there. Open Keychain Access, search \"gemini\", delete it"
   else say "Antigravity (Google Gemini): logged out"; fi
+  return 0
 }
 
 # API keys in your shell's settings log the programs in by themselves: Kural can't remove those, so it says where.

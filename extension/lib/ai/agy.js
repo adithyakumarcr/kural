@@ -123,10 +123,25 @@ async function agyAuth(bin) {
   return { loggedIn: null, method: "", email: "", error: (r.error && r.error.message) || lastLine(text) };
 }
 
+// agy's /logout, then its saved login itself: agy keeps it in the system's keyring (Mac keychain item "gemini" /
+// "antigravity", made with the `security` program, so removing it asks nothing; Linux Secret Service; Windows
+// Credential Manager "gemini:antigravity") or, without a keyring, in ~/.gemini/antigravity-cli/antigravity-oauth-token.
+// `/logout` in print mode isn't sure to run (it may go to the model as a message), and a login left in the keyring
+// signs the next agy in by itself, so "Log out" removes it too.
 async function agyLogout(bin) {
-  const { text, json } = await slash(bin, "/logout");
-  if (json && json.status === "SUCCESS") return { ok: true };
-  return { error: `${lastLine(text) || "agy didn't log out"}. Run agy in a terminal and type /logout.` };
+  // (No check afterwards: asked while logged out, agy may open the browser to log in again.)
+  await slash(bin, "/logout").catch(() => null);
+  await forgetLogin();
+  return { ok: true };
+}
+async function forgetLogin() {
+  const quiet = (cmd, args) => new Promise((resolve) => {
+    try { execFile(cmd, args, { cwd: os.tmpdir(), timeout: 5000, windowsHide: true }, () => resolve()); } catch { resolve(); }
+  });
+  if (process.platform === "darwin") await quiet("/usr/bin/security", ["delete-generic-password", "-s", "gemini", "-a", "antigravity"]);
+  else if (IS_WIN) await quiet("cmdkey", ["/delete:gemini:antigravity"]);
+  else await quiet("secret-tool", ["clear", "service", "gemini", "username", "antigravity"]);
+  try { fs.rmSync(path.join(os.homedir(), ".gemini", "antigravity-cli", "antigravity-oauth-token"), { force: true }); } catch { /* gone */ }
 }
 
 // The command a terminal runs to log in: agy itself (its first screen is the Google login; it opens your browser).

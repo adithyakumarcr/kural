@@ -82,7 +82,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   screen, also when wrapped, or from agy's own `open`/`xdg-open` call through a PATH shim) and, when the screen waits
   on a line asking for a code (`asksForCode`), asks for the code in an input box and types it (+Enter). Windows: agy in
   a plain terminal. It polls `agyAuth` (`--print /model --output-format json`, no quota) and closes the screen when
-  logged in. The real screen's wording is unknown: if the code isn't asked for, widen `asksForCode`. Limits: `--print /usage`. Install: Google's script (`install.js` `script` plan). Test with
+  logged in. The real screen's wording is unknown: if the code isn't asked for, widen `asksForCode`. Its login lives in
+  the OS keyring (Mac keychain item service "gemini" / account "antigravity", made with `/usr/bin/security`; Linux
+  Secret Service; Windows "gemini:antigravity"), or `~/.gemini/antigravity-cli/antigravity-oauth-token` without one, and
+  survives uninstalling agy: a new agy signs in by itself. So `agyLogout` (and `scripts/from-scratch.sh`) run
+  `/logout` and then delete that item and file (`forgetLogin`); never re-check with `/model` right after (logged out,
+  agy may open the browser). Limits: `--print /usage`. Install: Google's script (`install.js` `script` plan). Test with
   `test/fake-agy.js` (`kural.agyPath`; state in `FAKE_AGY_FILE`/tmp). Never checked against the real agy (blocked here):
   verify event names and tool parameter names with a real account (`KURAL_RAW_LOG=/tmp/raw.jsonl` logs agy's lines).
   Models: `agy models` lists one per thinking level ("gemini-3.8-flash-high" / "Gemini 3.8 Flash (High)");
