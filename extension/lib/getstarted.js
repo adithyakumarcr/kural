@@ -95,7 +95,9 @@ class GetStarted {
 
   // At startup: never set up → open the page. Claude set up → check it quietly (a moment later, not to slow the start).
   start() {
-    const shell = findClaude.lookInShell();   // in the background: where your terminal finds claude
+    // Only when claude isn't where Kural looks anyway: your shell's startup files run each time it's asked, and anything
+    // they touch (a folder in Documents, say) macOS would put down to Kural.
+    const shell = findClaude() ? Promise.resolve(null) : findClaude.lookInShell();   // in the background: where your terminal finds claude
     if (!this.ready) { shell.then(() => this.open()); return; }
     if (this.rec.claude) setTimeout(() => this.quickCheck(), 2500);
     // Codex / Gemini: is the program still where it was (or where the setting now says)? Updates the saved path.

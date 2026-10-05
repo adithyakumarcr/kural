@@ -7,6 +7,7 @@
 //   - Optional: Git.
 // No vscode here (tests run without it). The caller passes the claude path and a clean environment.
 
+const os = require("os");
 const { spawn, execFile } = require("child_process");
 const usage = require("./usage");
 
@@ -16,7 +17,7 @@ function run(bin, args, env, timeout) {
   return new Promise((resolve) => {
     let p;
     try {
-      p = execFile(bin, args, { env, timeout, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout, stderr) =>
+      p = execFile(bin, args, { cwd: os.tmpdir(), env, timeout, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout, stderr) =>
         resolve({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: stdout || "", stderr: stderr || "",
           error: error && (error.killed ? Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }) : typeof error.code === "string" ? error : null) }));
     } catch (e) { resolve({ status: null, stdout: "", stderr: "", error: e }); return; }
@@ -75,7 +76,7 @@ function claudeTest(bin, env, { cwd, timeoutMs = 90000, model = "haiku" } = {}) 
     let p;
     try {
       p = spawn(bin, ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--model", model,
-        "--safe-mode", "--max-turns", "1"], { cwd, env, windowsHide: true });
+        "--safe-mode", "--max-turns", "1"], { cwd: cwd || os.tmpdir(), env, windowsHide: true });
     } catch (e) { resolve({ ok: false, ms: 0, error: e.message }); return; }
     const timer = setTimeout(() => finish({ ok: false, error: `No answer after ${Math.round(timeoutMs / 1000)} s. Check your internet connection.` }), timeoutMs);
     p.on("error", (e) => finish({ ok: false, error: e.message }));

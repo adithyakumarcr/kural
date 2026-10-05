@@ -13,6 +13,7 @@ const { projectInstructions } = require("./project");
 const { ChangeTracker } = require("./changes");
 const ws = require("../workspace");
 const { Attachments } = require("./attachments");
+const { within, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("../ai/ollama");
 const brain = require("../ai");
@@ -44,6 +45,7 @@ const localName = (model) => String(model).slice("ollama:".length);
 const validModel = (m) => valid(MODELS, m) || ((/^ollama:./.test(m || "") || !!cliOf(m)) && m.length < 200);
 // Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "agy" (Gemini).
 const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("../ai/clis");
+const { splitLevel } = require("../ai/agy");
 const engineOf = (m) => brain.engineOf(m);
 // A linked device's tools need the model's program to take Kural's MCP server and ask Kural before each command:
 // Claude Code and Codex do; Kural's own engine (Ollama) has no MCP, and Gemini (Antigravity) can't ask.
@@ -80,7 +82,7 @@ class ChatView {
     this.context = context;
     this.apply = apply;          // (code, uri, ask) => Promise   (Apply button on code blocks)
     this.activity = null;        // what you've been doing, for Tab (activity.js); set by extension.js
-    this.tickets = new Tickets(() => this.root());   // Jira search for "+ → Link ticket"
+    this.tickets = new Tickets(() => vscode.workspace.isTrusted ? this.root() : ws.workDir());   // Jira search for "+ → Link ticket"
     this.version = context.extension.packageJSON.version;
     // Where chats are shown: the side panel, plus any chats opened beside the code (Split). Each pane
     // shows one tab: { id, kind: "side" | "editor", webview, panel?, ready, queue, activeId }.
@@ -110,14 +112,16 @@ class ChatView {
     const c = this.context;
     this.changes.register(c);
     watchFontScale(c, (m) => this.post(m));
-    watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (cfg().get("chat.fullClaudeCodeSetup")) this.setupChanged("changed"); });
+    watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (fullSetup()) this.setupChanged("changed"); });
     let lastFocusReload = Date.now();
     c.subscriptions.push(vscode.window.onDidChangeWindowState((st) => {
-      if (!st.focused || !cfg().get("chat.fullClaudeCodeSetup") || Date.now() - lastFocusReload < 60000) return;
+      if (!st.focused || !fullSetup() || Date.now() - lastFocusReload < 60000) return;
       lastFocusReload = Date.now();
       this.setupChanged("may have changed while you were away");
     }));
     const refreshFiles = debounce(() => { this.files = null; if (this.panes.some((p) => p.ready)) this.sendFiles(); }, 1500);
+    // You trusted this folder: Claude restarts with your full setup.
+    c.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => this.setupChanged("trusted")));
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
     watcher.onDidCreate(refreshFiles); watcher.onDidDelete(refreshFiles);
     c.subscriptions.push(
@@ -199,6 +203,7 @@ class ChatView {
   }
 
   remember(tab) {
+    if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     const prev = this.context.globalState.get(LAST_KEY) || {};
     this.context.globalState.update(LAST_KEY, { ...prev, model: tab.model, effort: tab.effort, mode: tab.mode, team: tab.team || 0,
       mood: tab.mood, roles: tab.roles, teamStyle: tab.teamStyle });
@@ -212,6 +217,10 @@ class ChatView {
     if (!tab.engine && tab.messages && tab.messages.length) tab.engine = engineOf(tab.model);
     if (tab.engine === "local") tab.engine = "ollama";   // (its old name)
     if (!valid(EFFORTS, tab.effort)) tab.effort = d.effort;
+    // A Gemini model saved with its level in the name ("agy:gemini-3.8-flash-high"): the model, and the level becomes
+    // the intensity (the menu lists each Gemini model once now).
+    const lv = cliOf(tab.model) === "agy" && splitLevel(cliModel(tab.model));
+    if (lv) { tab.model = `agy:${lv.base}`; tab.effort = { minimal: "low", xhigh: "max" }[lv.level] || lv.level; }
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
     if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)
@@ -262,6 +271,7 @@ class ChatView {
     if (!tab) return;
     if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
+    if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
     if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: tab.setup });
@@ -477,12 +487,16 @@ class ChatView {
     view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
   }
 
-  // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (attachments,
-  // pictures a model made), the temp folder and your home folder (a picture you attached from Downloads, say). Only
-  // pictures: the page's rules (CSP) let it load nothing else, and nothing it loads can be sent anywhere.
+  // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (pictures a
+  // model made), the temp folder (pasted screenshots, and copies of pictures you attach: attachments.js), and pictures
+  // in the open chats (attached by an older Kural), each file only. Not your whole home folder: an answer could then show (and so open) anything in Documents or
+  // Desktop, and on a Mac that makes macOS ask about Kural. Only pictures: the page's rules (CSP) let it load nothing
+  // else, and nothing it loads can be sent anywhere.
   resourceRoots() {
+    const pics = new Set();
+    for (const t of this.tabs) for (const m of t.messages || []) for (const a of m.attachments || []) if (a.kind === "image" && a.path) pics.add(a.path);
     return [vscode.Uri.joinPath(this.context.extensionUri, "media"), ...ws.folders().map((f) => vscode.Uri.file(f.path)),
-      this.context.globalStorageUri, vscode.Uri.file(os.tmpdir()), vscode.Uri.file(os.homedir())];
+      this.context.globalStorageUri, vscode.Uri.file(os.tmpdir()), ...[...pics].slice(-200).map((f) => vscode.Uri.file(f))];
   }
   // For the page: how to turn a file path into an address it can load (fileSrc in media/chat.js).
   filesFor(webview) {
@@ -566,7 +580,19 @@ class ChatView {
 
   async sendFiles() {
     if (!this.files) {
-      const uris = await vscode.workspace.findFiles("**/*", "{**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/__pycache__/**,**/.venv/**,**/venv/**,**/.mypy_cache/**,**/.pytest_cache/**}", 20000);
+      // Your home folder (or a folder above it) open as a project: not into Desktop, Documents, Music, Photos… (macOS
+      // asks about each). Per folder, since the patterns are relative to it.
+      const SKIP = "**/node_modules/**,**/.git/**,**/dist/**,**/build/**,**/__pycache__/**,**/.venv/**,**/venv/**,**/.mypy_cache/**,**/.pytest_cache/**";
+      const uris = [];
+      for (const f of ws.folders()) {
+        let extra = "";
+        if (isHomeOrAbove(f.path)) {
+          const rel = path.relative(f.path, os.homedir()).split(path.sep).join("/");
+          extra = HOME_PROTECTED.map((n) => `,${rel ? `${rel}/` : ""}${n}/**`).join("");
+        }
+        uris.push(...await vscode.workspace.findFiles(new vscode.RelativePattern(f.path, "**/*"), `{${SKIP}${extra}}`, 20000 - uris.length));
+        if (uris.length >= 20000) break;
+      }
       this.files = uris.map((u) => vscode.workspace.asRelativePath(u)).sort();
     }
     this.post({ type: "files", files: this.files });
@@ -610,7 +636,7 @@ class ChatView {
   procKey(tab) {
     const claude = isClaude(tab.model);
     return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
-      (claude ? `|${cfg().get("chat.fullClaudeCodeSetup")}|${this.setupVersion}` : "");
+      (claude ? `|${fullSetup()}|${this.setupVersion}` : "");
   }
 
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
@@ -726,13 +752,13 @@ class ChatView {
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); }
     this.endDevice(old);
-    const full = cfg().get("chat.fullClaudeCodeSetup");
+    const full = fullSetup();
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
     const editing = tab.mode === "agent" || tab.mode === "auto";
     const team = this.teamSize(tab);
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map() };
     // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
-    r.teamFile = team ? path.join(os.tmpdir(), `kural-team-${tab.id}-${Date.now()}.json`) : null;
+    r.teamFile = team ? path.join(privateTmp("teams"), `${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
@@ -751,13 +777,15 @@ class ChatView {
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
-      tools, allowedTools: [...(editing ? ["Read", "Grep", "Glob", "WebSearch"] : READ_TOOLS), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
+      // else, onPermission.)
+      tools, allowedTools: [...(editing ? ["WebSearch"] : []), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
       mcpServers: team || dev ? { ...(team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
         ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root() || ws.workDir(), persist: true,
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
-    }, local ? { tools: localTools, allowedTools: ["Read", "Grep", "Glob"], capabilities: this.localReady.get(tab.model) || [],
+    }, local ? { tools: localTools, allowedTools: ["Read", "Grep", "Glob"], readRoots: ws.aiRoots(), capabilities: this.localReady.get(tab.model) || [],
       store: brain.localStore(this.context) } : null, {
       onMessage: (m) => { if (r.stale) return; r.gotOutput = true; this.onClaude(tab, r, m); },
       onPermission: (req) => r.stale ? { allow: false, message: "Stopped." } : this.onPermission(tab, r, req),
@@ -903,7 +931,11 @@ class ChatView {
     delete tab.carryOver;
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + await this.buildPrompt(text, contexts), attachIds);
-    if (meta.length) { user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta }); }
+    if (meta.length) {
+      user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta });
+      // What you attached the AI may read without asking, even outside the project (onPermission).
+      tab.granted = [...new Set([...(tab.granted || []), ...meta.flatMap((a) => [a.path, a.original]).filter(Boolean)])].slice(-50);
+    }
     r.pendingSend = prompt;
     r.proc.send(prompt);
     log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
@@ -1205,7 +1237,7 @@ class ChatView {
   }
 
   showSetup(tab, setup) {
-    setup.full = !!cfg().get("chat.fullClaudeCodeSetup");
+    setup.full = !!fullSetup();
     // Announce a connector that wasn't there before (not on the very first report).
     const known = tab.knownServers ? new Set(tab.knownServers) : null;
     // (Kural's own servers, the device's tools and the team's board, aren't news.)
@@ -1301,7 +1333,17 @@ class ChatView {
         if (open && open.isDirty) await open.save();
         this.changes.snapshot(turn, file);
       }
-      return { allow: true };
+      // Inside your project (or Kural's own work folder, the temp folder): no asking, that's what Agent mode is for.
+      // Anywhere else (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks) a write can make the
+      // computer run something later, so it asks like a command does (Auto still doesn't ask).
+      // (agy only tells, `notice`: it doesn't wait for an answer, so no card.)
+      if (!file || req.notice || ws.mayUse(file, true)) return { allow: true };
+    }
+    // Reading inside your project: no asking. Elsewhere (your Documents, Desktop…) it asks, like a command: on a Mac
+    // reading there also makes macOS ask about Kural.
+    if (READ_TOOLS.includes(req.tool_name)) {
+      const where = input.file_path || input.path;
+      if (!where || ws.mayUse(where) || within(where, tab.granted || [])) return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
     // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
@@ -1702,8 +1744,14 @@ function permDetail(tool, input) {
   if (tool === "DeviceCommand") return input.command || "";
   if (tool === "DeviceWrite") return `${input.path || ""}\n\n${String(input.content || "").slice(0, 600)}${String(input.content || "").length > 600 ? "\n…" : ""}`;
   if (tool === "WebFetch") return input.url || "";
+  if (EDIT_TOOLS.has(tool)) return `${input.file_path || input.notebook_path || ""}\n(outside this project)`;
+  if (READ_TOOLS.includes(tool)) return `${input.file_path || input.path || ""}\n(outside this project)`;
   return JSON.stringify(input).slice(0, 300);
 }
+
+// Your full Claude Code setup (your MCP servers, hooks, skills, and the project's .claude settings) only in a folder
+// you trust: a project's own .claude/settings.json can run commands (hooks), and Kural starts Claude early.
+function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 

@@ -11,7 +11,7 @@ const IS_ATLASSIAN = /atlassian|jira/i;
 // A read-only Atlassian tool: mcp__<atlassian…>__getJiraIssue, …__searchJiraIssuesUsingJql, …__lookupJiraAccountId
 function isAtlassianRead(tool) {
   const m = /^mcp__(.+)__(.+)$/.exec(tool || "");
-  return !!m && IS_ATLASSIAN.test(m[1]) && /^(get|search|lookup|fetch|list|read)/i.test(m[2]);
+  return !!m && IS_ATLASSIAN.test(m[1]) && /^(get|search|lookup|fetch|list|read|atlassianUserInfo)([A-Z_]|$)/.test(m[2]);
 }
 
 // What the + menu shows for "Link ticket": ok, or a warning and why.
@@ -98,7 +98,7 @@ class Tickets {
       tools: [], hostPermissions: true, jsonSchema: SCHEMA, appendSystemPrompt: PROMPT, cwd: this.root(),
     }, {
       // Only Atlassian's tools may run; everything else is refused.
-      onPermission: async (r) => IS_ATLASSIAN.test(r.tool_name || "") ? { allow: true } : { allow: false, message: "Only the Atlassian tools are allowed here." },
+      onPermission: async (r) => isAtlassianRead(r.tool_name) ? { allow: true } : { allow: false, message: "Only reading from Jira is allowed here." },
       onMessage: (m) => { if (this.proc === proc && this.pending) this.pending.onMessage(m); },
       onExit: (info) => {
         if (this.proc !== proc) return;

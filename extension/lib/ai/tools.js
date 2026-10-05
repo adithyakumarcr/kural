@@ -8,10 +8,8 @@ const { spawn } = require("child_process");
 
 const SKIP_DIRS = new Set([".git", "node_modules", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache", "dist", "build",
   ".next", "target", ".gradle", ".idea", ".vscode-test", "coverage", ".tox"]);
-// In your home folder, never these: on a Mac, looking into them makes macOS ask for access (Music, Photos…), and
-// they're not code.
-const HOME = require("os").homedir();
-const HOME_PRIVATE = new Set(["Library", "Music", "Pictures", "Movies", "Photos Library.photoslibrary", "Applications", ".Trash"]);
+// Folders a walk never goes into (lib/paths.js: macOS asks before an app looks into Music, Photos, Documents…).
+const { isProtected } = require("../paths");
 const MAX_OUT = 30000;          // characters of tool output the model gets back
 const clip = (s, n = MAX_OUT) => s.length > n ? `${s.slice(0, n)}\n… (cut: ${s.length - n} more characters)` : s;
 
@@ -65,7 +63,9 @@ function walk(dir, max = 20000) {
     for (const e of entries) {
       if (out.length >= max) return;
       const r = rel ? `${rel}/${e.name}` : e.name;
-      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && !(d === HOME && HOME_PRIVATE.has(e.name))) go(path.join(d, e.name), r); }
+      // Never into Desktop, Documents, Music, Photos… (macOS would ask you about them), other people's home folders or
+      // mounted disks, unless the walk started there.
+      if (e.isDirectory()) { const full = path.join(d, e.name); if (!SKIP_DIRS.has(e.name) && !isProtected(full)) go(full, r); }
       else if (e.isFile()) out.push(r);
     }
   };

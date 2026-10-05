@@ -26,6 +26,7 @@
 
 const fs = require("fs");
 const os = require("os");
+const { privateTmp } = require("../paths");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
@@ -34,7 +35,7 @@ const usage = require("./usage");
 const IS_WIN = process.platform === "win32";
 const MIN_VERSION = "1.1.15";   // stream-json input
 const RAW_LOG = process.env.KURAL_RAW_LOG;   // debugging: every line to and from agy
-const raw = (dir, line) => { if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `agy ${dir} ${line}\n`); } catch { /* debugging only */ } } };
+const raw = (dir, line) => { if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `agy ${dir} ${line}\n`, { mode: 0o600 }); } catch { /* debugging only */ } } };
 let log = () => {};
 const setLog = (f) => { log = f || (() => {}); };
 
@@ -61,7 +62,7 @@ async function findAgy(chosenPath) {
 // `command -v agy` in an interactive login shell (its installer adds ~/.local/bin to PATH there). Up to 8 s.
 function fromShell() {
   return new Promise((resolve) => {
-    const p = execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v agy"], { timeout: 8000, encoding: "utf8" }, (_e, stdout) => {
+    const p = execFile(process.env.SHELL || "/bin/bash", ["-ilc", "command -v agy"], { cwd: os.tmpdir(), timeout: 8000, encoding: "utf8" }, (_e, stdout) => {
       const line = String(stdout || "").trim().split("\n").pop() || "";
       resolve(path.isAbsolute(line) && isFile(line) ? line : null);
     });
@@ -91,9 +92,7 @@ function cleanEnv(extra) {
 
 // An empty folder for questions that aren't about a project (agy looks around its folder).
 function quietDir() {
-  const d = path.join(os.tmpdir(), `kural-agy-${process.getuid ? process.getuid() : "u"}`);
-  try { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); } catch { /* exists */ }
-  return d;
+  return privateTmp("agy");   // (only you can open it: lib/paths.js)
 }
 
 const older = (a, b) => { const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); return false; };
@@ -222,7 +221,40 @@ async function agyModels(bin) {
     const [id, label] = line.split("\t").map((s) => (s || "").trim());
     if (id && /^[\w.:-]+$/.test(id)) out.push({ id, label: label || id, description: "", isDefault: false });
   }
-  return out.slice(0, 40);
+  return groupModels(out).slice(0, 40);
+}
+
+// agy lists one model per thinking level ("gemini-3.8-flash-high" = "Gemini 3.8 Flash (High)"). Kural already has
+// that choice (the intensity: Low, Medium, High, Max), so the menu shows each model once, and the intensity picks
+// the level: { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", efforts: { low: "…-low", high: "…-high" } }.
+// Safe to run on a list that's grouped already.
+const LEVEL = /^(.*?)[-_](minimal|low|medium|high|xhigh|max)$/i;
+function splitLevel(id) { const m = LEVEL.exec(String(id || "")); return m ? { base: m[1], level: m[2].toLowerCase() } : null; }
+function groupModels(list) {
+  const out = [], byBase = new Map(), plain = new Set();
+  for (const m of list || []) {
+    const sp = splitLevel(m.id);
+    if (!sp && !(m.efforts && Object.keys(m.efforts).length)) plain.add(m.id);
+    if (!sp) { if (!byBase.has(m.id)) { const e = { ...m }; byBase.set(m.id, e); out.push(e); } else Object.assign(byBase.get(m.id), { label: m.label || byBase.get(m.id).label }); continue; }
+    let g = byBase.get(sp.base);
+    if (!g) { g = { id: sp.base, label: String(m.label || sp.base).replace(/\s*\((minimal|low|medium|high|xhigh|max)\)\s*$/i, ""), description: m.description || "", isDefault: false, efforts: {} }; byBase.set(sp.base, g); out.push(g); }
+    g.efforts = { ...(g.efforts || {}), [sp.level]: m.id };
+    if (m.isDefault) g.isDefault = true;
+  }
+  // A model listed both plain and with levels ("gemini-3-pro" and "gemini-3-pro-high"): the plain one is its Medium,
+  // so it can still be picked.
+  for (const g of out) if (g.efforts && !g.efforts.medium && plain.has(g.id)) g.efforts = { ...g.efforts, medium: g.id };
+  return out;
+}
+// Which of agy's models to run for Kural's intensity (low, medium, high, max). A model without levels: itself.
+const NEAREST = { minimal: ["minimal", "low", "medium", "high"], low: ["low", "minimal", "medium", "high"], medium: ["medium", "high", "low"],
+  high: ["high", "medium", "xhigh", "low"], max: ["max", "xhigh", "high", "medium", "low"] };
+function variantFor(models, id, effort) {
+  if (!id) return id;
+  const m = (models || []).find((x) => x.id === id);
+  if (!m || !m.efforts || !Object.keys(m.efforts).length) return id;
+  for (const lv of NEAREST[effort] || NEAREST.medium) if (m.efforts[lv]) return m.efforts[lv];
+  return Object.values(m.efforts)[0];
 }
 
 // Weekly limits: `/usage` answers with lines like "Gemini Models\tWeekly Limit Remaining\t99%".
@@ -242,7 +274,8 @@ function parseUsage(text) {
     if (!pct || cols.length < 2) continue;
     const remaining = /remaining/i.test(line);
     const used = remaining ? 100 - Number(pct[1]) : Number(pct[1]);
-    windows.push({ id: cols[0].toLowerCase().replace(/\W+/g, "_"), label: cols[0].replace(/ Models?$/i, ""), usedPercent: Math.max(0, Math.min(100, used)), resetsAt: null });
+    windows.push({ id: cols[0].toLowerCase().replace(/\W+/g, "_"), label: cols[0].replace(/ Models?$/i, ""), usedPercent: Math.max(0, Math.min(100, used)), resetsAt: null,
+      ...(/week/i.test(line) ? { period: "week" } : {}) });
   }
   // The one closest to its limit first: that's the one the status bar shows.
   return windows.sort((a, b) => b.usedPercent - a.usedPercent).slice(0, 4);
@@ -272,7 +305,8 @@ class AgyAgent {
   constructor(opts, handlers) {
     this.opts = { ...opts };
     this.h = handlers || {};
-    this.model = opts.model || "";
+    this.base = opts.model || "";                                     // the model as the menu shows it
+    this.model = variantFor(opts.models, this.base, opts.effort) || "";  // agy's own id for it at this intensity
     this.mode = MODE_FLAGS[opts.mode] ? opts.mode : "agent";
     this.sessionId = opts.resume || opts.sessionId || crypto.randomUUID();
     const saved = opts.resume ? this.lookup() : null;
@@ -461,7 +495,7 @@ class AgyAgent {
       this.turn.segment = "";   // the final answer is what comes after the last tool
       // A file about to change: let the chat keep a copy first (for Undo). agy doesn't wait, so it's a best effort.
       if ((d.name === "Edit" || d.name === "Write") && d.input.file_path && this.h.onPermission && (this.mode === "agent" || this.mode === "auto")) {
-        Promise.resolve(this.h.onPermission({ tool_name: fs.existsSync(d.input.file_path) ? "Edit" : "Write", input: { file_path: d.input.file_path }, tool_use_id: t.id })).catch(() => {});
+        Promise.resolve(this.h.onPermission({ tool_name: fs.existsSync(d.input.file_path) ? "Edit" : "Write", input: { file_path: d.input.file_path }, tool_use_id: t.id, notice: true })).catch(() => {});
       }
       this.emit({ type: "assistant", message: { role: "assistant", model: this.model || "antigravity", content: [{ type: "tool_use", id: t.id, name: t.name, input: t.input }] } });
     }
@@ -535,7 +569,8 @@ class AgyAgent {
 
   setModel(m) {
     // Fixed when agy starts: the next message starts it again with this model, in the same conversation.
-    const want = m && m !== "default" ? m : "";
+    this.base = m && m !== "default" ? m : "";
+    const want = variantFor(this.opts.models, this.base, this.opts.effort) || "";
     if (want === this.model) return;
     this.model = want;
     if (!this.busy) this.restart();
@@ -630,7 +665,8 @@ function describe(name, params, cwd) {
 // ---------- one question, one answer (Ask, Ctrl+K, commit messages) and Get started's test ----------
 
 // One answer, read-only, through the same stream-json mode (long prompts don't fit a command line on Windows).
-function askAgy(bin, { model, system, prompt, cwd, signal, timeout = 180000 } = {}) {
+function askAgy(bin, { model, models, effort = "low", system, prompt, cwd, signal, timeout = 180000 } = {}) {
+  model = variantFor(models, model, effort);   // (one-off questions: the quick level)
   return new Promise((resolve, reject) => {
     let text = "", done = false;
     const agent = new AgyAgent({ bin, model: model || "", mode: "ask", cwd: cwd || quietDir(), appendSystemPrompt: system || "" }, {
@@ -662,5 +698,5 @@ async function agyTest(bin, { cwd, model } = {}) {
   } catch (e) { return { ok: false, error: e.message, login: !!e.login }; }
 }
 
-module.exports = { AgyAgent, findAgy, agyVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginPty, setLog,
+module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginPty, setLog,
   NOT_LOGGED_IN, MIN_VERSION, _test: { describe, parseUsage, friendly, findLoginUrl, asksForCode } };

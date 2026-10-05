@@ -20,8 +20,10 @@ const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
 const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
+const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
 const brain = require("./lib/ai");
+const ws = require("./lib/workspace");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
@@ -36,7 +38,8 @@ function openClaudeCode() {
   const t = vscode.window.createTerminal({
     name: "Claude Code",
     shellPath: win ? "powershell.exe" : undefined,
-    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    // No folder open: Kural's work folder, never your home folder (Claude Code looks through the folder it starts in).
+    cwd: ws.root() || ws.workDir(),
     location: { viewColumn: vscode.ViewColumn.Beside },
   });
   t.show();
@@ -151,7 +154,11 @@ function activate(context) {
   chat.register();
   // Account (status bar, person icon): who's logged in, usage, switch account, log out. A new login: Claude's
   // chat processes start again with it.
-  new Account(context, getStarted, () => chat.setupChanged("login changed")).register();
+  const account = new Account(context, getStarted, () => chat.setupChanged("login changed"));
+  account.register();
+  // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
+  new UsagePanel(context, account, getStarted).register();
+  chat.onChoice = () => setTimeout(() => account.drawMeters(), 0);
   new SearchView(context).register();
   triggerOnCursor(context);
 

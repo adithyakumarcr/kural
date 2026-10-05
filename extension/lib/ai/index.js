@@ -21,7 +21,12 @@ const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("./clis");
 // Codex and Gemini (agy): where their program is and whether Get started's test passed (set by lib/getstarted.js), and the
 // models each offers (for the chat's model menu). Folder for their conversation ids (set by extension.js).
 const cli = Object.fromEntries(CLI_IDS.map((id) => [id, { bin: null, ready: false, models: [] }]));
-const setCli = (id, info) => { if (cli[id]) Object.assign(cli[id], info); };
+// (Gemini's models one per thinking level, as an older Kural saved them: grouped, the intensity picks the level.)
+const setCli = (id, info) => {
+  if (!cli[id]) return;
+  Object.assign(cli[id], info);
+  if (id === "agy" && Array.isArray(cli[id].models)) cli[id].models = require("./agy").groupModels(cli[id].models);
+};
 let cliStore = null;
 const setStore = (dir) => { cliStore = dir; };
 
@@ -59,7 +64,7 @@ function usable(model = currentModel()) {
 function cliAgent(id, model, opts, handlers) {
   const c = cli[id];
   const json = opts.jsonSchema ? `\n\nAnswer with only one JSON object (no other text, no code fence) that matches this JSON schema: ${JSON.stringify(opts.jsonSchema)}` : "";
-  return new CLIS[id].Agent({ name: opts.name, bin: c.bin, model: cliModel(model), effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
+  return new CLIS[id].Agent({ name: opts.name, bin: c.bin, model: cliModel(model), models: c.models, effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
     cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs, appendSystemPrompt: (opts.appendSystemPrompt || "") + json,
     sessionId: opts.sessionId, resume: opts.resume, store: cliStore || path.join(os.tmpdir(), "kural-cli-chats") }, handlers);
 }
@@ -68,7 +73,7 @@ async function askCli(id, model, system, prompt, token) {
   if (token) token.onCancellationRequested(() => ctl.abort());
   const t0 = Date.now();
   try {
-    const text = await CLIS[id].ask(cli[id].bin, { model: cliModel(model), system, prompt, cwd: ws.root() || ws.workDir(), signal: ctl.signal });
+    const text = await CLIS[id].ask(cli[id].bin, { model: cliModel(model), models: cli[id].models, system, prompt, cwd: ws.root() || ws.workDir(), signal: ctl.signal });
     log(`${CLIS[id].short}: answer in ${Date.now() - t0} ms`);
     return text == null ? null : String(text);
   } catch (e) { log(`${CLIS[id].short}: ${e.message}`); return null; }

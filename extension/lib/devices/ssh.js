@@ -65,7 +65,9 @@ class Ssh {
           "-o", "KbdInteractiveAuthentication=no", "-o", "BatchMode=yes"])];
     if (reuse && this.controlDir) a.push("-o", "ControlMaster=auto", "-o", `ControlPath=${path.join(this.controlDir, "%C")}`, "-o", "ControlPersist=600");
     if (tty) a.push("-t"); else a.push("-T");
-    a.push(`${dev.user}@${dev.host}`);
+    // "--": a username or address starting with "-" would otherwise be read as an ssh option (-F, -o ProxyCommand…).
+    if (/^-/.test(String(dev.user)) || /^-/.test(String(dev.host))) throw new Error("The address or username can't start with \"-\".");
+    a.push("--", `${dev.user}@${dev.host}`);
     return a;
   }
 
@@ -173,7 +175,8 @@ class Ssh {
   // Close a reused connection (after setting the key up again, removing the device).
   close(dev) {
     if (!this.controlDir) return;
-    try { spawn(this.bin, [...this.args(dev), "-O", "exit"], { stdio: "ignore", env: this.env(null) }).on("error", () => {}); } catch { /* no master */ }
+    // (-O goes before "--" and the destination: after them it would be a command for the device.)
+    try { const a = this.args(dev); a.splice(a.length - 2, 0, "-O", "exit"); spawn(this.bin, a, { stdio: "ignore", env: this.env(null) }).on("error", () => {}); } catch { /* no master */ }
   }
 
   // The command line for a terminal on the device (Kural's key; nothing secret in its environment).

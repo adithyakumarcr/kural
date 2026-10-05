@@ -1,18 +1,30 @@
 # Account and Updates
 
-## The usage meter
+## AI Usage
 
-The status bar (bottom right) shows how much of your plan you've used:
+**The AI Usage panel** (at the bottom, next to Terminal and Tab Completion; or Command Palette → *Kural: Show AI
+Usage*) shows each of your plan's limits in words, with a bar and the time it starts again:
+
+```
+Claude   Claude Pro
+5-hour limit 50% used          resets in 42 min (Sun 9:24 PM)
+Weekly limit 25% used          resets in 3 days 4 h (Thu 12:42 AM)
+```
+
+Google Gemini (its weekly limits) and ChatGPT (Codex) (5-hour and weekly) are shown the same way. **Refresh** asks
+each program now (for Claude, one tiny request); **usage page** opens the provider's own page.
+
+**The status bar** (bottom right) shows the AI your chat is using in words, the others short:
 
 | Shows | Means |
 |---|---|
-| `Claude 45% · 24%` | Claude: 45 % of the 5-hour limit and 24 % of the weekly limit used |
-| `Codex 12% · 3%` | ChatGPT (Codex): the same two limits |
+| `Claude 5h 50% · resets 42m \| Weekly 25% · resets 3d 4h` | the chat's AI: each limit used, and when it resets |
+| `Codex 12% · 3%` | another AI you use: its 5-hour and weekly limits used |
 | `Gemini 13% · 1%` | Google Gemini: its weekly limits used (Gemini models, other models…) |
 
-It turns orange from 80 % and red from 95 %. Hover for when each limit resets. The numbers come from the programs
+It turns orange from 80 % and red from 95 %. Click it for the AI Usage panel. The numbers come from the programs
 themselves: Claude Code sends them with every answer (so they update while you work), Codex when Kural asks (every 10
-minutes). To get Claude's numbers right now, Account menu → the usage line (one tiny request to Claude).
+minutes), Gemini from its `/usage`.
 
 ## Account
 

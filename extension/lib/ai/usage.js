@@ -1,8 +1,9 @@
 // How much of each AI plan you've used: Claude's 5-hour and weekly limits, Codex's and Gemini's (agy) limits. No vscode
 // here: the providers report into it (Claude Code sends `rate_limit_event` with every answer; Codex's app server sends
-// `account/rateLimits/updated`; agy's /usage and token counts), and lib/usage-bar.js shows it in the status bar.
+// `account/rateLimits/updated`; agy's /usage and token counts). lib/account.js shows it in the status bar and
+// lib/usage-panel.js in the AI Usage panel at the bottom.
 //
-// A report: { provider: "claude" | "codex" | "agy", windows: [{ id, label, usedPercent, resetsAt (ms) }],
+// A report: { provider: "claude" | "codex" | "agy", windows: [{ id, label, usedPercent, resetsAt (ms), period? }],
 //             tokens?: { input, output }, plan?: "Pro" }
 // Nothing here ever reads a login or a key: only what the providers' own programs report.
 
@@ -56,10 +57,36 @@ function current(provider) {
   return { ...s, windows, tokens };
 }
 
+// ---------- in words ----------
+// "5-hour limit", "Weekly limit", "Weekly limit (Opus)", "Gemini: weekly limit".
+function limitName(w) {
+  const l = String(w.label || w.id || "Limit");
+  if (w.period === "week") return `${l}: weekly limit`;
+  if (/^week\b/i.test(l)) return `Weekly limit${l.slice(4)}`;
+  if (/^\d+-(hour|day|minute)$/.test(l)) return `${l} limit`;
+  return /limit/i.test(l) ? l : `${l} limit`;
+}
+// How long until `t` (ms): "42 min", "2 h 10 min", "3 days 4 h". short: "42m", "2h 10m", "3d 4h".
+function until(t, now = Date.now(), short = false) {
+  if (!t) return "";
+  const m = Math.max(0, Math.round((t - now) / 60000));
+  const [mi, h, d] = short ? ["m", "h", "d"] : [" min", " h", null];
+  if (m < 60) return `${m}${mi}`;
+  if (m < 24 * 60) { const hh = Math.floor(m / 60), mm = m % 60; return `${hh}${h}${mm ? ` ${mm}${mi}` : ""}`; }
+  const dd = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60);
+  return short ? `${dd}d${hh ? ` ${hh}h` : ""}` : `${dd} day${dd > 1 ? "s" : ""}${hh ? ` ${hh} h` : ""}`;
+}
+// One window in words: "5-hour limit 50% used, resets in 42 min".
+function inWords(w, now = Date.now()) {
+  const pct = `${Math.round(w.usedPercent)}%`;
+  const reset = w.resetsAt ? (w.resetsAt <= now ? ", resets now" : `, resets in ${until(w.resetsAt, now)}`) : "";
+  return `${limitName(w)} ${pct} used${reset}`;
+}
+
 const onChange = (f) => { listeners.add(f); return { dispose: () => listeners.delete(f) }; };
 const providers = () => [...state.keys()];
 // Saved between starts (the status bar shows the last numbers right away).
 const snapshot = () => Object.fromEntries(state);
 function restore(saved) { for (const [k, v] of Object.entries(saved || {})) if (!state.has(k) && v) state.set(k, v); }
 
-module.exports = { report, fromClaude, current, onChange, providers, snapshot, restore, _reset: () => state.clear() };
+module.exports = { report, fromClaude, current, limitName, until, inWords, onChange, providers, snapshot, restore, _reset: () => state.clear() };

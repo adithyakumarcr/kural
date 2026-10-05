@@ -21,7 +21,12 @@
   ],
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": true
+      "supported": "limited",
+      "description": "In a folder you haven't trusted, Kural ignores that folder's settings for which programs to run and how much the AI may do on its own, and doesn't load the folder's Claude Code setup (hooks, MCP servers).",
+      "restrictedConfigurations": [
+        "kural.claudePath", "kural.codexPath", "kural.agyPath", "kural.tabCompletion.ollamaUrl",
+        "kural.chat.mode", "kural.chat.fullClaudeCodeSetup", "kural.chat.model"
+      ]
     }
   },
   "main": "./extension.js",
@@ -84,6 +89,12 @@
         "command": "kural.getStarted",
         "title": "Get Started",
         "icon": "$(rocket)",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.showUsage",
+        "title": "Show AI Usage (limits and when they reset)",
+        "icon": "$(dashboard)",
         "category": "Kural"
       },
       {
@@ -189,6 +200,11 @@
           "id": "kural-tab",
           "title": "Tab Completion",
           "icon": "media/chat-icon.svg"
+        },
+        {
+          "id": "kural-usage",
+          "title": "AI Usage",
+          "icon": "media/usage-icon.svg"
         }
       ]
     },
@@ -213,6 +229,13 @@
           "type": "webview",
           "id": "kural.tabPanel",
           "name": "Tab Completion"
+        }
+      ],
+      "kural-usage": [
+        {
+          "type": "webview",
+          "id": "kural.usagePanel",
+          "name": "AI Usage"
         }
       ]
     },
@@ -380,16 +403,19 @@
       "properties": {
         "kural.claudePath": {
           "type": "string",
+          "scope": "machine",
           "default": "",
           "markdownDescription": "Where the `claude` program (Claude Code) is. Leave empty to find it automatically; set it only if Kural can't find yours (Get started → *Choose the claude file…*)."
         },
         "kural.codexPath": {
           "type": "string",
+          "scope": "machine",
           "default": "",
           "markdownDescription": "Where the `codex` program (OpenAI's Codex CLI) is. Leave empty to find it automatically."
         },
         "kural.agyPath": {
           "type": "string",
+          "scope": "machine",
           "default": "",
           "markdownDescription": "Where the `agy` program (Google's Antigravity CLI, for Google Gemini) is. Leave empty to find it automatically."
         },
@@ -487,6 +513,7 @@
         },
         "kural.tabCompletion.ollamaUrl": {
           "type": "string",
+          "scope": "machine",
           "default": "http://127.0.0.1:11434",
           "description": "Where Ollama runs."
         },

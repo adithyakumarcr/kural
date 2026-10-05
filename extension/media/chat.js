@@ -190,6 +190,65 @@
     return out;
   }
 
+  // ---------- code colors ----------
+  // A small, any-language highlighter for code in answers: comments, strings, numbers, keywords, function names, types,
+  // in VS Code's Dark+ / Light+ colors (chat.css .tk-*). It makes text nodes and spans only (never HTML from the answer).
+  const KW_DECL = new Set(("const let var function func fn def class struct enum interface type public private protected static " +
+    "async new extends implements package namespace module void int float double char bool boolean string long short unsigned " +
+    "signed byte auto final abstract readonly declare lambda local mut pub impl trait use crate typeof instanceof delete sizeof " +
+    "val object override virtual extern volatile register inline constexpr template typename defer go chan map select " +
+    "export echo set unset alias source").split(" "));
+  const KW_CTRL = new Set(("if else elif for while do switch case default break continue return throw throws try catch finally " +
+    "except raise with as from import yield await goto match when then fi esac done unless until loop pass in of and or not is " +
+    "foreach elseif endif require include").split(" "));
+  const KW_LANG = new Set("true false null None True False undefined nil this self super NaN Infinity".split(" "));
+  const HASH_LANGS = /^(py|python|sh|bash|zsh|shell|console|ruby|rb|yaml|yml|toml|r|perl|pl|makefile|make|dockerfile|conf|ini|cmake|nim|elixir|ex|powershell|ps1|coffee|graphql|gql|tf|hcl)$/i;
+  const DASH_LANGS = /^(sql|lua|haskell|hs|elm|ada)$/i;
+  const MARKUP_LANGS = /^(html|xml|svg|vue|svelte|jsx|tsx)$/i;
+  const SHELL_LANGS = /^(sh|bash|zsh|shell|console)$/i;
+  const PLAIN_LANGS = /^(text|txt|plain|plaintext|output|log|diff|patch)$/i;
+  // (# starts a comment only at the start of a word: "https://x.com/#a" isn't one. A ' with no closing ' on its line
+  // isn't a string: Rust's 'a, "can't" in a sentence.)
+  const R_SLASH = /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/.source, R_HASH = /(?<!\S)#[^\n]*/.source, R_DASH = /--[^\n]*/.source,
+    R_HTMLC = /<!--[\s\S]*?(?:-->|$)/.source;
+  const R_STR = /"""[\s\S]*?(?:"""|$)|'''[\s\S]*?(?:'''|$)|"(?:\\.|[^"\\\n])*"?|`(?:\\.|[^`\\])*`?/.source;
+  const R_SQ = /(?<!\w)(?:[fFrRbBuU]{1,2}(?='))?'(?:\\.|[^'\\\n])*'/.source, R_SQ_RUST = /'(?:\\.|[^'\\\n])'/.source;
+  const R_NUM = /\b0[xX][\da-fA-F_]+\b|\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?\b/.source;
+  const R_TAG = /<\/?[A-Za-z][\w:-]*/.source, R_WORD = /([A-Za-z_$][\w$]*)(\s*\()?/.source;
+  function highlight(code, lang) {
+    lang = String(lang || "");
+    if (code.length > 60000 || PLAIN_LANGS.test(lang)) return [code];
+    // No language given: # starts a comment when the code looks like a script (no // in it).
+    const hash = HASH_LANGS.test(lang) || (!lang && /^\s*#(?!include|define|!)/m.test(code) && !/\/\//.test(code));
+    const markup = MARKUP_LANGS.test(lang);
+    const comment = [hash ? null : R_SLASH, hash ? R_HASH : null, DASH_LANGS.test(lang) ? R_DASH : null, markup ? R_HTMLC : null].filter(Boolean).join("|");
+    // (Rust: 'a is a lifetime, so a ' string is one character: 'x', '\n'.)
+    const str = `${R_STR}|${/^(rust|rs)$/i.test(lang) ? R_SQ_RUST : R_SQ}`;
+    const re = new RegExp(`(${comment})|(${str})|(${R_NUM})|(${markup ? R_TAG : "(?!)"})|${R_WORD}`, "g");
+    const out = [];
+    let last = 0, m;
+    const add = (cls, t) => out.push(el("span", { class: cls }, t));
+    while ((m = re.exec(code))) {
+      if (!m[0]) { re.lastIndex++; continue; }
+      if (m.index > last) out.push(code.slice(last, m.index));
+      const t = m[5] || m[0];
+      if (m[1]) add("tk-c", t);
+      else if (m[2]) add("tk-s", t);
+      else if (m[3]) add("tk-n", t);
+      else if (m[4]) add("tk-tag", t);
+      else if (KW_LANG.has(t)) add("tk-l", t);
+      else if (KW_CTRL.has(t)) add("tk-x", t);
+      else if (KW_DECL.has(t)) add("tk-k", t);
+      else if (m[6]) add("tk-f", t);
+      else if (/^[A-Z][a-z]\w*$/.test(t) && !SHELL_LANGS.test(lang)) add("tk-t", t);
+      else out.push(t);
+      if (m[6]) out.push(m[6]);   // (the "(" after a function name)
+      last = re.lastIndex;
+    }
+    if (last < code.length) out.push(code.slice(last));
+    return out;
+  }
+
   function codeCard(info, code, done) {
     const lang = (info.split(/\s+/)[0] || "").replace(/^path=.*/, "");
     const pm = info.match(/path=(\S+)/), file = pm ? pm[1] : null;
@@ -202,7 +261,7 @@
         btn("Copy", "Copy to clipboard", () => post({ type: "copy", code })),
         btn("Insert", "Insert at the cursor", () => post({ type: "insert", code })),
         btn("Apply", file ? `Apply to ${file} and review` : "Apply to the open file and review", () => post({ type: "apply", code, path: file }), "primary")),
-      el("pre", {}, el("code", {}, code)));
+      el("pre", {}, el("code", {}, highlight(code, lang))));
   }
 
   // ---------- layout ----------
@@ -430,7 +489,7 @@
             (m.segments || []).filter((s) => s.t !== "text" && s.ctx && s.ctx.kind !== "selection" && IMG_RE.test(s.ctx.path || "") && fileSrc(s.ctx.path)).map((s) => s.ctx)),
           (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
             a.kind === "image" && fileSrc(a.path)
-              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.path }) })
+              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.original || a.path }) })
               : el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
                 kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
     }
@@ -610,14 +669,18 @@
 
   function permNode(b) {
     const what = b.tool === "Bash" ? "Run this command?" : b.tool === "WebFetch" ? "Open this web page?"
-      : b.tool === "DeviceCommand" ? `Run this on ${b.where || "the device"}?` : b.tool === "DeviceWrite" ? `Write this file on ${b.where || "the device"}?` : `Use ${prettyTool(b.tool)}?`;
+      : b.tool === "DeviceCommand" ? `Run this on ${b.where || "the device"}?` : b.tool === "DeviceWrite" ? `Write this file on ${b.where || "the device"}?`
+      : b.tool === "Write" || b.tool === "Edit" || b.tool === "NotebookEdit" ? "Change this file?"
+      : b.tool === "Read" ? "Read this file?" : b.tool === "Grep" || b.tool === "Glob" ? "Look through this folder?" : `Use ${prettyTool(b.tool)}?`;
     const card = el("div", { class: `perm ${b.state}` }, el("div", { class: "perm-q" }, b.agent ? el("span", { class: "perm-agent" }, typeof b.agent === "number" ? `Agent ${b.agent}` : b.agent) : null, what), el("pre", {}, b.detail));
     if (b.state === "pending") {
-      const always = el("input", { type: "checkbox", id: `al-${b.pid}` });
+      // A file outside the project (read or change): yes or no for this one; "allow all" is only for commands.
+      const fileCard = /^(Read|Grep|Glob|Write|Edit|NotebookEdit)$/.test(b.tool);
+      const always = fileCard ? null : el("input", { type: "checkbox", id: `al-${b.pid}` });
       card.append(el("div", { class: "perm-row" },
-        el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: always.checked }) }, "Run"),
+        el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: !!(always && always.checked) }) }, fileCard ? "Allow" : "Run"),
         el("button", { class: "cb", onclick: () => post({ type: "permission", pid: b.pid, allow: false }) }, "Skip"),
-        el("label", { class: "always", for: `al-${b.pid}` }, always, b.where ? ` Allow everything on ${b.where} in this chat` : " Allow all commands in this chat")));
+        always ? el("label", { class: "always", for: `al-${b.pid}` }, always, b.where ? ` Allow everything on ${b.where} in this chat` : " Allow all commands in this chat") : null));
     } else card.append(el("div", { class: "perm-state" }, b.state === "allowed" ? [icon("check"), " Allowed"] : [icon("close"), " Skipped"]));
     return card;
   }
@@ -911,7 +974,8 @@
         ...localMenuItems(t),
         ...cliMenuItems(t, false),
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
-        el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
+        el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
+        levelNote(t),
         el("div", { class: "mh" }, "Mood"),
         el("div", { class: "seg mood" }, S.moods.map((md) => el("button", { class: t.mood === md.id ? "on" : "", title: md.hint, onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label))),
         el("div", { class: "sep" }),
@@ -936,6 +1000,27 @@
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }
   }
+  // A Gemini model comes in thinking levels (agy lists "… (Low)", "… (High)"): the intensity picks one. Which levels
+  // this model has, and what each intensity button runs.
+  const LEVEL_NEAR = { low: ["low", "minimal", "medium", "high"], medium: ["medium", "high", "low"], high: ["high", "medium", "xhigh", "low"], max: ["max", "xhigh", "high", "medium", "low"] };
+  function geminiLevels(t) {
+    const c = /^agy:(.+)$/.exec(t.model || ""); if (!c) return null;
+    const cli = (S.clis || []).find((x) => x.id === "agy");
+    const m = cli && cli.models.find((x) => x.id === c[1]);
+    return m && m.efforts && Object.keys(m.efforts).length ? m.efforts : null;
+  }
+  const cap = (w) => w[0].toUpperCase() + w.slice(1);
+  function levelHint(t, effort) {
+    const lv = geminiLevels(t); if (!lv) return "";
+    const got = (LEVEL_NEAR[effort] || []).find((x) => lv[x]);
+    return got ? `Runs ${modelLabel(t.model)} (${cap(got)})` : "";
+  }
+  function levelNote(t) {
+    const lv = geminiLevels(t); if (!lv) return null;
+    const order = ["minimal", "low", "medium", "high", "xhigh", "max"].filter((x) => lv[x]);
+    return el("div", { class: "mi-note" }, `${modelLabel(t.model)} thinks at ${order.map(cap).join(", ")}: the intensity picks the nearest.`);
+  }
+
   // ---------- Gemini and Codex ----------
   // Set up: a section with their models (from the program itself). Not set up: one line each at the end that opens
   // Get started for it.

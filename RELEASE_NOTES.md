@@ -2,6 +2,25 @@
 
 These changes aren't in a release yet. When releasing, rename this heading to "What's new in <version>".
 
+- **Kural asks before going outside your project, and never looks through your private folders.** On a Mac, an app
+  that opens Desktop, Documents, Downloads, Music or Photos makes macOS ask "Kural would like to access…". Kural now
+  stays inside your project: the AI reads and changes files there without asking, and anywhere else it asks you first
+  (a "Read this file?" or "Change this file?" card; files you attach are fine). Kural never searches through those
+  folders on its own (not when your home folder is open, not in the terminal's suggestions, not with no folder open).
+- **Safer in folders you haven't trusted.** A downloaded project can't change which programs Kural runs or switch it
+  to Auto, and its own Claude Code setup (hooks, MCP servers) isn't loaded until you trust the folder.
+- **Other security fixes.** Updates are only installed from Kural's GitHub releases and checked against GitHub's
+  checksum. A terminal suggestion that hides a key press is thrown away. Pasted pictures and Kural's short-lived files
+  sit in a folder only you can open. A device's username can't sneak in an SSH option.
+- **Themes like VS Code.** Kural Dark and Kural Light now look like VS Code's own: code in many colors (keywords,
+  strings, functions, types each their own), easy to read. Purple, Kural's color, marks only buttons, the active tab,
+  focus and links. Code in chat answers is colored the same way.
+- **Gemini's thinking level is the intensity.** The model menu shows each Gemini model once (no more "(Low)",
+  "(Medium)", "(High)" copies); Low, Medium, High and Max in the menu pick the level.
+- **AI Usage panel.** At the bottom, next to Terminal: each limit in words, "5-hour limit 50% used, resets in 42 min",
+  "Weekly limit 25% used, resets in 3 days 4 h", with a bar, for Claude, Gemini and Codex. The status bar shows the
+  chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"); click it for the panel.
+
 - **Google Gemini, with your Google account.** Kural runs Google's Gemini models through Google's **Antigravity CLI**,
   with your Google account (free, AI Pro or Ultra). Google stopped personal accounts in its older Gemini CLI on 26 Sept
   2026, so Kural uses Antigravity and calls it Google Gemini (Gemini CLI isn't offered any more). Get started installs it

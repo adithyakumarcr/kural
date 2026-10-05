@@ -1,7 +1,9 @@
 // Your accounts, in the status bar:
-//   - the usage meter (like Claudemeter): "Claude 45% · 24%" (the 5-hour and weekly limits), "Codex 12% · 3%",
+//   - the usage meter: for the chat's AI in words, "Claude 5h 45% · resets 42m | Weekly 24% · resets 3d 4h"; the others
+//     short, "Codex 12% · 3%",
 //     "Gemini 13% · 1%" (Antigravity's weekly limits). Orange from 80 %, red from 95 %. It comes from lib/ai/usage.js, which the
 //     programs themselves fill: Claude Code reports its limits after every answer, Codex's app server on request.
+//     Clicking it opens the AI Usage panel at the bottom (lib/usage-panel.js).
 //   - the Account item (person icon) and its menu: per provider who's logged in, plan, usage page, switch account,
 //     log out, log in; your own model; Get started, updates, the guide.
 //
@@ -115,19 +117,23 @@ class Account {
       if (!item) {
         item = this.meters[id] = vscode.window.createStatusBarItem(`kural.usage.${id}`, vscode.StatusBarAlignment.Right, 102);
         item.name = `${NAMES[id]} usage`;
-        item.command = "kural.account";
+        item.command = "kural.showUsage";   // the AI Usage panel at the bottom: every limit in words
         this.context.subscriptions.push(item);
       }
       const windows = u.windows || [];
       const top = windows.length ? Math.max(...windows.map((w) => w.usedPercent)) : 0;
-      item.text = windows.length ? `$(dashboard) ${NAMES[id]} ${windows.slice(0, 2).map((w) => `${Math.round(w.usedPercent)}%`).join(" · ")}`
-        : `$(dashboard) ${NAMES[id]} ${tokens(u.tokens.input + u.tokens.output)} tok`;
+      // The chat's AI in words ("Claude 5-hour 50% · resets 42m | Weekly 25% · resets 3d 4h"); the others short
+      // ("Codex 12% · 3%"), so the status bar doesn't fill up.
+      const mine = engineOf() === id;
+      item.text = !windows.length ? `$(dashboard) ${NAMES[id]} ${tokens(u.tokens.input + u.tokens.output)} tok`
+        : mine ? `$(dashboard) ${NAMES[id]} ${windows.slice(0, 2).map((w) => `${shortName(w)} ${Math.round(w.usedPercent)}%${w.resetsAt ? ` · resets ${usage.until(w.resetsAt, Date.now(), true)}` : ""}`).join(" | ")}`
+        : `$(dashboard) ${NAMES[id]} ${windows.slice(0, 2).map((w) => `${Math.round(w.usedPercent)}%`).join(" · ")}`;
       item.backgroundColor = top >= 95 ? new vscode.ThemeColor("statusBarItem.errorBackground")
         : top >= 80 ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
       const md = new vscode.MarkdownString(`**${NAMES[id]} usage**\n\n` +
-        (windows.length ? windows.map((w) => `${w.label}: **${Math.round(w.usedPercent)}%** used${w.resetsAt ? ` · resets ${when(w.resetsAt)}` : ""}`).join("  \n")
+        (windows.length ? windows.map((w) => `${usage.limitName(w)}: **${Math.round(w.usedPercent)}%** used${w.resetsAt ? `, resets ${when(w.resetsAt)}` : ""}`).join("  \n")
           : `Today: ${tokens(u.tokens.input)} tokens in, ${tokens(u.tokens.output)} out`) +
-        `\n\n_Updated ${ago(u.at)}. Click for your accounts._`);
+        `\n\n_Updated ${ago(u.at)}. Click for the AI Usage panel._`);
       item.tooltip = md;
       item.show();
     }
@@ -255,6 +261,15 @@ class Account {
   }
 }
 
+// The chat's AI right now: "claude", "codex", "agy" (or "ollama").
+function engineOf() { try { return brain.engineOf(brain.currentModel()); } catch { return "claude"; } }
+// "5-hour" → "5h", "Week" → "Weekly", "Gemini" (a weekly limit) → "Gemini weekly".
+function shortName(w) {
+  const l = String(w.label || "");
+  if (w.period === "week") return `${l} weekly`;
+  const h = /^(\d+)-hour$/.exec(l); if (h) return `${h[1]}h`;
+  return /^week/i.test(l) ? `Weekly${l.slice(4)}` : l;
+}
 const open = (url) => vscode.env.openExternal(vscode.Uri.parse(url));
 const tokens = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n || 0);
 function ago(t) {
@@ -270,4 +285,4 @@ function when(t) {
   return new Date(t).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-module.exports = { Account, USAGE, _test: { tokens, when, ago } };
+module.exports = { Account, USAGE, _test: { tokens, when, ago, shortName } };

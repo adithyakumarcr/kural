@@ -62,7 +62,7 @@ class Devices {
     const at = /^([\w.-]+)@(.+)$/.exec(dev.host); if (at) { if (!dev.user) dev.user = at[1]; dev.host = at[2]; }
     const hp = /^([^:]+):(\d+)$/.exec(dev.host); if (hp) { dev.host = hp[1]; dev.port = Number(hp[2]); }
     if (!dev.name || !dev.host || !dev.user) return { ok: false, error: "Give the device a name, its address and the username." };
-    if (!/^[\w.:%-]+$/.test(dev.host) || !/^[\w.-]+$/.test(dev.user)) return { ok: false, error: "The address or username has characters SSH can't use." };
+    if (!/^[\w.:%][\w.:%-]*$/.test(dev.host) || !/^[\w.][\w.-]*$/.test(dev.user)) return { ok: false, error: "The address or username has characters SSH can't use." };
     if (this.list().some((d) => d.name.toLowerCase() === dev.name.toLowerCase())) return { ok: false, error: `There's already a device called ${dev.name}.` };
     const t = await this.ssh.installKey(dev, password || "");
     log(`devices: key for ${dev.user}@${dev.host}:${dev.port}: ${t.ok ? `ok (${t.system})` : t.error}`);

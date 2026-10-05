@@ -14,6 +14,12 @@ files, runs commands and answers. With code selected, Ctrl+L adds it to your mes
 
 Every file change shows under the answer: open the before/after, **keep** it or **undo** it.
 
+**Outside your project, Kural asks first.** In every mode the AI reads (and in Agent mode changes) files in your
+project without asking. A file anywhere else gets a card first: **Read this file?** or **Change this file?** (Allow /
+Skip). Files you attached are fine. That keeps the AI out of your other folders, and on a Mac it means macOS never asks
+"Kural would like to access your Documents folder" (or Music, Photos…) unless you said yes to such a file. In Auto mode
+nothing asks.
+
 You can change the mode while an answer is running. Agent → Auto: the commands waiting for your OK run at once, and
 later ones don't ask. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.
@@ -24,7 +30,8 @@ your next message, because which tools the model has is fixed when it starts.
   [[Google Gemini and ChatGPT]]), or a model **on this computer** (see [[Your Own Model]]). You can switch in the middle of a
   conversation; the new model gets the conversation so far.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
-  Medium / High / Max).
+  Medium / High / Max). Google Gemini's models come in thinking levels; the menu lists each model once and the
+  intensity picks its level (the nearest one the model has; a line under the buttons says which it has).
 - **Mood.**
   - **Default**: balanced.
   - **Explorer**: looks around and compares options before settling.

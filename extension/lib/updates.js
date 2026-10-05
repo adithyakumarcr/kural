@@ -85,6 +85,17 @@ async function download(url, file, progress, token) {
   } finally { if (sub) sub.dispose(); }
 }
 
+// The asset must come from this repo's releases over https.
+function downloadOk(asset) {
+  return !!asset && typeof asset.browser_download_url === "string" && asset.browser_download_url.startsWith(`https://github.com/${REPO}/releases/download/`);
+}
+function sha256(file) {
+  return new Promise((resolve, reject) => {
+    const h = require("crypto").createHash("sha256");
+    fs.createReadStream(file).on("data", (d) => h.update(d)).on("error", reject).on("end", () => resolve(h.digest("hex")));
+  });
+}
+
 // Start a small script that waits for Kural (process `pid`) to quit, then runs `then`.
 // It gets a clean environment: Kural's internal variables (ELECTRON_RUN_AS_NODE, VSCODE_…) would make the
 // restarted Kural start as plain Node, or think it's a child of the old one.
@@ -190,13 +201,21 @@ class Updater {
   }
 
   async fetchAndInstall(rel, asset) {
-
+    // Only Kural's own GitHub releases, and the file must be the one GitHub lists (its SHA-256, when GitHub gives it):
+    // a changed or broken download is never installed.
+    if (!downloadOk(asset)) throw new Error("the download isn't from Kural's GitHub releases");
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-update-"));
     const file = path.join(dir, asset.name);
     const ok = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Downloading Kural ${rel.version}`, cancellable: true },
       async (progress, token) => { await download(asset.browser_download_url, file, progress, token); return !token.isCancellationRequested; });
     if (!ok) return;
     log(`update: downloaded ${asset.name} (${fs.statSync(file).size} bytes)`);
+    const want = /^sha256:([0-9a-f]{64})$/i.exec(asset.digest || "");
+    if (want) {
+      const got = await sha256(file);
+      if (got !== want[1].toLowerCase()) { fs.rmSync(dir, { recursive: true, force: true }); throw new Error("the download is damaged (its checksum doesn't match); try again"); }
+      log("update: checksum matches");
+    } else log("update: GitHub gave no checksum for this file");
     await this.install(file, dir, rel.version);
   }
 
@@ -230,7 +249,10 @@ class Updater {
       afterQuit(pid, `${clear}exec /usr/share/kural/kural ${process.env.KURAL_RESTART_ARGS || ""}`);
     } else if (process.platform === "darwin") {
       // process.execPath is …/Kural.app/Contents/MacOS/Kural (or a helper inside it): the app is everything before /Contents/.
-      const app = process.execPath.slice(0, process.execPath.indexOf(".app/") + 4);
+      const at = process.execPath.indexOf(".app/");
+      const app = at > 0 ? process.execPath.slice(0, at + 4) : "";
+      // (Never remove anything but an app: the swap below deletes this folder.)
+      if (!/\/[^/]+\.app$/.test(app) || app.split("/").length < 3) throw new Error("couldn't find where Kural.app is; install the download by hand");
       const unpacked = path.join(dir, "new");
       fs.mkdirSync(unpacked);
       const r = spawnSync("ditto", ["-x", "-k", file, unpacked]);
@@ -251,4 +273,4 @@ class Updater {
   }
 }
 
-module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor };
+module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk };

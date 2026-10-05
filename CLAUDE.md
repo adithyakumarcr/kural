@@ -41,7 +41,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
-  - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item + menu),
+  - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item + menu, usage meter), `lib/usage-panel.js` (AI Usage panel), `lib/paths.js` (what the AI may touch without asking),
     `lib/updates.js` (updates), `lib/search.js` (Ask), `lib/workspace.js` (folders; `workDir()` when none is open),
     `lib/log.js`, `lib/ui.js` (font size).
   - `media/codicons/` — the Codicons icon font (CC BY 4.0) for every Kural page.
@@ -82,6 +82,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   logged in. The real screen's wording is unknown: if the code isn't asked for, widen `asksForCode`. Limits: `--print /usage`. Install: Google's script (`install.js` `script` plan). Test with
   `test/fake-agy.js` (`kural.agyPath`; state in `FAKE_AGY_FILE`/tmp). Never checked against the real agy (blocked here):
   verify event names and tool parameter names with a real account (`KURAL_RAW_LOG=/tmp/raw.jsonl` logs agy's lines).
+  Models: `agy models` lists one per thinking level ("gemini-3.8-flash-high" / "Gemini 3.8 Flash (High)");
+  `groupModels` makes one entry with `efforts` {low, medium, high…} (a plain one listed too = Medium), `variantFor`
+  picks the level from the chat's intensity (nearest; Max = highest) when agy starts; old chats' level ids are split
+  into model + intensity in `fix()`.
 - **Codex** (`lib/ai/codex.js`; with agy described once in `lib/ai/clis.js`; no vscode inside): like agy, an agent class
   with `LocalAgent`'s methods that turns the program's protocol into Claude Code's stream-json events, so the chat needs
   no special code. Model ids `codex:<id>` / `agy:<id>` (`default` = the program's own).
@@ -125,17 +129,35 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (`unifiedWindows.five_hour/seven_day.utilization`) after every answer; `ClaudeProcess.onData` and `claudeTest` report
   it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini (agy): `--print /usage` weekly limits, and
   tokens per answer.
-  Saved in globalState `kural.usage.v1` so the bar shows the last numbers at startup.
+  Saved in globalState `kural.usage.v1` so the bar shows the last numbers at startup. In words (`usage.limitName`,
+  `until`, `inWords`): the status item of the chat's AI (`brain.engineOf(currentModel())`) reads "Claude 5h 50% · resets
+  42m | Weekly 25% · resets 3d 4h", the others short; `chat.onChoice` (model pick, tab switch) redraws it. Clicking it
+  opens the **AI Usage** bottom panel (`lib/usage-panel.js`, view `kural.usagePanel`, command `kural.showUsage`).
 - **Account** (`lib/account.js`): status item (plan) + QuickPick menu. Who's logged in comes from `claude auth status
   --json` (email, orgName, subscriptionType), never from the Keychain (Claudemeter, removed, read the Keychain: prompts
   after every update, then failures). Log out = `claude auth logout` → `getStarted.loggedOut()` (locks Claude); once a new
   login passes its test, `chat.setupChanged()` (new processes with the new login; not earlier, or a process started
   while logged out would be kept). Switch = log out + `getStarted.signIn()` (login terminal;
   the page polls, runs the test, unlocks). `test/fake-claude.js` does `auth logout` too.
-- **No home-folder scans** (macOS asks for Music, Photos… when a process walks those folders): with no folder open,
-  AI work runs in `ws.workDir()` (globalStorage/work), never `~`; `tools.walk` skips home's private folders
-  (`HOME_PRIVATE`). `build-mac.sh` drops the camera/microphone entitlements but keeps
-  Info.plist's usage texts (without them macOS kills the app when any extension touches that device).
+- **No unasked-for macOS permission prompts** (Music, Photos, Documents, Desktop, Downloads… are asked about when any
+  process Kural starts opens them; Adithya: asking for what Kural doesn't need makes people distrust it). `lib/paths.js`
+  (no vscode): `within` (links followed: `real`), `isProtected` (those folders, other homes, /Volumes), `isHomeOrAbove`,
+  `privateTmp` (a 0700 folder per run: attachments, team files, Codex/agy helpers; never fixed names in the shared /tmp).
+  The AI reads/changes files without asking only inside `ws.aiRoots()` (project folders, workDir, temp; reading also
+  globalStorage, `~/.claude/projects|plans`, /tmp) or what you attached (`tab.granted`); elsewhere `onPermission` shows a
+  file card (Allow/Skip, no "allow all"). So Read/Grep/Glob aren't in Claude's `--allowedTools` (Claude Code reads inside
+  its folders by itself and asks for the rest); Kural's engine asks the same (`READS`); Ask refuses outside. agy can't
+  wait, so its file notices carry `notice: true` (no card). `tools.walk` never enters `isProtected` folders; terminal Tab
+  skips `git status` in a repo at home or above; the @ file list excludes them when home is open; chat pictures load
+  only from the roots plus copies of attached pictures (changing `webview.options` reloads the page: don't). With no
+  folder open, AI work runs in `ws.workDir()`, never `~`; shell lookups and checks run with `cwd: os.tmpdir()`, and the
+  `$SHELL -ilc` lookup only when claude isn't found otherwise. `build-mac.sh` keeps Info.plist's usage texts (without
+  them macOS kills the app when any extension touches that device).
+- **Untrusted folders** (VS Code's Restricted Mode): package.json `untrustedWorkspaces: limited` with
+  `restrictedConfigurations` (program paths, Ollama URL, chat mode/model, full setup) and `scope: machine` for the paths;
+  `fullSetup()` = the setting AND `vscode.workspace.isTrusted` (a project's .claude/settings.json hooks would run, and
+  Kural starts Claude early); trusting the folder → `setupChanged`. Updates install only from this repo's releases
+  (`downloadOk`) and, when GitHub gives one, after the asset's SHA-256 (`digest`) matches.
 - **Get started gate** (`lib/getstarted.js`): two ways, either is enough (globalState `kural.setup.v2` =
   `{claude, local}`): Claude's test passed (`claudeReady`, and nothing broke since) or a local model's test passed
   (`localModel`). `ready` = either. Claude processes only start when `claudeReady` (`setSetupGate` → `ClaudeProcess.start`
@@ -266,9 +288,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   out), falling back to `SUGGESTED`. Test without Ollama: `node test/fake-ollama-chat.js 11434` (`/api/chat` scripted:
   "read the readme" → Read call; "add a line to notes" → Edit; `format` → JSON; non-streamed → `<code>`/`<cmd>` replies)
   and `node test/engine.test.js`. Offline check: start Kural with `HTTPS_PROXY` pointing nowhere.
-- **Themes** (`extension/themes/`): Kural Dark and Kural Light (same keys). The panels (chat, Ask, Tab) set their
-  own accent colors in CSS; a light theme overrides them under `body.vscode-light` (VS Code's class) with darker ones.
-  `test/theme.test.js` checks Kural Light's text contrast (4.5:1; icons and line numbers 3:1): change a color, run it.
+- **Themes** (`extension/themes/`, written by `scripts/make-themes.py`: edit there, not the JSON): Kural Dark and Kural
+  Light, like VS Code's Dark/Light Modern window with Dark+/Light+ code colors; purple (Adithya: the brand color, but
+  not everywhere) only for buttons, active tab/view/panel lines, focus, badges, progress, links, the cursor. The panels
+  (chat, Ask, Tab, Usage) set their own accent colors in CSS; a light theme overrides them under `body.vscode-light`.
+  Code in chat answers: `highlight()` in `media/chat.js` (any language, `.tk-*` classes in Dark+/Light+ colors).
+  `test/theme.test.js` checks both themes' text contrast (4.5:1; icons and line numbers 3:1) and that they set the same keys.
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
   renames the program, the 4 helpers and `bin/kural` together; a mismatch crashes the app at launch. CI opens the real
   app on all three systems (not just `--version`, which never starts the helpers).

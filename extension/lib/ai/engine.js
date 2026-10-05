@@ -15,6 +15,8 @@ const crypto = require("crypto");
 const http = require("http");
 const https = require("https");
 const { Tools, definitions, SUPPORTED } = require("./tools");
+const { within } = require("../paths");
+const READS = new Set(["Read", "Grep", "Glob"]);
 
 // A POST to Ollama with Node's own http, not fetch: fetch gives up after 5 minutes without an answer, and a big model
 // on a slow computer can take that long to load and read a long prompt. The answer is decoded as UTF-8 across chunks
@@ -172,7 +174,12 @@ class LocalAgent {
     // Models often give paths relative to the project: make them absolute, so the chat's permission card and Undo
     // (which keeps a copy of each file before it changes) see the real file.
     if (input && typeof input.file_path === "string" && input.file_path) { try { input = { ...input, file_path: this.tools.abs(input.file_path) }; } catch { /* no path */ } }
-    if (!this.allowed.has(u.name)) {
+    if (input && typeof input.path === "string" && input.path) { try { input = { ...input, path: this.tools.abs(input.path) }; } catch { /* no path */ } }
+    // Reading is allowed without asking only inside the project (and its other folders, the temp folder): reading
+    // your Documents or Desktop would make macOS ask about Kural, so it's your call (the chat asks you).
+    const where = input && (input.file_path || input.path);
+    const outside = READS.has(u.name) && where && !within(where, [this.tools.cwd, ...(this.tools.dirs || []), os.tmpdir(), ...(this.opts.readRoots || [])]);
+    if (!this.allowed.has(u.name) || outside) {
       let ans = { allow: false, message: "Not allowed here." };
       try { if (this.h.onPermission) ans = await this.h.onPermission({ tool_name: u.name, input, tool_use_id: u.id }); } catch (e) { ans = { allow: false, message: e.message }; }
       if (!ans || !ans.allow) return { text: ans && ans.message ? ans.message : "The user declined.", error: true };

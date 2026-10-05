@@ -38,7 +38,13 @@ if (args.includes("-p")) {
     setTimeout(() => {
       if (state === "loggedout") fail("Not logged in · Please run /login");
       else if (state === "nocredit") fail("Credit balance is too low");
-      else out({ type: "result", subtype: "success", is_error: false, result: "OK", duration_ms: 900 });
+      else {
+        // Like Claude Code: the plan's limits after an answer (5-hour 50 %, resets in 42 min; weekly 25 %, in 3 days).
+        const t = Date.now() / 1000;
+        out({ type: "rate_limit_event", rate_limit_info: { status: "allowed", unifiedWindows: {
+          five_hour: { utilization: 0.5, resetsAt: Math.round(t + 42 * 60) }, seven_day: { utilization: 0.25, resetsAt: Math.round(t + 3 * 86400 + 4 * 3600) } } } });
+        out({ type: "result", subtype: "success", is_error: false, result: "OK", duration_ms: 900 });
+      }
       process.exit(0);
     }, Number(process.env.FAKE_CLAUDE_MS || 900));
   });

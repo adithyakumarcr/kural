@@ -24,7 +24,7 @@ function shellPath() {
   if (shellPathCache) return shellPathCache;
   shellPathCache = new Promise((resolve) => {
     if (IS_WIN || !process.env.SHELL) { resolve(""); return; }
-    const c = execFile(process.env.SHELL, ["-ilc", "printf '\\n__KURAL_PATH__%s\\n' \"$PATH\""], { timeout: 8000, encoding: "utf8" }, (_e, out) => {
+    const c = execFile(process.env.SHELL, ["-ilc", "printf '\\n__KURAL_PATH__%s\\n' \"$PATH\""], { cwd: os.tmpdir(), timeout: 8000, encoding: "utf8" }, (_e, out) => {
       const m = /__KURAL_PATH__(.*)/.exec(out || "");
       const found = m ? m[1].trim() : "";
       if (!found) shellPathCache = null;   // (try again next time: a slow or chatty shell start isn't forever)
@@ -58,7 +58,7 @@ function which(name, PATH) {
 }
 
 function nodeMajor(node, env) {
-  return new Promise((resolve) => execFile(node, ["--version"], { timeout: 8000, env }, (e, out) => {
+  return new Promise((resolve) => execFile(node, ["--version"], { cwd: os.tmpdir(), timeout: 8000, env }, (e, out) => {
     const m = /^v(\d+)/.exec(String(out || "").trim());
     resolve(e || !m ? null : Number(m[1]));
   }));
@@ -115,7 +115,7 @@ function runInstall(plan, { ask, onOutput, signal, quietMs = 20000 } = {}) {
     // Windows: npm is npm.cmd, which only starts through a shell (the arguments are fixed, nothing of yours in them).
     // (Quoted: "C:\Program Files\nodejs\npm.cmd" has a space.)
     const viaShell = IS_WIN && /\.cmd$/i.test(plan.file);
-    const p = spawn(viaShell ? `"${plan.file}"` : plan.file, plan.args, { env: plan.env, windowsHide: true, shell: viaShell });
+    const p = spawn(viaShell ? `"${plan.file}"` : plan.file, plan.args, { cwd: os.tmpdir(), env: plan.env, windowsHide: true, shell: viaShell });
     // Stopping: on Windows npm runs under cmd.exe, and killing cmd.exe alone leaves npm running.
     const stop = () => {
       try { if (IS_WIN && p.pid) execFile("taskkill", ["/pid", String(p.pid), "/T", "/F"], () => {}); else p.kill(); } catch { /* gone */ }
@@ -174,7 +174,7 @@ function npmBinDir(plan) {
   const given = m >= 0 ? plan.args[m + 1] : null;
   return new Promise((resolve) => {
     if (given) { resolve(IS_WIN ? given : path.join(given, "bin")); return; }
-    const c = execFile(plan.file, ["prefix", "-g"], { env: plan.env, timeout: 15000, encoding: "utf8", windowsHide: true, shell: IS_WIN && /\.cmd$/i.test(plan.file) },
+    const c = execFile(plan.file, ["prefix", "-g"], { cwd: os.tmpdir(), env: plan.env, timeout: 15000, encoding: "utf8", windowsHide: true, shell: IS_WIN && /\.cmd$/i.test(plan.file) },
       (e, out) => { const p = String(out || "").trim().split("\n").pop(); resolve(e || !p ? null : IS_WIN ? p : path.join(p, "bin")); });
     try { c.stdin.end(); } catch { /* gone */ }
   });

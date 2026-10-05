@@ -11,8 +11,11 @@
   and the setting `kural.tabCompletion.terminal` on.
 - **A model on my computer is slow:** pick a smaller one, or lower `kural.localModels.contextLength`.
 - **Mac says Kural is damaged:** run `xattr -dr com.apple.quarantine /Applications/Kural.app` in Terminal.
-- **Mac asks for access to Music, Photos or other folders:** Kural only needs your project folder. Click **Don't Allow**.
-  If it keeps asking, [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you
+- **Mac asks for access to Music, Photos or other folders:** Kural only needs your project folder, and it doesn't look
+  into Desktop, Documents, Downloads, Music or Photos by itself; the AI asks you in the chat before it reads a file
+  outside the project. So this should only come after you said **Allow** to such a file (or opened that folder as your
+  project, or ran something there in the terminal). Otherwise click **Don't Allow**. Things your shell's startup files
+  (`~/.zshrc`) do are also put down to Kural when it asks the shell where a program is. If it keeps asking, [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you
   were doing.
 - **Mac asks for your login keychain password ("Kural wants to use … Safe Storage"):** Kural itself keeps nothing
   in the keychain any more, and it turns off VS Code's silent GitHub sign-in checks that caused this at every start (the

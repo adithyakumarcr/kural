@@ -49,9 +49,10 @@ def edit(path, **changes):
 edit(f"{app}/Contents/Info.plist", CFBundleName="Kural", CFBundleDisplayName="Kural", CFBundleExecutable="Kural",
      CFBundleIdentifier="com.kural", CFBundleIconFile="Kural.icns")
 # The texts macOS shows if something asks for a permission. They don't ask for anything by themselves, and they stay:
-# without one, macOS closes the whole app when an extension tries that device. Kural itself uses none of them, and the
-# signature below doesn't allow camera or microphone (macOS just says no). The prompts people saw (Music, Photos…) came
-# from walking the home folder, which Kural no longer does.
+# without one, macOS closes the whole app when an extension tries that device. Kural itself uses none of them, so
+# macOS never shows them. (Built on Linux, the signature also doesn't allow camera or microphone at all; built on a Mac
+# it's a plain ad-hoc signature, where macOS would ask first.) The prompts people saw (Music, Photos, Documents…) came
+# from looking through the home folder, which Kural doesn't do (lib/paths.js).
 with open(f"{app}/Contents/Info.plist", "rb") as f: d = plistlib.load(f)
 for k in [k for k in d if k.endswith("UsageDescription")]:
     d[k] = d[k].replace("Visual Studio Code", "Kural")
