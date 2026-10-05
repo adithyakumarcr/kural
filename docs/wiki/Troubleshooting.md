@@ -28,7 +28,8 @@
 - **An install seems stuck:** the Get started page shows its latest output and how long it has been quiet. **Stop**
   ends it; **Install in a terminal instead** runs the same command where you can see everything.
 - **Start over like a new user:** in the source folder, `./install.sh --fresh` (your settings and chats move to a
-  backup folder).
+  backup folder), or `./install.sh --from-scratch-install` (also logs every AI out and resets Kural's macOS
+  permissions; nothing is kept).
 
 Still stuck? [Report a bug](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml): what happened, how
 to make it happen, what you expected, screenshots, your Kural version and system.

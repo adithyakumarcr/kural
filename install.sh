@@ -6,24 +6,33 @@
 #   ./install.sh --no-open  don't open Kural afterwards (Mac)
 #   ./install.sh --fresh    install like on a new computer: your Kural settings, chats and extensions are moved to a
 #                           backup folder first (Claude Code and Ollama are separate programs: not touched)
+#   ./install.sh --from-scratch-install
+#                           test Kural as a brand-new user: deletes Kural's data (no backup), logs Claude Code, Codex
+#                           and Antigravity out, resets the macOS permissions you gave Kural, and can remove those
+#                           programs too (it asks). Ollama stays. See scripts/from-scratch.sh.
 #
 # The first full build downloads VSCodium once (~250 MB, kept in downloads/). Later builds take about a minute.
 # Windows is built on Linux: ./build-win.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MODE=full OPEN=1 FRESH=0
+MODE=full OPEN=1 FRESH=0 SCRATCH=0
 for a in "$@"; do
   case "$a" in
     --ext) MODE=ext ;;
     --no-open) OPEN=0 ;;
     --fresh) FRESH=1 ;;
-    -h|--help) sed -n 2,10p "$0"; exit 0 ;;
+    --from-scratch-install|--from-scratch) SCRATCH=1 ;;
+    -h|--help) sed -n 2,14p "$0"; exit 0 ;;
     *) echo "Unknown option: $a (try --help)"; exit 1 ;;
   esac
 done
 die() { echo "Error: $*" >&2; exit 1; }
 [ "$FRESH" = 1 ] && [ "$MODE" = ext ] && die "--fresh is for a full install, not with --ext."
+[ "$SCRATCH" = 1 ] && [ "$MODE" = ext ] && die "--from-scratch-install is for a full install, not with --ext."
+[ "$SCRATCH" = 1 ] && FRESH=0   # (deletes instead of moving to a backup)
+# --from-scratch-install: ask now, before the build (nothing is deleted until the build has worked).
+if [ "$SCRATCH" = 1 ]; then . scripts/from-scratch.sh; scratch_confirm; fi
 
 # --fresh: Kural keeps your settings, chats and extensions outside the app, so a normal install (an update) keeps
 # them. For a first-time install, move them out of the way (not deleted: put them back to undo).
@@ -77,6 +86,7 @@ mac() {
     fi
     ./build-mac.sh
     quit_kural
+    [ "$SCRATCH" = 1 ] && scratch_wipe
     if [ "$FRESH" = 1 ]; then
       fresh_start "$HOME/Library/Application Support/Kural" "$HOME/.kural" "$HOME/Library/Caches/com.kural" \
         "$HOME/Library/Caches/com.kural.ShipIt" "$HOME/Library/Saved Application State/com.kural.savedState" \
@@ -112,6 +122,7 @@ linux() {
   fi
   ./make-deb.sh
   local deb; deb=$(ls -t dist/kural_*_amd64.deb | head -1)
+  [ "$SCRATCH" = 1 ] && scratch_wipe
   echo "Installing $deb ..."
   sudo apt install -y "./$deb"
   if [ "$FRESH" = 1 ]; then
