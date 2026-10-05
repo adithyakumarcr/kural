@@ -57,6 +57,7 @@ CLIS.agy = {
   auth: (bin) => agy.agyAuth(bin),
   logout: (bin) => agy.agyLogout(bin),
   loginCommand: (bin) => agy.loginCommand(bin),
+  loginPty: (bin, o) => agy.loginPty(bin, o),
   test: (bin, o) => agy.agyTest(bin, o),
   models: (bin) => agy.agyModels(bin),
   limits: (bin) => agy.agyLimits(bin),

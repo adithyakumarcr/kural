@@ -179,10 +179,10 @@
     else two = step(2, "Log in", loggingIn ? "waiting" : l.state === "unknown" ? "warn" : "todo",
       el("p", {}, l.state === "unknown" ? `Kural can't tell whether ${C.short} is logged in. The test (step 3) will tell.` : `Log in to ${C.short} once. Kural uses the same login as ${C.program}.`),
       loggingIn ? el("p", { class: "note" }, C.loginTerminal
-          ? `${C.short} logs in on its own screen: in the terminal below, pick the Google login (your browser opens). Kural closes the terminal by itself when you're logged in.`
+          ? `Kural opens Google's login page in your browser: log in there. If Google then shows a code, Kural asks you for it in a pop-up and passes it on. Kural closes the login screen (in the terminal below) by itself when you're logged in.`
           : "Finish logging in in your browser. This page updates by itself.")
         : C.loginTerminal
-          ? el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, `opens ${C.short}'s login screen in a terminal; it opens your browser`))
+          ? el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, `opens Google's login page in your browser`))
           : [el("div", { class: "row" }, ib("Log in", "loginCli", "primary"), el("span", { class: "muted" }, "opens the login page in your browser")),
             el("p", { class: "muted small" }, il("Log in in a terminal instead", "loginCliTerminal"))]);
     // 3. Test

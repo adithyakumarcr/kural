@@ -182,6 +182,26 @@ function chat(opts = {}) {
     assert.strictEqual(e.a.primed, true);
   });
 
+  await check("login screen: Kural finds the Google address and the code question, and types the code in", async () => {
+    if (!fs.existsSync("/usr/bin/script") && !fs.existsSync("/bin/script")) return;   // (no `script` here)
+    fs.writeFileSync(process.env.FAKE_AGY_FILE, "loggedout");
+    const seen = { urls: [], codes: 0, screen: "" };
+    await new Promise((done) => {
+      const pty = agy.loginPty(BIN, { cols: 60, rows: 20,
+        onData: (d) => { seen.screen += d; if (/Signed in/.test(seen.screen)) { pty.kill(); done(); } },
+        onUrl: (u) => seen.urls.push(u),
+        onCode: () => { seen.codes++; pty.answerCode(seen.codes === 1 ? "wrong" : "4/kural-test"); },
+        onExit: done });
+      setTimeout(() => { pty.kill(); done(); }, 15000);
+    });
+    // The address is longer than the 60-column screen: found whole anyway.
+    assert.strictEqual(seen.urls.length, 1); assert.match(seen.urls[0], /^https:\/\/accounts\.google\.com\/.*state=xyz$/);
+    assert.strictEqual(seen.codes, 2, "asked again after a wrong code");
+    assert.strictEqual(fs.readFileSync(process.env.FAKE_AGY_FILE, "utf8"), "ok");
+    assert.strictEqual(agy._test.asksForCode("\x1b[1mEnter the authorization code:\x1b[0m "), true);
+    assert.strictEqual(agy._test.asksForCode("Signed in as you@example.com"), false);
+  });
+
   await check("agy's tool names and parameters → the chat's tools", async () => {
     const d = agy._test.describe;
     assert.deepStrictEqual(d("view_file", { AbsolutePath: "/a/b.py" }, "/x"), { name: "Read", input: { file_path: "/a/b.py" } });

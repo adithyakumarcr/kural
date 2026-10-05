@@ -74,8 +74,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   respawns in a loop. Stop = SIGINT (agy
   exits; next message respawns). Text-only input: pictures are saved to a folder passed with `--add-dir`. Undo: a
   best-effort `onPermission` Edit/Write when a tool step starts (agy doesn't wait). No login command: Get started
-  (`loginTerminal`) runs `agy` in a terminal and polls `agyAuth` (`--print /model --output-format json`, no quota),
-  closing it when logged in. Limits: `--print /usage`. Install: Google's script (`install.js` `script` plan). Test with
+  (`loginTerminal`) runs agy's screen in a pseudo-terminal Kural reads (`loginPty`: the `script` program, Mac and Linux;
+  a `vscode.Pseudoterminal` shows it and passes your keys on). Kural opens the login address itself (found in the
+  screen, also when wrapped, or from agy's own `open`/`xdg-open` call through a PATH shim) and, when the screen waits
+  on a line asking for a code (`asksForCode`), asks for the code in an input box and types it (+Enter). Windows: agy in
+  a plain terminal. It polls `agyAuth` (`--print /model --output-format json`, no quota) and closes the screen when
+  logged in. The real screen's wording is unknown: if the code isn't asked for, widen `asksForCode`. Limits: `--print /usage`. Install: Google's script (`install.js` `script` plan). Test with
   `test/fake-agy.js` (`kural.agyPath`; state in `FAKE_AGY_FILE`/tmp). Never checked against the real agy (blocked here):
   verify event names and tool parameter names with a real account (`KURAL_RAW_LOG=/tmp/raw.jsonl` logs agy's lines).
 - **Codex** (`lib/ai/codex.js`; with agy described once in `lib/ai/clis.js`; no vscode inside): like agy, an agent class

@@ -31,9 +31,11 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
    Installed somewhere Kural can't find? **Choose the … file** (settings `kural.agyPath`, `kural.codexPath`).
    **Install in a terminal instead** runs the commands above in a terminal.
 2. **Logged in.**
-   - Gemini: Google's program has no login command; it logs in on its own screen. **Log in** opens that screen in a
-     terminal; pick the Google login there and your browser opens. Kural checks every few seconds and closes the
-     terminal by itself once you're logged in.
+   - Gemini: Google's program has no login command; it logs in on its own screen. **Log in** runs that screen in a
+     terminal that Kural reads: Kural opens Google's login page in your browser by itself, and when the screen asks for
+     the code Google shows after you log in ("authorization code"), Kural asks you for it in a pop-up and types it in.
+     (You can also type in the terminal yourself.) Kural closes the screen once you're logged in. On Windows, the screen
+     opens in a plain terminal.
    - Codex: **Log in** opens the login page in your browser. Log in there; the page turns green by itself. **Cancel** in
      the progress message stops waiting.
 3. **A test.** One tiny request. When it passes, its models appear in the chat's model menu.
