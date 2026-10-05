@@ -79,7 +79,7 @@ async function waitForAtlassian(proc, maxMs = 30000) {
       return { error: "Atlassian isn't connected. Add the Atlassian connector on claude.ai (Settings → Connectors), or run `claude mcp add` for an Atlassian MCP server." };
     await new Promise((r) => setTimeout(r, 500));
   }
-  if (proc.exited) return { error: "Claude stopped unexpectedly. See View → Output → Kural." };
+  if (proc.exited) return { error: "Claude stopped unexpectedly. See Kural's log (Kural: Show Log)." };
   return { error: `Atlassian didn't finish connecting within ${Math.round(maxMs / 1000)} seconds${seen ? ` (it's ${seen})` : ""}. Try again in a moment.` };
 }
 
@@ -103,7 +103,7 @@ class Tickets {
       onExit: (info) => {
         if (this.proc !== proc) return;
         this.proc = null; this.ready = null;
-        if (this.pending) this.pending.finish({ error: info.login ? "You're not logged in to Claude." : "Claude stopped unexpectedly. See View → Output → Kural." });
+        if (this.pending) this.pending.finish({ error: info.login ? "You're not logged in to Claude." : "Claude stopped unexpectedly. See Kural's log (Kural: Show Log)." });
       },
     });
     if (!proc.start()) return Promise.resolve({ error: "Couldn't start Claude." });
@@ -129,7 +129,7 @@ class Tickets {
     const w = await this.warm();
     if (w.error) return { error: w.error };
     const proc = this.proc;
-    if (!proc) return { error: "Claude stopped unexpectedly. See View → Output → Kural." };
+    if (!proc) return { error: "Claude stopped unexpectedly. See Kural's log (Kural: Show Log)." };
     if (onStatus) onStatus(query.trim() ? `Searching Jira for “${query.trim()}”…` : "Getting your recent tickets…");
     const t0 = Date.now();
     return new Promise((resolve) => {

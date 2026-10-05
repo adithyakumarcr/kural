@@ -6,7 +6,7 @@
 const vscode = require("vscode");
 const { fontScale } = require("../ui");
 const { isSetUp } = require("../ai/claude");
-const { LOCAL_MODELS, installOllama } = require("./local");
+const { LOCAL_MODELS, installText } = require("./local");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
@@ -46,7 +46,8 @@ class TabPanel {
       engine: c.get("tabCompletion.engine"), lastEngine: this.lastEngine, claudeReady: isSetUp(),
       localModel: c.get("tabCompletion.localModel"), localModels: LOCAL_MODELS,
       local: this.local ? { running: this.local.state.running, hasModel: this.local.state.hasModel, pulling: this.local.pulling, last: this.local.last,
-        allowed: this.local.allowed() } : null,
+        allowed: this.local.allowed(), steps: this.local.steps,
+        installing: this.local.installing && { ...this.local.installing, text: installText(this.local.installing) } } : null,
       linux: process.platform === "linux",
     };
   }
@@ -67,9 +68,9 @@ class TabPanel {
       if (m.type === "model") await set("tabCompletion.model", m.value);
       if (m.type === "engine") { await set("tabCompletion.engine", m.value); if (this.local) this.local.status(true); }
       if (m.type === "localModel") { await set("tabCompletion.localModel", m.value); if (this.local) await this.local.status(true); }
-      if (m.type === "install") installOllama();
-      if (m.type === "pull" && this.local) { if (this.local.choose) await this.local.choose(); this.local.pull(); }
-      if (m.type === "useLocal" && this.local && this.local.choose) await this.local.choose();
+      // Set up = everything in one click: Ollama (installed and started if it isn't there), then the model.
+      if (m.type === "setup" && this.local) this.local.setup();
+      if (m.type === "stopInstall" && this.local) this.local.stopInstall();
       if (m.type === "check" && this.local) { await this.local.status(true); this.push(); }
       if (m.type === "getStarted") vscode.commands.executeCommand("kural.getStarted", "claude");
     });
@@ -160,21 +161,30 @@ function page(nonce, csp, codicons) {
     for (const b of $("model").children) b.classList.toggle("on", b.dataset.v === S.model);
     $("localModel").replaceChildren(...S.localModels.map((m) => { const b = document.createElement("button"); b.textContent = m.label; b.title = m.id + " (" + m.size + ")"; b.className = m.id === S.localModel ? "on" : ""; b.onclick = () => send("localModel", m.id); return b; }));
     const cur = S.localModels.find((m) => m.id === S.localModel) || { size: "" };
-    const acts = $("localActions"); acts.replaceChildren();
+    const acts = $("localActions"); acts.replaceChildren(); $("localText").title = "";
     const button = (text, type, ghost) => { const b = document.createElement("button"); b.className = "btn" + (ghost ? " ghost" : ""); b.textContent = text; b.onclick = () => send(type); acts.append(b); };
-    if (!L.allowed && !L.pulling) {
-      // Not chosen yet (a model left over from before doesn't count): say so, and offer it.
-      $("localText").innerHTML = '<span class="muted">' + ic("info") + ' Not set up. A small model on this computer makes suggestions faster and works offline.</span>';
-      button("Set up", "useLocal");
+    // A bar: a percent, or moving without one (a step that can't tell how far it is).
+    const bar = (pct) => { const p = document.createElement("progress"); p.max = 100; if (pct !== undefined && pct !== null) p.value = pct; acts.append(p); };
+    // "Step 1 of 2" while Set up installs Ollama first, then downloads the model.
+    const step = (n) => L.steps ? "Step " + n + " of " + L.steps + ": " : "";
+    if (L.installing) {
+      $("localText").textContent = step(1) + L.installing.text;
+      $("localText").title = L.installing.note || "";
+      bar(L.installing.phase === "start" ? undefined : L.installing.percent);
+      if (L.installing.phase !== "start") button("Stop", "stopInstall", true);
     } else if (L.pulling) {
-      $("localText").textContent = "downloading " + L.pulling.model + "… " + (L.pulling.percent || 0) + "%";
-      const p = document.createElement("progress"); p.max = 100; p.value = L.pulling.percent || 0; acts.append(p);
+      $("localText").textContent = step(2) + "Downloading the model " + L.pulling.model + "… " + (L.pulling.percent || 0) + "%";
+      bar(L.pulling.percent || 0);
+    } else if (!L.allowed) {
+      // Not chosen yet (a model left over from before doesn't count): say so, and offer it. One click does it all.
+      $("localText").innerHTML = '<span class="muted">' + ic("info") + ' Not set up. A small model on this computer makes suggestions faster and works offline.</span>';
+      button(L.running ? (L.hasModel ? "Set up" : "Set up (" + cur.size + ")") : "Set up (installs Ollama, then the model)", "setup");
     } else if (!L.running) {
       $("localText").innerHTML = '<span class="warn">' + ic("warning") + ' Ollama isn’t installed or running.</span>';
-      button(S.linux ? "Install Ollama" : "Get Ollama", "install"); button("Check again", "check", true);
+      button("Install Ollama and the model", "setup"); button("Check again", "check", true);
     } else if (!L.hasModel) {
       $("localText").innerHTML = '<span class="warn">' + ic("warning") + ' Model not downloaded yet.</span>';
-      button("Download (" + cur.size + ")", "pull"); button("Check again", "check", true);
+      button("Download (" + cur.size + ")", "setup"); button("Check again", "check", true);
     } else {
       const last = L.last;
       $("localText").innerHTML = '<span class="ok">' + ic("pass-filled") + ' ready</span>' + (last && !last.ok ? ' <span class="warn">— last try: ' + esc(last.note) + '</span>' : '');

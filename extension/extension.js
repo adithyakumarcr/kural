@@ -8,6 +8,7 @@
 
 const vscode = require("vscode");
 const { initLog, log, findClaude, ClaudeSession } = require("./lib/ai/claude");
+const { showLog } = require("./lib/log");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/tab/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edit/inline");
 const { Updater } = require("./lib/updates");
@@ -20,6 +21,7 @@ const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
 const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
+const { SettingsPage } = require("./lib/settings-page");
 const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
 const brain = require("./lib/ai");
@@ -47,8 +49,7 @@ function openClaudeCode() {
 }
 
 function activate(context) {
-  const output = initLog();
-  context.subscriptions.push(output);
+  initLog(context);
   const updater = new Updater(context);   // Help → Check for Updates…, and once a day by itself
   updater.autoCheck();
   log(`Kural ${require("./lib/version").versionLabel(context.extensionPath, context.extension.packageJSON.version)} starting; claude at ${findClaude() || "(not found)"}`);
@@ -79,7 +80,7 @@ function activate(context) {
     const look = {
       ready:    ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
       thinking: ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
-      error:    ["$(warning) Tab Completion", "Last suggestion failed; see View → Output → Kural", "kural.showLog"],
+      error:    ["$(warning) Tab Completion", "Last suggestion failed; click for Kural's log", "kural.showLog"],
       login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted"],
       missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted"],
     }[state];
@@ -160,6 +161,9 @@ function activate(context) {
   // chat processes start again with it.
   const account = new Account(context, getStarted, () => chat.setupChanged("login changed"));
   account.register();
+  // Kural Settings (an editor tab): what the Account menu had. The person icon and "Kural: Settings" open it.
+  account.page = new SettingsPage(context, account, getStarted);
+  account.page.register();
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
   chat.onChoice = () => setTimeout(() => account.drawMeters(), 0);
@@ -199,7 +203,7 @@ function activate(context) {
     vscode.commands.registerCommand("kural.openClaudeCode", openClaudeCode),
     vscode.commands.registerCommand("kural.login", () => getStarted.open()),
     vscode.commands.registerCommand("kural.install", () => getStarted.open()),
-    vscode.commands.registerCommand("kural.showLog", () => output.show(true)),
+    vscode.commands.registerCommand("kural.showLog", () => showLog()),
     vscode.commands.registerCommand("kural.checkForUpdates", () => updater.check()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.tabCompletion.model")) { tabSession.stop(); terminalSession.stop(); }

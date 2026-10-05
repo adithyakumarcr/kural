@@ -109,7 +109,7 @@ Kural notices and opens the page again. Open it any time: **Kural: Get Started**
 
 Kural checks GitHub for a newer release once a day (alpha, beta and rc test versions included) and offers it in a
 small notification; it never installs without asking. Check yourself with **Help → Check for Updates…**, the Chat
-panel's **…** menu, or the Account menu (person icon in the status bar). Kural downloads the new version, installs it
+panel's **…** menu, or Kural Settings (person icon in the status bar). Kural downloads the new version, installs it
 and restarts: on Ubuntu it asks for your password; on a Mac it replaces Kural.app in place; on Windows it runs the
 setup. (Setting `kural.updates.autoCheck` turns the daily check off.)
 
@@ -271,8 +271,10 @@ cursor.
 
 ### More
 
-- **Ask (Ctrl+Alt+A).** Ask "where is the retry limit set?" and get the exact `file:line` places. (For plain text
-  search, use VS Code's own search, Ctrl+Shift+F.)
+- **Search & Ask** (magnifier icon). **Search** (Ctrl+Shift+F): find and replace in your files, with everything VS
+  Code's own Search had (Kural hides that one). **Ask** (Ctrl+Alt+A): ask "where is the retry limit set?" and get the
+  exact `file:line` places.
+- **Kural Settings** (person icon in the status bar): your accounts and usage, updates, the guide, in one tab.
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **AI Usage** (bottom panel, next to Terminal). Each limit in words: "5-hour limit 50% used, resets in 42 min",
   "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex. The status bar shows the chat's AI the
@@ -391,7 +393,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/tab/            Tab Completion: completion.js (editor), terminal.js (terminal, plain words), local.js
                       (Ollama), activity.js (what it learns), panel.js (the Tab Completion panel)
   lib/edit/           Ctrl+K and Apply (inline.js), red/green review, diff
-  lib/getstarted.js   Get started; lib/account.js the Account menu; lib/updates.js updates; lib/search.js Ask
+  lib/getstarted.js   Get started; lib/account.js accounts, lib/settings-page.js Kural Settings; lib/updates.js updates; lib/search/ Search & Ask
   media/              the panels' pages (HTML/CSS/JS) and the Codicons icon font
   themes/             Kural Dark, Kural Light (written by scripts/make-themes.py)
 scripts/              shared rebranding, logo, icons, release notes, push-wiki.sh
@@ -403,7 +405,7 @@ docs/                 screenshots for this README; docs/wiki/ the wiki's pages
 
 ## Troubleshooting
 
-- **View → Output → Kural** shows every request Kural makes, with timings.
+- **Kural: Show Log** (Command Palette, or Kural Settings) shows every request Kural makes, with timings.
 - **"Kural: finish setup" in the status bar:** click it. Get started shows which step is missing (Claude Code, the
   login, or the test request) and how to fix it.
 - **No Tab suggestions:** click **Tab Completion** in the status bar. The panel shows the engine, whether the local

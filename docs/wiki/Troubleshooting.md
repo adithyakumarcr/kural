@@ -1,6 +1,6 @@
 # Troubleshooting
 
-- **See what Kural does:** **View → Output → Kural** lists every request, with timings.
+- **See what Kural does:** **Kural: Show Log** (Command Palette, or Kural Settings → Show log) lists every request, with timings.
 - **"Kural: finish setup" in the status bar:** click it. [[Getting Started|Getting Started]] shows which step is missing
   and how to fix it.
 - **Claude says I'm not logged in:** click the person icon (Account) → **Log in**.
