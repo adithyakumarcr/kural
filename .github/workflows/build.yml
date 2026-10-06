@@ -113,7 +113,17 @@ jobs:
           # Exactly what a user does: copy Kural out of the .dmg, then open it.
           hdiutil attach -nobrowse -mountpoint /tmp/kural-dmg dist/*.dmg
           ditto /tmp/kural-dmg/Kural.app "$RUNNER_TEMP/Kural.app"
-          hdiutil detach /tmp/kural-dmg
+          # GitHub's macOS runners often return EBUSY (exit 16) if we detach at once.
+          MP=/tmp/kural-dmg
+          for try in 1 2 3; do
+            hdiutil detach "$MP" && break || sleep $(( try * 2 ))
+          done
+          if mount | grep -qF "$MP"; then
+            for try in 1 2 3; do
+              hdiutil detach -force "$MP" && break || sleep $(( try * 2 ))
+            done
+          fi
+          mount | grep -qF "$MP" && { echo "::error::Could not detach $MP"; hdiutil info; exit 1; }
           APP="$RUNNER_TEMP/Kural.app"
           codesign --verify --deep --strict "$APP"
           "$APP/Contents/Resources/app/bin/kural" --version
