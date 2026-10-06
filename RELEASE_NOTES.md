@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.1.0-alpha.5
 
 - **A browser inside Kural, with Design Mode like Cursor.** Real web pages in a tab: your app on localhost or any
   website. **Every web link in a chat answer opens there** (not in your outside browser). Click the browser bar's inspect
