@@ -1,0 +1,56 @@
+/* Kural Settings (an editor tab). */
+:root { --accent: #8b6cef; --accent-hi: #a68af9; --muted: var(--vscode-descriptionForeground); --border: var(--vscode-widget-border, rgba(128,128,128,.25));
+  --card: var(--vscode-editorWidget-background, rgba(128,128,128,.06)); --track: rgba(128,128,128,.22); --ok: #6cc490; --warn: #e0b45c; --bad: #f14c4c; }
+body.vscode-light { --accent: #6447d6; --accent-hi: #5a3cc8; --ok: #2c7a34; --warn: #8a5d00; --bad: #c02a3a; }
+* { box-sizing: border-box; }
+body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); background: var(--vscode-editor-background); margin: 0; }
+#app { max-width: 980px; margin: 0 auto; padding: 24px 28px 40px; }
+header, .sechead, .head, .row { display: flex; align-items: center; gap: 8px; }
+header { align-items: flex-start; gap: 16px; flex-wrap: wrap; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+header .title { display: flex; flex-direction: column; gap: 4px; }
+.update { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.grow { flex: 1; }
+h1 { font-size: 1.7em; font-weight: 600; margin: 0; }
+h2 { font-size: 1.05em; font-weight: 600; margin: 0; text-transform: none; }
+h3 { font-size: 1em; font-weight: 600; margin: 0; }
+.sechead { margin: 26px 0 12px; }
+.muted { color: var(--muted); } .small { font-size: .9em; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.card.dim { opacity: .85; }
+.card .head .codicon { font-size: 1.25em; color: var(--accent-hi); }
+.card p { margin: 2px 0; line-height: 1.45; }
+.who { font-weight: 600; overflow-wrap: anywhere; } .who .codicon { color: var(--muted); }
+.tag { font-size: .8em; color: var(--accent-hi); border: 1px solid var(--accent); border-radius: 9px; padding: 0 7px; }
+.pill { font-size: .82em; border-radius: 9px; padding: 1px 8px; border: 1px solid var(--border); white-space: nowrap; }
+.pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+.pill.off { color: var(--muted); }
+.lim { margin-top: 4px; }
+.lim .row { justify-content: space-between; flex-wrap: wrap; }
+.bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; margin: 4px 0 2px; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.bar.warn span { background: var(--warn); } .bar.bad span { background: var(--bad); }
+.pct.warn { color: var(--warn); } .pct.bad { color: var(--bad); }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 8px; }
+.btn { background: none; border: 1px solid var(--border); color: var(--vscode-foreground); border-radius: 5px; padding: 3px 10px; cursor: pointer; font: inherit; display: inline-flex; align-items: center; gap: 4px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-hi); }
+.btn.quiet { color: var(--muted); }
+.btn[disabled] { opacity: .55; cursor: default; }
+.check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.check input { accent-color: var(--accent); margin: 0; }
+.links { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.link { display: flex; align-items: center; gap: 10px; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; font: inherit; color: inherit; }
+.link:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.12)); border-color: var(--border); }
+.link .codicon { font-size: 1.2em; color: var(--accent-hi); flex-shrink: 0; }
+.lt { display: flex; flex-direction: column; gap: 1px; }
+.codicon { vertical-align: -3px; }
+.spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+/* Narrow tabs: buttons and tags stay on one line; the version and its button wrap as a whole. */
+.btn, .tag, .pill { white-space: nowrap; }
+header .title { flex: 1 1 260px; }
+.update .row { flex-wrap: wrap; justify-content: flex-end; text-align: right; }
+@media (max-width: 560px) { .update { align-items: flex-start; } .update .row { justify-content: flex-start; text-align: left; } }

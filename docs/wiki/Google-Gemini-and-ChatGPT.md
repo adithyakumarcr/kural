@@ -50,7 +50,7 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
   - Gemini can't read attached pictures directly: Kural saves them where it can open them and tells it where.
 - Ask, Ctrl+K, Apply, commit messages and plain words in the terminal use the chat's model, so these too.
 - The usage meter: Gemini shows its weekly limits; Codex its 5-hour and weekly limits, like Claude.
-- The Account menu: who's logged in, the usage page, switch account, log out.
+- Kural Settings (person icon in the status bar): who's logged in, the usage page, switch account, log out.
 
 ## What needs Claude
 

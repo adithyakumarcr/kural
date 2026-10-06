@@ -1,3 +1,47 @@
+## Not released yet
+
+- **A browser inside Kural, with Design Mode like Cursor.** Real web pages in a tab: your app on localhost or any
+  website. **Every web link in a chat answer opens there** (not in your outside browser). Click the browser bar's inspect
+  button (Cmd/Ctrl+Shift+C), click an element on the page, and it's added to your message with its HTML, size, computed
+  CSS and a picture; **Comment on Elements** adds what you want changed ("make this bigger") as the start of your
+  message. Kural finds the code behind the element and changes it; reload to see it. The dropdown also adds screenshots
+  and the console logs. **+ → Pick from a browser** opens it for you.
+- **Links to files in answers open them** (at the line), and a web link opens in Kural's browser tab. Before, only
+  web links and `file:12` code were clickable; a link like `[install.sh](install.sh)` was plain text.
+- **Click a picture in the chat** to see it full size in its own tab.
+- **Terminal: plain words that end in a word work.** "i want to delete the file install.sh" now suggests
+  `rm install.sh`, first in the list, so Tab takes it. VS Code only asked Kural at a space, so the whole sentence was
+  never asked about; and Kural's suggestion sat under VS Code's own file matches.
+- **The status bar shows whose account it is:** the name on the account the chat's AI uses (e.g. "Peasant Adithya")
+  instead of the plan ("Team"). Kural Settings shows the name and email on each card.
+- **A chat dragged into the editor area shows only that chat.** It used to show every chat's tab (so "New chat"
+  appeared twice, and your other chats were there too); now its editor tab is its tab, and the side panel stops
+  listing it until you close it.
+- **Kural Settings, rearranged:** the version and Check for updates are in the header; your AIs come first, two
+  cards to a row; the rest is a compact grid. Nothing wraps oddly in a narrow tab.
+- **New tagline** on the chat's home screen: "A weapon, a voice for your ideas."
+- **Search & Ask, one side bar with two tabs.** **Search** (Ctrl+Shift+F) finds and replaces in your files with
+  everything VS Code's own Search had: Match Case, Whole Word, Regular Expression, Preserve Case, files to include and
+  exclude, open editors only, results as you type, history, tree or list, Replace Preview, Replace All, dismiss,
+  right-click Copy, F4 for the next result. **Ask** is the same as before. VS Code's own Search icon is gone.
+- **Kural Settings.** The person icon in the status bar opens a tab instead of a long pop-up list: a card each for
+  Claude, Google Gemini, ChatGPT (Codex) and your own model (who's logged in, plan, usage, switch account, log out), and
+  Kural's version, updates and links.
+- **No Output tab.** VS Code's Output tab at the bottom is gone; Kural's log opens with **Kural: Show Log** (or Kural
+  Settings → Kural's log).
+- **Ask's example** is now a general one ("where are the user's settings saved?").
+- **Fixed:** Shift+Enter in the chat made a new line below the box's edge without scrolling to it.
+- **Split a chat by dragging its tab.** Drag a chat tab out of the Kural panel into the editor area: it opens there,
+  split like VS Code's editors (beside, above or below), and comes back after a restart. The split button is gone.
+- **A tidier Kural panel title bar:** the Claude Code button and Check for Updates are gone from it (Claude Code:
+  Ctrl+Esc; updates: Kural Settings, Help menu).
+- **Fixed: icons off centre.** The round send buttons (chat, Ask) kept the browser's own button padding, which left too
+  little room for the arrow, so it sat a few pixels right of the middle; Get started's check marks sat a little low.
+- **Tab Completion: Set up installs Ollama for you.** Without Ollama, the Tab panel's Set up used to open ollama.com
+  in the browser. Now one click does everything: Kural downloads Ollama (with a percent), installs it (with a percent),
+  starts it, then downloads the model. Get started's and the chat's "Install Ollama" do the same, with a notification.
+  On Ubuntu the system asks for your password (Ollama installs for the whole computer).
+
 ## What's new in 1.1.0-alpha.4
 
 - **Tab Completion uses a model on your computer only after you chose one.** A model left over from an earlier install

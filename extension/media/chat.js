@@ -55,7 +55,7 @@
   const moodLabel = (id) => (S.moods.find((m) => m.id === id) || { label: "" }).label;
   const effortLabel = (id) => (S.efforts.find((e) => e.id === id) || { label: "Medium" }).label;
   const modeLabel = (id) => (S.modes.find((m) => m.id === id) || { label: "Agent" }).label;
-  const pillLabel = (c) => c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : base(c.path);
+  const pillLabel = (c) => c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : c.kind === "element" ? c.label : base(c.path);
   // Show ⌘ instead of Ctrl on a Mac.
   const MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
   // "Ctrl+" is ⌘ on a Mac; "Control+" means the Control key everywhere (⌃ on a Mac).
@@ -98,12 +98,25 @@
   function imageHtml(alt, src) {
     const raw = src.replace(/&amp;/g, "&");
     const local = fileSrc(raw);
-    if (local) return `<img class="md-img" src="${esc(local)}" alt="${alt}" title="${alt}">`;
+    if (local) return `<img class="md-img" src="${esc(local)}" data-path="${esc(raw)}" alt="${alt}" title="${alt ? `${alt} · ` : ""}Click to open it full size">`;
     if (/^https?:\/\//i.test(raw)) {
       let host = ""; try { host = new URL(raw).host; } catch { /* not a URL */ }
       return `<span class="img-remote" data-url="${esc(raw)}" data-alt="${alt}" title="${esc(raw)}">Load image${host ? ` from ${esc(host)}` : ""}</span>`;
     }
     return `<span class="img-missing">${alt || "image"}</span>`;
+  }
+
+  // A link to a file the model wrote, [install.sh](install.sh) or [app.js:12](src/app.js#L12): opens the file (at the
+  // line). (Before, only web links were clickable and these showed as plain text.)
+  function fileLink(text, url) {
+    let p = url.replace(/&amp;/g, "&").replace(/^file:\/\//i, "");
+    try { p = decodeURIComponent(p); } catch { /* keep it as written */ }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[A-Za-z]:[\\/]/.test(p)) return `<span class="link">${text}</span>`;   // mailto: etc.
+    let line = "", end = "";
+    const h = /#L(\d+)(?:-L?(\d+))?$/.exec(p) || /:(\d+)(?:-(\d+))?(?::\d+)?$/.exec(p);
+    if (h) { line = h[1]; end = h[2] || ""; p = p.slice(0, h.index); }
+    if (!p) return `<span class="link">${text}</span>`;
+    return `<a class="link file" data-path="${esc(p)}" data-line="${line}" data-end="${end}" title="Open ${esc(p)}${line ? `:${line}` : ""}">${text}</a>`;
   }
 
   function inline(s) {
@@ -116,10 +129,11 @@
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
       .replace(/(^|[^"])\[([^\]]+)\]\(([^)\s]+)\)/g, (_, pre, text, url) => pre + (/^https?:\/\//.test(url)
-        ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : `<span class="link">${text}</span>`))
+        ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : fileLink(text, url)))
       // A bare web address: clickable too (not inside `code`, a link or a picture made above).
       .split(/(<code[^>]*>[\s\S]*?<\/code>|<a [^>]*>[\s\S]*?<\/a>|<img [^>]*>|<span class="img-[^>]*>[\s\S]*?<\/span>)/).map((part, i) => i % 2 ? part
-        : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')).join("");
+        : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')
+          .replace(/(^|[\s(>])(www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s<"]*[^\s<".,:;!?)\]'])?)/gi, '$1<a class="link" data-url="https://$2">$2</a>')).join("");
   }
 
   // "| a | b |" → ["a", "b"]   (a "|" inside `code` doesn't split)
@@ -288,7 +302,7 @@
   const modeBtn = el("button", { class: "pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
   const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
-  const attachBtn = el("button", { class: "attach", title: "Add files, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
+  const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const composer = el("div", { class: "composer" }, popupEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }),
       sendBtn));   // (type @ to mention a project file; + attaches anything)
@@ -325,6 +339,15 @@
             if (t.id !== S.activeId) { S.focusNext = true; post({ type: "switchTab", id: t.id }); }
           },
           onauxclick: (e) => { if (e.button === 1) post({ type: "closeTab", id: t.id }); },
+          // Drag a tab into the editor area: it opens there, split like VS Code's own editors (lib/chat/tab-editor.js).
+          draggable: "true",
+          ondragstart: (e) => {
+            const uri = `kural-chat:/${t.id}.kuralchat`;
+            e.dataTransfer.effectAllowed = "copyMove";
+            e.dataTransfer.setData("ResourceURLs", JSON.stringify([uri]));
+            e.dataTransfer.setData("text/uri-list", uri);
+            e.dataTransfer.setData("text/plain", t.title);
+          },
         },
         el("span", { class: "dot" }),
         el("span", { class: "tab-title" }, t.title),
@@ -402,7 +425,7 @@
         el("div", { class: "logo" }, "{K}"),
         el("div", { class: "brand" }, "Kural"),
         el("div", { class: "brand-sub" }, "AI-powered code editor"),
-        el("div", { class: "tagline" }, "Few words. Working code."),
+        el("div", { class: "tagline" }, "A weapon, a voice for your ideas."),
         el("div", { class: "hints" }, hint("@", "mention a file"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
         S.version ? el("div", { class: "version" }, S.version) : null));
     } else {
@@ -442,9 +465,9 @@
   // Pills in sent messages open the file when clicked; pills you're still typing don't.
   function pillNode(ctx, openable = true) {
     return el("span", { class: `pill ${ctx.kind}`, contenteditable: "false", "data-ctx": JSON.stringify(ctx),
-      title: openable ? `Open ${ctx.path}` : ctx.path,
-      onclick: openable ? () => post({ type: "openFile", path: ctx.path, line: ctx.startLine, endLine: ctx.endLine }) : null },
-      el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"), pillLabel(ctx));
+      title: ctx.kind === "element" ? `${ctx.label} on ${ctx.path}${ctx.element && ctx.element.text ? `\n"${ctx.element.text.slice(0, 80)}"` : ""}` : openable ? `Open ${ctx.path}` : ctx.path,
+      onclick: !openable ? null : ctx.kind === "element" ? () => post({ type: "browser", url: ctx.path }) : () => post({ type: "openFile", path: ctx.path, line: ctx.startLine, endLine: ctx.endLine }) },
+      ctx.kind === "element" ? el("span", { class: "pill-icon" }, icon("inspect")) : el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"), pillLabel(ctx));
   }
 
   // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock), and a
@@ -485,11 +508,11 @@
         el("div", { class: "bubble" }, (m.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)),
           // Pictures you mentioned with @: shown, like attached ones.
           ((pics) => pics.length ? el("div", { class: "att-row" }, pics.map((c) => el("img", { class: "att-photo", src: fileSrc(c.path), alt: base(c.path),
-            title: `Open ${base(c.path)}`, onclick: () => post({ type: "openFile", path: c.path }) }))) : null)(
+            title: `Open ${base(c.path)} full size`, onclick: () => post({ type: "openImage", path: c.path }) }))) : null)(
             (m.segments || []).filter((s) => s.t !== "text" && s.ctx && s.ctx.kind !== "selection" && IMG_RE.test(s.ctx.path || "") && fileSrc(s.ctx.path)).map((s) => s.ctx)),
           (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
             a.kind === "image" && fileSrc(a.path)
-              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.original || a.path }) })
+              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openImage", path: a.original || a.path }) })
               : el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
                 kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
     }
@@ -552,7 +575,7 @@
       el("span", { class: "tool-name" }, TOOL_VERB[b.name] || deviceVerb(b.name) || prettyTool(b.name)), " ",
       file ? el("span", { class: "tool-file", onclick: () => post({ type: "openFile", path: file }) }, b.detail)
         : b.name === "Bash" || /run_command$/.test(b.name) ? el("code", {}, b.detail) : el("span", {}, b.detail),
-      pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), onclick: () => post({ type: "openFile", path: file }) }) : null);
+      pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), title: "Click to open it full size", onclick: () => post({ type: "openImage", path: file }) }) : null);
   }
 
   // The model's thinking (short summaries). Always one line, so nothing around it moves while it thinks: "Thinking…"
@@ -572,7 +595,7 @@
   // A picture the model made (saved by Kural as a file): shown in the answer; click opens it.
   function imageNode(b) {
     const src = fileSrc(b.path);
-    return src ? el("img", { class: "md-img gen-img", src, alt: b.alt || "picture", title: "Open the picture", onclick: () => post({ type: "openFile", path: b.path }) })
+    return src ? el("img", { class: "md-img gen-img", src, alt: b.alt || "picture", title: "Click to open it full size", onclick: () => post({ type: "openImage", path: b.path }) })
       : el("span", { class: "img-missing" }, icon("file-media"), " ", b.path);
   }
 
@@ -873,7 +896,23 @@
   }
   function closePopup() { S.popup = null; popupEl.classList.add("hidden"); }
 
-  input.addEventListener("input", () => { checkMention(); });
+  input.addEventListener("input", () => { checkMention(); requestAnimationFrame(caretIntoView); });
+  // A new line (Shift+Enter) or typing past the box's height: keep the line you're on in view. The box scrolls inside
+  // (max-height); without this the caret went below its edge. At the end of the text, go to the very bottom (a caret on
+  // an empty last line has no size to measure).
+  function caretIntoView() {
+    const sel = getSelection();
+    if (!sel.rangeCount || !input.contains(sel.anchorNode)) return;
+    const r = sel.getRangeAt(0);
+    const tail = document.createRange(); tail.selectNodeContents(input); tail.setStart(r.endContainer, r.endOffset);
+    if (!tail.toString().trim()) { input.scrollTop = input.scrollHeight; return; }
+    const at = r.getBoundingClientRect(), box = input.getBoundingClientRect();
+    if (!at.height) return;
+    if (at.bottom > box.bottom) input.scrollTop += at.bottom - box.bottom + 4;
+    else if (at.top < box.top) input.scrollTop -= box.top - at.top + 4;
+  }
+  // The box growing (a new line) makes the conversation above shorter: if you were at its end, stay there.
+  new ResizeObserver(() => { if (stick) toBottom(); }).observe(composer);
   input.addEventListener("keydown", (e) => {
     const P = S.popup;
     if (P) {
@@ -883,7 +922,7 @@
       if (e.key === "Escape") { e.preventDefault(); closePopup(); return; }
     }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendOrStop(); }
-    else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); }
+    else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); requestAnimationFrame(caretIntoView); }
     else if (e.key === "Escape" && S.tab && S.tab.status !== "idle") post({ type: "stop", tabId: S.tab.id });
   });
   // Pasting code copied from the editor turns it into a "main.py (L3-9)" reference.
@@ -948,6 +987,8 @@
         el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
           el("span", { class: "mi-icon" }, icon("issues")), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
           jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected")),
+        el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "browserPick" }); } },
+          el("span", { class: "mi-icon" }, icon("inspect")), el("span", { class: "mi-label" }, "Pick from a browser"), el("span", { class: "mi-hint" }, "your app: click an element to add it")),
         el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
           el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
           el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];
@@ -1055,7 +1096,7 @@
     const out = [el("div", { class: "mh" }, "On this computer", el("span", { class: "mh-key" }, "Ollama · offline"))];
     if (!L) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint" }, "Looking for Ollama…")));
     else if (!L.status.running) out.push(el("div", { class: "mi", onclick: () => { post({ type: "installOllama" }); closeMenu(); } },
-      el("span", { class: "mi-icon" }, icon("cloud-download")), el("span", { class: "mi-label" }, "Get Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
+      el("span", { class: "mi-icon" }, icon("cloud-download")), el("span", { class: "mi-label" }, "Install Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
     else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, icon("warning"), ` Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
     else for (const m of L.models.filter((x) => x.chat)) {   // (models without tools can't chat: not listed)
       const id = `ollama:${m.name}`;
@@ -1093,7 +1134,7 @@
         memory ? ` (this computer has ${memory} GB).` : "."),
     ];
     if (!L) kids.push(el("div", { class: "h-empty" }, "Looking for Ollama…"));
-    else if (!L.status.running) kids.push(el("div", { class: "lm-warn" }, "Ollama isn't running. ", el("button", { class: "cb primary", onclick: () => post({ type: "installOllama" }) }, "Get Ollama"),
+    else if (!L.status.running) kids.push(el("div", { class: "lm-warn" }, "Ollama isn't running. ", el("button", { class: "cb primary", onclick: () => post({ type: "installOllama" }) }, "Install Ollama"),
       el("button", { class: "cb", onclick: () => post({ type: "localModels" }) }, "Check again")));
     else if (!L.status.ok) kids.push(el("div", { class: "lm-warn" }, icon("warning"), ` Your Ollama is ${L.status.version}. The chat needs ${L.minVersion} or newer: update Ollama.`));
     // Downloads in progress
@@ -1297,9 +1338,14 @@ ${d.system}` : ""}`,
   });
   listEl.addEventListener("click", (e) => {
     const remote = e.target.closest && e.target.closest(".img-remote");
-    if (remote) { remote.replaceWith(el("img", { class: "md-img", src: remote.dataset.url, alt: remote.dataset.alt || "" })); return; }
+    if (remote) { remote.replaceWith(el("img", { class: "md-img", src: remote.dataset.url, "data-url": remote.dataset.url, alt: remote.dataset.alt || "", title: "Click to open it full size" })); return; }
+    // A picture: full size in its own editor tab.
+    const pic = e.target.closest && e.target.closest("img.md-img[data-path], img.md-img[data-url]");
+    if (pic) { post({ type: "openImage", path: pic.dataset.path, url: pic.dataset.url }); return; }
     const a = e.target.closest && e.target.closest("a.link[data-url]");
     if (a) { e.preventDefault(); post({ type: "openUrl", url: a.dataset.url }); return; }
+    const f = e.target.closest && e.target.closest("a.link[data-path]");
+    if (f) { e.preventDefault(); post({ type: "openFile", path: f.dataset.path, line: +f.dataset.line || undefined, endLine: +f.dataset.end || undefined }); return; }
     const r = e.target.closest && e.target.closest("code.ref");
     if (r) post({ type: "openFile", path: r.dataset.path, line: +r.dataset.line || undefined });
   });
@@ -1338,6 +1384,8 @@ ${d.system}` : ""}`,
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
+        // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.
+        tabBar.classList.toggle("hidden", !!m.single);
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
           mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
@@ -1394,7 +1442,11 @@ ${d.system}` : ""}`,
       case "activeFile": S.activeFile = m.file; S.includeActive = true; renderChips(); break;
       case "files": S.files = m.files; if (S.popup) renderPopup(); break;
       case "pics": S.pics = m.pics; break;
-      case "insertPill": closeHistory(); insertPill(m.ctx); break;
+      case "insertPill":
+        closeHistory(); insertPill(m.ctx);
+        if (m.text) document.execCommand("insertText", false, m.text);   // (a comment typed in the browser starts your message)
+        input.focus();
+        break;
       case "pasted":
         if (m.ctx) insertPill(m.ctx, pasteRange);
         else { input.focus(); if (pasteRange) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(pasteRange); } document.execCommand("insertText", false, m.text); }

@@ -48,6 +48,7 @@ your next message, because which tools the model has is fixed when it starts.
 - **+ → Link ticket** (Claude): link a Jira epic, story or task; Kural then knows which ticket you're working on in every
   message, and reads its details from Jira when needed. Needs the Atlassian connector in Claude (claude.ai → Settings →
   Connectors).
+- **+ → Pick from a browser**: opens the [[Browser]] to select an element of your app and add it here.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
 - The file you're looking at is added by itself ("current file"); click its × to leave it out.
@@ -63,7 +64,10 @@ your next message, because which tools the model has is fixed when it starts.
   model made. Ask "show me @chart.png" and the chat shows it. Pictures you attach or mention with @ show in your
   message. A picture from the internet shows **Load image** first: loading it would tell that website you read this
   answer.
-- **Links** open in your browser; `file.py:12` style references open the file at that line.
+- **Click a picture** to see it full size in its own tab.
+- **Links** to files (`[install.sh](install.sh)`, `[app.js:12](src/app.js#L12)`) and `file.py:12` style references
+  open the file at that line; a folder shows in the Explorer. Web links open in Kural's own [[Browser]] tab (so you can
+  pick elements of the page).
 - **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;
   **Latest** brings you back down.
 - **Stop** (the square button) stops the answer.
@@ -74,8 +78,11 @@ your next message, because which tools the model has is fixed when it starts.
 - **History** (clock button): every chat from every workspace, in full. Search, **pin** chats to the top, delete
   them. A chat from another workspace opens to read; **Open its folder**, or **Continue here** (a new chat here that knows
   the old conversation).
-- **Two chats at once**: the split button in the Kural panel's title bar opens a second chat beside your code. Both can
-  work at the same time; drag it anywhere, even to another screen.
+- **Two chats at once**: drag a chat tab out of the Kural panel into the editor area. It opens there, split the way VS
+  Code splits editors: drop it on a side of an editor to put it beside, above or below, or in the middle to add it as a
+  tab. It shows only that chat (its editor tab is its tab), and the side panel stops listing it until you close the
+  editor. Both chats can work at the same time; move it anywhere, even to another screen. It comes back after a restart.
+  (Command Palette: **Kural: Open a Chat Beside the Code** does the same with a new chat.)
 
 ## Your Claude Code setup
 

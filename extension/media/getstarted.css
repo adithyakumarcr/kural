@@ -65,7 +65,8 @@ pre.err { white-space: pre-wrap; word-break: break-word; margin: 6px 0; padding:
 .tag { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; }
 .extra { margin-top: 14px; }
 .x-head { display: flex; align-items: center; gap: 8px; min-height: 28px; }
-.x-mark { width: 16px; text-align: center; color: var(--muted); }
+.x-mark { width: 16px; display: inline-grid; place-items: center; color: var(--muted); }
+.x-mark .codicon { vertical-align: 0; }
 .x-mark.yes { color: var(--green); font-weight: 700; }
 .extra .muted.small { margin-left: 24px; }
 .sub { margin: 4px 0 0 24px; padding-left: 12px; border-left: 2px solid var(--border); font-size: 13px; }

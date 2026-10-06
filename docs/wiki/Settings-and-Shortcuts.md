@@ -13,6 +13,8 @@ On a Mac, use **Cmd** where it says Ctrl, except where it says *(Ctrl on Mac too
 | **Ctrl+K** | inline edit |
 | **Ctrl+Enter** / **Ctrl+Shift+Backspace** | keep / reject an inline edit |
 | **Ctrl+Alt+Space** | Tab Completion on/off *(Ctrl on Mac too)* |
+| **Ctrl+Shift+F** / **Ctrl+Shift+H** | Search / Replace in files (Search & Ask side bar) |
+| **F4** / **Shift+F4** | next / previous search result |
 | **Ctrl+Alt+A** | Ask |
 | **Ctrl+Esc** | the full Claude Code terminal beside your file |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |

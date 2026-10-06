@@ -28,8 +28,11 @@ minutes), Gemini from its `/usage`.
 
 ## Account
 
-The person icon next to it shows your Claude plan; hover for who's logged in where. Click it for the Account menu, with
-a section each for Claude, Google Gemini and ChatGPT (Codex):
+The person icon next to it shows the name on the account the chat's AI uses (for example "Peasant Adithya"); hover
+for who's logged in where. (The name comes from what Claude Code, Gemini or Codex saved on your computer at login, and
+only when it belongs to the same account; otherwise the email shows.) Click it for **Kural Settings**, an
+editor tab (also the Chat panel's **...** menu, or **Kural: Settings**). It has a card each for Claude, Google Gemini,
+ChatGPT (Codex) and your own model:
 
 - **Who's logged in**: email, plan, organization.
 - **Usage**: the meter's numbers; and **Usage page**, which opens the provider's own usage page in your browser.
@@ -50,7 +53,9 @@ Kural checks for a new version once a day by itself and offers it in a small not
 **What's new**, **Later**). It never installs without asking. Turn the daily check off with the setting
 `kural.updates.autoCheck`.
 
-Check yourself any time: **Help → Check for Updates…**, the Chat panel's **…** menu, or the Account menu.
+Check yourself any time: **Help → Check for Updates…**, the Chat panel's **…** menu, or **Check for updates** in Kural
+Settings (with the switch for the daily check). Kural Settings also links to Get started, Tab Completion, all of Kural's
+settings, Kural's log, the guide, and asking for a feature.
 
 Updates include test versions (alpha, beta, rc). Installing:
 
