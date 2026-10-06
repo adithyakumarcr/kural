@@ -67,7 +67,7 @@ class SettingsPage {
     const claude = { id: "claude", name: "Claude", what: "Claude's models with your Claude plan, through Claude Code.", ...limits("claude") };
     if (!this.gs.passed) claude.state = "off";
     else if (a && a.loggedIn) {
-      Object.assign(claude, { state: "on", who: a.email || a.method || "Logged in", plan: [a.plan && `Claude ${a.plan}`, a.org].filter(Boolean).join(" · "),
+      Object.assign(claude, { state: "on", who: a.name || a.email || a.method || "Logged in", email: a.name ? a.email : "", plan: [a.plan && `Claude ${a.plan}`, a.org].filter(Boolean).join(" · "),
         note: a.provider !== "firstParty" || a.apiKey ? `Logged in with ${a.method}` : "", page: a.provider === "firstParty" ? (a.apiKey ? USAGE.apiKey : USAGE.claude) : "" });
     } else if (a && a.loggedIn === false) claude.state = "out";
     else claude.state = "set";   // (this Claude Code can't say who's logged in)
@@ -77,7 +77,7 @@ class SettingsPage {
       const C = CLIS[id], c = this.account.cliAuth[id];
       const card = { id, name: C.label, what: C.what, ...limits(id) };
       if (!this.gs.cliReady(id)) card.state = "off";
-      else if (c && c.loggedIn) Object.assign(card, { state: "on", who: c.email || c.method || "Logged in", plan: [c.plan, c.email ? c.method : ""].filter(Boolean).join(" · "), page: C.usageUrl });
+      else if (c && c.loggedIn) Object.assign(card, { state: "on", who: c.name || c.email || c.method || "Logged in", email: c.name ? c.email : "", plan: [c.plan, c.email ? c.method : ""].filter(Boolean).join(" · "), page: C.usageUrl });
       else if (c && c.loggedIn === false) card.state = "out";
       else card.state = "set";
       cards.push(card);

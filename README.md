@@ -274,7 +274,10 @@ cursor.
 - **Search & Ask** (magnifier icon). **Search** (Ctrl+Shift+F): find and replace in your files, with everything VS
   Code's own Search had (Kural hides that one). **Ask** (Ctrl+Alt+A): ask "where is the retry limit set?" and get the
   exact `file:line` places.
-- **Kural Settings** (person icon in the status bar): your accounts and usage, updates, the guide, in one tab.
+- **Kural Settings** (person icon in the status bar, which shows your account's name): your accounts and usage,
+  updates, the guide, in one tab.
+- **Kural Browser.** Your app on localhost beside the code: **Select element**, click something, and it's added to the
+  chat with its HTML, styles and component (like Cursor).
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **AI Usage** (bottom panel, next to Terminal). Each limit in words: "5-hour limit 50% used, resets in 42 min",
   "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex. The status bar shows the chat's AI the

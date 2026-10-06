@@ -868,10 +868,12 @@ class ChatView {
     const parts = [];
     const seen = new Set();
     for (const c of contexts) {
-      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine]);
+      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine, c.element && c.element.selector]);   // (two elements of one page are two)
       if (seen.has(key)) continue; seen.add(key);
       if (c.kind === "selection") {
         parts.push(`${c.path} (lines ${c.startLine}-${c.endLine}):\n\`\`\`${c.lang || ""}\n${c.code}\n\`\`\``);
+      } else if (c.kind === "element") {
+        parts.push(elementNote(c.element || {}));
       } else if (c.kind === "file" || c.kind === "current") {
         const uri = this.resolvePath(c.path);
         let body = null;
@@ -887,12 +889,13 @@ class ChatView {
 
   // What you typed, with pills written as @main.py or @main.py (L3-9).
   static textOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
+      : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
   }
 
   // A tab title from your first message; pills read as "main.py (L3-9)".
   static titleOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "element" ? s.ctx.label : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
@@ -1540,7 +1543,12 @@ class ChatView {
         if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
-      case "openUrl": if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url)); break;
+      // A link to your own app (localhost) opens in the Kural Browser, where you can pick elements; others in your browser.
+      case "openUrl":
+        if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(m.url || "")) vscode.commands.executeCommand("kural.browser.open", m.url);
+        else if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url));
+        break;
+      case "browser": vscode.commands.executeCommand("kural.browser.open", m.url); break;
       case "ticketSearch": {
         const out = await this.tickets.search(m.query || "", (text) => pane && this.postTo(pane, { type: "ticketStatus", id: m.id, text }));
         if (!out.cancelled && pane) this.postTo(pane, { type: "ticketResults", id: m.id, ...out });
@@ -1729,6 +1737,16 @@ class ChatView {
     return u ? ChatView.textOf(u.segments || []) : "";
   }
 
+  // An element picked in the Kural Browser (lib/browser): a pill in the message you're writing, in the chat you used
+  // last; its details go to the model with the message (elementNote).
+  async addElement(info) {
+    const ctx = { kind: "element", path: info.url, label: `<${info.short}>`, element: info };
+    await this.reveal();
+    const pane = this.cur();
+    if (pane) this.postTo(pane, { type: "insertPill", ctx });
+    vscode.window.setStatusBarMessage(`Kural: added ${info.short} to the chat`, 3000);
+  }
+
   // A file the chat mentions or links: open it (at the line). A folder: show it in the Explorer. A picture or another
   // file that isn't text: VS Code's own viewer. Not there: say so (a model can name a file that doesn't exist).
   async openPath(p, line, endLine) {
@@ -1820,5 +1838,17 @@ function permDetail(tool, input) {
 function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// What the model reads about an element you picked in the Kural Browser.
+function elementNote(e) {
+  const lines = [`An element I picked on the page ${e.url || ""}${e.title ? ` ("${e.title}")` : ""}:`,
+    `- element: <${e.short || e.tag}>, selector: ${e.selector || "?"}${e.size ? `, ${e.size[0]}x${e.size[1]} px` : ""}`];
+  if (e.component && e.component.name) lines.push(`- ${e.component.framework || ""} component: ${e.component.name}${e.component.file ? ` (${e.component.file}${e.component.line ? `:${e.component.line}` : ""})` : ""}`);
+  if (e.text) lines.push(`- text: ${JSON.stringify(e.text)}`);
+  const st = Object.entries(e.styles || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
+  if (st) lines.push(`- styles: ${st}`);
+  if (e.html) lines.push("```html\n" + e.html + "\n```");
+  return lines.join("\n");
+}
 
 module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, teamPrompt, FRIENDS, ROLES, MOOD_PROMPTS, toolDetail } };

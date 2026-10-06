@@ -49,3 +49,8 @@ h3 { font-size: 1em; font-weight: 600; margin: 0; }
 .lt { display: flex; flex-direction: column; gap: 1px; }
 .codicon { vertical-align: -3px; }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+/* Narrow tabs: buttons and tags stay on one line; the version and its button wrap as a whole. */
+.btn, .tag, .pill { white-space: nowrap; }
+header .title { flex: 1 1 260px; }
+.update .row { flex-wrap: wrap; justify-content: flex-end; text-align: right; }
+@media (max-width: 560px) { .update { align-items: flex-start; } .update .row { justify-content: flex-start; text-align: left; } }

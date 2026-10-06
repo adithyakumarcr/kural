@@ -31,10 +31,14 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Each change
-  can be reviewed, kept or undone. Pictures in answers are shown. The clock button: every chat from every workspace
-  (search, pin, delete). Drag a chat tab into the editor area to
-  open it there, split like VS Code's editors (drop on a side: beside, above or below; also "Kural: Open a Chat Beside
-  the Code").
+  can be reviewed, kept or undone. Pictures in answers are shown; click one to see it full size in its own tab. Links to
+  files in an answer open the file (at the line); links to your app on localhost open in the Kural Browser. The clock
+  button: every chat from every workspace (search, pin, delete). Drag a chat tab into the editor area to open it there,
+  split like VS Code's editors (drop on a side: beside, above or below); it then shows only that chat, and leaves the
+  side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code").
+- Kural Browser ("Kural: Open Browser", or + in the chat: "Pick from a browser"): your app (localhost:3000…) in a tab
+  beside the code. "Select element", then click something on the page: it's added to your message (tag, selector, text,
+  HTML, styles, size, the React/Vue component and its file when the dev build tells), like Cursor. Esc stops picking.
 - Devices over SSH (a Raspberry Pi, a board computer…): + → Link device → add one (name, address, username, password).
   Kural uses the password once to put its own SSH key on the device and doesn't save it anywhere (no keychain); after
   that it logs in with the key. A chat linked to a device can run commands and read/write files on it (asking first in
@@ -57,7 +61,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   then downloads the model.
   It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
-  want ("push this to the fix/login branch", "commit with message fixed the login") and Kural suggests the command.
+  want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
+  login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
   "5-hour limit 50% used, resets in 42 min", "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex.
   The status bar shows the chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"), the
@@ -67,7 +72,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
 - In a folder you haven't trusted (VS Code's Restricted Mode), its settings can't pick programs or modes for Kural, and
   its Claude Code setup (hooks, MCP servers) isn't loaded.
-- Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural: Settings"): a card each
+- The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
+- Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
   for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
   page, switch account, log out, log in, set up; then Kural's version and Check for updates, Get started, Tab Completion,
   all settings, the log, the guide. Kural's log: "Kural: Show Log" (an editor tab; Kural hides VS Code's Output tab).

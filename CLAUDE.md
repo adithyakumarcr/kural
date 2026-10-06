@@ -239,7 +239,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Dragging a chat tab into the editor area makes one (`lib/chat/tab-editor.js`): the page's tab sets `ResourceURLs`
   = `kural-chat:/<id>.kuralchat` (what VS Code's editor drop target opens), which opens in the custom editor
   "kural.chatTab" (`adoptDragged`: the side panel moves on to another chat), so VS Code does the split zones, moving and
-  restoring after a restart. No FileSystemProvider for that scheme on purpose: with one, VS Code shows a breadcrumb bar
+  restoring after a restart. Such a pane is `single`: its page hides its tab bar (`tabs` message `single`), `post("tabs")`
+  gives it only its own tab and leaves that tab out of the other panes' lists, `activate()` of it from elsewhere reveals
+  its editor, `cycle()`/new tab skip it, closing the chat disposes the editor (Adithya: the split showed "New chat" twice
+  and his other chats). No FileSystemProvider for that scheme on purpose: with one, VS Code shows a breadcrumb bar
   with the made-up file name. A drop on top of a webview (another chat, Get started) lands in that webview instead: drop
   on an editor's tab bar or a text editor. Checked in the app with DOM drag events (CDP can't start a native drag in a
   background window). Older split panels (WebviewPanel "kural.chatEditor") still come back through their serializer
@@ -248,6 +251,23 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (`focusPane`). `post()` goes to every pane (each shows what's about its own tab), except `ONE_PANE` replies
   (full, attached, flash…) to the current pane. A reply sent after an `await` uses `postTo(pane, …)`. Use
   `shown(id)` for "is this tab on screen", never `tab.id === this.activeId`.
+- **Links and pictures in answers** (`media/chat.js` `fileLink`, `openPath`/`openImage` in the chat): a markdown link
+  that isn't http(s) is a file (`#L12`, `#L12-L20`, `:12` = the line); a folder → Explorer, pictures/binaries →
+  `vscode.open`, missing → a message. Pictures (`img.md-img[data-path|data-url]`, attachments, tool/generated ones) open
+  full size in a tab: local → VS Code's image viewer, web → a tiny WebviewPanel. localhost links → the Kural Browser.
+- **Kural Browser** (`lib/browser/`: `index.js` the tab, `proxy.js` no vscode; pages `media/browser.*`, picker
+  `media/browser-picker.js`): the page loads in an iframe from a proxy on 127.0.0.1:<random> (a cross-origin page can't
+  be reached into, so the picker comes with the page: one `<script>` first in `<head>`; CSP/X-Frame-Options/COOP/COEP
+  dropped; gzip/br decoded; Location and Set-Cookie (Domain, Secure, SameSite=None) pointed at the proxy; websocket
+  upgrades piped, and destroyed on close (a server waits for them forever). Picker ↔ tab by postMessage (`kuralPick`,
+  `kuralNav`; `picked`/`page`, checked against the frame's window). A pick → `chat.addElement` → a pill `kind:
+  "element"` (`element` = the details) → `elementNote()` in the prompt (dedupe key includes the selector). The webview
+  CSP's `frame-src` is the proxy only. Test: `test/browser-proxy.test.js` (a stand-in dev server). Checked in the app:
+  page through the proxy, outline, pick → pill with the real URL, the model reads the styles.
+- **Account names** (`lib/ai/names.js`, no vscode): the status item shows the name on the chat's AI's account, from the
+  programs' own plain files only when their email is the account's: `~/.claude.json` oauthAccount.displayName (Claude
+  Code's `auth status` has no name), `~/.gemini/oauth_creds.json`'s id_token `name` (Antigravity's own login is in the
+  keychain: never read), `~/.codex/auth.json`'s id_token. `chat.onChoice` redraws it. Test: `test/names.test.js`.
 - **History** (`lib/chat/archive.js`, no vscode inside): every chat in full, all workspaces, in
   `globalStorage/kural.kural/chats/`: `<id>.json` + `<id>.meta.json` (one file per chat, so several windows can save at
   once; `deleted.json` keeps deleted ids so a window that still has one open can't bring it back; pinned is re-read
@@ -293,7 +313,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   whose label doesn't fuzzy-match the typed text, so `suggestionItem()` gives such items an empty replacement range
   (always shown) and `inputData` = DEL × typed characters + the command (what the terminal gets on Tab; VS Code's own
   items use it, the extension API passes it through with `...item`). `inputData` isn't public API: after a VSCodium
-  update, check that "push this to main" + Tab still replaces the words.
+  update, check that "push this to main" + Tab still replaces the words. VS Code asks a provider only at its trigger
+  characters, so letters/digits/`.` are triggers too (a sentence ending in a word, "delete the file install.sh", was
+  never asked about whole); mid-word only plain words go to the model (and after 450 ms). The plain-words item has
+  VS Code's internal kind 101 "InlineSuggestionAlwaysOnTop" (not in the public enum) so it's first and Tab takes it;
+  a pause timer + `triggerSuggest` was tried and dropped (it showed "No suggestions." on every pause). `ACTIONS`: a
+  leading verb that isn't a program ("delete install.sh") counts; apostrophes inside words are English, not quotes.
+  Checked live in the app (`rm install.sh` first, Tab replaces the line).
 - **Tab learns from your work** (`lib/tab/activity.js`, no vscode inside; fed by extension.js and chat.js): per workspace
   (`workspaceState` "kural.activity.v1"): chat asks + changed files (`finishReply`; Undo removes the file; "Build it"
   uses the plan's question), Ctrl+K/Apply you accepted (`review.onDone(meta)`), accepted Tab suggestions (the inline item's

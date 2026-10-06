@@ -28,7 +28,9 @@ minutes), Gemini from its `/usage`.
 
 ## Account
 
-The person icon next to it shows your Claude plan; hover for who's logged in where. Click it for **Kural Settings**, an
+The person icon next to it shows the name on the account the chat's AI uses (for example "Peasant Adithya"); hover
+for who's logged in where. (The name comes from what Claude Code, Gemini or Codex saved on your computer at login, and
+only when it belongs to the same account; otherwise the email shows.) Click it for **Kural Settings**, an
 editor tab (also the Chat panel's **...** menu, or **Kural: Settings**). It has a card each for Claude, Google Gemini,
 ChatGPT (Codex) and your own model:
 
