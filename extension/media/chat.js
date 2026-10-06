@@ -518,7 +518,8 @@
     }
     const out = el("div", { class: "answer" });
     const last = i === S.tab.messages.length - 1;
-    if (m.models && m.models.length) out.append(el("div", { class: "model-attribution" },m.models.map(modelLabel).join(" → ") +
+    // Hover: why Auto chose it (profile, task, intensity, limits, staying on the model, what it learned).
+    if (m.models && m.models.length) out.append(el("div", { class: "model-attribution", ...(m.routing && m.routing.reason ? { title: m.routing.reason } : {}) },m.models.map(modelLabel).join(" → ") +
       (m.routing ? ` · ${m.routing.source || "native"} · ${Number(m.routing.ms).toFixed(1)} ms routing` : "")));
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
     (m.blocks || []).forEach((b, k) => out.append(blockNode(m, b, k)));
@@ -778,7 +779,7 @@
     modeBtn.replaceChildren(el("span", { class: `mode-dot m-${t.mode}` }), modeLabel(t.mode), icon("chevron-down", "chev"));
     const team = t.teamSize ? ` · ${t.teamStyle === "discuss" ? "discussion" : `${t.teamSize} agents`}` : "";
     const mood = t.mood && t.mood !== "default" ? ` · ${moodLabel(t.mood)}` : "";
-    const routing = t.autoRoute ? `Auto · ${cap(t.routingProfile || "balanced")} · ` : "";
+    const routing = t.autoRoute ? `Auto · ${cap(profileName(t.routingProfile))} · ` : "";
     modelBtn.replaceChildren(`${routing}${t.routingState || t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${team}`, icon("chevron-down", "chev"));
     sendBtn.replaceChildren(icon(running ? "debug-stop" : "arrow-up"));
     sendBtn.title = running ? "Stop (Esc)" : "Send (Enter)";
@@ -1010,9 +1011,9 @@
       const local = /^[a-z]+:/.test(t.model || "");   // (not Claude: no agent teams, no Claude Code setup)
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
       items = [el("div", { class: "mh" }, "Auto · Kural Model Router"),
-        ...["balanced","speed","quality"].map((profile) => el("div", { class: `mi ${t.autoRoute && t.routingProfile === profile ? "on" : ""}`,onclick: () => { post({ type: "setRouterProfile",tabId: t.id,profile }); closeMenu(); } },
-          el("span", { class: `check radio${t.autoRoute && t.routingProfile === profile ? " on" : ""}` }),el("span", { class: "mi-label" },cap(profile)),
-          el("span", { class: "mi-hint" }, { balanced: "quality, then speed",speed: "prefer quick responses",quality: "prefer capability" }[profile]))),
+        ...["balance","cost","intelligence"].map((profile) => el("div", { class: `mi ${t.autoRoute && profileName(t.routingProfile) === profile ? "on" : ""}`,onclick: () => { post({ type: "setRouterProfile",tabId: t.id,profile }); closeMenu(); } },
+          el("span", { class: `check radio${t.autoRoute && profileName(t.routingProfile) === profile ? " on" : ""}` }),el("span", { class: "mi-label" },cap(profile)),
+          el("span", { class: "mi-hint" }, { balance: "quality, then speed",cost: "saves your usage limits",intelligence: "most capable" }[profile]))),
         el("div", { class: "mi",onclick: () => { post({ type: "routerPanel" }); closeMenu(); } },el("span", { class: "mi-icon" },icon("settings-gear")),el("span", { class: "mi-label" },"Configure Model Router…")),
         el("div", { class: "sep" }),
         el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
@@ -1061,6 +1062,8 @@
     return m && m.efforts && Object.keys(m.efforts).length ? m.efforts : null;
   }
   const cap = (w) => w[0].toUpperCase() + w.slice(1);
+  // Auto profiles were Balanced/Speed/Quality before Oct 2026 (lib/router/policy.js ALIASES).
+  const profileName = (p) => ({ balanced: "balance", speed: "cost", quality: "intelligence" })[p] || p || "balance";
   function levelHint(t, effort) {
     const lv = geminiLevels(t); if (!lv) return "";
     const got = (LEVEL_NEAR[effort] || []).find((x) => lv[x]);

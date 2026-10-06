@@ -136,6 +136,21 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `isTransient`. Only for Claude and Codex (`deviceOk`): Ollama has no MCP in Kural's engine, and Gemini (agy) can't
   ask before a command. Tests: `test/devices.test.js` with `test/fake-ssh.js` (`KURAL_SSH_BIN`). Real check: a local
   sshd (`apt install openssh-server`, `sshd -p 2222`).
+- **Model Router** (`lib/router/`: `policy.js` decides, no vscode; `index.js` ModelRouter; `client.js` MiniLM through
+  Ollama; `learn.js` RouterMemory; `panel.js`): Auto = Cursor-like profiles **cost / balance / intelligence** (old ids
+  speed / balanced / quality map via `ALIASES`; keep accepting them: saved chats and settings have them). `select()`:
+  capability `eligible` → floor from task size (+ checkpoint, + a stronger model you picked for similar requests) →
+  score = profile weights − usage-limit pressure (`limitUsed` from `usage.current(provider)`, set as `router.usageOf` in
+  extension.js; ≥98 % skipped unless it's the only one) + stay bonus growing with `historyChars` (switching loses the
+  cache) + `learned` lean. Returns `effort` too (chat sets `tab.effort` unless you picked one: `effortPinned`). The
+  reason lists what decided. `classify(prompt, context)`: context = `ChatView.routingContext` (files/selections, sizes
+  by stat only: routing must stay instant; the always-attached open file doesn't count), error output, browser
+  elements; file names are stripped before word matching; `sure` marks labels from explicit words. MiniLM: examples per
+  label (`EXAMPLES`), each half kept only when clearly ahead, and it may replace only Native's guesses (`sure`). A
+  generative helper (Qwen3 0.6B) was measured and removed (slower, worse labels): see docs/wiki/Model-Router.md before
+  adding one. Learning: `routerFeedback` in the chat: next message = good, `setModel` right after = better, every
+  change undone = bad (replaces good); workspaceState `kural.router.memory.v1`, command `kural.router.forget`. Tests:
+  `test/router.test.js`, `test/router-chat.test.js`; live: `node test/router.bench.js --live` (MiniLM installed).
 - **Usage meter** (`lib/ai/usage.js` hub, drawn by `lib/account.js`): Claude Code sends `rate_limit_event`
   (`unifiedWindows.five_hour/seven_day.utilization`) after every answer; `ClaudeProcess.onData` and `claudeTest` report
   it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini (agy): `--print /usage` weekly limits, and

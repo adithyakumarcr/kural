@@ -1,5 +1,5 @@
 const { LocalRouterClient,abortError } = require("./client");
-const { profileOf,eligible,classify,select,contextWithinBudget,lexicalRank } = require("./policy");
+const { profileOf,eligible,classify,select,contextWithinBudget,lexicalRank,limitUsed } = require("./policy");
 const { performance } = require("perf_hooks");
 const { createHash } = require("crypto");
 const { excludedModel } = require("../ai/model-policy");
@@ -10,13 +10,15 @@ class ModelRouter {
     this.client=new LocalRouterClient(fetchImpl);this.listeners=new Set();this.samples=[];this.tasks=new Map();
     this.inflight=0;this.cooldowns=new Map();this.cache=new Map();this.last=null;this.lastAssistant=null;
     this.usage={ decisions:0,calls:0,inputTokens:0,fallbacks:0 };
+    // Set by extension.js: usageOf(providerId) → lib/ai/usage.js current() report; memory → lib/router/learn.js.
+    this.usageOf=()=>null;this.memory=null;
   }
   onChange(f) { this.listeners.add(f);return { dispose:()=>this.listeners.delete(f) }; }
   changed() { for (const f of this.listeners) f(); }
   options() {
     const c=this.settings(),number=(k,d,min,max)=>{const n=c.get(k,d);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):d;};
     const assistant=c.get("modelRouter.assistant","native"),allowed=c.get("modelRouter.allowedModels",null);
-    return { profile:profileOf(c.get("modelRouter.profile","balanced")),allowedModels:Array.isArray(allowed)?allowed.filter((x)=>typeof x==="string"):null,
+    return { profile:profileOf(c.get("modelRouter.profile","balance")),allowedModels:Array.isArray(allowed)?allowed.filter((x)=>typeof x==="string"):null,
       allowCloud:c.get("modelRouter.allowCloud",true)!==false,saveTokens:!!c.get("modelRouter.saveTokens",false),
       assistant:ASSISTANTS.includes(assistant)?assistant:"native",
       url:c.get("tabCompletion.ollamaUrl","http://127.0.0.1:11434"),timeoutMs:number("modelRouter.timeoutMs",1500,100,10000),
@@ -25,7 +27,12 @@ class ModelRouter {
       contextChars:number("modelRouter.contextChars",12000,1000,60000),handoffChars:number("modelRouter.handoffChars",120000,10000,1000000),
       checkpoints:c.get("modelRouter.checkpoints",true)!==false,tab:!!c.get("modelRouter.tab",false) };
   }
-  async availableModels() { return (await this.models()).map((m)=>({...m,observedTaskMs:this.taskMedian(m.id)})); }
+  async availableModels() {
+    return (await this.models()).map((m)=>{
+      let used=null;try { used=limitUsed(m,this.usageOf(m.providerId)); } catch { /* no report yet */ }
+      return {...m,observedTaskMs:this.taskMedian(m.id),...(Number.isFinite(used)?{limitUsed:used}:{})};
+    });
+  }
   taskMedian(id) { const v=[...(this.tasks.get(id)||[])].sort((a,b)=>a-b);return v.length?v[Math.floor(v.length/2)]:null; }
   taskDone(id,ms,ok) {
     if (ok && Number.isFinite(ms)) { const list=this.tasks.get(id)||[];list.push(ms);this.tasks.set(id,list.slice(-20)); }
@@ -56,7 +63,7 @@ class ModelRouter {
     if (signal && signal.aborted) throw abortError();
     const continuation = /^\s*(yes|okay|ok|go ahead|continue|build it|do it|implement (it|that|the plan))\b/i.test(String(request.prompt||"")) && String(request.prompt||"").length<200;
     const text = continuation && request.recentContext ? `Recent conversation: ${String(request.recentContext).slice(-1200)}\nLatest request: ${request.prompt}` : String(request.prompt||"");
-    let task=classify(text),source="native",note="";
+    let task=classify(text,request.context),source="native",note="";
     if (settings.assistant!=="native" && this.trusted() && list.length>1 && !request.checkpoint) {
       const key=createHash("sha256").update(JSON.stringify([settings.assistant,settings.url,settings.minSimilarity,settings.minMargin,text])).digest("hex");
       try {
@@ -68,11 +75,18 @@ class ModelRouter {
         // Known complex work and nontrivial edits/reviews retain a quality floor when a helper disagrees.
         const floor = task.complexity === "complex" ? "complex" :
           task.complexity === "standard" && ["edit","review"].includes(task.intent) ? "standard" : null;
-        task={...out.task,complexity:floor === "complex" ? "complex" :
-          floor === "standard" && out.task.complexity === "simple" ? "standard" : out.task.complexity};source=out.source;
+        // Explicit words win (policy.js classify `sure`); MiniLM replaces Native's guesses, and fills in when it's sure of
+        // only one half.
+        const sure=task.sure||{};
+        const helper={intent:sure.intent?task.intent:out.task.intent||task.intent,complexity:sure.complexity?task.complexity:out.task.complexity||task.complexity};
+        task={...helper,complexity:floor === "complex" ? "complex" :
+          floor === "standard" && helper.complexity === "simple" ? "standard" : helper.complexity,
+          ...(task.signals?{signals:task.signals}:{})};source=out.source;
       } catch(e) { if (signal && signal.aborted) throw e;note=` · native fallback: ${e.message}`;this.usage.fallbacks++; }
     }
-    const decision={...select(list,request,settings,task),source,ms:performance.now()-t0};
+    // Not at a checkpoint: that's the same answer continuing, nothing to learn from yet.
+    const learned=this.memory&&!request.checkpoint?this.memory.advise(request.prompt||text).lean:null;
+    const decision={...select(list,{...request,...(learned?{learned}:{})},settings,task),source,ms:performance.now()-t0};
     if (decision.reason) decision.reason+=note;
     this.last={...decision,profile:profileOf(request.profile||settings.profile)};this.usage.decisions++;
     this.samples.push(decision.ms);this.samples=this.samples.slice(-100);this.changed();return decision;
@@ -103,7 +117,7 @@ class ModelRouter {
     const local=localReady&&!excludedModel(localModel)&&allowed(`ollama:${localModel}`),cloud=claudeReady&&s.allowCloud&&allowed(claudeModel);
     if (!local&&!cloud) return "none";
     if (!cloud) return "local";if (!local) return "claude";
-    return s.profile==="quality"&&!s.saveTokens?"claude":"local";
+    return s.profile==="intelligence"&&!s.saveTokens?"claude":"local";
   }
 }
 module.exports={ModelRouter,ASSISTANTS};

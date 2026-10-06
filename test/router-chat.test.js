@@ -134,6 +134,31 @@ function fixture(model='haiku') {
   const pending=provider.provideInlineCompletionItems(doc,position,{triggerKind:1},token);await new Promise(r=>setImmediate(r));values['modelRouter.allowCloud']=false;resolve('<insert>3</insert>');
   assert.deepStrictEqual(await pending,[]);assert.strictEqual(router.usage.calls,0);
  });
+ await check('Auto learns from what you do next: carrying on, picking another model, undoing every change',async()=>{
+  const {RouterMemory}=require('../extension/lib/router/learn');
+  const routed=(ask,model)=>[{role:'user',segments:[{t:'text',v:ask}]},{role:'assistant',model,routing:{model,source:'native'},blocks:[{k:'text',text:'done'}],changes:[{id:'c1',state:'pending'},{id:'c2',state:'pending'}]}];
+  // Carried on with the next message: "good".
+  let f=fixture();f.chat.router.memory=new RouterMemory();f.tab.messages=routed('refactor the payment module into services','haiku');
+  await f.chat.send(f.tab,[{t:'text',v:'now add tests'}],[]);
+  assert.deepStrictEqual(f.chat.router.memory.items.map(e=>[e.kind,e.model]),[['good','haiku']]);assert.strictEqual(f.tab.messages[1].routingJudged,'good');
+  // Picked another model right after: "better" (once; a second pick doesn't count again).
+  f=fixture();f.chat.router.memory=new RouterMemory();f.chat.warm=()=>{};f.chat.tab=()=>f.tab;f.tab.messages=routed('refactor the payment module into services','haiku');
+  await f.chat.handle({type:'setModel',tabId:'chat',model:'opus'});
+  assert.deepStrictEqual(f.chat.router.memory.items.map(e=>[e.kind,e.model,e.better]),[['better','haiku','opus']]);assert.strictEqual(f.tab.autoRoute,false);
+  // Undid every change of an Auto answer: "bad", even after carrying on ("good" is replaced); one undone of two isn't.
+  f=fixture();f.chat.router.memory=new RouterMemory();f.chat.changes={undo:async()=>true,keep:()=>{}};f.tab.messages=routed('write the csv export function','sonnet');
+  f.tab.messages[1].routingJudged='good';f.chat.router.memory.record('good',{prompt:'write the csv export function',model:'sonnet'});
+  await f.chat.onChangeAction(f.tab,{msgIndex:1,id:'c1',action:'undo'});assert.strictEqual(f.chat.router.memory.items[0].kind,'good');
+  await f.chat.onChangeAction(f.tab,{msgIndex:1,id:'c2',action:'undo'});
+  assert.deepStrictEqual(f.chat.router.memory.items.map(e=>[e.kind,e.model]),[['bad','sonnet']]);
+ });
+ await check('routing request carries attached context and conversation size, not the open file',()=>{
+  const file=path.join(dir,'big.js');fs.writeFileSync(file,'x'.repeat(50000));
+  const ctx=ChatView.routingContext([{kind:'current',path:file},{kind:'file',path:file},{kind:'selection',code:'abc'},{kind:'element'}],[{kind:'image',path:file},{kind:'text',path:file}]);
+  assert.deepStrictEqual(ctx,{files:3,chars:100003,elements:1});
+  const f=fixture();f.tab.messages=[{role:'user',segments:[{t:'text',v:'hello'}]},{role:'assistant',blocks:[{k:'text',text:'hi there'}]}];
+  const req=f.chat.routingRequest(f.tab,'next',[],[]);assert.strictEqual(req.historyChars,13);assert.deepStrictEqual(req.context,{files:0,chars:0,elements:0});
+ });
  const html=require('../extension/lib/router/panel')._page('testnonce');new Function(html.split('<script nonce="testnonce">')[1].split('</script>')[0]);
  console.log(`router-chat: ${passed} passed, ${failed} failed; panel script parses`);fs.rmSync(dir,{recursive:true,force:true});process.exitCode=failed?1:0;
 })();
