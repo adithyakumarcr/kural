@@ -1467,9 +1467,10 @@ class ChatView {
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
     setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
+    // (A connector that connects is only logged: the "Now connected" pop-ups added nothing, Adithya.)
+    if (added.length) log(`chat ${tab.id}: now connected: ${added.join(", ")}`);
     if (!this.shown(tab.id)) return;
     this.post({ type: "setup", tabId: tab.id, setup });
-    if (added.length) this.post({ type: "flash", text: `Now connected: ${added.join(", ")}` });
   }
 
   // The answer is complete (or stopped): close it and tidy up.

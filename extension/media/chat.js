@@ -776,7 +776,7 @@
         v.canOpen ? el("button", { class: "cb", title: "Open that folder in a new window and carry on there", onclick: () => post({ type: "openWorkspace", id: t.id }) }, "Open its folder") : null,
         el("button", { class: "cb primary", title: "Start a new chat here that knows this conversation", onclick: () => { S.focusNext = true; post({ type: "continueHere", id: t.id }); } }, "Continue here")));
     const running = t.status !== "idle";
-    modeBtn.replaceChildren(el("span", { class: `mode-dot m-${t.mode}` }), modeLabel(t.mode), icon("chevron-down", "chev"));
+    modeBtn.replaceChildren(modeLabel(t.mode), icon("chevron-down", "chev"));
     const team = t.teamSize ? ` · ${t.teamStyle === "discuss" ? "discussion" : `${t.teamSize} agents`}` : "";
     const mood = t.mood && t.mood !== "default" ? ` · ${moodLabel(t.mood)}` : "";
     const routing = t.autoRoute ? `Auto · ${cap(profileName(t.routingProfile))} · ` : "";
@@ -1004,7 +1004,7 @@
     } else if (kind === "mode") {
       items = [el("div", { class: "mh" }, "Mode", el("span", { class: "mh-key" }, keys("Control+P plan"))), ...S.modes.map((md) =>
         el("div", { class: `mi ${t.mode === md.id ? "on" : ""}`, onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
-          el("span", { class: `mode-dot m-${md.id}` }), el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
+          el("span", { class: `check radio${t.mode === md.id ? " on" : ""}` }), el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
