@@ -59,6 +59,8 @@ const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
+// Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
+const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
@@ -878,7 +880,7 @@ class ChatView {
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
-    const tools = [...(editing ? AGENT_TOOLS : READ_TOOLS), ...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
+    const tools = [...(editing ? AGENT_TOOLS : [...READ_TOOLS, ...WEB_TOOLS]),...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
     // A Claude model: Claude Code. A model on this computer: Kural's own engine, with the same tools and events.
     // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
     // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
@@ -895,7 +897,7 @@ class ChatView {
       addDirs: ws.extraDirs(),
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
-      tools, allowedTools: [...(editing ? ["WebSearch"] : []), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      tools, allowedTools: [...WEB_TOOLS,...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
       mcpServers: team || dev ? { ...(team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
         ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
@@ -1004,6 +1006,8 @@ class ChatView {
           this.post({ type: "flash",text: "A previous attachment is no longer available. Pin the current model or reattach it before switching providers." }); return;
         }
         tab.model = routed.model;
+        // Auto also sets the intensity, unless you picked one yourself (picking a profile hands it back to Auto).
+        if (routed.effort && !tab.effortPinned && valid(EFFORTS, routed.effort)) tab.effort = routed.effort;
         if (previous !== tab.model) { tab.modelName = null; tab.pendingModel = isClaude(tab.model); }
         this.remember(tab);
       } catch (e) { if (!ctl.signal.aborted) this.post({ type: "flash",text: "Model Router couldn't select a model. Check its panel." }); return; }
@@ -1535,7 +1539,7 @@ class ChatView {
     // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
     const onDevice = req.tool_name === "DeviceCommand" || req.tool_name === "DeviceWrite";
     if (tab.mode === "auto" || (onDevice ? !!tab.device && tab.allowAllDevice === tab.device : tab.allowAll)) return { allow: true };
-    // Agent mode: running commands, fetching web pages ask you first.
+    // Agent mode: running commands asks you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
     const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
@@ -1768,14 +1772,14 @@ class ChatView {
       }
       case "setRouterProfile": {
         if (!tab || !["balanced","speed","quality"].includes(m.profile)) break;
-        tab.autoRoute = true; tab.routingProfile = m.profile;
+        tab.autoRoute = true; tab.routingProfile = m.profile; tab.effortPinned = false;
         this.remember(tab); this.postTabs(); this.save();
         if (tab.status !== "idle") this.post({ type: "flash",text: "The routing profile applies at the next supported checkpoint or message" });
         break;
       }
       case "routerPanel": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "setEffort": if (valid(EFFORTS, m.effort)) {
-        tab.effort = m.effort; this.remember(tab); this.postTabs(); this.save();
+        tab.effort = m.effort; tab.effortPinned = !!tab.autoRoute; this.remember(tab); this.postTabs(); this.save();
         if (tab.status === "idle") this.warm(tab);
         else this.post({ type: "flash", text: "Intensity applies from your next message" });   // set when Claude starts
       } break;

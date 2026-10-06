@@ -36,6 +36,14 @@ function traits(model, overrides = {}) {
   const band = (v,d) => Number.isInteger(v) && v >= 1 && v <= 3 ? v : d;
   return { quality: band(custom.quality,quality),speed: band(custom.speed,4-quality),tokens: band(custom.tokens,4-quality) };
 }
+// Intensity (thinking effort) for the task: complexity sets it, the profile moves it one step. Max only for hard work
+// under Quality. A model without intensity levels simply ignores it.
+const EFFORT_LEVELS = ["low", "medium", "high", "max"];
+function effortFor(task, profile, settings = {}) {
+  const base = { simple: 0, standard: 1, complex: 2 }[task.complexity] ?? 1;
+  const step = profile === "speed" ? -1 : profile === "quality" ? 1 : 0;
+  return EFFORT_LEVELS[Math.max(0, Math.min(3, base + step - (settings.saveTokens && base > 0 ? 1 : 0)))];
+}
 function select(models, request, settings, task = classify(request.prompt)) {
   models = eligible(models,request,settings);
   if (!models.length) return { error: "No allowed model can handle this request. Turn on more models in Model Router." };
@@ -56,8 +64,9 @@ function select(models, request, settings, task = classify(request.prompt)) {
       (settings.saveTokens ? t.tokens*1.2 : 0) + (current && m.providerId === current.providerId ? .2 : 0) + (m.id === request.current ? .15 : 0);
   };
   const chosen = [...candidates].sort((a,b) => score(b)-score(a) || a.id.localeCompare(b.id))[0];
-  return { model: chosen.id,source: "native",intent: task.intent,complexity: task.complexity,
-    reason: `${profileOf(profile)} profile · ${task.complexity} ${task.intent} task${request.checkpoint ? " · reassessed after tool failure" : ""}${settings.saveTokens ? " · token efficiency preferred" : ""}` };
+  const effort = effortFor(task,profile,settings);
+  return { model: chosen.id,source: "native",intent: task.intent,complexity: task.complexity,effort,
+    reason: `${profileOf(profile)} profile · ${task.complexity} ${task.intent} task · ${effort} intensity${request.checkpoint ? " · reassessed after tool failure" : ""}${settings.saveTokens ? " · token efficiency preferred" : ""}` };
 }
 function contextWithinBudget(candidates, maxChars, limit = 5) {
   const selected = []; let used = 0;
@@ -78,4 +87,4 @@ function lexicalRank(query, candidates) {
     return { ...c,relevance: terms.length ? hits/terms.length : 0 };
   }).sort((a,b) => b.relevance-a.relevance);
 }
-module.exports = { PROFILES,INTENTS,COMPLEXITIES,profileOf,eligible,classify,traits,select,contextWithinBudget,lexicalRank };
+module.exports = { effortFor,PROFILES,INTENTS,COMPLEXITIES,profileOf,eligible,classify,traits,select,contextWithinBudget,lexicalRank };

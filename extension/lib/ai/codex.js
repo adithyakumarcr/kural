@@ -205,7 +205,9 @@ class AppServer {
     this.buf = "";
     this.stderr = "";
     this.exited = false;
-    const c = command(bin, [...mcpConfig(mcpServers), "app-server"]);
+    // Live web search in every mode (Codex's default is its cached index, so answers about new versions were stale).
+    // Only Codex's own search tool: commands stay offline in the sandbox (networkAccess: false).
+    const c = command(bin, [...mcpConfig(mcpServers), "-c", 'web_search="live"', "app-server"]);
     // Its own process group (not on Windows), so stopping it also stops the commands it started.
     this.proc = spawn(c.file, c.args, { cwd: cwd || privateTmp("codex"), env: { ...process.env, ...(env || {}), ...c.env },
       stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });

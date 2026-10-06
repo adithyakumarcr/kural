@@ -2,7 +2,7 @@
 const assert=require('assert');
 const {ModelRouter,ASSISTANTS}=require('../extension/lib/router');
 const {LocalRouterClient,loopback,cosine,SEEDS}=require('../extension/lib/router/client');
-const {eligible,classify,select,traits,contextWithinBudget}=require('../extension/lib/router/policy');
+const {eligible,classify,select,traits,contextWithinBudget,effortFor}=require('../extension/lib/router/policy');
 const {record,canCheckpoint,handoff}=require('../extension/lib/router/journal');
 const {excludedModel,completionModel}=require('../extension/lib/ai/model-policy');
 let passed=0,failed=0;
@@ -218,6 +218,15 @@ const local={assistant:'minilm',url:'http://127.0.0.1:11434',timeoutMs:1000,minS
   const text=handoff([{role:'user',segments:[{t:'text',v:'Do not deploy'}],sentText:'old source',attachments:[{path:'photo.png',kind:'image'}]},
    {role:'assistant',model:'haiku',blocks:[{k:'text',text:'working'},{k:'think',text:'private reasoning'}],journal:{tools:[{id:'t1',status:'complete',result:'test passed'}]},changes:[{rel:'login.js'}]}]);
   for(const s of ['Do not deploy','old source','photo.png','test passed','login.js'])assert.ok(text.includes(s));assert.ok(!text.includes('private reasoning'));assert.match(text,/do not repeat/);
+ });
+ await check('Auto sets intensity from task size and profile',async()=>{
+  const e=(c,p,s)=>effortFor({complexity:c},p,s);
+  assert.deepStrictEqual(['simple','standard','complex'].map(c=>e(c,'balanced')),['low','medium','high']);
+  assert.deepStrictEqual(['simple','standard','complex'].map(c=>e(c,'speed')),['low','low','medium']);
+  assert.deepStrictEqual(['simple','standard','complex'].map(c=>e(c,'quality')),['medium','high','max']);
+  assert.strictEqual(e('complex','balanced',{saveTokens:true}),'medium');
+  assert.strictEqual(select(models,{prompt:'rename a variable',profile:'speed'},{}).effort,'low');
+  assert.match(select(models,{prompt:'architect a distributed system',profile:'quality'},{}).reason,/max intensity/);
  });
  console.log(`router: ${passed} passed, ${failed} failed`);process.exitCode=failed?1:0;
 })();
