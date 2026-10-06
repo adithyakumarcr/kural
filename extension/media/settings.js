@@ -96,6 +96,7 @@
         link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
         link("dashboard", "AI Usage panel", "every limit, at the bottom", "usagePanel"),
         link("symbol-keyword", "Tab Completion", "engine, speed, model", "tab"),
+        link("git-compare", "Model Router", "Auto profiles, local assistance, allowed models", "router"),
         link("settings", "All settings", "Kural's, in VS Code's settings", "allSettings"),
         link("list-unordered", "Kural's log", "every request, with timings", "log"),
         link("book", "Kural guide", "what every feature does", "guide"),

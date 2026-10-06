@@ -431,3 +431,6 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 .dev-row { display: flex; align-items: center; gap: 6px; }
 .dev-row .dev-in[type=number] { width: 70px; flex: none; }
 .dev-note { color: var(--muted); font-size: calc(11px * var(--fs, 1)); display: inline-flex; align-items: center; gap: 4px; }
+
+/* Attribution stays visible when Auto changes models within one answer. */
+.model-attribution { color: var(--vscode-descriptionForeground); font-size: .85em; margin: 0 0 8px; overflow-wrap: anywhere; }

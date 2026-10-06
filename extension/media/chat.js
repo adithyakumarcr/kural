@@ -518,6 +518,8 @@
     }
     const out = el("div", { class: "answer" });
     const last = i === S.tab.messages.length - 1;
+    if (m.models && m.models.length) out.append(el("div", { class: "model-attribution" },m.models.map(modelLabel).join(" → ") +
+      (m.routing ? ` · ${m.routing.source || "native"} · ${Number(m.routing.ms).toFixed(1)} ms routing` : "")));
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
     (m.blocks || []).forEach((b, k) => out.append(blockNode(m, b, k)));
     const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
@@ -776,7 +778,8 @@
     modeBtn.replaceChildren(el("span", { class: `mode-dot m-${t.mode}` }), modeLabel(t.mode), icon("chevron-down", "chev"));
     const team = t.teamSize ? ` · ${t.teamStyle === "discuss" ? "discussion" : `${t.teamSize} agents`}` : "";
     const mood = t.mood && t.mood !== "default" ? ` · ${moodLabel(t.mood)}` : "";
-    modelBtn.replaceChildren(`${t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${team}`, icon("chevron-down", "chev"));
+    const routing = t.autoRoute ? `Auto · ${cap(t.routingProfile || "balanced")} · ` : "";
+    modelBtn.replaceChildren(`${routing}${t.routingState || t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${team}`, icon("chevron-down", "chev"));
     sendBtn.replaceChildren(icon(running ? "debug-stop" : "arrow-up"));
     sendBtn.title = running ? "Stop (Esc)" : "Send (Enter)";
     sendBtn.classList.toggle("stop", running);
@@ -814,9 +817,10 @@
     const segments = readInput();
     const contexts = segments.filter((s) => s.t === "pill").map((s) => s.ctx);
     if (S.activeFile && S.includeActive) contexts.unshift({ kind: "current", path: S.activeFile.path, name: S.activeFile.name });
-    post({ type: "send", tabId: t.id, segments, contexts, attachments: S.attachments.map((a) => a.id) });
-    S.attachments = []; renderChips();
-    input.replaceChildren();
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    // Keep the draft until the extension accepts it, including when routing cannot find an eligible model.
+    S.pendingSend = { tabId: t.id, requestId, segments: JSON.stringify(segments), attachments: S.attachments.map((a) => a.id) };
+    post({ type: "send", tabId: t.id, requestId, segments, contexts, attachments: S.pendingSend.attachments });
     closePopup(); closeHistory();
   }
 
@@ -1005,11 +1009,17 @@
       const editing = t.mode === "agent" || t.mode === "auto";
       const local = /^[a-z]+:/.test(t.model || "");   // (not Claude: no agent teams, no Claude Code setup)
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
-      items = [el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
-        el("div", { class: `mi ${t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
+      items = [el("div", { class: "mh" }, "Auto · Kural Model Router"),
+        ...["balanced","speed","quality"].map((profile) => el("div", { class: `mi ${t.autoRoute && t.routingProfile === profile ? "on" : ""}`,onclick: () => { post({ type: "setRouterProfile",tabId: t.id,profile }); closeMenu(); } },
+          el("span", { class: `check radio${t.autoRoute && t.routingProfile === profile ? " on" : ""}` }),el("span", { class: "mi-label" },cap(profile)),
+          el("span", { class: "mi-hint" }, { balanced: "quality, then speed",speed: "prefer quick responses",quality: "prefer capability" }[profile]))),
+        el("div", { class: "mi",onclick: () => { post({ type: "routerPanel" }); closeMenu(); } },el("span", { class: "mi-icon" },icon("settings-gear")),el("span", { class: "mi-label" },"Configure Model Router…")),
+        el("div", { class: "sep" }),
+        el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
+        el("div", { class: `mi ${!t.autoRoute && t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
           if (S.claudeReady) post({ type: "setModel", tabId: t.id, model: m.id }); else post({ type: "getStarted", path: "claude" });
           closeMenu(); } },
-          el("span", { class: `check radio${t.model === m.id ? " on" : ""}` }),
+          el("span", { class: `check radio${!t.autoRoute && t.model === m.id ? " on" : ""}` }),
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, S.claudeReady ? m.hint : "set up Claude…"))),
         ...cliMenuItems(t, true),
         ...localMenuItems(t),
@@ -1078,8 +1088,8 @@
       const models = c.models.length ? c.models : [{ id: "default", label: `${c.short} (its default model)` }];
       for (const m of models.slice(0, 8)) {
         const id = `${c.id}:${m.id}`;
-        out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, title: m.description || "", onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
-          el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln" }, m.label),
+        out.push(el("div", { class: `mi ${!t.autoRoute && t.model === id ? "on" : ""}`, title: m.description || "", onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
+          el("span", { class: `check radio${!t.autoRoute && t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln" }, m.label),
           el("span", { class: "mi-hint" }, m.isDefault ? "default" : "")));
       }
     }
@@ -1100,8 +1110,8 @@
     else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, icon("warning"), ` Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
     else for (const m of L.models.filter((x) => x.chat)) {   // (models without tools can't chat: not listed)
       const id = `ollama:${m.name}`;
-      out.push(el("div", { class: `mi ${t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
-        el("span", { class: `check radio${t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
+      out.push(el("div", { class: `mi ${!t.autoRoute && t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
+        el("span", { class: `check radio${!t.autoRoute && t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
     }
     if (L && L.status.ok && !L.models.some((x) => x.chat)) out.push(el("div", { class: "mi dim" },
       el("span", { class: "mi-hint" }, "No model for the chat yet: find one below")));
@@ -1387,7 +1397,8 @@ ${d.system}` : ""}`,
         // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.
         tabBar.classList.toggle("hidden", !!m.single);
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
-          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device }); }
+          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device,
+          autoRoute: s.autoRoute,routingProfile: s.routingProfile,routingState: s.routingState,modelName: s.modelName }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
@@ -1418,7 +1429,14 @@ ${d.system}` : ""}`,
       }
       case "showHistory": openHistory(); break;
       case "modelName": if (mine) { S.tab.modelName = m.name; renderFoot(); } break;
-      case "append": if (mine) { for (const x of m.msgs) S.tab.messages.push(x); renderAll(); } break;
+      case "append": if (mine) {
+        if (m.msgs.some((x) => x.role === "user") && S.pendingSend && S.pendingSend.tabId === S.tab.id && m.requestId === S.pendingSend.requestId) {
+          if (JSON.stringify(readInput()) === S.pendingSend.segments) input.replaceChildren();
+          S.attachments = S.attachments.filter((a) => !S.pendingSend.attachments.includes(a.id));
+          S.pendingSend = null; renderChips();
+        }
+        for (const x of m.msgs) S.tab.messages.push(x); renderAll();
+      } break;
       case "delta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
         const msg = S.tab.messages[i];

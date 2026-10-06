@@ -8,16 +8,16 @@
 const vscode = require("vscode");
 const { log } = require("../ai/claude");
 const { OllamaInstaller } = require("../ai/ollama-install");
+const { completionModel, excludedModel } = require("../ai/model-policy");
 
 const LOCAL_MODELS = [
-  { id: "qwen2.5-coder:0.5b-base", label: "0.5B · fastest", size: "~400 MB" },
   { id: "qwen2.5-coder:1.5b-base", label: "1.5B · recommended", size: "~1 GB" },
   { id: "qwen2.5-coder:3b-base", label: "3B · smarter", size: "~2 GB" },
 ];
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const url = (p) => (cfg().get("tabCompletion.ollamaUrl") || "http://127.0.0.1:11434").replace(/\/$/, "") + p;
-const model = () => cfg().get("tabCompletion.localModel") || LOCAL_MODELS[1].id;
+const model = () => completionModel(cfg().get("tabCompletion.localModel"));
 
 async function http(path, body, { timeoutMs = 4000, signal } = {}) {
   const ctl = new AbortController();
@@ -156,6 +156,7 @@ class LocalEngine {
 
   // Download a model, reporting progress (0–100).
   async pull(name = model()) {
+    if (excludedModel(name)) return;
     if (this.pulling) return;
     this.pulling = { model: name, percent: 0, status: "starting" };
     this.changed();

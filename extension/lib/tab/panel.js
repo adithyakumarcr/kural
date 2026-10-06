@@ -7,6 +7,7 @@ const vscode = require("vscode");
 const { fontScale } = require("../ui");
 const { isSetUp } = require("../ai/claude");
 const { LOCAL_MODELS, installText } = require("./local");
+const { completionModel } = require("../ai/model-policy");
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
@@ -44,7 +45,7 @@ class TabPanel {
       last: this.times[this.times.length - 1] || null, median: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null,
       key: process.platform === "darwin" ? "⌃⌥Space" : "Ctrl+Alt+Space",
       engine: c.get("tabCompletion.engine"), lastEngine: this.lastEngine, claudeReady: isSetUp(),
-      localModel: c.get("tabCompletion.localModel"), localModels: LOCAL_MODELS,
+      localModel: completionModel(c.get("tabCompletion.localModel")), localModels: LOCAL_MODELS,
       local: this.local ? { running: this.local.state.running, hasModel: this.local.state.hasModel, pulling: this.local.pulling, last: this.local.last,
         allowed: this.local.allowed(), steps: this.local.steps,
         installing: this.local.installing && { ...this.local.installing, text: installText(this.local.installing) } } : null,
@@ -67,7 +68,7 @@ class TabPanel {
       if (m.type === "ms") await set("tabCompletion.debounceMs", Number(m.value));
       if (m.type === "model") await set("tabCompletion.model", m.value);
       if (m.type === "engine") { await set("tabCompletion.engine", m.value); if (this.local) this.local.status(true); }
-      if (m.type === "localModel") { await set("tabCompletion.localModel", m.value); if (this.local) await this.local.status(true); }
+      if (m.type === "localModel" && LOCAL_MODELS.some((model) => model.id === m.value)) { await set("tabCompletion.localModel", m.value); if (this.local) await this.local.status(true); }
       // Set up = everything in one click: Ollama (installed and started if it isn't there), then the model.
       if (m.type === "setup" && this.local) this.local.setup();
       if (m.type === "stopInstall" && this.local) this.local.stopInstall();

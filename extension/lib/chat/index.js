@@ -24,6 +24,10 @@ const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
 const { GUIDE } = require("./guide");
 const { registerTabEditor, openBeside } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
+const { profileOf } = require("../router/policy");
+const journal = require("../router/journal");
+const { retrieve } = require("../router/retrieve");
+const { excludedModel, completionModel } = require("../ai/model-policy");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -101,6 +105,7 @@ class ChatView {
     this.localReady = new Map();   // "ollama:<name>" -> the larger-context copy's name, once prepared
     this.pulls = new Map();        // model downloads in progress: name -> { percent, status }
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
+    this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
     this.changes = new ChangeTracker();
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
@@ -184,7 +189,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { for (const r of this.runtime.values()) if (r.proc) r.proc.kill(); } },
+      { dispose: () => { for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -193,6 +198,7 @@ class ChatView {
     const last = this.context.globalState.get(LAST_KEY) || {};
     return {
       model: this.usableModel(validModel(last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet")),
+      autoRoute: !!last.autoRoute, routingProfile: profileOf(last.routingProfile || cfg().get("modelRouter.profile")),
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
@@ -214,6 +220,7 @@ class ChatView {
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     const prev = this.context.globalState.get(LAST_KEY) || {};
     this.context.globalState.update(LAST_KEY, { ...prev, model: tab.model, effort: tab.effort, mode: tab.mode, team: tab.team || 0,
+      autoRoute: !!tab.autoRoute, routingProfile: tab.routingProfile,
       mood: tab.mood, roles: tab.roles, teamStyle: tab.teamStyle });
   }
 
@@ -221,6 +228,8 @@ class ChatView {
   fix(tab) {
     const d = this.lastChoices();
     if (!validModel(tab.model)) tab.model = d.model;
+    tab.autoRoute = !!tab.autoRoute; tab.routingProfile = profileOf(tab.routingProfile || d.routingProfile);
+    delete tab.routingState;
     // Which engine has this conversation (chats from before Kural had its own engine: the one their model uses).
     if (!tab.engine && tab.messages && tab.messages.length) tab.engine = engineOf(tab.model);
     if (tab.engine === "local") tab.engine = "ollama";   // (its old name)
@@ -253,6 +262,7 @@ class ChatView {
     const tab = {
       id: shortId(), title: "New chat", renamed: false,
       model: d.model, effort: d.effort, mode: d.mode, team: d.team, mood: d.mood, roles: d.roles, teamStyle: d.teamStyle,
+      autoRoute: d.autoRoute, routingProfile: d.routingProfile,
       sessionId: newSessionId(), started: false, workspace: this.here,
       messages: [], status: "idle", unread: false, allowAll: false, modelName: null,
       createdAt: Date.now(), updatedAt: Date.now(),
@@ -304,7 +314,9 @@ class ChatView {
   closeTab(id, keep = true) {
     const tab = this.tab(id);
     if (!tab) return;
+    const routing = this.routingJobs.get(id); if (routing) { routing.abort(); this.routingJobs.delete(id); }
     const r = this.runtime.get(id);
+    if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
     this.endDevice(r);
     this.runtime.delete(id);
@@ -416,6 +428,7 @@ class ChatView {
   }
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
+    autoRoute: !!t.autoRoute, routingProfile: t.routingProfile, routingState: t.routingState || null, modelName: t.modelName || null,
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
     device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
@@ -702,6 +715,67 @@ class ChatView {
       models: brain.cli[id].models || [], account: brain.cli[id].account || "" }));
   }
 
+  routerModels() {
+    const claude = MODELS.map((m) => ({ ...m, provider: "Claude", providerId: "claude", description: m.hint,
+      ready: isSetUp(), local: false, team: true, device: true, images: true, pdf: true, commands: true, connectors: true }));
+    const clis = this.cliInfo().flatMap((c) => (c.models.length ? c.models : [{ id: "default", label: `${c.short} default` }]).map((m) => ({
+      id: `${c.id}:${m.id}`, label: m.label || m.id, description: m.description || "", provider: c.label, providerId: c.id,
+      ready: c.ready, local: false, team: false, device: c.id === "codex", images: true, pdf: false,
+      commands: c.id === "codex", connectors: false,
+    })));
+    const installed = new Map((this.routerLocalList || []).filter((m) => m.chat && !(m.capabilities || []).includes("cloud") && !/cloud/i.test(m.name)).map((m) => [m.name,m]));
+    const fallback = this.localDefault && this.localDefault();
+    if (fallback && !/cloud/i.test(fallback) && !(this.localReady.get(fallback) || []).includes("cloud") && !installed.has(localName(fallback))) installed.set(localName(fallback), { name: localName(fallback), capabilities: this.localReady.get(fallback) || [] });
+    const local = [...installed.values()].map((m) => ({ id: `ollama:${m.name}`, label: m.name, description: `${m.params || ""} on this computer`,
+      provider: "Ollama", providerId: "ollama", ready: true, local: true, team: false, device: false,
+      images: (m.capabilities || []).includes("vision"), pdf: false, commands: true, connectors: false }));
+    const tabModel = completionModel(cfg().get("tabCompletion.localModel"));
+    const tabInstalled = (this.routerLocalList || []).find((m) => m.name === tabModel || m.name === `${tabModel}:latest`);
+    const completion = tabModel && !local.some((m) => m.id === `ollama:${tabModel}` || m.id === `ollama:${tabModel}:latest`)
+      ? [{ id: `ollama:${tabModel}`,label: `${tabModel} (Tab only)`,provider: "Ollama",providerId: "ollama",local: true,
+        ready: !!tabInstalled && !(tabInstalled.capabilities || []).includes("cloud") && !/cloud/i.test(tabModel),completionOnly: true }] : [];
+    return [...claude,...clis,...local,...completion].filter((model) => !excludedModel(model.id));
+  }
+
+  routingRequest(tab, text, attachments = []) {
+    return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
+      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto",
+      team: tab.team > 1, device: !!tab.device, connectors: !!tab.ticket,
+      images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
+  }
+
+  async routingCheckpoint(tab, r) {
+    if (!tab.autoRoute || !this.router || !this.router.options().checkpoints || !journal.canCheckpoint(r) ||
+      r.turn.switches || !r.turn.journal.tools.some((t) => t.status === "failed" && !/permission|declined|denied|cancelled|not authorized/i.test(t.result || ""))) return;
+    // Claude supports native set_model; Kural's local engine can await this checkpoint. Other adapters switch next turn.
+    const provider = engineOf(tab.model);
+    if (!["claude","ollama"].includes(provider)) return;
+    r.routingCheckpoint = true;
+    const ctl = new AbortController(); r.checkpointAbort = ctl;
+    const reply = r.turn.reply, was = tab.model;
+    try {
+      const result = await this.router.route({ ...this.routingRequest(tab,r.turn.ask, r.turn.attachments || []),
+        recentContext: JSON.stringify({ tools: r.turn.journal.tools.slice(-8) }), provider, checkpoint: true },ctl.signal);
+      r.routingCheckpoint = false;
+      if (!journal.canCheckpoint(r) || ctl.signal.aborted || !tab.autoRoute || tab.model !== was || !result.model || result.model === was || result.error) return;
+      if (provider === "ollama") {
+        const checked = await this.prepareLocal({ ...tab,model: result.model });
+        if (checked.error || ctl.signal.aborted || !tab.autoRoute || tab.model !== was || !journal.canCheckpoint(r)) return;
+        r.proc.setModel(localName(result.model));
+        r.proc.opts.capabilities = this.localReady.get(result.model) || [];
+      } else {
+        const accepted = await r.proc.request({ subtype: "set_model", model: result.model },1500);
+        if (accepted === null || r.stale || !reply.running || ctl.signal.aborted || !tab.autoRoute || tab.model !== was) return;
+      }
+      tab.model = result.model; tab.modelName = null; r.turn.switches = 1;
+      reply.models = [...new Set([...(reply.models || [was]),result.model])];
+      reply.routing = result;
+      this.post({ type: "patch",tabId: tab.id,msg: this.patchOf(reply) });
+      this.remember(tab); this.postTabs(); this.save();
+    } catch (e) { if (!ctl.signal.aborted) log("model router: checkpoint unavailable; current model continues"); }
+    finally { r.routingCheckpoint = false; r.checkpointAbort = null; }
+  }
+
   setupChanged(why) {
     this.setupVersion++;
     log(`chat: Claude Code setup ${why}; Claude reloads in the same conversation when it's not busy`);
@@ -749,6 +823,8 @@ class ChatView {
     const status = await this.ollama.status();
     let models = [];
     if (status.running) { try { models = await this.ollama.models(); } catch (e) { log(`local models: ${e.message}`); } }
+    this.routerLocalList = models;
+    if (this.router) this.router.changed();
     const msg = { type: "localModels", status, models, memory: totalMemoryGB(), pulls: Object.fromEntries(this.pulls), minVersion: MIN_VERSION };
     if (pane) this.postTo(pane, msg); else this.post(msg);
   }
@@ -830,6 +906,7 @@ class ChatView {
       onMessage: (m) => { if (r.stale) return; r.gotOutput = true; this.onClaude(tab, r, m); },
       onPermission: (req) => r.stale ? { allow: false, message: "Stopped." } : this.onPermission(tab, r, req),
       onExit: (info) => this.onExit(tab, r, info),
+      onCheckpoint: () => this.routingCheckpoint(tab,r),
     });
     r.proc = proc;
     this.runtime.set(tab.id, r);
@@ -899,11 +976,44 @@ class ChatView {
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
-  async send(tab, segments, contexts, attachIds = []) {
+  async send(tab, segments, contexts, attachIds = [], requestId = null) {
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
     if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
+    let routed = null;
+    const previousMedia = [...new Map(tab.messages.flatMap((m) => m.attachments || [])
+      .filter((a) => ["image","pdf"].includes(a.kind)).map((a) => [a.path,a])).values()];
+    if (tab.autoRoute && this.router) {
+      const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
+      tab.status = "running"; tab.routingState = "Choosing model…"; this.postTabs();
+      const previous = tab.model;
+      try {
+        const attached = attachIds.map((id) => this.attachments.items.get(id)).filter(Boolean);
+        // Attachments from earlier turns must remain usable after a provider handoff too.
+        const historical = tab.messages.flatMap((m) => m.attachments || []);
+        routed = await this.router.route(this.routingRequest(tab,text,[...attached,...historical]),ctl.signal);
+        if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
+        if (routed.error) { this.post({ type: "flash",text: routed.error }); return; }
+        const changesProvider = engineOf(routed.model) !== (tab.engine || engineOf(previous));
+        const windowBudget = isLocal(routed.model) ? Math.max(1000,brain.contextLength()*3*.75-8000-text.length) : Infinity;
+        if (changesProvider && journal.handoff(tab.messages).length > Math.min(this.router.options().handoffChars,windowBudget)) {
+          this.post({ type: "flash",text: "This conversation exceeds the handoff budget or local context budget. Increase the budget in Settings or pin the current model; no context was silently discarded." }); return;
+        }
+        if (changesProvider && previousMedia.some((a) => !a.path || !fs.existsSync(a.path))) {
+          this.post({ type: "flash",text: "A previous attachment is no longer available. Pin the current model or reattach it before switching providers." }); return;
+        }
+        tab.model = routed.model;
+        if (previous !== tab.model) { tab.modelName = null; tab.pendingModel = isClaude(tab.model); }
+        this.remember(tab);
+      } catch (e) { if (!ctl.signal.aborted) this.post({ type: "flash",text: "Model Router couldn't select a model. Check its panel." }); return; }
+      finally {
+        // Stop may already have begun another request. Only the owning request can reset this state.
+        if (this.routingJobs.get(tab.id) === ctl) {
+          this.routingJobs.delete(tab.id); delete tab.routingState; tab.status = "idle"; this.postTabs();
+        }
+      }
+    }
     if (!brain.providerOf(tab.model).ready()) {   // e.g. a Claude model, but only your own model is set up
       const p = brain.providerOf(tab.model);
       this.post({ type: "flash", text: `${p.label} isn't set up: pick another model, or set it up in Get started` });
@@ -914,18 +1024,19 @@ class ChatView {
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
     const reply = { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, team: this.teamSize(tab), teamStyle: tab.teamStyle,
-      teamLabel: this.teamLabel(tab) };
+      teamLabel: this.teamLabel(tab), model: tab.model, models: [tab.model], routing: routed, journal: { tools: [] } };
     tab.messages.push(user, reply);
     tab.status = "running";
     tab.updatedAt = Date.now();
-    this.post({ type: "append", tabId: tab.id, msgs: [user, reply] });
+    this.post({ type: "append", tabId: tab.id, requestId, msgs: [user, reply] });
     this.postTabs();
 
     // The chat was on the other engine (Claude Code ↔ Kural's own): that one has the conversation, this one doesn't.
     // A new session, and this message carries the conversation so far (everything before it).
     const engine = engineOf(tab.model);
-    if (tab.engine && tab.engine !== engine) {
-      if (tab.messages.length > 2) tab.carryOver = { model: true, text: ChatView.transcript({ ...tab, messages: tab.messages.slice(0, -2) }) };
+    const changedProvider = tab.engine && tab.engine !== engine;
+    if (changedProvider) {
+      if (tab.messages.length > 2) tab.carryOver = { model: true, text: journal.handoff(tab.messages.slice(0,-2)) };
       tab.sessionId = newSessionId(); tab.started = false;
       const old = this.runtime.get(tab.id);
       if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
@@ -956,7 +1067,7 @@ class ChatView {
     if (tab.pendingModel && isClaude(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
-    r.turn = { snaps: {}, reply, ask };
+    r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0 };
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
@@ -973,7 +1084,23 @@ class ChatView {
         "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
     delete tab.carryOver;
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
-    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + await this.buildPrompt(text, contexts), attachIds);
+    const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
+    let retrieved = "";
+    if (this.router && this.router.options().context && vscode.workspace.isTrusted) {
+      try {
+        const candidates = await retrieve(text,ctl.signal,contexts.map((c) => c.path));
+        const selected = await this.router.selectContext(text,candidates,ctl.signal);
+        if (selected.candidates.length) retrieved = "<retrieved_context>\n" + selected.candidates.map((c) => `${c.file} (from line ${c.startLine}):\n${c.excerpt}`).join("\n\n") + "\n</retrieved_context>\n\n";
+        reply.contextSelection = { count: selected.candidates.length, source: selected.source, ms: selected.ms };
+      } catch { /* Context retrieval is optional; explicit context stays intact. */ }
+    }
+    if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
+    const built = await this.buildPrompt(text,contexts);
+    if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
+    if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
+    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds,changedProvider ? previousMedia : []);
+    user.sentText = journal.textOf(prompt).slice(carry.length);
+    r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
       user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta });
       // What you attached the AI may read without asking, even outside the project (onPermission).
@@ -998,6 +1125,11 @@ class ChatView {
   onClaude(tab, r, m) {
     const turn = r.turn;
     const reply = turn && turn.reply;
+    if (reply && reply.journal) journal.record(reply.journal,m);
+    if (reply && !m.parent_tool_use_id && m.type === "assistant" && m.message && m.message.model) {
+      tab.modelName = shownModel(tab,m.message.model);
+      this.post({ type: "modelName",tabId: tab.id,name: tab.modelName });
+    }
     if (m.type === "kural_image" && r.turn) {   // (Kural's engine: a picture from the model)
       try {
         const block = { k: "image", path: this.saveImage(m.data, m.mime) };
@@ -1145,6 +1277,7 @@ class ChatView {
         const a = c.type === "tool_result" && c.is_error && r.agents.get(c.tool_use_id);
         if (a && a.state === "running") { a.state = "failed"; this.teamFinished(r, a); this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state }); }
       }
+      if (isClaude(tab.model)) this.routingCheckpoint(tab,r).catch(() => {});
     } else if (m.type === "result") {
       r.pendingSend = null;
       const working = [...r.agents.values()].filter((a) => a.state === "running");
@@ -1302,6 +1435,7 @@ class ChatView {
     r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
+    if (this.router && (reply.models || []).length === 1) this.router.taskDone(reply.model,reply.ms,!m.is_error);
     tab.started = true;
     tab.updatedAt = Date.now();
     r.pendingSend = null;
@@ -1327,7 +1461,10 @@ class ChatView {
 
   // Stop no matter what state Claude is in.
   forceStop(tab, r) {
+    const routing = this.routingJobs.get(tab.id); if (routing) { routing.abort(); this.routingJobs.delete(tab.id); }
+    delete tab.routingState;
     if (r) {
+      if (r.checkpointAbort) r.checkpointAbort.abort();
       clearInterval(r.watchdog); clearInterval(r.busyTimer);
       if (r.teamFile) fs.rm(r.teamFile, { force: true }, () => {});
       r.stale = true;
@@ -1361,7 +1498,7 @@ class ChatView {
     } catch (e) { log(`chat: couldn't list changes: ${e.message}`); }
   }
 
-  patchOf(msg) { return { waitingFor: msg.waitingFor, running: msg.running, error: msg.error, errorWho: msg.errorWho, changes: msg.changes, ms: msg.ms, note: msg.note, blocks: msg.blocks, planReady: msg.planReady, planBuilt: msg.planBuilt }; }
+  patchOf(msg) { return { waitingFor: msg.waitingFor, running: msg.running, error: msg.error, errorWho: msg.errorWho, changes: msg.changes, ms: msg.ms, note: msg.note, blocks: msg.blocks, planReady: msg.planReady, planBuilt: msg.planBuilt, model: msg.model, models: msg.models, routing: msg.routing, contextSelection: msg.contextSelection }; }
 
   // Claude (or a team member) wants to edit a file or run a command.
   async onPermission(tab, r, req) {
@@ -1536,7 +1673,7 @@ class ChatView {
       case "localDelete": await this.deleteLocal(m.name); break;
       case "installOllama": installOllama(); break;
       case "openWorkspace": this.openWorkspaceOf(m.id); break;
-      case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || []); break;
+      case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null); break;
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
@@ -1594,6 +1731,8 @@ class ChatView {
       } break;
       case "finishTeam": if (tab) this.finishTeam(tab); break;
       case "stop": {
+        const routing = this.routingJobs.get(tab.id);
+        if (routing) { this.forceStop(tab,this.runtime.get(tab.id)); break; }
         const r = this.runtime.get(tab.id);
         // Agents working in the background don't stop on an interrupt, and a paused lead has
         // nothing to interrupt: end the whole process. The conversation is saved, so the next
@@ -1608,7 +1747,10 @@ class ChatView {
       }
       case "setModel": {
         if (!validModel(m.model)) return;
+        const choosing = this.routingJobs.get(tab.id); if (choosing) choosing.abort();
+        const checkpoint = this.runtime.get(tab.id); if (checkpoint && checkpoint.checkpointAbort) checkpoint.checkpointAbort.abort();
         const was = tab.model;
+        tab.autoRoute = false;
         tab.model = m.model;
         const r = this.runtime.get(tab.id);
         if (engineOf(m.model) !== engineOf(was) || isLocal(m.model)) {
@@ -1624,6 +1766,14 @@ class ChatView {
         this.remember(tab); this.postTabs(); this.save();
         break;
       }
+      case "setRouterProfile": {
+        if (!tab || !["balanced","speed","quality"].includes(m.profile)) break;
+        tab.autoRoute = true; tab.routingProfile = m.profile;
+        this.remember(tab); this.postTabs(); this.save();
+        if (tab.status !== "idle") this.post({ type: "flash",text: "The routing profile applies at the next supported checkpoint or message" });
+        break;
+      }
+      case "routerPanel": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "setEffort": if (valid(EFFORTS, m.effort)) {
         tab.effort = m.effort; this.remember(tab); this.postTabs(); this.save();
         if (tab.status === "idle") this.warm(tab);
