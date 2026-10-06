@@ -41,6 +41,10 @@
   "contributes": {
     "commands": [
       {
+        "command": "kural.router.forget",
+        "title": "Kural: Forget What Model Router Learned (This Workspace)"
+      },
+      {
         "command": "kural.tab.forget",
         "title": "Kural: Forget What Tab Completion Learned (This Workspace)"
       },
@@ -771,12 +775,17 @@
         "kural.modelRouter.profile": {
           "type": "string",
           "enum": [
-            "balanced",
-            "speed",
-            "quality"
+            "balance",
+            "cost",
+            "intelligence"
           ],
-          "default": "balanced",
-          "description": "Default Auto profile: suitable quality then speed, speed first, or quality first."
+          "enumDescriptions": [
+            "Meet the task's quality needs, then prefer speed; steer away from an AI close to its limit",
+            "Save your usage limits: the lightest model that can do the task, on the AI with the most room left",
+            "Prefer the most capable model, even when it's slower or uses more of your limits"
+          ],
+          "default": "balance",
+          "description": "Default Auto profile, like Cursor's: Balance, Cost (saves your usage limits) or Intelligence."
         },
         "kural.modelRouter.allowedModels": {
           "type": [

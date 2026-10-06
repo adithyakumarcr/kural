@@ -60,6 +60,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   right-click Copy, F4 for the next result, Open in Search Editor; Explorer: right-click a folder, Find in Folder.
   Ask (Ctrl+Alt+A): describe what you're looking for in plain words; Kural lists the exact places.
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review red/green, Accept or Reject.
+- Model Router (Auto in the model menu, like Cursor's): Balance, Cost (saves your usage limits) or Intelligence. Per
+  message it picks the model and the intensity from the words and what's attached (files, error output, a picked
+  element), each AI's usage left (avoids one past half, skips one at 98 %), the conversation's length (long chats stay
+  on their model: switching loses the cache), and what you did after earlier answers (picked another model, undid every
+  change: learned per workspace; "Kural: Forget What Model Router Learned"). Each answer shows the model; hover: why.
+  Status bar "Model Router": the profile, task detection Native or MiniLM (Download button), which models Auto may use.
 - Tab Completion: grey suggestions as you type; Tab accepts. Click "Tab Completion" in the status bar for its panel:
   on/off (Ctrl+Alt+Space), how fast it suggests, the engine (Auto, a local model for speed, or Claude) and its model.
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:

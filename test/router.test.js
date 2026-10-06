@@ -1,8 +1,9 @@
 // Router policy and local protocols: no real models, credentials or editor processes.
 const assert=require('assert');
 const {ModelRouter,ASSISTANTS}=require('../extension/lib/router');
-const {LocalRouterClient,loopback,cosine,SEEDS}=require('../extension/lib/router/client');
-const {eligible,classify,select,traits,contextWithinBudget,effortFor}=require('../extension/lib/router/policy');
+const {LocalRouterClient,loopback,cosine,SEEDS,LABELS}=require('../extension/lib/router/client');
+const {eligible,classify,select,traits,contextWithinBudget,effortFor,limitUsed,profileOf}=require('../extension/lib/router/policy');
+const {RouterMemory,similarity,words}=require('../extension/lib/router/learn');
 const {record,canCheckpoint,handoff}=require('../extension/lib/router/journal');
 const {excludedModel,completionModel}=require('../extension/lib/ai/model-policy');
 let passed=0,failed=0;
@@ -24,8 +25,9 @@ function transport(opts={}) {
   if(url.endsWith('/api/tags'))return json({models:opts.tags||['all-minilm:22m'].map(name=>({name}))});
   if(url.endsWith('/api/show'))return json({capabilities:opts.caps||['embedding']});
   if(url.endsWith('/api/embed'))return json({embeddings:body.input.map(s=>{
+   // Every example of a label points the same way (one direction per label: search, explain … complex).
    const index=SEEDS.findIndex(seed=>seed[1]===s);
-   if(index>=0)return Array.from({length:8},(_,i)=>i===index?1:0);
+   if(index>=0)return Array.from({length:LABELS.length},(_,i)=>i===LABELS.indexOf(SEEDS[index][0])?1:0);
    return opts.vector?opts.vector(s):[1,0,0,0,0,1,0,0];
   }),prompt_eval_count:30});
   throw new Error('Unexpected endpoint');
@@ -159,7 +161,7 @@ const local={assistant:'minilm',url:'http://127.0.0.1:11434',timeoutMs:1000,minS
   const d=await r.route({prompt:'locate setting',current:'sonnet'});assert.strictEqual(d.source,'minilm');assert.strictEqual(d.model,'haiku');
   await r.route({prompt:'locate preference',current:'sonnet'});
   const calls=t.requests.filter(r=>r.url.endsWith('/api/embed'));
-  assert.strictEqual(calls[0].body.input.length,9);assert.strictEqual(calls[1].body.input.length,1);
+  assert.strictEqual(calls[0].body.input.length,SEEDS.length+1);assert.strictEqual(calls[1].body.input.length,1);
  });
  await check('ambiguous MiniLM matches are not treated as calibrated confidence',async()=>{
   const t=transport({vector:()=>[1,1,1,1,1,1,1,1]});const r=make({'modelRouter.assistant':'minilm'},t.fetch);
@@ -227,6 +229,88 @@ const local={assistant:'minilm',url:'http://127.0.0.1:11434',timeoutMs:1000,minS
   assert.strictEqual(e('complex','balanced',{saveTokens:true}),'medium');
   assert.strictEqual(select(models,{prompt:'rename a variable',profile:'speed'},{}).effort,'low');
   assert.match(select(models,{prompt:'architect a distributed system',profile:'quality'},{}).reason,/max intensity/);
+ });
+ await check('profiles are Cost, Balance and Intelligence; the old names still work',()=>{
+  assert.deepStrictEqual(['speed','balanced','quality','cost','nonsense',undefined].map(profileOf),['cost','balance','intelligence','cost','balance','balance']);
+  assert.strictEqual(effortFor({complexity:'complex'},'quality'),'max');assert.strictEqual(effortFor({complexity:'standard'},'cost'),'low');
+  const schema=require('../extension/package.json').contributes.configuration.properties['kural.modelRouter.profile'];
+  assert.deepStrictEqual(schema.enum,['balance','cost','intelligence']);assert.strictEqual(schema.default,'balance');
+  assert.strictEqual(make({'modelRouter.profile':'quality','modelRouter.tab':true}).tabEngine({localModel:'qwen2.5-coder:1.5b-base',claudeModel:'haiku',localReady:true,claudeReady:true}),'claude');
+ });
+ await check('usage limits: a model past half its limit is avoided, most under Cost; at 98 % it is skipped',()=>{
+  const two=[{id:'sonnet',label:'Sonnet',provider:'Claude',providerId:'claude',ready:true},{id:'codex:gpt',label:'GPT',provider:'ChatGPT',providerId:'codex',ready:true}];
+  const req={prompt:'add a feature with tests',current:'sonnet'};
+  assert.strictEqual(select(two,{...req,profile:'balance'},{}).model,'sonnet');                      // no usage known: stays
+  const busy=[{...two[0],limitUsed:90},two[1]];
+  const cost=select(busy,{...req,profile:'cost'},{});assert.strictEqual(cost.model,'codex:gpt');assert.match(cost.reason,/Sonnet avoided: 90% of its limit used/);
+  // Intelligence: capability first; a busier but stronger model still wins (equal ones: the less used).
+  assert.strictEqual(select([{id:'opus',label:'Opus',provider:'Claude',providerId:'claude',ready:true,limitUsed:90},two[1]],{...req,profile:'intelligence'},{}).model,'opus');
+  const full=select([{...two[0],limitUsed:99},two[1]],{...req,profile:'intelligence'},{});
+  assert.strictEqual(full.model,'codex:gpt');assert.match(full.reason,/skipped Claude \(limit nearly reached\)/);
+  assert.strictEqual(select([{...two[0],limitUsed:99}],req,{}).model,'sonnet');                      // the only one: still used
+ });
+ await check('limitUsed: the fullest general window, and a model\'s own weekly window only for that model',()=>{
+  const report={windows:[{id:'five_hour',usedPercent:20},{id:'seven_day',usedPercent:40},{id:'seven_day_opus',usedPercent:95}]};
+  assert.strictEqual(limitUsed({id:'opus'},report),95);assert.strictEqual(limitUsed({id:'sonnet'},report),40);
+  assert.strictEqual(limitUsed({id:'haiku'},null),null);assert.strictEqual(limitUsed({id:'x'},{windows:[]}),null);
+  const r=make();r.usageOf=(p)=>p==='claude'?report:null;
+  return r.availableModels().then(list=>{assert.strictEqual(list.find(m=>m.id==='opus').limitUsed,95);assert.ok(!('limitUsed' in list.find(m=>m.id==='agy:flash')));});
+ });
+ await check('switching costs more the longer the conversation: a long chat stays on its model',()=>{
+  // A simple request after Sonnet: Haiku suits it (faster), unless the conversation is long.
+  const req={prompt:'rename x',current:'sonnet',profile:'balance'},claude=models.filter(m=>m.providerId==='claude');
+  const short=select(claude,{...req,historyChars:0},{}),long=select(claude,{...req,historyChars:80000},{});
+  assert.strictEqual(short.model,'haiku');assert.strictEqual(long.model,'sonnet');assert.match(long.reason,/stayed on the current model/);
+  // Never below the task's floor: a complex task still leaves a small model, however long the chat.
+  const hard=select(models,{prompt:'design a distributed architecture',current:'haiku',profile:'balance',historyChars:500000},{});
+  assert.strictEqual(hard.model,'opus');
+ });
+ await check('attached context counts: many files or much text make it bigger, error output makes it a review',()=>{
+  assert.strictEqual(classify('update these').complexity,'standard');
+  // A tiny question isn't normal-sized work ("whats 2+2" went to Opus in a long chat); a short edit still is.
+  assert.strictEqual(classify('whats 2+2').complexity,'simple');assert.strictEqual(classify("what's 2+2").intent,'explain');
+  assert.strictEqual(classify('fix it').complexity,'standard');
+  assert.strictEqual(select(models.filter(m=>m.providerId==='claude'),{prompt:'whats 2+2',current:'opus',profile:'balance',historyChars:400000},{}).model,'haiku');
+  assert.strictEqual(classify('update these',{files:4}).complexity,'complex');
+  assert.strictEqual(classify('rename x',{files:4}).complexity,'standard');
+  assert.strictEqual(classify('rename x',{files:9}).complexity,'complex');
+  const t=classify('this happens:\nTypeError: Cannot read properties of undefined\n    at load (src/app.js:12:5)');
+  assert.strictEqual(t.intent,'review');assert.ok(t.signals.includes('error output'));
+  assert.strictEqual(classify('make this bigger',{elements:1}).intent,'edit');
+  assert.strictEqual(classify('Rename architecture.md to design.md').complexity,'simple');   // a file name isn't the task
+  assert.match(select(models,{prompt:'update these',context:{files:5},current:'haiku'},{},classify('update these',{files:5})).reason,/5 files attached/);
+ });
+ await check('Auto learns: a model you picked instead leans similar requests its way; undone answers lean away',()=>{
+  let saved=null;const mem=new RouterMemory(()=>[],(v)=>saved=v),now=Date.now();
+  assert.ok(similarity(words('add a login page with tests'),words('add the login page and its tests'))>.5);
+  assert.ok(!mem.record('better',{prompt:'hi',model:'haiku',better:'opus'}));                // too few words to learn from
+  assert.ok(mem.record('better',{prompt:'refactor the payment module into services',model:'haiku',better:'opus'},now));
+  assert.strictEqual(saved.length,1);
+  const near=mem.advise('refactor the payment module into smaller services',now).lean;
+  assert.ok(near.opus>0&&near.haiku<0);assert.deepStrictEqual(mem.advise('what time is it in tokyo',now).lean,{});
+  const d=select(models,{prompt:'refactor the payment module into smaller services',current:'haiku',learned:near},{});
+  assert.strictEqual(d.model,'opus');assert.match(d.reason,/you chose a stronger model/);
+  // Undone after carrying on: "bad" replaces "good" for that answer; old lessons fade.
+  mem.record('good',{prompt:'write the csv export function',model:'sonnet'},now);mem.record('bad',{prompt:'write the csv export function',model:'sonnet'},now);
+  assert.strictEqual(mem.items.filter(e=>e.model==='sonnet').length,1);assert.ok(mem.advise('write the csv export function',now).lean.sonnet<0);
+  const later=mem.advise('write the csv export function',now+180*86400000).lean.sonnet;assert.ok(later<0&&later>-.05);
+  const reloaded=new RouterMemory(()=>[...saved,{kind:'bogus'}]);assert.strictEqual(reloaded.items.length,saved.length);
+  mem.forget();assert.deepStrictEqual(saved,[]);
+ });
+ await check('the router uses what it learned (not at a checkpoint)',async()=>{
+  const r=make();r.memory=new RouterMemory();r.memory.record('better',{prompt:'refactor the payment module into services',model:'haiku',better:'opus'});
+  assert.strictEqual((await r.route({prompt:'refactor the payment module into services',current:'haiku'})).model,'opus');
+  assert.strictEqual((await r.route({prompt:'refactor the payment module into services',current:'haiku',provider:'claude',checkpoint:true})).model,'sonnet');
+ });
+ await check('MiniLM keeps the half it is sure of; explicit words beat its guesses',async()=>{
+  // search+simple vector, but equally close to standard and complex too: only the intent is sure.
+  const t=transport({vector:()=>[1,0,0,0,0,1,1,1]}),c=new LocalRouterClient(t.fetch);
+  assert.deepStrictEqual((await c.classify('which module keeps sessions',local)).task,{intent:'search'});
+  const r=make({'modelRouter.assistant':'minilm'},transport({vector:()=>[0,0,0,0,1,1,0,0]}).fetch);   // MiniLM: other/simple
+  const guess=await r.route({prompt:'which module keeps who is signed in',current:'sonnet'});
+  assert.strictEqual(guess.source,'minilm');assert.strictEqual(guess.intent,'other');                // Native only guessed "other" too
+  const explicit=await r.route({prompt:'implement retry handling for the client',current:'sonnet'});
+  assert.strictEqual(explicit.intent,'edit');                                                         // "implement" wins over MiniLM's "other"
  });
  console.log(`router: ${passed} passed, ${failed} failed`);process.exitCode=failed?1:0;
 })();

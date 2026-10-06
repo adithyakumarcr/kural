@@ -27,6 +27,8 @@ const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
 const { ModelRouter } = require("./lib/router");
 const { RouterPanel } = require("./lib/router/panel");
+const { RouterMemory } = require("./lib/router/learn");
+const usageHub = require("./lib/ai/usage");
 const brain = require("./lib/ai");
 const ws = require("./lib/workspace");
 
@@ -154,6 +156,10 @@ function activate(context) {
   chat.readyCheck = () => getStarted.ready;           // Claude or your own model set up
   chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
   const router = new ModelRouter(context,cfg,() => chat.routerModels(),() => vscode.workspace.isTrusted);
+  // Auto steers away from an AI close to its usage limit (lib/ai/usage.js) and learns from what you do after its
+  // answers, per workspace (lib/router/learn.js).
+  router.usageOf = (provider) => usageHub.current(provider);
+  router.memory = new RouterMemory(() => context.workspaceState.get("kural.router.memory.v1"), (v) => context.workspaceState.update("kural.router.memory.v1", v));
   chat.router = router;
   new RouterPanel(context,router,() => chat.postLocal()).register();
   chat.postLocal().catch(() => {});
@@ -186,6 +192,10 @@ function activate(context) {
     { dispose: () => { tabSession.stop(); editSession.stop(); commitSession.stop(); } },
     vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity,router)),
     vscode.commands.registerCommand("kural.tab.accepted", (a) => { if (a) activity.tabAccepted(a.file, a.lang, a.before, a.text); }),
+    vscode.commands.registerCommand("kural.router.forget", () => {
+      router.memory.forget();
+      vscode.window.showInformationMessage("Model Router forgot what it learned in this workspace.");
+    }),
     vscode.commands.registerCommand("kural.tab.forget", () => {
       activity.forget();
       tabPanel.push();

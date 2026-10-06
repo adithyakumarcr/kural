@@ -739,11 +739,52 @@ class ChatView {
     return [...claude,...clis,...local,...completion].filter((model) => !excludedModel(model.id));
   }
 
-  routingRequest(tab, text, attachments = []) {
+  routingRequest(tab, text, attachments = [], contexts = []) {
     return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
+      historyChars: ChatView.conversationSize(tab), context: ChatView.routingContext(contexts, attachments),
       profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto",
       team: tab.team > 1, device: !!tab.device, connectors: !!tab.ticket,
       images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
+  }
+
+  // How long the conversation is (characters): switching models costs more the longer it is (lib/router/policy.js).
+  static conversationSize(tab) {
+    return (tab.messages || []).reduce((n, m) => n + String(m.sentText || ChatView.textOf(m.segments || [])).length +
+      (m.blocks || []).reduce((k, b) => k + String(b.text || "").length, 0), 0);
+  }
+
+  // What came with the message, for Auto (Cursor's "attached context"): files and selections (not the open file, which
+  // always comes), their size (file sizes, not read: routing must stay instant), browser elements, attached text files.
+  static routingContext(contexts = [], attachments = []) {
+    let files = 0, chars = 0, elements = 0;
+    const size = (f) => { try { return fs.statSync(f).size; } catch { return 0; } };
+    for (const c of contexts || []) {
+      if (c.kind === "selection") { files++; chars += String(c.code || "").length; }
+      else if (c.kind === "file") { files++; chars += size(c.path); }
+      else if (c.kind === "element") elements++;
+    }
+    for (const a of attachments || []) if (a && a.path && !["image", "pdf"].includes(a.kind)) { files++; chars += size(a.path); }
+    return { files, chars, elements };
+  }
+
+  // Auto learns from what you do after its answers (lib/router/learn.js): carried on = fine, undid all its changes =
+  // that model didn't manage it, picked another model = that one suits such requests better.
+  // (Undoing later still counts after you carried on: "bad" replaces "good".)
+  routedAnswer(tab, index = tab.messages.length - 1, kind = "good") {
+    for (let i = index; i >= 1; i--) {
+      const a = tab.messages[i];
+      if (a.role !== "assistant") continue;
+      if (!a.routing || !a.routing.model || a.running || (kind === "good" && a.error) ||
+        (a.routingJudged && !(kind === "bad" && a.routingJudged === "good"))) return null;
+      const u = tab.messages[i - 1];
+      return u && u.role === "user" ? { answer: a, prompt: ChatView.textOf(u.segments || []), model: a.routing.model } : null;
+    }
+    return null;
+  }
+  routerFeedback(tab, kind, better, index) {
+    const memory = this.router && this.router.memory, r = this.routedAnswer(tab, index, kind);
+    if (!memory || !r) return;
+    if (memory.record(kind, { prompt: r.prompt, model: r.model, better })) { r.answer.routingJudged = kind; log(`model router: learned "${kind}" for ${r.model}${better ? ` (you picked ${better})` : ""}`); }
   }
 
   async routingCheckpoint(tab, r) {
@@ -987,6 +1028,7 @@ class ChatView {
     const previousMedia = [...new Map(tab.messages.flatMap((m) => m.attachments || [])
       .filter((a) => ["image","pdf"].includes(a.kind)).map((a) => [a.path,a])).values()];
     if (tab.autoRoute && this.router) {
+      this.routerFeedback(tab, "good");   // you carried on after Auto's last answer
       const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
       tab.status = "running"; tab.routingState = "Choosing model…"; this.postTabs();
       const previous = tab.model;
@@ -994,7 +1036,7 @@ class ChatView {
         const attached = attachIds.map((id) => this.attachments.items.get(id)).filter(Boolean);
         // Attachments from earlier turns must remain usable after a provider handoff too.
         const historical = tab.messages.flatMap((m) => m.attachments || []);
-        routed = await this.router.route(this.routingRequest(tab,text,[...attached,...historical]),ctl.signal);
+        routed = await this.router.route(this.routingRequest(tab,text,[...attached,...historical],contexts),ctl.signal);
         if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
         if (routed.error) { this.post({ type: "flash",text: routed.error }); return; }
         const changesProvider = engineOf(routed.model) !== (tab.engine || engineOf(previous));
@@ -1754,6 +1796,8 @@ class ChatView {
         const choosing = this.routingJobs.get(tab.id); if (choosing) choosing.abort();
         const checkpoint = this.runtime.get(tab.id); if (checkpoint && checkpoint.checkpointAbort) checkpoint.checkpointAbort.abort();
         const was = tab.model;
+        // Right after an Auto answer, picking another model says Auto chose wrong for this kind of request.
+        if (tab.autoRoute && m.model !== was && tab.status === "idle") this.routerFeedback(tab, "better", m.model);
         tab.autoRoute = false;
         tab.model = m.model;
         const r = this.runtime.get(tab.id);
@@ -1771,7 +1815,7 @@ class ChatView {
         break;
       }
       case "setRouterProfile": {
-        if (!tab || !["balanced","speed","quality"].includes(m.profile)) break;
+        if (!tab || !["balance","cost","intelligence"].includes(m.profile)) break;
         tab.autoRoute = true; tab.routingProfile = m.profile; tab.effortPinned = false;
         this.remember(tab); this.postTabs(); this.save();
         if (tab.status !== "idle") this.post({ type: "flash",text: "The routing profile applies at the next supported checkpoint or message" });
@@ -1881,6 +1925,8 @@ class ChatView {
       if (m.action === "undo") { if (await this.changes.undo(c.id)) { c.state = "undone"; if (this.activity) this.activity.undone(c.rel); } }
       if (m.action === "keep") { this.changes.keep(c.id); c.state = "kept"; }
     }
+    // Every change of an Auto answer undone: that model didn't manage this kind of request.
+    if (msg.routing && msg.changes.length && msg.changes.every((c) => c.state === "undone")) this.routerFeedback(tab, "bad", null, m.msgIndex);
     this.post({ type: "patch", tabId: tab.id, index: m.msgIndex, msg: this.patchOf(msg) });
     this.save();
   }

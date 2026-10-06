@@ -1,5 +1,5 @@
-// The Model Router panel at the bottom of the window: what Auto prefers, which models it may pick, and what it picked
-// last. Kept as small as the Tab Completion panel on purpose (Adithya found the full one unusable).
+// The Model Router panel at the bottom of the window: what Auto prefers (Cost, Balance, Intelligence, like Cursor's), how it
+// reads the task, which models it may pick (with their usage when past half), and what it picked last. Kept as small as the Tab Completion panel on purpose (Adithya found the full one unusable).
 // settings.json only, not shown here: model ratings, Search & Ask ranking, chat context, cloud
 // on/off, token preference, Auto Tab engine, the helper deadline.
 
@@ -33,7 +33,7 @@ class RouterPanel {
     const revision = ++this.revision, options = this.router.options();
     // Tab-only models never answer a chat, so they aren't a choice here.
     const models = (await this.router.availableModels()).filter((m) => !m.completionOnly)
-      .map((m) => ({ id: m.id, label: m.label, provider: m.local ? "This computer" : m.provider, ready: m.ready }));
+      .map((m) => ({ id: m.id, label: m.label, provider: m.local ? "This computer" : m.provider, ready: m.ready, used: m.limitUsed }));
     const minilm = options.assistant === "minilm" ? await this.router.client.state(options).catch(() => "offline") : null;
     if (!this.view || revision !== this.revision) return;   // a newer push started while we waited
     this.view.webview.postMessage({ type: "state", profile: options.profile, profiles: PROFILES, assistant: options.assistant, minilm, download: this.download && { percent: this.download.percent }, allowed: options.allowedModels, models, last: this.router.last });
@@ -85,7 +85,7 @@ function page(nonce) {
   button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 </style></head><body>
   <div class="row"><span class="label">Auto prefers</span>
-    <div class="seg" id="profile"><button data-v="speed">Speed</button><button data-v="balanced">Balanced</button><button data-v="quality">Quality</button></div>
+    <div class="seg" id="profile"><button data-v="cost">Cost</button><button data-v="balance">Balance</button><button data-v="intelligence">Intelligence</button></div>
     <span id="profileText" class="muted"></span></div>
   <div class="row"><span class="label">Task detection</span>
     <div class="seg" id="assistant"><button data-v="native">Native</button><button data-v="minilm">MiniLM</button></div>
@@ -123,7 +123,11 @@ function page(nonce) {
     // One row per provider; models that aren't set up are hidden (Auto can't pick them anyway).
     const rows = [...new Set(ready.map((m) => m.provider))].map((p) => {
       const row = el("div", "row"), chips = el("div", "chips");
-      for (const m of ready.filter((x) => x.provider === p)) { const b = el("button", "chip" + (on(m.id) ? " on" : ""), m.label); b.onclick = () => toggle(m.id); chips.append(b); }
+      for (const m of ready.filter((x) => x.provider === p)) {
+        // Past half its usage limit: Auto leans away from it (Cost most), and skips it at 98 %.
+        const used = typeof m.used === "number" && m.used >= 50 ? " · " + Math.round(m.used) + "% used" : "";
+        const b = el("button", "chip" + (on(m.id) ? " on" : ""), m.label + used); b.onclick = () => toggle(m.id); chips.append(b);
+      }
       row.append(el("span", "label", p), chips); return row;
     });
     const usable = ready.filter((m) => on(m.id)).length;

@@ -1,16 +1,28 @@
 # Kural Model Router
 
-Select **Auto → Balanced, Speed or Quality** in the chat's model menu. The footer shows the active model, and each answer records the models that handled it. Selecting a model manually turns Auto off for that chat.
+Select **Auto → Balance, Cost or Intelligence** in the chat's model menu (Cursor's names for the same three trade-offs). Auto picks the model **and the intensity** for every message. The footer shows the active model, and each answer records the models that handled it and why. Selecting a model manually turns Auto off for that chat.
 
-Open **Model Router** from the status bar, the chat model menu, Kural Settings, or the command **Kural: Model Router**. The panel has three rows: what Auto prefers (Speed, Balanced or Quality; new chats start with it), the models Auto may pick (click a model to turn it on or off; models that aren't set up are hidden), and the last choice. Turning every model off prevents Auto dispatch. Everything else on this page is a setting in Settings (`kural.modelRouter.*`), not in the panel.
+Open **Model Router** from the status bar, the chat model menu, Kural Settings, or the command **Kural: Model Router**. The panel shows what Auto prefers, how it reads the task (**Native** or **MiniLM**, with a **Download** button when MiniLM's model is missing), the models Auto may pick (click one to turn it on or off; a model past half its usage limit shows how much is used), and the last choice with its reasons. Turning every model off prevents Auto dispatch. Everything else on this page is a setting (`kural.modelRouter.*`).
 
-| Profile | Native selection policy |
-|---|---|
-| Balanced | Meet the estimated task difficulty, then prefer speed |
-| Speed | Favor faster suitable models; retain a minimum quality floor for complex work |
-| Quality | Favor the highest capability rating among eligible models |
+| Profile | What Auto does | Intensity |
+|---|---|---|
+| **Balance** (default) | Meets the task's difficulty, then prefers speed; steers away from an AI close to its limit | Low / Medium / High by task size |
+| **Cost** | The lightest model that can do the task, on the AI with the most room left. Kural's plans are flat-rate, so what Cost saves is your **usage limits** | One step lower |
+| **Intelligence** | The most capable model, even when it's slower or uses more of your limits | One step higher (Max for complex work) |
 
-Capability checks come first: unavailable models, disallowed models, unsupported images/PDFs, teams, devices and connectors are excluded. Agent requests retain command-approval support. The current model/provider wins close ties to avoid unnecessary handoffs. Unknown models start with conservative medium ratings; adjust these with the `kural.modelRouter.modelPreferences` setting. Successful single-model task durations provide tie-breaking hints only when all candidates have observations; different tasks are not directly comparable benchmarks.
+Older settings and chats saying Balanced, Speed or Quality keep working (they mean Balance, Cost and Intelligence).
+
+Capability checks come first: unavailable models, disallowed models, unsupported images/PDFs, teams, devices and connectors are excluded. Agent requests retain command-approval support. Unknown models start with conservative medium ratings; adjust these with `kural.modelRouter.modelPreferences`. Successful single-model task durations break ties only when all candidates have observations.
+
+## How Auto decides
+
+**What the task is.** The words of your message, and what came with it, like Cursor's "attached context": 4 or more attached files or selections (or more than 40,000 characters) make it one size bigger, 8 or more (or 120,000 characters) two; pasted error output (a stack trace, "TypeError: …", a failed exit code) makes it a review and never "simple"; an element picked in the browser makes it an edit. File names don't count as words ("rename architecture.md" isn't architecture work). The open file always comes along, so it doesn't count.
+
+**Your usage limits.** Kural knows how much of each plan you've used (the AI Usage panel). From half of a limit on, Auto leans away from that model, gently under Intelligence, strongly under Cost. At 98 % it skips the model while another can do the task (the only suitable model is still used). Claude's per-model weekly limits count only for that model (Opus's for Opus).
+
+**The cost of switching.** Another model starts without the prompt cache, and another AI needs the whole conversation handed over, so switching costs more the longer the chat is. Auto stays on the current model unless the task clearly suits another one better, and says "stayed on the current model" when that decided it. It never stays below the task's floor: a complex request still leaves a small model.
+
+**What you did before.** Auto learns from what you do after its answers, per workspace (like Tab Completion learns): you **carry on** with your next message (it was fine), you **pick another model** right after (that one suits such requests better: it leans similar requests its way, and a stronger model you chose raises the floor), or you **undo every change** of the answer (that model didn't manage it). Similar requests share enough words; older lessons fade over months. **Kural: Forget What Model Router Learned (This Workspace)** clears it.
 
 ## Choose local assistance
 
@@ -19,9 +31,11 @@ Native policy works immediately. MiniLM is optional and runs through Kural's exi
 | Assistance | How it works | Trade-off |
 |---|---|---|
 | Native only — default | Rules classify the prompt and apply your ratings/profile | Almost no overhead; limited semantic understanding |
-| MiniLM | `all-minilm:22m` matches task examples and ranks snippets using embeddings | Small download; similarities need tuning and are not success probabilities |
+| MiniLM | `all-minilm:22m` compares your request with example requests (6 per label) and ranks snippets using embeddings | Small download (46 MB); similarities are not success probabilities |
 
-Set `kural.modelRouter.assistant` to `minilm` and download its model with `ollama pull all-minilm:22m`. Selecting MiniLM never downloads it automatically.
+Choose **MiniLM** in the panel and click **Download** (or `ollama pull all-minilm:22m`). Selecting MiniLM never downloads it by itself.
+
+MiniLM keeps each half it's sure of (the kind of task, or its size) and Native fills in the other. Explicit words win: when your message says "fix", "rename" or "architecture", that label stays; MiniLM replaces only Native's guesses ("other" when no word matched, "explain" from just "what/how/why", "standard" by default). In the benchmark, the explicit words were right each time the two disagreed, and MiniLM was right on the guesses. Only the task's size changes which model and intensity Auto picks; the kind of task shows in the reason.
 
 Native and MiniLM are the only router choices. Qwen classification, generative ranking and reuse of the Tab Completion model have been removed. Older router settings selecting Qwen or Tab reuse default to Native without starting any helper inference. Tab Completion continues to use its own code models. Qwen 0.5B remains excluded from model choices and downloads; existing Tab settings pointing to it use the recommended 1.5B model instead.
 
@@ -46,6 +60,19 @@ Cross-provider changes happen **between messages**. Kural sends the recorded use
 Hidden reasoning and provider caches cannot transfer across providers. Recorded conversation transfer remains subject to the receiving model's context window. Mid-answer cross-provider migration for Codex/Gemini is not implemented; their adapters do not expose a safe pause point.
 
 ## Speed evidence and reproduction
+
+**Example requests, 6 October 2026** ([report](../benchmarks/model-router-2026-10-06-examples.json); Apple M5, 16 GB, Ollama, 5,000 ms deadline, same 24-prompt corpus as below). MiniLM got example requests per label, keeps the half it's sure of, and yields to explicit words; Native stopped reading file names as task words.
+
+| | Native before | Native after | MiniLM before | MiniLM after |
+|---|---|---|---|---|
+| Requests MiniLM decided (not ambiguous) | – | – | 3 / 24 | 20 / 24 |
+| Correct kind of task | 17 / 24 | 17 / 24 | 18 / 24 | 20 / 24 |
+| Correct size (what changes the model) | 20 / 24 | 21 / 24 | 20 / 24 | 20 / 24 |
+| Both correct | 15 / 24 | 16 / 24 | 16 / 24 | 17 / 24 |
+| Routing median | 0.002 ms | 0.004 ms | 7.1 ms | 7.2 ms |
+
+A small gain, on a small corpus whose disagreements were used to choose the merge rule: a smoke check, not an accuracy evaluation. The example sentences were written separately, not taken from the corpus. A small language model as the helper (Qwen3 0.6B, below) was not brought back: it was 20 times slower and labelled worse.
+
 
 The [verification report after removing Qwen](../benchmarks/model-router-2026-10-06-native-minilm.json) contains only Native and MiniLM. The reports below preserve the comparison that led to keeping only Native and MiniLM. Qwen measurements are historical; Qwen is no longer a router option, and the current benchmark runs only Native and MiniLM.
 

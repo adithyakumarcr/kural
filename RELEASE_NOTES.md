@@ -1,5 +1,15 @@
 ## Not released yet
 
+- **Model Router like Cursor's Auto.** The profiles are now **Balance**, **Cost** and **Intelligence**, and Auto picks the
+  intensity too. It watches your usage limits: it leans away from an AI past half its limit (strongly under Cost, which
+  now saves your limits) and skips one at 98 %. Long conversations stay on their model, since switching loses the cache.
+  It reads what you attached (many files, pasted error output, a picked browser element), not just your words. And it
+  learns from what you do after its answers, per workspace: picking another model or undoing every change steers
+  similar requests next time (**Kural: Forget What Model Router Learned** clears it). Hover over the model on an answer
+  to see why it was chosen.
+- **MiniLM reads tasks better.** It compares your request with several examples per kind of task, keeps the half it's
+  sure of, and yields to explicit words. It now decides 20 of 24 benchmark requests instead of 3. The Model Router panel
+  has a **Download** button for its model.
 - **The web in every mode.** Claude can now search the web and read pages in Plan and Ask too (before: only Agent and
   Auto), without asking. ChatGPT (Codex) uses live web search instead of its cached copy of the web; the commands it
   runs still have no internet. Google Gemini already searched the web with its own tools.

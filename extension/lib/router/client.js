@@ -2,16 +2,34 @@
 const { INTENTS,COMPLEXITIES } = require("./policy");
 const abortError = () => Object.assign(new Error("Cancelled"),{ name: "AbortError" });
 const MODEL = "all-minilm:22m";
-const SEEDS = [
-  ["search","Find where settings are stored and locate the function definition"],
-  ["explain","Explain what this existing code does and why it works"],
-  ["edit","Implement a feature, change code, create a function and add tests"],
-  ["review","Debug a crash, review a patch and investigate a bug"],
-  ["other","Discuss ideas and answer a general question"],
-  ["simple","Rename a variable, fix a typo, add a comment or explain one line"],
-  ["standard","Implement a function and its tests, fix a bug in a module"],
-  ["complex","Design an architecture, fix concurrency across multiple modules, migrate a distributed system"],
-];
+// Example requests per label (written for this, not taken from the benchmark corpus). A request gets the label whose
+// examples it's closest to (the mean of its two closest). One example per label made MiniLM unsure about most requests
+// (21 of 24 fell back to Native in the 6 Oct benchmark); several per label cover more ways of saying the same thing.
+const EXAMPLES = {
+  search: ["Where is the code that handles user login?", "Which file defines the database connection settings?",
+    "Show me where this config value gets read", "Locate the place that sends the welcome email",
+    "In which module is the payments API route declared?", "Find all callers of the save function"],
+  explain: ["Explain what this function does", "How does this caching code work?", "What is this regular expression matching?",
+    "Why does this loop start at index one?", "Describe what happens when this button is clicked", "What does this error message mean?"],
+  edit: ["Add a dark mode toggle to the settings page", "Implement pagination for the products list",
+    "Create a new endpoint that returns the user's orders", "Change the button color to blue",
+    "Refactor this class to use async and await", "Write unit tests for the cart totals"],
+  review: ["Debug why the app crashes when I upload a file", "Find the bug that makes the totals wrong",
+    "Review my pull request for mistakes", "This test fails now and then, figure out why",
+    "Check this code for security problems", "The page is blank after login, track down the cause"],
+  other: ["Suggest a good name for this library", "Should we use Postgres or MongoDB here?", "Compare two approaches to state management",
+    "Hello, what can you help me with?", "Give me ideas for new features", "Summarize our conversation so far"],
+  simple: ["Rename this variable", "Fix the spelling in this string", "Add a comment above this function",
+    "Change the port number to 8080", "What does this line do?", "Where is the main function?"],
+  standard: ["Add input validation to this form and test it", "Fix the off-by-one error in this module",
+    "Implement a function that parses dates, with tests", "Write an endpoint for updating a user profile",
+    "Investigate why this request times out", "Split this file into smaller functions"],
+  complex: ["Design the architecture for a real-time chat service", "Migrate the whole project from JavaScript to TypeScript",
+    "Find and fix race conditions between these worker threads", "Add authentication across the frontend, backend and database",
+    "Plan a zero-downtime database schema migration", "Audit the entire codebase for security vulnerabilities"],
+};
+const LABELS = Object.keys(EXAMPLES);
+const SEEDS = LABELS.flatMap((label) => EXAMPLES[label].map((text) => [label, text]));
 function loopback(base) {
   const u = new URL(base || "http://127.0.0.1:11434");
   if (!["http:","https:"].includes(u.protocol) || !(u.hostname === "localhost" || u.hostname === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(u.hostname)) ||
@@ -101,13 +119,21 @@ class LocalRouterClient {
       const key = `${base}/${model}`,cached = this.seeds.get(key);
       const out = await this.embed(req,model,cached ? [prompt] : [prompt,...SEEDS.map((s) => s[1])]);
       const seeds = cached || out.vectors.slice(1);if (!cached) this.seeds.set(key,seeds);
-      const scored = SEEDS.map((s,i) => ({ label: s[0],score: cosine(out.vectors[0],seeds[i]) }));
+      const near = SEEDS.map((s,i) => ({ label: s[0],score: cosine(out.vectors[0],seeds[i]) }));
+      // Each label: the mean of its two closest examples (one lucky match counts less).
+      const scored = LABELS.map((label) => {
+        const top = near.filter((n) => n.label === label).map((n) => n.score).sort((a,b) => b-a).slice(0,2);
+        return { label,score: top.reduce((a,b) => a+b,0)/top.length };
+      });
+      // A label only when it's clearly ahead. Each half stands alone: sure of the kind of task but not its size, the
+      // size comes from Native (the router merges), instead of throwing both away.
       const best = (labels) => {
         const values = scored.filter((s) => labels.includes(s.label)).sort((a,b) => b.score-a.score);
-        if (values[0].score < settings.minSimilarity || values[0].score-values[1].score < settings.minMargin) throw new Error("Ambiguous semantic match; native routing used");
-        return values[0].label;
+        return values[0].score >= settings.minSimilarity && values[0].score-values[1].score >= settings.minMargin ? values[0].label : null;
       };
-      return { task: { intent: best(INTENTS),complexity: best(COMPLEXITIES) },tokens: out.tokens,source: "minilm" };
+      const intent = best(INTENTS),complexity = best(COMPLEXITIES);
+      if (!intent && !complexity) throw new Error("Ambiguous semantic match; native routing used");
+      return { task: { ...(intent ? { intent } : {}),...(complexity ? { complexity } : {}) },tokens: out.tokens,source: "minilm" };
     });
   }
   async rank(query,candidates,settings,signal) {
@@ -118,4 +144,4 @@ class LocalRouterClient {
     });
   }
 }
-module.exports = { LocalRouterClient,loopback,cosine,SEEDS,MODEL,abortError };
+module.exports = { LocalRouterClient,loopback,cosine,SEEDS,LABELS,EXAMPLES,MODEL,abortError };
