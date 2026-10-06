@@ -163,6 +163,8 @@ class LocalAgent {
         if (this.stopped) break;
       }
       this.emit({ type: "user", message: { role: "user", content: results } });
+      // Kural can await a routing decision here: every tool finished, and the next model request has not started.
+      if (!this.stopped && this.h.onCheckpoint) await this.h.onCheckpoint();
     }
     return { type: "result", subtype: "success", is_error: false, result: `${text}\n\n(Stopped after ${MAX_STEPS} tool steps.)`.trim() };
   }

@@ -115,6 +115,7 @@ class SettingsPage {
       case "autoUpdates": await vscode.workspace.getConfiguration("kural").update("updates.autoCheck", !!m.value, vscode.ConfigurationTarget.Global); this.push(); break;
       case "getStarted": this.gs.open(); break;
       case "tab": vscode.commands.executeCommand("kural.tabPanel.focus"); break;
+      case "router": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "usagePanel": vscode.commands.executeCommand("kural.showUsage"); break;
       case "log": vscode.commands.executeCommand("kural.showLog"); break;
       case "allSettings": vscode.commands.executeCommand("workbench.action.openSettings", "@ext:kural.kural"); break;

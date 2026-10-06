@@ -31,7 +31,9 @@
         "kural.tabCompletion.ollamaUrl",
         "kural.chat.mode",
         "kural.chat.fullClaudeCodeSetup",
-        "kural.chat.model"
+        "kural.chat.model",
+        "kural.modelRouter.assistant",
+        "kural.modelRouter.modelPreferences"
       ]
     }
   },
@@ -263,6 +265,11 @@
         "command": "kural.browser.open",
         "title": "Kural: Open Browser (Pick Elements for the Chat)",
         "icon": "$(globe)"
+      },
+      {
+        "command": "kural.modelRouter",
+        "title": "Kural: Model Router",
+        "icon": "$(git-compare)"
       }
     ],
     "viewsContainers": {
@@ -289,6 +296,11 @@
         {
           "id": "kural-usage",
           "title": "AI Usage",
+          "icon": "media/usage-icon.svg"
+        },
+        {
+          "id": "kural-router",
+          "title": "Model Router",
           "icon": "media/usage-icon.svg"
         }
       ]
@@ -321,6 +333,13 @@
           "type": "webview",
           "id": "kural.usagePanel",
           "name": "AI Usage"
+        }
+      ],
+      "kural-router": [
+        {
+          "type": "webview",
+          "id": "kural.routerPanel",
+          "name": "Model Router"
         }
       ]
     },
@@ -725,7 +744,7 @@
         "kural.tabCompletion.localModel": {
           "type": "string",
           "default": "qwen2.5-coder:1.5b-base",
-          "description": "Ollama model for local Tab Completion suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:0.5b-base / 1.5b-base / 3b-base)."
+          "description": "Ollama model for local Tab Completion suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:1.5b-base / 3b-base)."
         },
         "kural.tabCompletion.ollamaUrl": {
           "type": "string",
@@ -748,6 +767,131 @@
           "type": "boolean",
           "default": true,
           "description": "Check for a new Kural version once a day (it asks before installing anything)."
+        },
+        "kural.modelRouter.profile": {
+          "type": "string",
+          "enum": [
+            "balanced",
+            "speed",
+            "quality"
+          ],
+          "default": "balanced",
+          "description": "Default Auto profile: suitable quality then speed, speed first, or quality first."
+        },
+        "kural.modelRouter.allowedModels": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": null,
+          "description": "Models Auto may choose. Null allows all configured models; an empty list prevents Auto requests."
+        },
+        "kural.modelRouter.allowCloud": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow cloud answering models. Routing assistance always stays on this computer. Off restricts Auto to local answering models."
+        },
+        "kural.modelRouter.saveTokens": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask the router to prefer fewer tokens and retries while meeting the selected profile."
+        },
+        "kural.modelRouter.timeoutMs": {
+          "type": "integer",
+          "default": 1500,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Maximum time for optional local router assistance before native policy takes over."
+        },
+        "kural.modelRouter.search": {
+          "type": "boolean",
+          "default": false,
+          "description": "Rank local Search & Ask candidates with native matching or the selected local helper, then fall back to the existing AI search when needed."
+        },
+        "kural.modelRouter.context": {
+          "type": "boolean",
+          "default": false,
+          "description": "Retrieve and rank optional workspace snippets for chat. Explicit attachments and instructions are preserved."
+        },
+        "kural.modelRouter.contextChars": {
+          "type": "integer",
+          "default": 12000,
+          "minimum": 1000,
+          "maximum": 60000,
+          "description": "Character budget for automatically retrieved context, excluding explicit attachments."
+        },
+        "kural.modelRouter.handoffChars": {
+          "type": "integer",
+          "default": 120000,
+          "minimum": 10000,
+          "maximum": 1000000,
+          "description": "Maximum recorded conversation size for an automatic provider handoff. Larger conversations stay intact and require a manual choice or larger budget."
+        },
+        "kural.modelRouter.checkpoints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reassess after failed tool steps in Auto model selection. Live switching currently supports Claude and local models within their provider."
+        },
+        "kural.modelRouter.tab": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply native profile and allowed-model rules when Tab Completion uses Auto. No helper inference runs while typing."
+        },
+        "kural.modelRouter.assistant": {
+          "type": "string",
+          "enum": [
+            "native",
+            "minilm"
+          ],
+          "enumDescriptions": [
+            "Native rules without model inference",
+            "MiniLM (all-minilm:22m) embeddings through local Ollama"
+          ],
+          "default": "native",
+          "description": "Optional local assistance for Kural Model Router. Download helpers from the Model Router panel."
+        },
+        "kural.modelRouter.modelPreferences": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "quality": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "speed": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "tokens": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Per-model quality, speed and token-efficiency hints, rated 1 (low) to 3 (high). Configure in Model Router; these are not measured guarantees."
+        },
+        "kural.modelRouter.minSimilarity": {
+          "type": "number",
+          "default": 0.25,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum MiniLM task similarity. Similarity is not confidence or a task-success probability."
+        },
+        "kural.modelRouter.minMargin": {
+          "type": "number",
+          "default": 0.04,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum separation between MiniLM task matches before accepting a classification."
         }
       }
     },

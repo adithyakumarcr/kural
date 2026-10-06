@@ -215,6 +215,12 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
   <sub>Pick the roles and how they work &nbsp;·&nbsp; Then they discuss and decide (sped up)</sub>
 </p>
 
+### Model Router
+
+Choose **Auto → Balanced, Speed or Quality** in the chat model menu. The active model appears in the footer and on each answer. Open **Model Router** from the status bar or Kural Settings to choose allowed models, adjust your ratings, and choose Native rules or optional MiniLM assistance. Native routing works without a download or routing API key.
+
+The panel also configures Search & Ask ranking, optional chat context, and native Auto Tab engine selection. Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
+
 ### Tab Completion
 
 Suggestions appear as you type or when you place the cursor, also in the middle of a line. Write a comment, press
@@ -229,7 +235,7 @@ Click **Tab Completion** in the status bar for its panel. There you can:
 - pick the engine: **Auto**, **Local model** or **Claude**, and its model,
 - see how long the last suggestion took.
 
-In **Auto**, the local model and Claude race, and the first good answer wins.
+In **Auto**, the local model and Claude race, and the first good answer wins. With Model Router’s Auto Tab policy enabled, the router selects one engine using your profile and allowed models.
 
 ![The Tab Completion panel: speed, engine and model](docs/screenshots/tab-panel.gif)
 

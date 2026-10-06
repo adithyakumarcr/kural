@@ -25,6 +25,8 @@ const { SettingsPage } = require("./lib/settings-page");
 const { Browser } = require("./lib/browser");
 const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
+const { ModelRouter } = require("./lib/router");
+const { RouterPanel } = require("./lib/router/panel");
 const brain = require("./lib/ai");
 const ws = require("./lib/workspace");
 
@@ -151,6 +153,10 @@ function activate(context) {
   chat.activity = activity;
   chat.readyCheck = () => getStarted.ready;           // Claude or your own model set up
   chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
+  const router = new ModelRouter(context,cfg,() => chat.routerModels(),() => vscode.workspace.isTrusted);
+  chat.router = router;
+  new RouterPanel(context,router,() => chat.postLocal()).register();
+  chat.postLocal().catch(() => {});
   brain.setModelSource(() => { const t = chat.active(); return t ? t.model : chat.lastChoices().model; }, () => getStarted.localModel);
   // Devices over SSH (+ → Link device in the chat, Kural: Devices): passwords encrypted in SecretStorage.
   const devices = new Devices(context);
@@ -168,7 +174,7 @@ function activate(context) {
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
   chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)
-  new SearchView(context).register();
+  new SearchView(context,router,() => chat.active()).register();
   // Kural Browser: your app on localhost beside the code; "Select element" adds what you click to the chat.
   const browser = new Browser(context, (info) => chat.addElement(info));
   browser.onItems = (items) => chat.addBrowserItems(items);
@@ -178,7 +184,7 @@ function activate(context) {
   context.subscriptions.push(
     status,
     { dispose: () => { tabSession.stop(); editSession.stop(); commitSession.stop(); } },
-    vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity)),
+    vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity,router)),
     vscode.commands.registerCommand("kural.tab.accepted", (a) => { if (a) activity.tabAccepted(a.file, a.lang, a.before, a.text); }),
     vscode.commands.registerCommand("kural.tab.forget", () => {
       activity.forget();

@@ -62,7 +62,7 @@ class ChatArchive {
   save(tab, card) {
     if (!SAFE_ID.test(tab.id) || this.deleted.has(tab.id) || !tab.messages || !tab.messages.length) return false;
     const body = JSON.stringify(tab.messages);
-    const sig = `${body.length}|${tab.title}|${tab.updatedAt}|${card.pinned ? 1 : 0}`;
+    const sig = `${body.length}|${tab.title}|${tab.updatedAt}|${card.pinned ? 1 : 0}|${tab.model}|${!!tab.autoRoute}|${tab.routingProfile || ""}`;
     if (this.written.get(tab.id) === sig) return false;
     this.loadDeleted();                          // deleted in another window? Then it stays deleted.
     if (this.deleted.has(tab.id)) return false;

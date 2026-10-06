@@ -15,6 +15,12 @@ function setup() {
   // The programs, installed like Claude Code's own installer does it (~/.local/share/claude + a link in ~/.local/bin).
   const share = path.join(home, ".local/share/claude/versions/2.1.300"); fs.mkdirSync(share, { recursive: true });
   const bin = path.join(home, ".local/bin"); fs.mkdirSync(bin, { recursive: true });
+  // A fake HOME does not isolate processes: real pkill would close the editor running this test.
+  // Also force Linux so a macOS test runner can never reach /Applications or the real keychain.
+  const processLog = path.join(tmp,"process-control.log");
+  for (const command of ["pgrep","pkill","osascript","security"])
+    fs.writeFileSync(path.join(bin,command), `#!/bin/sh\nprintf '%s\\n' '${command}' "$@" >> "$KURAL_TEST_PROCESS_LOG"\nexit 0\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin,"uname"), "#!/bin/sh\nprintf 'Linux\\n'\n", { mode: 0o755 });
   const wrap = (file, fake) => { fs.writeFileSync(file, `#!/bin/sh\nexec node ${path.join(ROOT, "test", fake)} "$@"\n`, { mode: 0o755 }); };
   wrap(path.join(share, "claude"), "fake-claude.js"); fs.symlinkSync(path.join(share, "claude"), path.join(bin, "claude"));
   wrap(path.join(bin, "codex"), "fake-codex.js"); wrap(path.join(bin, "agy"), "fake-agy.js");
@@ -30,13 +36,13 @@ function setup() {
   fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/settings.json"), "{}");
   fs.mkdirSync(path.join(tmp, "kural-abc123/attachments"), { recursive: true });
   fs.mkdirSync(path.join(home, ".ollama/models"), { recursive: true });
-  return { home, tmp, bin };
+  return { home, tmp, bin, processLog };
 }
 function run(s, answers) {
   const script = `. scripts/from-scratch.sh; die() { echo "DIE: $*"; exit 3; }; dpkg() { return 1; }
 scratch_confirm <<'IN'\n${answers}\nIN\nscratch_wipe`;
   return spawnSync("bash", ["-c", script], { cwd: ROOT, encoding: "utf8", timeout: 120000,
-    env: { HOME: s.home, TMPDIR: s.tmp, PATH: `${s.bin}:/usr/bin:/bin:${path.dirname(process.execPath)}`, XDG_CONFIG_HOME: "" } });
+    env: { HOME: s.home, TMPDIR: s.tmp, PATH: `${s.bin}:/usr/bin:/bin:${path.dirname(process.execPath)}`, XDG_CONFIG_HOME: "", KURAL_TEST_PROCESS_LOG: s.processLog } });
 }
 const exists = (s, p) => fs.existsSync(path.join(s.home, p));
 
@@ -51,6 +57,8 @@ check("yes, keep the programs: logged out everywhere, Kural's data gone, the res
   const s = setup();
   const r = run(s, "yes\nn");
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  // The shutdown path was exercised, but only our stand-in process tools were invoked.
+  assert.match(fs.readFileSync(s.processLog,"utf8"), /pgrep\n-x\nkural\npkill\n-x\nkural/);
   for (const line of ["Claude Code: logged out", "Codex: logged out", "Antigravity (Google Gemini): logged out"]) assert.ok(r.stdout.includes(line), `${line}\n${r.stdout}`);
   for (const f of ["kural-fake-claude-state", "kural-fake-codex-state", "kural-fake-agy-state"]) assert.strictEqual(fs.readFileSync(path.join(s.tmp, f), "utf8"), "loggedout", f);
   for (const p of [".config/Kural", ".kural", ".claude/.credentials.json", ".codex/auth.json", "tmp/kural-abc123",
@@ -65,7 +73,6 @@ check("yes, remove the programs too: Claude Code's install and the others are go
   for (const p of [".local/bin/claude", ".local/share/claude", ".local/bin/codex", ".local/bin/agy"]) assert.ok(!exists(s, p), `${p}\n${r.stdout}`);
   assert.ok(exists(s, ".ollama/models"));
 });
-for (const h of homes) fs.rmSync(h, { recursive: true, force: true });
 check("Gemini's saved login goes even when agy itself was already removed (it would sign the next agy in)", () => {
   const s = setup();
   fs.rmSync(path.join(s.bin, "agy"));
@@ -74,5 +81,6 @@ check("Gemini's saved login goes even when agy itself was already removed (it wo
   assert.ok(!exists(s, ".gemini/antigravity-cli/antigravity-oauth-token"), r.stdout);
   assert.match(r.stdout, /Antigravity \(Google Gemini\): logged out/);
 });
+for (const h of homes) fs.rmSync(h, { recursive: true, force: true });
 console.log(fail ? `from-scratch: ${fail} FAILED` : "from-scratch: ALL PASS");
 process.exit(fail ? 1 : 0);

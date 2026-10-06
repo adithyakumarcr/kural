@@ -29,6 +29,7 @@ const os = require("os");
 const { findClaude, cleanEnv, setSetupGate, log } = require("./ai/claude");
 const checks = require("./ai/claude-checks");
 const { installOllama, LOCAL_MODELS } = require("./tab/local");
+const { completionModel } = require("./ai/model-policy");
 const { Ollama, memoryGB, totalMemoryGB } = require("./ai/ollama");
 const { LocalAgent } = require("./ai/engine");
 const brain = require("./ai");
@@ -191,7 +192,7 @@ class GetStarted {
       waiting: this.installing ? `install-${this.installing}` : this.loggingIn ? `login-${this.loggingIn}` : this.waiting, install,
       // What the install is doing right now: its last lines, how long it runs, when it last printed something.
       run: this.run ? { id: this.run.id, text: this.run.text, lines: this.run.lines.slice(-8), started: this.run.started, last: this.run.last, now: Date.now() } : null, platform: process.platform, memory: totalMemoryGB(),
-      tabModel: (LOCAL_MODELS.find((m) => m.id === (cfg().get("tabCompletion.localModel") || LOCAL_MODELS[1].id)) || LOCAL_MODELS[1]) });
+      tabModel: (LOCAL_MODELS.find((m) => m.id === completionModel(cfg().get("tabCompletion.localModel"))) || LOCAL_MODELS[0]) });
   }
 
   // Check again (the page shows each step as it's found). shell: also ask your shell where claude is
@@ -398,7 +399,7 @@ class GetStarted {
     if (st.running) {
       try {
         const models = await this.ollama.models();
-        const want = cfg().get("tabCompletion.localModel") || LOCAL_MODELS[1].id;
+        const want = completionModel(cfg().get("tabCompletion.localModel"));
         // (Downloaded and chosen for Tab: a model left over from before isn't set up until you choose it.)
         o.tabModel = models.some((m) => m.name === want || m.name === `${want}:latest`) && (!!this.context.globalState.get("kural.tabLocal.v1") || !!this.rec.local);
         o.chatModels = models.filter((m) => m.chat).map((m) => m.name);
