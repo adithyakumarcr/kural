@@ -258,6 +258,11 @@
       {
         "command": "kural.search.dismiss",
         "title": "Dismiss"
+      },
+      {
+        "command": "kural.browser.open",
+        "title": "Kural: Open Browser (Pick Elements for the Chat)",
+        "icon": "$(globe)"
       }
     ],
     "viewsContainers": {

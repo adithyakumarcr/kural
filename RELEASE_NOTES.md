@@ -1,5 +1,22 @@
 ## Not released yet
 
+- **Kural Browser: pick an element for the chat**, like Cursor. **Kural: Open Browser** (or **+ → Pick from a
+  browser**) shows your app (localhost) beside the code; **Select element**, click something, and it's added to your
+  message with its HTML, styles, size and (React/Vue) the component and its file.
+- **Links to files in answers open them** (at the line), and a localhost link opens in the Kural Browser. Before, only
+  web links and `file:12` code were clickable; a link like `[install.sh](install.sh)` was plain text.
+- **Click a picture in the chat** to see it full size in its own tab.
+- **Terminal: plain words that end in a word work.** "i want to delete the file install.sh" now suggests
+  `rm install.sh`, first in the list, so Tab takes it. VS Code only asked Kural at a space, so the whole sentence was
+  never asked about; and Kural's suggestion sat under VS Code's own file matches.
+- **The status bar shows whose account it is:** the name on the account the chat's AI uses (e.g. "Peasant Adithya")
+  instead of the plan ("Team"). Kural Settings shows the name and email on each card.
+- **A chat dragged into the editor area shows only that chat.** It used to show every chat's tab (so "New chat"
+  appeared twice, and your other chats were there too); now its editor tab is its tab, and the side panel stops
+  listing it until you close it.
+- **Kural Settings, rearranged:** the version and Check for updates are in the header; your AIs come first, two
+  cards to a row; the rest is a compact grid. Nothing wraps oddly in a narrow tab.
+- **New tagline** on the chat's home screen: "A weapon, a voice for your ideas."
 - **Search & Ask, one side bar with two tabs.** **Search** (Ctrl+Shift+F) finds and replaces in your files with
   everything VS Code's own Search had: Match Case, Whole Word, Regular Expression, Preserve Case, files to include and
   exclude, open editors only, results as you type, history, tree or list, Replace Preview, Replace All, dismiss,

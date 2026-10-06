@@ -55,7 +55,7 @@
   const moodLabel = (id) => (S.moods.find((m) => m.id === id) || { label: "" }).label;
   const effortLabel = (id) => (S.efforts.find((e) => e.id === id) || { label: "Medium" }).label;
   const modeLabel = (id) => (S.modes.find((m) => m.id === id) || { label: "Agent" }).label;
-  const pillLabel = (c) => c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : base(c.path);
+  const pillLabel = (c) => c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : c.kind === "element" ? c.label : base(c.path);
   // Show ⌘ instead of Ctrl on a Mac.
   const MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
   // "Ctrl+" is ⌘ on a Mac; "Control+" means the Control key everywhere (⌃ on a Mac).
@@ -301,7 +301,7 @@
   const modeBtn = el("button", { class: "pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
   const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
-  const attachBtn = el("button", { class: "attach", title: "Add files, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
+  const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const composer = el("div", { class: "composer" }, popupEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }),
       sendBtn));   // (type @ to mention a project file; + attaches anything)
@@ -464,9 +464,9 @@
   // Pills in sent messages open the file when clicked; pills you're still typing don't.
   function pillNode(ctx, openable = true) {
     return el("span", { class: `pill ${ctx.kind}`, contenteditable: "false", "data-ctx": JSON.stringify(ctx),
-      title: openable ? `Open ${ctx.path}` : ctx.path,
-      onclick: openable ? () => post({ type: "openFile", path: ctx.path, line: ctx.startLine, endLine: ctx.endLine }) : null },
-      el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"), pillLabel(ctx));
+      title: ctx.kind === "element" ? `${ctx.label} on ${ctx.path}${ctx.element && ctx.element.text ? `\n"${ctx.element.text.slice(0, 80)}"` : ""}` : openable ? `Open ${ctx.path}` : ctx.path,
+      onclick: !openable ? null : ctx.kind === "element" ? () => post({ type: "browser", url: ctx.path }) : () => post({ type: "openFile", path: ctx.path, line: ctx.startLine, endLine: ctx.endLine }) },
+      ctx.kind === "element" ? el("span", { class: "pill-icon" }, icon("inspect")) : el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"), pillLabel(ctx));
   }
 
   // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock), and a
@@ -986,6 +986,8 @@
         el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
           el("span", { class: "mi-icon" }, icon("issues")), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
           jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected")),
+        el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "browser" }); } },
+          el("span", { class: "mi-icon" }, icon("inspect")), el("span", { class: "mi-label" }, "Pick from a browser"), el("span", { class: "mi-hint" }, "your app on localhost: select an element")),
         el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
           el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
           el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];

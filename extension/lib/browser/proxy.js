@@ -74,7 +74,9 @@ function startProxy({ picker, log = () => {} }) {
     req.pipe(up);
   });
 
-  // The dev server's live reload (Vite, webpack, Next…) is a websocket: passed straight through.
+  // The dev server's live reload (Vite, webpack, Next…) is a websocket: passed straight through. (Kept in `open`
+  // so closing the proxy ends them: a server waits for open websockets forever.)
+  const open = new Set();
   server.on("upgrade", (req, socket, head) => {
     if (!target) { socket.destroy(); return; }
     const port = Number(target.port) || (target.protocol === "https:" ? 443 : 80);
@@ -90,6 +92,9 @@ function startProxy({ picker, log = () => {} }) {
       s.pipe(socket); socket.pipe(s);
     };
     s.once(target.protocol === "https:" ? "secureConnect" : "connect", start);
+    open.add(s); open.add(socket);
+    const end = () => { open.delete(s); open.delete(socket); };
+    s.on("close", end); socket.on("close", end);
     s.on("error", () => socket.destroy());
     socket.on("error", () => s.destroy());
   });
@@ -112,7 +117,7 @@ function startProxy({ picker, log = () => {} }) {
     // The proxy's address of a page → the page's real address (for the address bar).
     real: (u) => back(u),
     get target() { return target ? target.origin : null; },
-    close: () => new Promise((r) => { server.close(() => r()); if (server.closeAllConnections) server.closeAllConnections(); }),
+    close: () => new Promise((r) => { server.close(() => r()); if (server.closeAllConnections) server.closeAllConnections(); for (const x of open) x.destroy(); }),
   };
 }
 

@@ -248,7 +248,10 @@ function terminalTab(context, session, local, activity = null, commitSession = n
 
   const KIND = vscode.TerminalCompletionItemKind || {};
   const kind = KIND.InlineSuggestion ?? KIND.InlineSuggestionAlwaysOnTop ?? KIND.Argument ?? KIND.Method;
-  const item = (line, typed, engine) => suggestionItem(line, typed, engine, kind);
+  // A command made from your words goes first in the list, above VS Code's own file matches, so Tab takes it: VS Code's
+  // "always on top" kind (101; its own whole-line suggestion uses it), which the public enum doesn't list yet.
+  const TOP = KIND.InlineSuggestionAlwaysOnTop ?? 101;
+  const item = (line, typed, engine) => suggestionItem(line, typed, engine, line.startsWith(typed) ? kind : TOP);
 
   // The terminal waits for every suggestion source before it shows its list. So Kural never makes it wait:
   // it answers at once from its cache, or with nothing. Meanwhile, after a short pause in your typing (the
@@ -263,6 +266,9 @@ function terminalTab(context, session, local, activity = null, commitSession = n
       latest = typed;
       if (typed.trim().length < 2 || /\n/.test(typed)) return [];
       if (cache.has(typed)) return cache.get(typed) ? [item(cache.get(typed), typed, "cache")] : [];
+      // Asked in the middle of a word (letters are trigger characters too, see below): only plain words go to the
+      // model then ("…delete the file install.sh"), so ordinary commands make no more requests than before.
+      if (!/[\s"\-\/]$/.test(typed) && !(intentSession && plainWords(typed))) return [];
       // A suggestion for a shorter line that still fits what you've typed since ("type-through").
       for (const [k, v] of cache) if (v && typed.startsWith(k) && v.startsWith(typed) && v.length > typed.length) return [item(v, typed, "cache")];
       if (job && job.typed === typed) return [];      // already asking
@@ -275,17 +281,18 @@ function terminalTab(context, session, local, activity = null, commitSession = n
     if (job) job.cts.cancel();                         // you typed on: the older question is stale
     const mine = { typed, cts: new vscode.CancellationTokenSource() };
     job = mine;
-    const pause = Math.max(cfg().get("tabCompletion.debounceMs") || 0, 120);
+    // (In the middle of a word, wait a little longer: you're probably still typing it.)
+    const pause = Math.max(cfg().get("tabCompletion.debounceMs") || 0, /[\s"\-\/]$/.test(typed) ? 120 : 450);
     setTimeout(async () => {
       if (job !== mine || latest !== typed) return;
       const t0 = Date.now();
       let line = "", engine = "";
       try { [line, engine] = await suggest(terminal, typed, mine.cts.token); } catch (e) { log(`terminal tab: ${e.message}`); }
-      if (mine.cts.token.isCancellationRequested) return;
+      if (mine.cts.token.isCancellationRequested) { log(`terminal tab: "${typed.slice(0, 60)}" dropped (you typed on)`); return; }
       cache.set(typed, line || "");
       if (cache.size > 200) cache.delete(cache.keys().next().value);
       if (job === mine) job = null;
-      if (!line) return;
+      if (!line) { log(`terminal tab: no suggestion for "${typed.slice(0, 60)}" (${engine || "no engine"})`); return; }
       log(`terminal tab: "${line}" after ${Date.now() - t0} ms (${engine})`);
       // Still on that line, in that terminal: show it.
       if (latest === typed && vscode.window.activeTerminal === terminal) vscode.commands.executeCommand("workbench.action.terminal.triggerSuggest");
@@ -296,7 +303,11 @@ function terminalTab(context, session, local, activity = null, commitSession = n
     log("terminal tab: this VS Code has no terminal suggestion API; Tab in the terminal is off");
     return;
   }
-  context.subscriptions.push(vscode.window.registerTerminalCompletionProvider(provider, " ", "\"", "-", "/"));
+  // VS Code asks a provider for suggestions only when you type one of its trigger characters. With only space, quote,
+  // - and /, a sentence that ends in a word ("delete the file install.sh") was never asked about as a whole, so letters,
+  // digits and . count too. (A pause timer that opened the list itself showed "No suggestions." whenever nothing fit.)
+  const TRIGGERS = [" ", "\"", "-", "/", ".", "_", ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"];
+  context.subscriptions.push(vscode.window.registerTerminalCompletionProvider(provider, ...TRIGGERS));
   log("terminal tab: ready");
 }
 

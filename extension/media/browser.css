@@ -19,3 +19,5 @@ body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 
 .note { padding: 4px 10px; font-size: .92em; background: color-mix(in srgb, var(--accent) 16%, transparent); border-bottom: 1px solid var(--border); }
 .hidden { display: none !important; }
 .page { flex: 1; width: 100%; border: 0; background: #fff; }
+/* A narrow tab: the button keeps only its icon, so the address stays readable. */
+@media (max-width: 620px) { .pick span { display: none; } .pick { padding: 0 6px; } }

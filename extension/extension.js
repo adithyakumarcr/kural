@@ -22,6 +22,7 @@ const { Activity } = require("./lib/tab/activity");
 const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
 const { SettingsPage } = require("./lib/settings-page");
+const { Browser } = require("./lib/browser");
 const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
 const brain = require("./lib/ai");
@@ -166,8 +167,10 @@ function activate(context) {
   account.page.register();
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
-  chat.onChoice = () => setTimeout(() => account.drawMeters(), 0);
+  chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)
   new SearchView(context).register();
+  // Kural Browser: your app on localhost beside the code; "Select element" adds what you click to the chat.
+  new Browser(context, (info) => chat.addElement(info)).register();
   triggerOnCursor(context);
 
   context.subscriptions.push(

@@ -45,6 +45,7 @@
     const body = [];
     if (c.state === "on" || c.state === "set") {
       if (c.who) body.push(el("div", { class: "who" }, icon("account"), " ", c.who));
+      if (c.email) body.push(el("div", { class: "muted small" }, c.email));
       if (c.plan) body.push(el("div", { class: "muted" }, c.plan));
       if (c.note) body.push(el("div", { class: "muted small" }, c.note));
     } else body.push(el("p", { class: "muted" }, c.what));

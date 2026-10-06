@@ -10,6 +10,7 @@
 - [[Devices]]
 - [[Inline Edit]]
 - [[Search and Ask]]
+- [[Browser]]
 - [[Account and Updates]]
 - [[Settings and Shortcuts]]
 - [[Troubleshooting]]

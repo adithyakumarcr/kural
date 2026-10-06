@@ -18,6 +18,7 @@ const checks = require("./ai/claude-checks");
 const usage = require("./ai/usage");
 const brain = require("./ai");
 const { CLIS, IDS: CLI_IDS } = require("./ai/clis");
+const { accountName } = require("./ai/names");
 
 const USAGE = { claude: "https://claude.ai/settings/usage", apiKey: "https://console.anthropic.com/settings/usage" };
 const SAVED = "kural.usage.v1";
@@ -71,28 +72,34 @@ class Account {
   async update() {
     const bin = this.gs.passed ? findClaude() : null;
     this.auth = bin ? await checks.claudeAuth(bin, cleanEnv({})).catch(() => null) : null;
+    if (this.auth && this.auth.loggedIn) this.auth.name = accountName("claude", this.auth.email);
     for (const id of CLI_IDS) {
       const c = brain.cli[id];
       this.cliAuth[id] = c.ready && c.bin ? await CLIS[id].auth(c.bin).catch(() => null) : null;
+      if (this.cliAuth[id] && this.cliAuth[id].loggedIn) this.cliAuth[id].name = accountName(id, this.cliAuth[id].email);
     }
     this.draw();
     return this.auth;
   }
 
+  // The status item shows whose account the chat's AI uses: the name on it ("Peasant Adithya"), else its email, else
+  // the plan. (It showed the plan, "Team", which says little about whose account it is.) The tooltip lists them all.
   draw() {
     const a = this.auth;
     const lines = [];
-    let text = "$(account)";
+    const shown = { claude: a && a.loggedIn ? a : null };
     if (a && a.loggedIn) {
-      if (a.plan) text = `$(account) ${a.plan}`;
-      lines.push(`Claude: ${a.email || a.method || "logged in"}${a.plan ? ` (Claude ${a.plan})` : ""}`);
+      lines.push(`Claude: ${[a.name, a.email || a.method || "logged in"].filter(Boolean).join(" · ")}${a.plan ? ` (Claude ${a.plan})` : ""}`);
     } else if (a && a.loggedIn === false) lines.push("Claude: not logged in");
     else if (this.gs.passed) lines.push("Claude: set up");
     for (const id of CLI_IDS) {
       const c = this.cliAuth[id];
-      if (c && c.loggedIn) lines.push(`${CLIS[id].label}: ${[c.email, c.plan || c.method].filter(Boolean).join(" · ") || "logged in"}`);
+      if (c && c.loggedIn) { shown[id] = c; lines.push(`${CLIS[id].label}: ${[c.name, c.email, c.plan || c.method].filter(Boolean).join(" · ") || "logged in"}`); }
       else if (c && c.loggedIn === false) lines.push(`${CLIS[id].label}: not logged in`);
     }
+    const mine = shown[engineOf()] || Object.values(shown).find(Boolean);
+    const label = mine ? (mine.name || mine.email || mine.plan || "") : "";
+    const text = label ? `$(account) ${label.length > 28 ? label.slice(0, 27) + "…" : label}` : "$(account)";
     if (this.gs.localModel) lines.push(`Your own model: ${this.gs.localModel.slice("ollama:".length)}`);
     if (!lines.length) lines.push("Nothing set up yet");
     this.item.text = text;

@@ -22,9 +22,13 @@ Write what you want in your own words, and Kural suggests the command:
 |---|---|
 | `push this code to fix/code-editor branch` | `git push origin HEAD:fix/code-editor` |
 | `commit with message please added the low stock check` | `git commit -m "Added the low stock check"` |
+| `i want to delete the file install.sh` | `rm install.sh` |
+| `rename notes.md to todo.md` | `mv notes.md todo.md` |
 
 Kural notices plain words (a sentence, not a command: no options or shell symbols, and words like "this", "the",
-"please"; after a program name such as `git` it needs at least two of them) and asks the chat's model, with your
+"please"; after a program name such as `git` it needs at least two of them; or starting with a verb like "delete",
+"rename" or "remove" that isn't a program) and asks the chat's model when you pause, also in the middle of a word. Its
+suggestion comes first in the list, so Tab takes it. The model gets your
 current branch and remotes. Kural tells the model to avoid destructive options (like `rm -rf` or `push --force`), but
 it's a model: read the suggestion before you press Enter.
 
