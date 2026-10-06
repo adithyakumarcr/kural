@@ -113,7 +113,7 @@ let cachedPreferences = null;
 function preferenceKey(cfg,router) {
   const s = router && router.options();
   return JSON.stringify([cfg.get("tabCompletion.engine"),cfg.get("tabCompletion.localModel"),cfg.get("tabCompletion.model"),
-    s && [s.tab,s.profile,s.allowedModels,s.allowCloud,s.saveTokens]]);
+    s && [s.tab,s.profile,s.saveTokens]]);
 }
 function cacheKey(doc, offset) { return `${doc.uri.toString()}#${doc.version}#${offset}`; }
 

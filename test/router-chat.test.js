@@ -58,13 +58,20 @@ function fixture(model='haiku') {
   assert.ok(Array.isArray(f.sent[0]));assert.strictEqual(f.sent[0].find(b=>b.type==='image').source.data,Buffer.from('image bytes').toString('base64'));
   assert.strictEqual(f.tab.messages.at(-2).attachments,undefined);
  });
- await check('oversized or missing-attachment handoffs do not dispatch or discard history',async()=>{
+ await check('a handoff that is too big (or lost an attachment) stays with the current AI instead of refusing',async()=>{
   for(const missing of [false,true]){
-   const f=fixture();f.tab.messages=[{role:'user',segments:[{t:'text',v:'old context'}],attachments:missing?[{kind:'image',path:path.join(dir,'gone.png')}]:[]}];
+   const f=fixture(),asked=[];f.tab.messages=[{role:'user',segments:[{t:'text',v:'old context'}],attachments:missing?[{kind:'image',path:path.join(dir,'gone.png')}]:[]}];
    if(!missing)f.chat.router.options=()=>({handoffChars:1});
+   f.chat.router.route=async(req)=>{asked.push(req.provider||null);return req.provider?{model:'sonnet',source:'native',reason:'balance profile'}:{model:'codex:test',source:'native',reason:'balance profile'};};
    await f.chat.send(f.tab,[{t:'text',v:'Continue'}],[]);
-   assert.strictEqual(f.sent.length,0);assert.strictEqual(f.tab.messages.length,1);assert.strictEqual(f.tab.status,'idle');assert.strictEqual(f.tab.model,'haiku');assert.ok(f.posted.some(m=>m.type==='flash'));
+   assert.deepStrictEqual(asked,[null,'claude']);                                   // asked again, within Claude
+   assert.strictEqual(f.tab.model,'sonnet');assert.strictEqual(f.sent.length,1);assert.strictEqual(f.tab.messages.length,3);   // history kept, message sent
+   assert.match(f.tab.messages.at(-1).routing.reason,/stayed with this AI/);assert.ok(!f.posted.some(m=>m.type==='flash'));
   }
+  // Nothing within the current AI: the chat's own model answers.
+  const f=fixture();f.tab.messages=[{role:'user',segments:[{t:'text',v:'old'}]}];f.chat.router.options=()=>({handoffChars:1});
+  f.chat.router.route=async(req)=>req.provider?{error:'none'}:{model:'codex:test',source:'native',reason:'r'};
+  await f.chat.send(f.tab,[{t:'text',v:'Continue'}],[]);assert.strictEqual(f.tab.model,'haiku');assert.strictEqual(f.sent.length,1);
  });
  await check('Stop during model selection dispatches nothing and leaves no running state',async()=>{
   const f=fixture();let resolve;f.chat.router.route=()=>new Promise(r=>resolve=r);
@@ -129,9 +136,9 @@ function fixture(model='haiku') {
   const position={line:0,character:10},doc={uri:{scheme:'file',toString:()=>'/test.js'},version:1,languageId:'javascript',offsetAt:()=>10,getText:(range)=>range?'':'const n = ',lineAt:()=>({text:'const n = ',range:{end:position}})};
   const token={isCancellationRequested:false,onCancellationRequested:()=>({dispose:()=>{}})};
   assert.strictEqual((await provider.provideInlineCompletionItems(doc,position,{triggerKind:1},token)).length,1);assert.strictEqual(cloud,1);assert.strictEqual(local,0);
-  values['modelRouter.allowedModels']=[];assert.deepStrictEqual(await provider.provideInlineCompletionItems(doc,position,{triggerKind:1},token),[]);assert.strictEqual(cloud,1);
-  values['modelRouter.allowedModels']=null;session.ask=()=>{cloud++;return new Promise(r=>resolve=r);};
-  const pending=provider.provideInlineCompletionItems(doc,position,{triggerKind:1},token);await new Promise(r=>setImmediate(r));values['modelRouter.allowCloud']=false;resolve('<insert>3</insert>');
+  // The profile changes while Claude answers: that answer is for the old choice and is dropped.
+  session.ask=()=>{cloud++;return new Promise(r=>resolve=r);};doc.version=2;   // (a new version: not from the cache)
+  const pending=provider.provideInlineCompletionItems(doc,position,{triggerKind:1},token);await new Promise(r=>setImmediate(r));values['modelRouter.profile']='cost';resolve('<insert>3</insert>');
   assert.deepStrictEqual(await pending,[]);assert.strictEqual(router.usage.calls,0);
  });
  await check('Auto learns from what you do next: carrying on, picking another model, undoing every change',async()=>{

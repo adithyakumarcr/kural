@@ -217,9 +217,9 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
 ### Model Router
 
-Choose **Auto → Balance, Cost or Intelligence** in the chat model menu, like Cursor's Auto. For every message Kural picks the model and the intensity: from your words and what you attached, how much of each AI's usage limit is left (**Cost** saves your limits), how long the conversation is (switching loses the cache, so long chats stay put), and what you did after its earlier answers (it learns per workspace). Each answer shows the model; hover over it for the reasons. Open **Model Router** from the status bar or Kural Settings to choose what Auto prefers and which models it may pick. Native routing works without a download or routing API key.
+Choose **Auto → Balance, Cost or Intelligence** in the chat model menu, like Cursor's Auto. For every message Kural picks the model and the intensity from your Claude, Google Gemini and ChatGPT (Codex) models, switching between those AIs with the conversation handed over (models on this computer are only picked by you). It reads how much work the request is (Kural's own word classifier, or a helper model like Granite or Qwen3 Embedding for up to 90 % accuracy at under 50 ms), what you attached, how much of each AI's usage limit is left (**Cost** saves your limits), how long the conversation is, and what you did after its earlier answers. A quick question goes to a light model even under Intelligence, and complex work gets the most capable one even under Cost. Each answer shows the model; hover over it for the reasons.
 
-Model ratings, optional MiniLM assistance, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
+Model ratings, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
 
 ### Tab Completion
 

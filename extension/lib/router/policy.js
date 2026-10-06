@@ -1,20 +1,36 @@
 // Native policy owns capability checks and model selection. Local AI only labels the task.
+//
+// How Auto chooses (like Cursor's router): read how much work the request is (simple / standard / complex: lib/router/
+// words.js, optionally MiniLM), turn that and your profile into the capability it needs (tier 1 light, 2 balanced,
+// 3 most capable), then take the lightest model that has it, preferring the AI with room left in its usage limits and
+// the one the conversation is already on. Only Claude, Google Gemini and ChatGPT (Codex) models: models on this
+// computer are never picked by Auto (they stay in the menu to pick yourself).
 const { excludedModel } = require("../ai/model-policy");
+const { classifyWords } = require("./words");
 // Cursor's names for the same three trade-offs. Kural's plans are flat-rate, so what "Cost" saves is your usage limits.
 const PROFILES = {
-  cost: "Save your usage limits: the lightest model that can do the task, on the AI with the most room left.",
-  balance: "Meet the task's quality needs, then prefer speed; steer away from an AI close to its limit.",
-  intelligence: "Prefer the most capable model, even when it's slower or uses more of your limits.",
+  cost: "Lightest model that can do it; the most capable only for complex work. Saves your usage limits.",
+  balance: "A model that fits the task: light for quick questions, balanced for normal work, the most capable for complex work.",
+  intelligence: "One step more capable than the task needs; quick questions still use a cheaper model.",
 };
 const ALIASES = { speed: "cost", balanced: "balance", quality: "intelligence" };   // (names before Oct 2026)
 const profileOf = (v) => Object.hasOwn(PROFILES, v) ? v : ALIASES[v] || "balance";
 const INTENTS = ["search", "explain", "edit", "review", "other"];
 const COMPLEXITIES = ["simple", "standard", "complex"];
-function eligible(models, request, settings) {
-  const allowed = settings.allowedModels;
-  return models.filter((m) => m.ready && !m.completionOnly && !excludedModel(m.id) && (!Array.isArray(allowed) || allowed.includes(m.id)) &&
+// The capability (tier) a task needs, per profile. Cost reads and explains with light models, but code changes and
+// reviews get a balanced one; complex work always gets the most capable, in every profile.
+function needTier(profile, task) {
+  const p = profileOf(profile);
+  if (task.complexity === "complex") return 3;
+  if (task.complexity === "simple") return p === "intelligence" ? 2 : 1;
+  if (p === "intelligence") return 3;
+  if (p === "cost") return ["edit", "review"].includes(task.intent) ? 2 : 1;
+  return 2;
+}
+// Auto picks from the AIs with accounts (Claude, Gemini, Codex): never a model on this computer, never a Tab-only one.
+function eligible(models, request) {
+  return models.filter((m) => m.ready && !m.completionOnly && !m.local && !excludedModel(m.id) &&
     (!request.provider || m.providerId === request.provider) &&
-    (settings.allowCloud !== false || m.local) &&
     (!request.team || m.team) && (!request.device || m.device) &&
     (!request.images || m.images) && (!request.pdf || m.pdf) &&
     (!request.connectors || m.connectors) &&
@@ -22,23 +38,19 @@ function eligible(models, request, settings) {
 }
 // Error output pasted into the message: a stack trace, "TypeError: …", a panic, a failed exit code.
 const TRACE = /traceback \(most recent call last\)|\b\w*(?:error|exception):\s|^\s+at \S+ \(?\S+:\d+:\d+\)?|\bpanic:|segmentation fault|exit (?:code|status) [1-9]/im;
-// The words, plus what came with them (Cursor's "attached context"): context = { files, chars, errors, elements }
+// How much MiniLM's view counts against the word classifier's when both are there (test/router-eval-blend.js).
+const HELPER_WEIGHT = 0.5;
+const blend = (a, b, w) => Object.fromEntries(Object.keys(a).map((k) => [k, (1 - w) * a[k] + w * ((b && b[k]) || 0)]));
+const argmax = (probs) => Object.entries(probs).sort((x, y) => y[1] - x[1])[0][0];
+// The size and kind from the words (words.js), blended with a helper's when there is one (MiniLM: { sizeProbs,
+// kindProbs }), then what came with them (Cursor's "attached context"): context = { files, chars, errors, elements }
 // (files/selections attached, their size, error output, elements picked in the browser).
-function classify(prompt, context = {}) {
-  // (File names don't describe the task: "rename architecture.md" isn't architecture work.)
-  const raw = String(prompt || ""), p = raw.toLowerCase().replace(/[\w./-]*\w\.(?:[a-z][a-z0-9]{0,4})\b/g, " file ");
-  let intent = /\b(debug|review|crash|race condition|vulnerability|bug)\b/.test(p) ? "review" :
-    /\b(implement|build|create|change|edit|fix|refactor|add|remove|rename|update|write|delete|move|replace|improve|convert)\b/.test(p) ? "edit" :
-    /\b(find|where|locate|search)\b/.test(p) ? "search" : /\b(explain|what|what'?s|how|why)\b/.test(p) ? "explain" : "other";
-  const complex = /\b(architect\w*|distributed|concurren\w*|security|migration|across (the |multiple )?(project|files|modules)|race condition|deadlock|end.to.end|multi.file)\b/.test(p) || p.length > 1800;
-  // A very short message without an action word ("whats 2+2", "hi") is a small question, not normal-sized work.
-  const tiny = p.trim().length < 40 && !["edit", "review"].includes(intent);
-  const simple = (tiny || /\b(rename|typo|format|comment|one.line|single.line|find|where|locate|explain)\b/.test(p)) && p.length < 500;
-  let complexity = complex ? "complex" : simple ? "simple" : "standard";
-  // Which labels came from an explicit word ("fix", "rename", "architecture") and which are guesses ("other" when
-  // nothing matched, "explain" from just "what/how/why", "standard" by default). A helper may replace only guesses:
-  // in the 6 Oct benchmark the explicit words were right each time the two disagreed, MiniLM was right on the guesses.
-  const sure = { intent: !["other", "explain"].includes(intent) || /\bexplain\b/.test(p), complexity: complex || simple };
+function classify(prompt, context = {}, helper = null) {
+  const raw = String(prompt || ""), w = classifyWords(raw);
+  const sizeProbs = helper && helper.sizeProbs ? blend(w.sizeProbs, helper.sizeProbs, HELPER_WEIGHT) : w.sizeProbs;
+  const kindProbs = helper && helper.kindProbs ? blend(w.kindProbs, helper.kindProbs, HELPER_WEIGHT) : w.kindProbs;
+  let intent = argmax(kindProbs), complexity = argmax(sizeProbs);
+  context = context || {};
   const signals = [], errors = !!context.errors || TRACE.test(raw);
   const files = Math.max(0, Number(context.files) || 0), chars = Math.max(0, Number(context.chars) || 0);
   if (errors) { signals.push("error output"); if (intent === "other" || intent === "explain") intent = "review"; }
@@ -47,17 +59,24 @@ function classify(prompt, context = {}) {
   let bump = files >= 8 || chars > 120000 ? 2 : files >= 4 || chars > 40000 ? 1 : 0;
   if (bump) signals.push(files ? `${files} files attached` : "a lot of attached text");
   if (errors && complexity === "simple") bump = Math.max(bump, 1);
+  if (raw.length > 1800 && complexity === "simple") bump = Math.max(bump, 1);   // a long message isn't a quick question
   complexity = COMPLEXITIES[Math.min(2, COMPLEXITIES.indexOf(complexity) + bump)];
-  return { intent, complexity, sure, ...(signals.length ? { signals } : {}) };
+  return { intent, complexity, sizeProbs, ...(signals.length ? { signals } : {}) };
 }
+// How capable a model is: tier 1 (light: Haiku, Gemini Flash, GPT "fast and affordable"), 2 (balanced: Sonnet, most
+// models), 3 (the most capable: Opus, Gemini Pro, "frontier"/"flagship" models). From the name and the description the
+// program gives (Codex: "Fast and affordable model for easier tasks"). Old models ("legacy", "older") lose ties.
+const LIGHT = /\b(haiku|mini|nano|flash|lite|lightweight|fastest|fast and (?:affordable|efficient|cheap)|affordable|cheapest|easier tasks|quick tasks)\b/;
+const STRONG = /\b(opus|pro|max|ultra|most capable|most intelligent|frontier|flagship|hardest|complex (?:work|tasks|problems)|deepest)\b/;
+const LEGACY = /\b(legacy|older|deprecated|previous generation)\b/;
 function traits(model, overrides = {}) {
   const name = `${model.id} ${model.label || ""} ${model.description || ""}`.toLowerCase();
   const params = /(?:^|[^\d.])(\d+(?:\.\d+)?)b\b/.exec(name);
-  const quality = /\b(opus|pro|max|most capable)\b/.test(name) ? 3 : /\b(haiku|mini|flash|fastest)\b/.test(name) ? 1 :
-    model.local && params ? Number(params[1]) < 4 ? 1 : Number(params[1]) >= 20 ? 3 : 2 : 2;
+  const quality = model.local && params ? Number(params[1]) < 4 ? 1 : Number(params[1]) >= 20 ? 3 : 2
+    : STRONG.test(name) ? 3 : LIGHT.test(name) ? 1 : 2;
   const custom = overrides[model.id] || {};
   const band = (v,d) => Number.isInteger(v) && v >= 1 && v <= 3 ? v : d;
-  return { quality: band(custom.quality,quality),speed: band(custom.speed,4-quality),tokens: band(custom.tokens,4-quality) };
+  return { quality: band(custom.quality,quality),speed: band(custom.speed,4-quality),tokens: band(custom.tokens,4-quality),legacy: LEGACY.test(name) };
 }
 // How much of a model's usage limit is used (0–100), from its provider's report in lib/ai/usage.js: the fullest general
 // window, plus the model's own weekly window when there is one (Claude's "seven_day_opus" counts only for Opus).
@@ -77,15 +96,18 @@ function effortFor(task, profile, settings = {}) {
   return EFFORT_LEVELS[Math.max(0, Math.min(3, base + step - (settings.saveTokens && base > 0 ? 1 : 0)))];
 }
 const LIMIT_WEIGHT = { cost: 3, balance: 1.5, intelligence: .6 };
+const TIER_NAME = { 1: "light", 2: "balanced", 3: "most capable" };
 const pct = (n) => `${Math.round(n)}%`;
 // request: prompt, current (model id), profile, historyChars (the conversation so far), learned ({ model id: -2…2 } from
 // what you did after similar requests, lib/router/learn.js), checkpoint, and capability needs (see eligible).
 // models: each may carry limitUsed (0–100) and observedTaskMs.
 function select(models, request, settings, task = classify(request.prompt)) {
-  models = eligible(models,request,settings);
-  if (!models.length) return { error: "No allowed model can handle this request. Turn on more models in Model Router." };
+  models = eligible(models,request);
+  if (!models.length) return { error: request.provider ? "No model of the current AI can handle this request."
+    : "Auto picks from Claude, Google Gemini and ChatGPT (Codex): set one up in Get started, or pick a model yourself." };
   const profile = profileOf(request.profile || settings.profile), preferences = settings.modelPreferences || {};
   const used = (m) => Number.isFinite(m.limitUsed) ? m.limitUsed : 0;
+  const tier = (m) => traits(m,preferences).quality;
   const notes = [];
   // Nearly out (98 %+): not chosen while another model can do the task.
   const full = models.filter((m) => used(m) >= 98);
@@ -96,26 +118,28 @@ function select(models, request, settings, task = classify(request.prompt)) {
   const current = models.find((m) => m.id === request.current);
   const learned = request.learned && typeof request.learned === "object" ? request.learned : {};
   const lean = (m) => Math.max(-2, Math.min(2, Number(learned[m.id]) || 0));
-  let floor = profile === "intelligence" ? 3 : task.complexity === "simple" ? 1 : task.complexity === "complex" && profile === "balance" ? 3 : 2;
-  if (request.checkpoint && current) floor = Math.max(floor,Math.min(3,traits(current,preferences).quality+1));
-  // You chose a stronger model than Auto's for requests like this one: that becomes the floor.
-  const wanted = models.filter((m) => lean(m) >= 1).map((m) => traits(m,preferences).quality);
-  if (wanted.length && Math.max(...wanted) > floor) { floor = Math.max(...wanted); notes.push("you chose a stronger model for similar requests"); }
-  const top = Math.max(...models.map((m) => traits(m,preferences).quality));
-  floor = Math.min(floor,top);
-  const candidates = models.filter((m) => traits(m,preferences).quality >= floor);
+  let need = needTier(profile, task);
+  if (request.checkpoint && current) need = Math.max(need, Math.min(3, tier(current) + 1));
+  // You chose a stronger model than Auto's for requests like this one: that becomes what's needed.
+  const wanted = models.filter((m) => lean(m) >= 1).map(tier);
+  if (wanted.length && Math.max(...wanted) > need) { need = Math.max(...wanted); notes.push("you chose a stronger model for similar requests"); }
+  const top = Math.max(...models.map(tier));
+  if (need > top) notes.push(`no ${TIER_NAME[need]} model set up: the most capable one available`);
+  need = Math.min(need, top);
+  const candidates = models.filter((m) => tier(m) >= need);
   const observed = candidates.filter((m) => Number.isFinite(m.observedTaskMs) && m.observedTaskMs > 0);
   const maxTime = Math.max(1,...observed.map((m) => m.observedTaskMs));
   // Switching costs more the longer the conversation: another model starts without the prompt cache, another AI needs the
-  // whole conversation handed over. So the current model wins unless the task clearly suits another better.
+  // whole conversation handed over (a new program, the record sent along). So the current model and AI win close calls,
+  // but never against the task's needs or a lighter model that's enough.
   const history = Math.max(0, Number(request.historyChars) || 0);
-  const stayModel = .15 + Math.min(2, history / 25000), stayProvider = .2 + Math.min(1, history / 50000);
+  const stayModel = .3 + Math.min(.8, history / 60000), stayProvider = .3 + Math.min(1.5, history / 40000);
   const score = (m, parts = { limits: true, stay: true }) => {
     const t = traits(m,preferences);
     // Timing only breaks ties when every candidate has observations. Different tasks are not comparable benchmarks.
-    const speed = observed.length === candidates.length ? 3*(1-m.observedTaskMs/maxTime) : t.speed;
-    return (profile === "intelligence" ? 3*t.quality + speed*.3 : 2*speed + t.quality*.3) +
-      (settings.saveTokens || profile === "cost" ? t.tokens*1.2 : 0) + 1.2*lean(m) +
+    const speed = observed.length === candidates.length ? 1 - m.observedTaskMs/maxTime : 0;
+    return -2.5 * (t.quality - need) - (t.legacy ? .8 : 0) + .3 * speed +
+      ((settings.saveTokens || profile === "cost") ? .2 * t.tokens : 0) + 1.2*lean(m) +
       (parts.limits ? -LIMIT_WEIGHT[profile] * Math.max(0, used(m) - 50) / 50 : 0) +
       (parts.stay ? (m.id === request.current ? stayModel : 0) + (current && m.providerId === current.providerId ? stayProvider : 0) : 0);
   };
@@ -125,10 +149,13 @@ function select(models, request, settings, task = classify(request.prompt)) {
   const plain = best({ limits: false, stay: true });
   if (plain !== chosen && used(plain) >= 50) notes.push(`${plain.label || plain.id} avoided: ${pct(used(plain))} of its limit used`);
   const fresh = best({ limits: true, stay: false });
-  if (fresh !== chosen && chosen.id === request.current && history > 20000) notes.push("stayed on the current model: switching would lose the conversation's cache");
+  if (fresh !== chosen && current && chosen.providerId === current.providerId && history > 20000)
+    notes.push(chosen.id === request.current ? "stayed on the current model: switching would lose the conversation's cache"
+      : `stayed with ${chosen.provider || chosen.providerId}: handing the conversation to another AI costs more than it gains`);
   const effort = effortFor(task,profile,settings);
-  return { model: chosen.id,source: "native",intent: task.intent,complexity: task.complexity,effort,
-    reason: [`${profile} profile`, `${task.complexity} ${task.intent} task${task.signals ? ` (${task.signals.join(", ")})` : ""}`, `${effort} intensity`,
+  return { model: chosen.id,source: "native",intent: task.intent,complexity: task.complexity,effort,tier: tier(chosen),need,
+    reason: [`${profile} profile`, `${task.complexity} ${task.intent} task${task.signals ? ` (${task.signals.join(", ")})` : ""}`,
+      `needs a ${TIER_NAME[need]} model`, `${effort} intensity`,
       ...(request.checkpoint ? ["reassessed after tool failure"] : []), ...notes, ...(settings.saveTokens ? ["token efficiency preferred"] : [])].join(" · ") };
 }
 function contextWithinBudget(candidates, maxChars, limit = 5) {
@@ -150,4 +177,4 @@ function lexicalRank(query, candidates) {
     return { ...c,relevance: terms.length ? hits/terms.length : 0 };
   }).sort((a,b) => b.relevance-a.relevance);
 }
-module.exports = { effortFor,limitUsed,ALIASES,PROFILES,INTENTS,COMPLEXITIES,profileOf,eligible,classify,traits,select,contextWithinBudget,lexicalRank };
+module.exports = { needTier,effortFor,limitUsed,ALIASES,PROFILES,INTENTS,COMPLEXITIES,profileOf,eligible,classify,traits,select,contextWithinBudget,lexicalRank };

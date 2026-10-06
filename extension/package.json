@@ -787,22 +787,6 @@
           "default": "balance",
           "description": "Default Auto profile, like Cursor's: Balance, Cost (saves your usage limits) or Intelligence."
         },
-        "kural.modelRouter.allowedModels": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "default": null,
-          "description": "Models Auto may choose. Null allows all configured models; an empty list prevents Auto requests."
-        },
-        "kural.modelRouter.allowCloud": {
-          "type": "boolean",
-          "default": true,
-          "description": "Allow cloud answering models. Routing assistance always stays on this computer. Off restricts Auto to local answering models."
-        },
         "kural.modelRouter.saveTokens": {
           "type": "boolean",
           "default": false,
@@ -853,14 +837,18 @@
           "type": "string",
           "enum": [
             "native",
-            "minilm"
+            "minilm",
+            "granite",
+            "qwen3"
           ],
           "enumDescriptions": [
-            "Native rules without model inference",
-            "MiniLM (all-minilm:22m) embeddings through local Ollama"
+            "Kural's word classifier: built in, instant",
+            "MiniLM (all-minilm:22m, 46 MB) through Ollama on this computer, with the word classifier",
+            "Granite (granite-embedding:30m, 63 MB) through Ollama, with the word classifier: a good balance",
+            "Qwen3 Embedding (qwen3-embedding:0.6b, 640 MB) through Ollama, with the word classifier: the most accurate"
           ],
           "default": "native",
-          "description": "Optional local assistance for Kural Model Router. MiniLM needs its model on this computer: ollama pull all-minilm:22m"
+          "description": "How Auto reads how much work a request is. The helper models run through Ollama on this computer (download them in Model Router); without one, Kural's built-in word classifier decides."
         },
         "kural.modelRouter.modelPreferences": {
           "type": "object",
@@ -887,20 +875,6 @@
             "additionalProperties": false
           },
           "description": "Per-model quality, speed and token-efficiency hints, rated 1 (low) to 3 (high). These are not measured guarantees."
-        },
-        "kural.modelRouter.minSimilarity": {
-          "type": "number",
-          "default": 0.25,
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Minimum MiniLM task similarity. Similarity is not confidence or a task-success probability."
-        },
-        "kural.modelRouter.minMargin": {
-          "type": "number",
-          "default": 0.04,
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Minimum separation between MiniLM task matches before accepting a classification."
         }
       }
     },
