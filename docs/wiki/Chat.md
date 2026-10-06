@@ -14,6 +14,11 @@ files, runs commands and answers. With code selected, Ctrl+L adds it to your mes
 
 Every file change shows under the answer: open the before/after, **keep** it or **undo** it.
 
+**The web, in every mode.** Claude, Google Gemini and ChatGPT (Codex) can search the web and read web pages in all four
+modes, Plan and Ask too (a plan often needs current docs or versions), without asking: it changes nothing on your
+computer. Codex uses live search (not its cached copy of the web); the commands it runs still have no internet. A model
+on this computer has no web tools.
+
 **Outside your project, Kural asks first.** In every mode the AI reads (and in Agent mode changes) files in your
 project without asking. A file anywhere else gets a card first: **Read this file?** or **Change this file?** (Allow /
 Skip). Files you attached are fine. That keeps the AI out of your other folders, and on a Mac it means macOS never asks

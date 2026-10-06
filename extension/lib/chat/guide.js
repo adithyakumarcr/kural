@@ -25,7 +25,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   didn't run); in Auto it runs commands; Plan and Ask change nothing. A mode change applies from the next message.
   No agent teams, no devices with Gemini.
 - Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking), Plan
-  (a plan, then "Build it"), Ask (answers only). @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
+  (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
+  (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
+  @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku, Google Gemini and
   ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you

@@ -67,6 +67,33 @@ class LocalRouterClient {
     for (const v of out.embeddings) cosine(v,out.embeddings[0]);
     return { vectors: out.embeddings,tokens: Math.max(0,Number(out.prompt_eval_count)||0) };
   }
+  // "missing" (Ollama is running, the model isn't there), "ready", or "offline" (Ollama isn't running).
+  async state(settings) {
+    try {
+      const res = await this.fetch(loopback(settings.url)+"/api/tags",{ signal: AbortSignal.timeout(2000),redirect: "error" });
+      if (!res.ok) return "offline";
+      return ((await res.json()).models || []).some((m) => m.name === MODEL || m.name === `${MODEL}:latest`) ? "ready" : "missing";
+    } catch { return "offline"; }
+  }
+  // Download the model; onProgress(percent).
+  async download(settings,onProgress = () => {},signal) {
+    const res = await this.fetch(loopback(settings.url)+"/api/pull",{ method: "POST",headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: MODEL,stream: true }),signal,redirect: "error" });
+    if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
+    const reader = res.body.getReader();let buf = "",status = "";
+    for (;;) {
+      const { done,value } = await reader.read();if (done) break;
+      buf += Buffer.from(value).toString("utf8");let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0,i).trim();buf = buf.slice(i+1);if (!line) continue;
+        let m;try { m = JSON.parse(line); } catch { continue; }
+        if (m.error) throw new Error(String(m.error));
+        status = m.status || status;if (m.total) onProgress(Math.round(100*(m.completed || 0)/m.total));
+      }
+    }
+    if (!/success/i.test(status)) throw new Error(`download stopped (${status || "no answer"})`);
+    this.verified.clear();
+  }
   async classify(prompt,settings,signal) {
     return this.run(settings,signal,async (req,base) => {
       const model = MODEL;

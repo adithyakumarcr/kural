@@ -1,3 +1,9 @@
+## Not released yet
+
+- **The web in every mode.** Claude can now search the web and read pages in Plan and Ask too (before: only Agent and
+  Auto), without asking. ChatGPT (Codex) uses live web search instead of its cached copy of the web; the commands it
+  runs still have no internet. Google Gemini already searched the web with its own tools.
+
 ## What's new in 1.1.0-alpha.5
 
 - **A browser inside Kural, with Design Mode like Cursor.** Real web pages in a tab: your app on localhost or any
