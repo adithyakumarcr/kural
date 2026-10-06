@@ -1,35 +1,46 @@
 // Local assistance only: no hosted decision endpoint, credentials, Python service or new runtime dependency.
+//
+// A helper model reads how much work a request is by comparing it with the labelled requests in examples.json: each
+// size's (and kind's) examples are averaged into one point (a centroid), and the request gets probabilities from how close
+// it is to each. Those are blended with the word classifier's in policy.js. The centroids are computed once per model
+// (one batch of embeddings, about a second) and saved, so routing itself is one embedding: 7-45 ms (test/router-eval.js).
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 const { INTENTS,COMPLEXITIES } = require("./policy");
+const EXAMPLES = require("./examples.json").examples;
 const abortError = () => Object.assign(new Error("Cancelled"),{ name: "AbortError" });
-const MODEL = "all-minilm:22m";
-// Example requests per label (written for this, not taken from the benchmark corpus). A request gets the label whose
-// examples it's closest to (the mean of its two closest). One example per label made MiniLM unsure about most requests
-// (21 of 24 fell back to Native in the 6 Oct benchmark); several per label cover more ways of saying the same thing.
-const EXAMPLES = {
-  search: ["Where is the code that handles user login?", "Which file defines the database connection settings?",
-    "Show me where this config value gets read", "Locate the place that sends the welcome email",
-    "In which module is the payments API route declared?", "Find all callers of the save function"],
-  explain: ["Explain what this function does", "How does this caching code work?", "What is this regular expression matching?",
-    "Why does this loop start at index one?", "Describe what happens when this button is clicked", "What does this error message mean?"],
-  edit: ["Add a dark mode toggle to the settings page", "Implement pagination for the products list",
-    "Create a new endpoint that returns the user's orders", "Change the button color to blue",
-    "Refactor this class to use async and await", "Write unit tests for the cart totals"],
-  review: ["Debug why the app crashes when I upload a file", "Find the bug that makes the totals wrong",
-    "Review my pull request for mistakes", "This test fails now and then, figure out why",
-    "Check this code for security problems", "The page is blank after login, track down the cause"],
-  other: ["Suggest a good name for this library", "Should we use Postgres or MongoDB here?", "Compare two approaches to state management",
-    "Hello, what can you help me with?", "Give me ideas for new features", "Summarize our conversation so far"],
-  simple: ["Rename this variable", "Fix the spelling in this string", "Add a comment above this function",
-    "Change the port number to 8080", "What does this line do?", "Where is the main function?"],
-  standard: ["Add input validation to this form and test it", "Fix the off-by-one error in this module",
-    "Implement a function that parses dates, with tests", "Write an endpoint for updating a user profile",
-    "Investigate why this request times out", "Split this file into smaller functions"],
-  complex: ["Design the architecture for a real-time chat service", "Migrate the whole project from JavaScript to TypeScript",
-    "Find and fix race conditions between these worker threads", "Add authentication across the frontend, backend and database",
-    "Plan a zero-downtime database schema migration", "Audit the entire codebase for security vulnerabilities"],
+// The helpers Model Router offers (Ollama models; all Apache-2.0). Measured on examples.json with 10-fold cross-validation
+// on an Apple M5 (docs/wiki/Model-Router.md): share of request sizes read right, and time per request.
+const HELPERS = {
+  granite: { model: "granite-embedding:30m", label: "Granite", size: "63 MB", note: "84 % of sizes right, 10 ms" },
+  qwen3: { model: "qwen3-embedding:0.6b", label: "Qwen3 Embedding", size: "640 MB", note: "90 % of sizes right, 45 ms" },
+  minilm: { model: "all-minilm:22m", label: "MiniLM", size: "46 MB", note: "79 % of sizes right, 7 ms" },
 };
-const LABELS = Object.keys(EXAMPLES);
-const SEEDS = LABELS.flatMap((label) => EXAMPLES[label].map((text) => [label, text]));
+const MODEL = HELPERS.minilm.model;   // (the first helper Kural offered; still accepted)
+const helperOf = (assistant) => HELPERS[assistant] || null;
+// Models that expect a task prefix (their model cards).
+const PREFIX = { "nomic-embed-text": "classification: ", "embeddinggemma": "task: classification | query: ",
+  "qwen3-embedding:0.6b": "Instruct: Classify how much work this request to a coding assistant needs\nQuery: " };
+const TEMPERATURE = 0.01;   // how sharply closeness turns into probability (chosen by test/router-eval-blend.js)
+const norm = (v) => { let n = 0; for (const x of v) n += x * x; n = Math.sqrt(n) || 1; return v.map((x) => x / n); };
+const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+// { label: average direction of its examples }; examples: [{ vec (normalised), size, kind }].
+function centroids(examples, field, labels) {
+  const out = {};
+  for (const l of labels) {
+    const vs = examples.filter((e) => e[field] === l).map((e) => e.vec);
+    if (vs.length) out[l] = norm(vs[0].map((_, d) => vs.reduce((s, v) => s + v[d], 0)));
+  }
+  return out;
+}
+function probsFrom(vec, cents, temperature = TEMPERATURE) {
+  const labels = Object.keys(cents), z = labels.map((l) => dot(cents[l], vec) / temperature), m = Math.max(...z);
+  const e = z.map((x) => Math.exp(x - m)), sum = e.reduce((a, x) => a + x, 0);
+  return Object.fromEntries(labels.map((l, i) => [l, e[i] / sum]));
+}
+const centroidProbs = (vec, examples, field, labels, temperature) => probsFrom(vec, centroids(examples, field, labels), temperature);
+const EXAMPLES_HASH = crypto.createHash("sha256").update(JSON.stringify(EXAMPLES)).digest("hex").slice(0, 16);
 function loopback(base) {
   const u = new URL(base || "http://127.0.0.1:11434");
   if (!["http:","https:"].includes(u.protocol) || !(u.hostname === "localhost" || u.hostname === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(u.hostname)) ||
@@ -44,14 +55,17 @@ function cosine(a,b) {
   return Math.max(-1,Math.min(1,dot/Math.sqrt(na*nb)));
 }
 class LocalRouterClient {
-  constructor(fetchImpl = globalThis.fetch) { this.fetch = fetchImpl;this.verified = new Map();this.seeds = new Map(); }
-  async run(settings, signal, fn) {
+  // cacheDir: where the centroids are saved (Kural's globalStorage), so they're computed once per model.
+  constructor(fetchImpl = globalThis.fetch, cacheDir = null) {
+    this.fetch = fetchImpl;this.cacheDir = cacheDir;this.verified = new Map();this.seeds = new Map();this.preparing = new Map();
+  }
+  async run(settings, signal, fn, timeoutMs = settings.timeoutMs) {
     if (signal && signal.aborted) throw abortError();
-    if (settings.assistant !== "minilm") throw new Error("MiniLM is the only local router helper");
+    if (!helperOf(settings.assistant)) throw new Error("Not a local router helper");
     const base = loopback(settings.url),ctl = new AbortController();let timer,abort;
     const interrupted = new Promise((_,reject) => {
       const fail = (message) => { ctl.abort();reject(Object.assign(new Error(message),{ name: "AbortError" })); };
-      timer = setTimeout(() => fail("Local router deadline exceeded"),settings.timeoutMs);
+      timer = setTimeout(() => fail("Local router deadline exceeded"),timeoutMs);
       abort = () => fail("Cancelled");if (signal) signal.addEventListener("abort",abort,{ once: true });
     });
     const req = async (p,body) => {
@@ -71,7 +85,7 @@ class LocalRouterClient {
     if (cached && Date.now()-cached.at < 60000) return cached.capabilities;
     const tags = await req("/api/tags");
     const installed = (tags.models || []).find((m) => m.name === model || m.name === `${model}:latest`);
-    if (!installed) throw new Error("Router model isn't installed; run: ollama pull all-minilm:22m");
+    if (!installed) throw new Error(`Router model isn't installed; download it in Model Router (ollama pull ${model})`);
     if (installed.remote_host || installed.remote_model) throw new Error("Cloud models cannot assist the local router");
     const info = await req("/api/show",{ model });
     if (info.remote_host || info.remote_model || (info.capabilities || []).includes("cloud")) throw new Error("Cloud models cannot assist the local router");
@@ -90,13 +104,14 @@ class LocalRouterClient {
     try {
       const res = await this.fetch(loopback(settings.url)+"/api/tags",{ signal: AbortSignal.timeout(2000),redirect: "error" });
       if (!res.ok) return "offline";
-      return ((await res.json()).models || []).some((m) => m.name === MODEL || m.name === `${MODEL}:latest`) ? "ready" : "missing";
+      const model = (helperOf(settings.assistant) || HELPERS.minilm).model;
+      return ((await res.json()).models || []).some((m) => m.name === model || m.name === `${model}:latest`) ? "ready" : "missing";
     } catch { return "offline"; }
   }
   // Download the model; onProgress(percent).
   async download(settings,onProgress = () => {},signal) {
     const res = await this.fetch(loopback(settings.url)+"/api/pull",{ method: "POST",headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: MODEL,stream: true }),signal,redirect: "error" });
+      body: JSON.stringify({ model: (helperOf(settings.assistant) || HELPERS.minilm).model,stream: true }),signal,redirect: "error" });
     if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
     const reader = res.body.getReader();let buf = "",status = "";
     for (;;) {
@@ -112,36 +127,65 @@ class LocalRouterClient {
     if (!/success/i.test(status)) throw new Error(`download stopped (${status || "no answer"})`);
     this.verified.clear();
   }
+  // The centroids of examples.json for this helper: from memory, the saved file, or computed now (one batch of embeddings,
+  // about a second: done by prepare(), outside a routing request's deadline).
+  cacheFile(model) { return this.cacheDir ? path.join(this.cacheDir, `router-${model.replace(/[^\w.-]+/g, "_")}.json`) : null; }
+  loaded(base, model) {
+    const key = `${base}/${model}`;
+    if (this.seeds.has(key)) return this.seeds.get(key);
+    try {
+      const saved = JSON.parse(fs.readFileSync(this.cacheFile(model), "utf8"));
+      if (saved.model === model && saved.examples === EXAMPLES_HASH && saved.size && saved.kind) { this.seeds.set(key, saved); return saved; }
+    } catch { /* not computed yet */ }
+    return null;
+  }
+  // Computes and saves the centroids if they aren't there yet. One at a time per model; safe to call often.
+  prepare(settings) {
+    const helper = helperOf(settings.assistant);
+    if (!helper) return Promise.resolve(false);
+    const base = loopback(settings.url), key = `${base}/${helper.model}`;
+    if (this.loaded(base, helper.model)) return Promise.resolve(true);
+    if (this.preparing.has(key)) return this.preparing.get(key);
+    const job = this.run(settings, null, async (req) => {
+      await this.verify(req, base, helper.model);
+      const pre = PREFIX[helper.model] || "", vecs = [];
+      for (let i = 0; i < EXAMPLES.length; i += 64) vecs.push(...(await this.embed(req, helper.model, EXAMPLES.slice(i, i + 64).map((e) => pre + e[0]))).vectors.map(norm));
+      const ex = EXAMPLES.map((e, i) => ({ vec: vecs[i], size: e[1], kind: e[2] }));
+      const r = (v) => v.map((x) => Math.round(x * 1e6) / 1e6);
+      const round = (c) => Object.fromEntries(Object.entries(c).map(([l, v]) => [l, r(v)]));
+      const out = { model: helper.model, examples: EXAMPLES_HASH, size: round(centroids(ex, "size", COMPLEXITIES)), kind: round(centroids(ex, "kind", INTENTS)) };
+      this.seeds.set(key, out);
+      const file = this.cacheFile(helper.model);
+      if (file) { try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(out)); } catch { /* memory only */ } }
+      return true;
+    }, Math.max(settings.timeoutMs || 0, 60000)).finally(() => this.preparing.delete(key));
+    this.preparing.set(key, job);
+    return job;
+  }
   async classify(prompt,settings,signal) {
+    const helper = helperOf(settings.assistant);
+    if (!helper) throw new Error("Not a local router helper");
+    const base = loopback(settings.url);
+    if (!this.loaded(base, helper.model)) {
+      // Not ready yet: get ready in the background and let Native decide this one (no cooldown for that).
+      this.prepare(settings).catch(() => {});
+      throw new Error(`${helper.label} is getting ready (first use); native routing used`);
+    }
     return this.run(settings,signal,async (req,base) => {
-      const model = MODEL;
-      await this.verify(req,base,model);
-      const key = `${base}/${model}`,cached = this.seeds.get(key);
-      const out = await this.embed(req,model,cached ? [prompt] : [prompt,...SEEDS.map((s) => s[1])]);
-      const seeds = cached || out.vectors.slice(1);if (!cached) this.seeds.set(key,seeds);
-      const near = SEEDS.map((s,i) => ({ label: s[0],score: cosine(out.vectors[0],seeds[i]) }));
-      // Each label: the mean of its two closest examples (one lucky match counts less).
-      const scored = LABELS.map((label) => {
-        const top = near.filter((n) => n.label === label).map((n) => n.score).sort((a,b) => b-a).slice(0,2);
-        return { label,score: top.reduce((a,b) => a+b,0)/top.length };
-      });
-      // A label only when it's clearly ahead. Each half stands alone: sure of the kind of task but not its size, the
-      // size comes from Native (the router merges), instead of throwing both away.
-      const best = (labels) => {
-        const values = scored.filter((s) => labels.includes(s.label)).sort((a,b) => b.score-a.score);
-        return values[0].score >= settings.minSimilarity && values[0].score-values[1].score >= settings.minMargin ? values[0].label : null;
-      };
-      const intent = best(INTENTS),complexity = best(COMPLEXITIES);
-      if (!intent && !complexity) throw new Error("Ambiguous semantic match; native routing used");
-      return { task: { ...(intent ? { intent } : {}),...(complexity ? { complexity } : {}) },tokens: out.tokens,source: "minilm" };
+      await this.verify(req,base,helper.model);
+      const cents = this.loaded(base, helper.model);
+      const out = await this.embed(req,helper.model,[(PREFIX[helper.model] || "") + prompt]);
+      const vec = norm(out.vectors[0]);
+      return { task: { sizeProbs: probsFrom(vec, cents.size), kindProbs: probsFrom(vec, cents.kind) },tokens: out.tokens,source: settings.assistant };
     });
   }
   async rank(query,candidates,settings,signal) {
+    const helper = helperOf(settings.assistant);
     return this.run(settings,signal,async (req,base) => {
-      await this.verify(req,base,MODEL);
-      const out = await this.embed(req,MODEL,[query,...candidates.map((c) => `${c.file}\n${c.excerpt || c.text || ""}`)]);
+      await this.verify(req,base,helper.model);
+      const out = await this.embed(req,helper.model,[query,...candidates.map((c) => `${c.file}\n${c.excerpt || c.text || ""}`)]);
       return { candidates: candidates.map((c,i) => ({ ...c,similarity: cosine(out.vectors[0],out.vectors[i+1]) })),tokens: out.tokens };
     });
   }
 }
-module.exports = { LocalRouterClient,loopback,cosine,SEEDS,LABELS,EXAMPLES,MODEL,abortError };
+module.exports = { LocalRouterClient,loopback,cosine,HELPERS,helperOf,PREFIX,centroids,probsFrom,centroidProbs,EXAMPLES_HASH,MODEL,abortError };

@@ -1038,14 +1038,26 @@ class ChatView {
         const historical = tab.messages.flatMap((m) => m.attachments || []);
         routed = await this.router.route(this.routingRequest(tab,text,[...attached,...historical],contexts),ctl.signal);
         if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
-        if (routed.error) { this.post({ type: "flash",text: routed.error }); return; }
-        const changesProvider = engineOf(routed.model) !== (tab.engine || engineOf(previous));
-        const windowBudget = isLocal(routed.model) ? Math.max(1000,brain.contextLength()*3*.75-8000-text.length) : Infinity;
-        if (changesProvider && journal.handoff(tab.messages).length > Math.min(this.router.options().handoffChars,windowBudget)) {
-          this.post({ type: "flash",text: "This conversation exceeds the handoff budget or local context budget. Increase the budget in Settings or pin the current model; no context was silently discarded." }); return;
+        if (routed.error) {
+          // Nothing Auto may pick (no AI with an account set up, or none can do this): keep the chat's model if it works.
+          if (!brain.providerOf(previous).ready()) { this.post({ type: "flash",text: routed.error }); return; }
+          routed = { ...routed, model: previous, reason: `${routed.error} · kept ${previous}` };
         }
-        if (changesProvider && previousMedia.some((a) => !a.path || !fs.existsSync(a.path))) {
-          this.post({ type: "flash",text: "A previous attachment is no longer available. Pin the current model or reattach it before switching providers." }); return;
+        // Another AI takes over with a record of the conversation (journal.handoff). When that record is too big for the
+        // handoff budget, or an earlier picture/PDF is gone, Auto picks again within the current AI instead of refusing.
+        const here = tab.engine || engineOf(previous);
+        let changesProvider = engineOf(routed.model) !== here;
+        const tooBig = () => journal.handoff(tab.messages).length > this.router.options().handoffChars;
+        const missing = () => previousMedia.some((a) => !a.path || !fs.existsSync(a.path));
+        if (changesProvider && tab.messages.length && (missing() || tooBig())) {
+          const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over";
+          // (On a model on this computer there's no "same AI" for Auto: that one stays.)
+          const again = here === "ollama" ? { error: "local" }
+            : await this.router.route({ ...this.routingRequest(tab,text,[...attached,...historical],contexts), provider: here }, ctl.signal);
+          if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
+          routed = again.error ? { ...routed, model: previous, reason: `${routed.reason} · kept ${previous}: ${why}` }
+            : { ...again, reason: `${again.reason} · stayed with this AI: ${why}` };
+          changesProvider = false;
         }
         tab.model = routed.model;
         // Auto also sets the intensity, unless you picked one yourself (picking a profile hands it back to Auto).

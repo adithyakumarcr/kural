@@ -1,13 +1,16 @@
-const { LocalRouterClient,abortError } = require("./client");
+const path = require("path");
+const { LocalRouterClient,abortError,HELPERS } = require("./client");
 const { profileOf,eligible,classify,select,contextWithinBudget,lexicalRank,limitUsed } = require("./policy");
 const { performance } = require("perf_hooks");
 const { createHash } = require("crypto");
 const { excludedModel } = require("../ai/model-policy");
-const ASSISTANTS = ["native","minilm"];
+// Native = Kural's word classifier (built in); the others are helper models through Ollama (client.js HELPERS).
+const ASSISTANTS = ["native",...Object.keys(HELPERS)];
 class ModelRouter {
   constructor(context,settings,models,trusted = () => true,fetchImpl) {
     this.context=context;this.settings=settings;this.models=models;this.trusted=trusted;
-    this.client=new LocalRouterClient(fetchImpl);this.listeners=new Set();this.samples=[];this.tasks=new Map();
+    const store=context&&context.globalStorageUri&&context.globalStorageUri.fsPath;
+    this.client=new LocalRouterClient(fetchImpl,store?path.join(store,"router"):null);this.listeners=new Set();this.samples=[];this.tasks=new Map();
     this.inflight=0;this.cooldowns=new Map();this.cache=new Map();this.last=null;this.lastAssistant=null;
     this.usage={ decisions:0,calls:0,inputTokens:0,fallbacks:0 };
     // Set by extension.js: usageOf(providerId) → lib/ai/usage.js current() report; memory → lib/router/learn.js.
@@ -17,12 +20,11 @@ class ModelRouter {
   changed() { for (const f of this.listeners) f(); }
   options() {
     const c=this.settings(),number=(k,d,min,max)=>{const n=c.get(k,d);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):d;};
-    const assistant=c.get("modelRouter.assistant","native"),allowed=c.get("modelRouter.allowedModels",null);
-    return { profile:profileOf(c.get("modelRouter.profile","balance")),allowedModels:Array.isArray(allowed)?allowed.filter((x)=>typeof x==="string"):null,
-      allowCloud:c.get("modelRouter.allowCloud",true)!==false,saveTokens:!!c.get("modelRouter.saveTokens",false),
+    // (No list of allowed models any more: Auto uses every model of the AIs you set up, never a model on this computer.)
+    const assistant=c.get("modelRouter.assistant","native");
+    return { profile:profileOf(c.get("modelRouter.profile","balance")),saveTokens:!!c.get("modelRouter.saveTokens",false),
       assistant:ASSISTANTS.includes(assistant)?assistant:"native",
       url:c.get("tabCompletion.ollamaUrl","http://127.0.0.1:11434"),timeoutMs:number("modelRouter.timeoutMs",1500,100,10000),
-      minSimilarity:number("modelRouter.minSimilarity",.25,0,1),minMargin:number("modelRouter.minMargin",.04,0,1),
       modelPreferences:c.get("modelRouter.modelPreferences",{})||{},search:!!c.get("modelRouter.search",false),context:!!c.get("modelRouter.context",false),
       contextChars:number("modelRouter.contextChars",12000,1000,60000),handoffChars:number("modelRouter.handoffChars",120000,10000,1000000),
       checkpoints:c.get("modelRouter.checkpoints",true)!==false,tab:!!c.get("modelRouter.tab",false) };
@@ -39,6 +41,12 @@ class ModelRouter {
     this.changed();
   }
   resetAssistance() { this.cooldowns.clear();this.cache.clear();this.client.verified.clear();this.client.seeds.clear();this.lastAssistant=null;this.changed(); }
+  // Gets the chosen helper ready (its centroids: one batch of embeddings, then saved), outside any routing deadline.
+  prepare() {
+    const s=this.options();
+    if (s.assistant==="native"||!this.trusted()) return Promise.resolve(false);
+    return this.client.prepare(s).then((ok)=>{this.changed();return ok;},()=>false);
+  }
   async assist(settings,signal,fn) {
     if (!this.trusted()) throw new Error("Local assistance is disabled in Restricted Mode");
     if (signal && signal.aborted) throw abortError();
@@ -59,29 +67,22 @@ class ModelRouter {
     } finally { this.inflight--; }
   }
   async route(request,signal) {
-    const t0=performance.now(),settings=this.options(),list=eligible(await this.availableModels(),request,settings);
+    const t0=performance.now(),settings=this.options(),list=eligible(await this.availableModels(),request);
     if (signal && signal.aborted) throw abortError();
     const continuation = /^\s*(yes|okay|ok|go ahead|continue|build it|do it|implement (it|that|the plan))\b/i.test(String(request.prompt||"")) && String(request.prompt||"").length<200;
     const text = continuation && request.recentContext ? `Recent conversation: ${String(request.recentContext).slice(-1200)}\nLatest request: ${request.prompt}` : String(request.prompt||"");
     let task=classify(text,request.context),source="native",note="";
     if (settings.assistant!=="native" && this.trusted() && list.length>1 && !request.checkpoint) {
-      const key=createHash("sha256").update(JSON.stringify([settings.assistant,settings.url,settings.minSimilarity,settings.minMargin,text])).digest("hex");
+      const key=createHash("sha256").update(JSON.stringify([settings.assistant,settings.url,text])).digest("hex");
       try {
         let out=this.cache.get(key);
         if (!out || Date.now()-out.at>120000) {
           out={...await this.assist(settings,signal,()=>this.client.classify(text,settings,signal)),at:Date.now()};
           this.cache.set(key,out);if (this.cache.size>100) this.cache.delete(this.cache.keys().next().value);
         }
-        // Known complex work and nontrivial edits/reviews retain a quality floor when a helper disagrees.
-        const floor = task.complexity === "complex" ? "complex" :
-          task.complexity === "standard" && ["edit","review"].includes(task.intent) ? "standard" : null;
-        // Explicit words win (policy.js classify `sure`); MiniLM replaces Native's guesses, and fills in when it's sure of
-        // only one half.
-        const sure=task.sure||{};
-        const helper={intent:sure.intent?task.intent:out.task.intent||task.intent,complexity:sure.complexity?task.complexity:out.task.complexity||task.complexity};
-        task={...helper,complexity:floor === "complex" ? "complex" :
-          floor === "standard" && helper.complexity === "simple" ? "standard" : helper.complexity,
-          ...(task.signals?{signals:task.signals}:{})};source=out.source;
+        // MiniLM's view is blended with the word classifier's (both are probabilities; the blend was the most accurate in
+        // test/router-eval.js), and what came with the request still counts after it.
+        task=classify(text,request.context,out.task);source=out.source;
       } catch(e) { if (signal && signal.aborted) throw e;note=` · native fallback: ${e.message}`;this.usage.fallbacks++; }
     }
     // Not at a checkpoint: that's the same answer continuing, nothing to learn from yet.
@@ -107,14 +108,14 @@ class ModelRouter {
   async selectContext(query,candidates,signal) {
     const out=await this.rank(query,candidates,signal);
     // These are relevance heuristics, not calibrated probabilities.
-    const threshold=out.source==="minilm"?.25:.5;
+    const threshold=out.source!=="native"?.25:.5;
     return {...out,candidates:contextWithinBudget(out.candidates.filter((c)=>c.relevance>=threshold),this.options().contextChars)};
   }
-  // No model inference while typing. Apply the native profile and allowed-model policy synchronously.
-  tabEngine({localModel,claudeModel,localReady,claudeReady}) {
+  // No model inference while typing: the profile decides between Tab's two engines synchronously. (Tab Completion keeps
+  // its local engine: Auto in the chat never picks a model on this computer, Tab is a separate choice.)
+  tabEngine({localModel,localReady,claudeReady}) {
     const s=this.options();if (!s.tab) return null;
-    const allowed=(id)=>s.allowedModels===null||s.allowedModels.includes(id)||s.allowedModels.includes(`${id}:latest`);
-    const local=localReady&&!excludedModel(localModel)&&allowed(`ollama:${localModel}`),cloud=claudeReady&&s.allowCloud&&allowed(claudeModel);
+    const local=localReady&&!excludedModel(localModel),cloud=claudeReady;
     if (!local&&!cloud) return "none";
     if (!cloud) return "local";if (!local) return "claude";
     return s.profile==="intelligence"&&!s.saveTokens?"claude":"local";

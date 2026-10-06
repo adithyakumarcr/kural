@@ -233,7 +233,7 @@ class SearchView {
         this.post({ type: "progress",id,text: "Ranking relevant code…" });
         const ranked = await this.router.rank(q,candidates,ctl.signal);
         if (ctl.signal.aborted) return;
-        const relevant = ranked.candidates.filter((c) => c.relevance >= (ranked.source === "minilm" ? .35 : .6)).slice(0,10);
+        const relevant = ranked.candidates.filter((c) => c.relevance >= (ranked.source !== "native" ? .35 : .6)).slice(0,10);
         if (relevant.length) {
           const results = verify(relevant.map((c) => ({ ...c,why: "Matched locally to your question; inspect this location to confirm" })));
           if (results.length) { this.current = null; this.post({ type: "askResult",id,answer: "Candidate code locations, ranked locally.",results,ms: Date.now()-t0,model: `Kural Router (${ranked.source})` }); return; }
