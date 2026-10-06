@@ -217,9 +217,9 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
 ### Model Router
 
-Choose **Auto → Balanced, Speed or Quality** in the chat model menu. The active model appears in the footer and on each answer. Open **Model Router** from the status bar or Kural Settings to choose allowed models, adjust your ratings, and choose Native rules or optional MiniLM assistance. Native routing works without a download or routing API key.
+Choose **Auto → Balanced, Speed or Quality** in the chat model menu. The active model appears in the footer and on each answer. Open **Model Router** from the status bar or Kural Settings to choose what Auto prefers and which models it may pick. Native routing works without a download or routing API key.
 
-The panel also configures Search & Ask ranking, optional chat context, and native Auto Tab engine selection. Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
+Model ratings, optional MiniLM assistance, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
 
 ### Tab Completion
 

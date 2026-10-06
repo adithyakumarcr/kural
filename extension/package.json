@@ -851,7 +851,7 @@
             "MiniLM (all-minilm:22m) embeddings through local Ollama"
           ],
           "default": "native",
-          "description": "Optional local assistance for Kural Model Router. Download helpers from the Model Router panel."
+          "description": "Optional local assistance for Kural Model Router. MiniLM needs its model on this computer: ollama pull all-minilm:22m"
         },
         "kural.modelRouter.modelPreferences": {
           "type": "object",
@@ -877,7 +877,7 @@
             },
             "additionalProperties": false
           },
-          "description": "Per-model quality, speed and token-efficiency hints, rated 1 (low) to 3 (high). Configure in Model Router; these are not measured guarantees."
+          "description": "Per-model quality, speed and token-efficiency hints, rated 1 (low) to 3 (high). These are not measured guarantees."
         },
         "kural.modelRouter.minSimilarity": {
           "type": "number",

@@ -2,7 +2,7 @@
 
 Select **Auto → Balanced, Speed or Quality** in the chat's model menu. The footer shows the active model, and each answer records the models that handled it. Selecting a model manually turns Auto off for that chat.
 
-Open **Model Router** from the status bar, the chat model menu, Kural Settings, or the command **Kural: Model Router**. Choose allowed answering models and adjust their quality, speed and token-efficiency ratings to match your experience. Ratings are hints, not benchmarks or guaranteed token savings. Unchecking all models prevents Auto dispatch.
+Open **Model Router** from the status bar, the chat model menu, Kural Settings, or the command **Kural: Model Router**. The panel has three rows: what Auto prefers (Speed, Balanced or Quality; new chats start with it), the models Auto may pick (click a model to turn it on or off; models that aren't set up are hidden), and the last choice. Turning every model off prevents Auto dispatch. Everything else on this page is a setting in Settings (`kural.modelRouter.*`), not in the panel.
 
 | Profile | Native selection policy |
 |---|---|
@@ -10,7 +10,7 @@ Open **Model Router** from the status bar, the chat model menu, Kural Settings, 
 | Speed | Favor faster suitable models; retain a minimum quality floor for complex work |
 | Quality | Favor the highest capability rating among eligible models |
 
-Capability checks come first: unavailable models, disallowed models, unsupported images/PDFs, teams, devices and connectors are excluded. Agent requests retain command-approval support. The current model/provider wins close ties to avoid unnecessary handoffs. Unknown models start with conservative medium ratings; adjust these in the panel. Successful single-model task durations provide tie-breaking hints only when all candidates have observations; different tasks are not directly comparable benchmarks.
+Capability checks come first: unavailable models, disallowed models, unsupported images/PDFs, teams, devices and connectors are excluded. Agent requests retain command-approval support. The current model/provider wins close ties to avoid unnecessary handoffs. Unknown models start with conservative medium ratings; adjust these with the `kural.modelRouter.modelPreferences` setting. Successful single-model task durations provide tie-breaking hints only when all candidates have observations; different tasks are not directly comparable benchmarks.
 
 ## Choose local assistance
 
@@ -21,15 +21,15 @@ Native policy works immediately. MiniLM is optional and runs through Kural's exi
 | Native only — default | Rules classify the prompt and apply your ratings/profile | Almost no overhead; limited semantic understanding |
 | MiniLM | `all-minilm:22m` matches task examples and ranks snippets using embeddings | Small download; similarities need tuning and are not success probabilities |
 
-Choose MiniLM, then **Download helper**. If Ollama is missing, the panel offers Kural's existing installer. Downloading is a user action; selecting MiniLM never downloads it automatically.
+Set `kural.modelRouter.assistant` to `minilm` and download its model with `ollama pull all-minilm:22m`. Selecting MiniLM never downloads it automatically.
 
 Native and MiniLM are the only router choices. Qwen classification, generative ranking and reuse of the Tab Completion model have been removed. Older router settings selecting Qwen or Tab reuse default to Native without starting any helper inference. Tab Completion continues to use its own code models. Qwen 0.5B remains excluded from model choices and downloads; existing Tab settings pointing to it use the recommended 1.5B model instead.
 
-Local assistance accepts loopback Ollama addresses only, rejects redirects and cloud-backed Ollama models, validates outputs, observes Stop, and has one helper operation in flight at a time. The default deadline is 1,500 ms. Missing models, busy helpers, ambiguous MiniLM matches, invalid output and timeouts use native policy. Failed helpers have a 30-second cooldown; **Refresh models** clears it. MiniLM stays resident for five minutes; inference may compete with local chat/Tab generation.
+Local assistance accepts loopback Ollama addresses only, rejects redirects and cloud-backed Ollama models, validates outputs, observes Stop, and has one helper operation in flight at a time. The default deadline is 1,500 ms. Missing models, busy helpers, ambiguous MiniLM matches, invalid output and timeouts use native policy. Failed helpers have a 30-second cooldown. MiniLM stays resident for five minutes; inference may compete with local chat/Tab generation.
 
 ## Search, context and Tab
 
-Enable each integration in the panel:
+Enable each integration in Settings (`kural.modelRouter.search`, `.context`, `.tab`):
 
 - **Search & Ask ranking:** locally retrieve up to 16 candidate snippets, rank them, and show verified file/line locations. Weak or empty matches fall back to the existing AI search. Results are candidates to inspect; they do not constitute a generated explanation. Retrieval is bounded, honors ignore and exclude settings, uses unsaved editor text, and excludes `.env*`, PEM files, dependencies and paths outside the workspace.
 - **Retrieve useful chat context:** add up to five ranked optional snippets within a character budget. Explicit attachments, selected context and project instructions remain intact. Native ranking uses lexical relevance; MiniLM uses similarity. Ranking scores are heuristics, not calibrated probabilities.
