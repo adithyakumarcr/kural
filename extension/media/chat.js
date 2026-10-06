@@ -98,12 +98,25 @@
   function imageHtml(alt, src) {
     const raw = src.replace(/&amp;/g, "&");
     const local = fileSrc(raw);
-    if (local) return `<img class="md-img" src="${esc(local)}" alt="${alt}" title="${alt}">`;
+    if (local) return `<img class="md-img" src="${esc(local)}" data-path="${esc(raw)}" alt="${alt}" title="${alt ? `${alt} · ` : ""}Click to open it full size">`;
     if (/^https?:\/\//i.test(raw)) {
       let host = ""; try { host = new URL(raw).host; } catch { /* not a URL */ }
       return `<span class="img-remote" data-url="${esc(raw)}" data-alt="${alt}" title="${esc(raw)}">Load image${host ? ` from ${esc(host)}` : ""}</span>`;
     }
     return `<span class="img-missing">${alt || "image"}</span>`;
+  }
+
+  // A link to a file the model wrote, [install.sh](install.sh) or [app.js:12](src/app.js#L12): opens the file (at the
+  // line). (Before, only web links were clickable and these showed as plain text.)
+  function fileLink(text, url) {
+    let p = url.replace(/&amp;/g, "&").replace(/^file:\/\//i, "");
+    try { p = decodeURIComponent(p); } catch { /* keep it as written */ }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[A-Za-z]:[\\/]/.test(p)) return `<span class="link">${text}</span>`;   // mailto: etc.
+    let line = "", end = "";
+    const h = /#L(\d+)(?:-L?(\d+))?$/.exec(p) || /:(\d+)(?:-(\d+))?(?::\d+)?$/.exec(p);
+    if (h) { line = h[1]; end = h[2] || ""; p = p.slice(0, h.index); }
+    if (!p) return `<span class="link">${text}</span>`;
+    return `<a class="link file" data-path="${esc(p)}" data-line="${line}" data-end="${end}" title="Open ${esc(p)}${line ? `:${line}` : ""}">${text}</a>`;
   }
 
   function inline(s) {
@@ -116,7 +129,7 @@
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
       .replace(/(^|[^"])\[([^\]]+)\]\(([^)\s]+)\)/g, (_, pre, text, url) => pre + (/^https?:\/\//.test(url)
-        ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : `<span class="link">${text}</span>`))
+        ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : fileLink(text, url)))
       // A bare web address: clickable too (not inside `code`, a link or a picture made above).
       .split(/(<code[^>]*>[\s\S]*?<\/code>|<a [^>]*>[\s\S]*?<\/a>|<img [^>]*>|<span class="img-[^>]*>[\s\S]*?<\/span>)/).map((part, i) => i % 2 ? part
         : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')).join("");
@@ -411,7 +424,7 @@
         el("div", { class: "logo" }, "{K}"),
         el("div", { class: "brand" }, "Kural"),
         el("div", { class: "brand-sub" }, "AI-powered code editor"),
-        el("div", { class: "tagline" }, "Few words. Working code."),
+        el("div", { class: "tagline" }, "A weapon, a voice for your ideas."),
         el("div", { class: "hints" }, hint("@", "mention a file"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
         S.version ? el("div", { class: "version" }, S.version) : null));
     } else {
@@ -494,11 +507,11 @@
         el("div", { class: "bubble" }, (m.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)),
           // Pictures you mentioned with @: shown, like attached ones.
           ((pics) => pics.length ? el("div", { class: "att-row" }, pics.map((c) => el("img", { class: "att-photo", src: fileSrc(c.path), alt: base(c.path),
-            title: `Open ${base(c.path)}`, onclick: () => post({ type: "openFile", path: c.path }) }))) : null)(
+            title: `Open ${base(c.path)} full size`, onclick: () => post({ type: "openImage", path: c.path }) }))) : null)(
             (m.segments || []).filter((s) => s.t !== "text" && s.ctx && s.ctx.kind !== "selection" && IMG_RE.test(s.ctx.path || "") && fileSrc(s.ctx.path)).map((s) => s.ctx)),
           (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
             a.kind === "image" && fileSrc(a.path)
-              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openFile", path: a.original || a.path }) })
+              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openImage", path: a.original || a.path }) })
               : el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
                 kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
     }
@@ -561,7 +574,7 @@
       el("span", { class: "tool-name" }, TOOL_VERB[b.name] || deviceVerb(b.name) || prettyTool(b.name)), " ",
       file ? el("span", { class: "tool-file", onclick: () => post({ type: "openFile", path: file }) }, b.detail)
         : b.name === "Bash" || /run_command$/.test(b.name) ? el("code", {}, b.detail) : el("span", {}, b.detail),
-      pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), onclick: () => post({ type: "openFile", path: file }) }) : null);
+      pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), title: "Click to open it full size", onclick: () => post({ type: "openImage", path: file }) }) : null);
   }
 
   // The model's thinking (short summaries). Always one line, so nothing around it moves while it thinks: "Thinking…"
@@ -581,7 +594,7 @@
   // A picture the model made (saved by Kural as a file): shown in the answer; click opens it.
   function imageNode(b) {
     const src = fileSrc(b.path);
-    return src ? el("img", { class: "md-img gen-img", src, alt: b.alt || "picture", title: "Open the picture", onclick: () => post({ type: "openFile", path: b.path }) })
+    return src ? el("img", { class: "md-img gen-img", src, alt: b.alt || "picture", title: "Click to open it full size", onclick: () => post({ type: "openImage", path: b.path }) })
       : el("span", { class: "img-missing" }, icon("file-media"), " ", b.path);
   }
 
@@ -1322,9 +1335,14 @@ ${d.system}` : ""}`,
   });
   listEl.addEventListener("click", (e) => {
     const remote = e.target.closest && e.target.closest(".img-remote");
-    if (remote) { remote.replaceWith(el("img", { class: "md-img", src: remote.dataset.url, alt: remote.dataset.alt || "" })); return; }
+    if (remote) { remote.replaceWith(el("img", { class: "md-img", src: remote.dataset.url, "data-url": remote.dataset.url, alt: remote.dataset.alt || "", title: "Click to open it full size" })); return; }
+    // A picture: full size in its own editor tab.
+    const pic = e.target.closest && e.target.closest("img.md-img[data-path], img.md-img[data-url]");
+    if (pic) { post({ type: "openImage", path: pic.dataset.path, url: pic.dataset.url }); return; }
     const a = e.target.closest && e.target.closest("a.link[data-url]");
     if (a) { e.preventDefault(); post({ type: "openUrl", url: a.dataset.url }); return; }
+    const f = e.target.closest && e.target.closest("a.link[data-path]");
+    if (f) { e.preventDefault(); post({ type: "openFile", path: f.dataset.path, line: +f.dataset.line || undefined, endLine: +f.dataset.end || undefined }); return; }
     const r = e.target.closest && e.target.closest("code.ref");
     if (r) post({ type: "openFile", path: r.dataset.path, line: +r.dataset.line || undefined });
   });
@@ -1363,6 +1381,8 @@ ${d.system}` : ""}`,
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
+        // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.
+        tabBar.classList.toggle("hidden", !!m.single);
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
           mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
