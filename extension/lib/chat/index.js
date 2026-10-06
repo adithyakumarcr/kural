@@ -22,6 +22,7 @@ const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
 const { GUIDE } = require("./guide");
+const { registerTabEditor, openBeside } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
 
 const MODELS = [
@@ -112,6 +113,7 @@ class ChatView {
   register() {
     const c = this.context;
     this.changes.register(c);
+    registerTabEditor(c, this);   // a chat tab dragged into the editor area opens there (tab-editor.js)
     watchFontScale(c, (m) => this.post(m));
     watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (fullSetup()) this.setupChanged("changed"); });
     let lastFocusReload = Date.now();
@@ -154,8 +156,13 @@ class ChatView {
         this.open();
       }),
       vscode.commands.registerCommand("kural.chat.split", () => this.openSplit()),
+      // (Panels opened by older versions come back through this serializer; new ones are tab editors, tab-editor.js.)
       vscode.window.registerWebviewPanelSerializer("kural.chatEditor", { deserializeWebviewPanel: async (panel) => this.restoreSplit(panel) }),
-      vscode.commands.registerCommand("kural.chat.newTab", () => { this.reveal(); this.newTab(true); }),
+      vscode.commands.registerCommand("kural.chat.newTab", async () => {
+        // (From a chat dragged into the editor area: the new chat goes into the side panel, which has the tabs.)
+        if (this.cur() && this.cur().single) { await vscode.commands.executeCommand("kural.chat.focus"); this.focusPane = this.side() || null; }
+        this.reveal(); this.newTab(true);
+      }),
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
@@ -270,6 +277,9 @@ class ChatView {
   activate(id, pane = this.cur()) {
     const tab = this.tab(id);
     if (!tab) return;
+    // Open in its own editor already (dragged out): go there instead of showing it twice.
+    const own = this.panes.find((p) => p.single && p.activeId === id && p !== pane);
+    if (own && own.panel) { own.panel.reveal(); return; }
     if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
@@ -281,9 +291,13 @@ class ChatView {
   }
 
   cycle(dir) {
-    if (!this.tabs.length) return;
-    const i = this.tabs.findIndex((t) => t.id === this.activeId);
-    this.activate(this.tabs[(i + dir + this.tabs.length) % this.tabs.length].id);
+    const pane = this.cur();
+    if (pane && pane.single) return;   // (a dragged-out chat has no other tabs)
+    const out = new Set(this.panes.filter((p) => p.single).map((p) => p.activeId));
+    const list = this.tabs.filter((t) => !out.has(t.id) || t.id === this.activeId);
+    if (!list.length) return;
+    const i = list.findIndex((t) => t.id === this.activeId);
+    this.activate(list[(i + dir + list.length) % list.length].id);
   }
 
   // Closing a tab keeps it in History (clock button), unless it was never used (or you deleted it: keep = false).
@@ -298,8 +312,9 @@ class ChatView {
     this.tabs.splice(i, 1);
     if (keep && tab.messages.length) this.archive.save(tab, this.card(tab));
     if (!this.tabs.length) this.newTab(true);
-    // Every pane that showed it moves to the tab before it.
-    const showing = this.panes.filter((p) => p.activeId === id);
+    // Its own editor (dragged out) closes with it; every other pane that showed it moves to the tab before it.
+    for (const p of this.panes.filter((q) => q.single && q.activeId === id)) { p.closing = true; p.panel.dispose(); }
+    const showing = this.panes.filter((p) => p.activeId === id && !p.single);
     for (const p of showing) this.activate(this.tabs[Math.max(0, Math.min(i - 1, this.tabs.length - 1))].id, p);
     if (!showing.length) this.postTabs();
     this.postHistory();
@@ -530,13 +545,26 @@ class ChatView {
     return pane;
   }
 
-  // Split: a chat beside the code (an editor panel you can move anywhere), next to the side panel.
-  // It starts with a new chat; its tab bar switches between all your chats, like the side panel's.
+  // Split: a chat beside the code (an editor you can move anywhere), next to the side panel. Usually by dragging a chat
+  // tab into the editor area (lib/chat/tab-editor.js); the command opens a new chat that way. Its tab bar switches
+  // between all your chats, like the side panel's.
   openSplit(tabId) {
     const tab = tabId ? this.tab(tabId) : this.newTab(false);
-    const panel = vscode.window.createWebviewPanel("kural.chatEditor", tab.title, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
-      { enableScripts: true, retainContextWhenHidden: true });
-    this.adoptSplit(panel, tab.id);
+    openBeside(tab.id);
+  }
+  // A chat tab dropped in the editor area (or brought back after a restart): show it there. Like moving an editor tab
+  // in VS Code, it leaves the side panel, which shows another chat instead.
+  adoptDragged(panel, tabId) {
+    const id = tabId && this.tab(tabId) ? tabId : (this.tabs[0] || this.newTab(false)).id;
+    panel.title = this.tab(id).title;
+    for (const p of this.panes) {
+      if (p.kind === "editor" || p.activeId !== id) continue;
+      const other = this.tabs.find((t) => t.id !== id && !this.panes.some((q) => q.activeId === t.id)) || this.newTab(false);
+      this.activate(other.id, p);
+    }
+    const pane = this.adoptSplit(panel, id);
+    pane.single = true;
+    this.postTabs();
     this.save();
   }
   // After a restart VS Code brings the panel back; give it the chat it showed before.
@@ -552,9 +580,11 @@ class ChatView {
     panel.onDidDispose(() => {
       this.panes.splice(this.panes.indexOf(pane), 1);
       if (this.focusPane === pane) this.focusPane = null;
+      this.postTabs();   // (a dragged-out chat goes back into the side panel's tabs)
       this.save();
     });
     this.postTabs();
+    return pane;
   }
 
   // Show the chat you're working in: the panel beside the code, or the side panel.
@@ -567,7 +597,16 @@ class ChatView {
   // Replies to one pane (the tab it opened, a file it picked, focus, short notices) go only to that pane.
   // Everything else goes to all panes; each one keeps what's about the tab it shows.
   post(msg) {
-    if (msg.type === "tabs") { for (const p of this.panes) this.postTo(p, { ...msg, activeId: p.activeId }); return; }
+    if (msg.type === "tabs") {
+      // A chat dragged into the editor area (a "single" pane) shows only itself, and leaves the other panes' tab bars
+      // until its editor closes (like moving a tab in VS Code).
+      const out = new Set(this.panes.filter((p) => p.single).map((p) => p.activeId));
+      for (const p of this.panes) {
+        const tabs = p.single ? msg.tabs.filter((t) => t.id === p.activeId) : msg.tabs.filter((t) => !out.has(t.id) || t.id === p.activeId);
+        this.postTo(p, { ...msg, tabs, activeId: p.activeId, single: !!p.single });
+      }
+      return;
+    }
     if (ONE_PANE.has(msg.type)) { const p = this.cur(); if (p) this.postTo(p, msg); return; }
     for (const p of this.panes) this.postTo(p, msg);
   }
@@ -816,7 +855,7 @@ class ChatView {
     r.proc = null;
     if (last && last.role === "assistant" && last.running) {
       last.running = false;
-      last.error = info.login ? "login" : "The model stopped unexpectedly. See View → Output → Kural.";
+      last.error = info.login ? "login" : "The model stopped unexpectedly. See Kural's log (Kural: Show Log).";
       if (info.login) last.errorWho = whoOf(tab.model);
       tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(last) });
@@ -829,10 +868,12 @@ class ChatView {
     const parts = [];
     const seen = new Set();
     for (const c of contexts) {
-      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine]);
+      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine, c.element && c.element.selector]);   // (two elements of one page are two)
       if (seen.has(key)) continue; seen.add(key);
       if (c.kind === "selection") {
         parts.push(`${c.path} (lines ${c.startLine}-${c.endLine}):\n\`\`\`${c.lang || ""}\n${c.code}\n\`\`\``);
+      } else if (c.kind === "element") {
+        parts.push(elementNote(c.element || {}));
       } else if (c.kind === "file" || c.kind === "current") {
         const uri = this.resolvePath(c.path);
         let body = null;
@@ -848,12 +889,13 @@ class ChatView {
 
   // What you typed, with pills written as @main.py or @main.py (L3-9).
   static textOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
+      : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
   }
 
   // A tab title from your first message; pills read as "main.py (L3-9)".
   static titleOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "element" ? s.ctx.label : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
@@ -1501,7 +1543,12 @@ class ChatView {
         if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
-      case "openUrl": if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url)); break;
+      // Web links open in Kural's browser tab (the Integrated Browser), where you can also pick elements of the page.
+      case "openUrl":
+        if (/^https?:\/\//i.test(m.url || "")) vscode.commands.executeCommand("kural.browser.open", m.url);   // (inside Kural)
+        break;
+      case "browser": vscode.commands.executeCommand("kural.browser.open", m.url); break;
+      case "browserPick": vscode.commands.executeCommand("kural.browser.pick"); break;
       case "ticketSearch": {
         const out = await this.tickets.search(m.query || "", (text) => pane && this.postTo(pane, { type: "ticketStatus", id: m.id, text }));
         if (!out.cancelled && pane) this.postTo(pane, { type: "ticketResults", id: m.id, ...out });
@@ -1637,13 +1684,10 @@ class ChatView {
         break;
       }
       case "copy": await vscode.env.clipboard.writeText(m.code); vscode.window.setStatusBarMessage("Copied", 1500); break;
-      case "openFile": {
-        const uri = this.resolvePath(m.path);
-        if (!uri) return;
-        const line = Math.max(0, (m.line || 1) - 1), end = Math.max(line, (m.endLine || m.line || 1) - 1);
-        await vscode.window.showTextDocument(uri, { preview: false, selection: m.line ? new vscode.Range(line, 0, end, 0) : undefined });
-        break;
-      }
+      case "openFile": await this.openPath(m.path, m.line, m.endLine); break;
+      // A picture in the chat, clicked: in its own editor tab, full size (VS Code's picture viewer; a web picture in a
+      // small page of its own).
+      case "openImage": await this.openImage(m.path, m.url); break;
       case "files": await this.sendFiles(); break;
       case "paste": this.post({ type: "pasted", ctx: this.pasteToRef(m.text), text: m.text }); break;
       case "login": {   // log in to the program the chat's model needs
@@ -1691,6 +1735,69 @@ class ChatView {
   lastAsk(tab) {
     const u = [...tab.messages].reverse().find((x) => x.role === "user");
     return u ? ChatView.textOf(u.segments || []) : "";
+  }
+
+  // An element picked in the Kural Browser (lib/browser): a pill in the message you're writing, in the chat you used
+  // last; its details go to the model with the message (elementNote).
+  async addElement(info) {
+    const ctx = { kind: "element", path: info.url, label: `<${info.short}>`, element: info };
+    await this.reveal();
+    const pane = this.cur();
+    if (pane) this.postTo(pane, { type: "insertPill", ctx });
+    vscode.window.setStatusBarMessage(`Kural: added ${info.short} to the chat`, 3000);
+  }
+
+  // What VS Code's Integrated Browser sends ("Add Element to Chat", "Comment on Elements", screenshots, console logs;
+  // rebrand.py routes it here as `kural.browser.attach`): elements and console logs become pills in the message
+  // you're writing (with the comment typed in the browser as the start of your message); pictures become attachments.
+  async addBrowserItems(items) {
+    await this.reveal();
+    const pane = this.cur();
+    if (!pane) return;
+    const added = [];
+    for (const x of items || []) {
+      if (x.image) {
+        const ext = /png/i.test(x.mime || "") ? "png" : "jpg";
+        const a = this.attachments.addData(`${x.kind === "element" ? "element" : "screenshot"}-${Date.now() % 100000}.${ext}`, x.image);
+        if (a) this.postTo(pane, { type: "attached", items: [a] });
+      }
+      if (x.kind !== "element" || !x.value) { if (x.image) added.push("a screenshot"); continue; }
+      const url = (/^URL: (\S+)/m.exec(x.value) || [])[1] || "browser";
+      const label = x.name && x.name.length < 60 ? `<${x.name}>` : "<element>";
+      const ctx = { kind: "element", path: url, label, element: { note: x.value, text: x.innerText || "", comment: x.comment || "", short: x.name || "element", url } };
+      this.postTo(pane, { type: "insertPill", ctx, text: x.comment ? ` ${x.comment}` : "" });
+      added.push(label);
+    }
+    if (added.length) vscode.window.setStatusBarMessage(`Kural: added ${added.join(", ")} to the chat`, 3000);
+  }
+
+  // A file the chat mentions or links: open it (at the line). A folder: show it in the Explorer. A picture or another
+  // file that isn't text: VS Code's own viewer. Not there: say so (a model can name a file that doesn't exist).
+  async openPath(p, line, endLine) {
+    const uri = this.resolvePath(p);
+    if (!uri) return;
+    let st;
+    try { st = await vscode.workspace.fs.stat(uri); } catch { vscode.window.showWarningMessage(`Kural can't find ${p}.`); return; }
+    if (st.type & vscode.FileType.Directory) { await vscode.commands.executeCommand("revealInExplorer", uri); return; }
+    if (/\.(png|jpe?g|gif|webp|bmp|ico|svg|pdf|mp4|webm|mp3|wav|zip)$/i.test(uri.fsPath)) { await vscode.commands.executeCommand("vscode.open", uri, { preview: false }); return; }
+    const l = Math.max(0, (line || 1) - 1), e = Math.max(l, (endLine || line || 1) - 1);
+    try {
+      await vscode.window.showTextDocument(uri, { preview: false, selection: line ? new vscode.Range(l, 0, e, 0) : undefined });
+    } catch { await vscode.commands.executeCommand("vscode.open", uri, { preview: false }); }
+  }
+
+  async openImage(p, url) {
+    if (p) {
+      const uri = this.resolvePath(p);
+      if (uri) { await vscode.commands.executeCommand("vscode.open", uri, { preview: false }); return; }
+    }
+    if (!/^https:\/\//.test(url || "")) return;
+    const panel = vscode.window.createWebviewPanel("kural.picture", "Picture", vscode.ViewColumn.Active, { enableScripts: false });
+    const safe = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    panel.webview.html = `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline';">
+<style>html,body{height:100%;margin:0;background:var(--vscode-editor-background)}body{display:grid;place-items:center}img{max-width:100%;max-height:100vh;object-fit:contain}</style>
+</head><body><img src="${safe}" alt=""></body></html>`;
   }
 
   resolvePath(p) {
@@ -1755,5 +1862,24 @@ function permDetail(tool, input) {
 function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// What the model reads about an element you picked in the Kural Browser.
+function elementNote(e) {
+  // From VS Code's Integrated Browser: its own description of the element (HTML path, outer HTML, size, computed CSS).
+  if (e.note) {
+    const out = [e.note];
+    if (e.comment) out.push(`My instruction for this element: ${e.comment}`);
+    out.push("(Find the code that makes this element in my project, searching for its classes, id or text, before you change anything.)");
+    return out.join("\n\n");
+  }
+  const lines = [`An element I picked on the page ${e.url || ""}${e.title ? ` ("${e.title}")` : ""}:`,
+    `- element: <${e.short || e.tag}>, selector: ${e.selector || "?"}${e.size ? `, ${e.size[0]}x${e.size[1]} px` : ""}`];
+  if (e.component && e.component.name) lines.push(`- ${e.component.framework || ""} component: ${e.component.name}${e.component.file ? ` (${e.component.file}${e.component.line ? `:${e.component.line}` : ""})` : ""}`);
+  if (e.text) lines.push(`- text: ${JSON.stringify(e.text)}`);
+  const st = Object.entries(e.styles || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
+  if (st) lines.push(`- styles: ${st}`);
+  if (e.html) lines.push("```html\n" + e.html + "\n```");
+  return lines.join("\n");
+}
 
 module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, teamPrompt, FRIENDS, ROLES, MOOD_PROMPTS, toolDetail } };

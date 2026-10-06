@@ -44,8 +44,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
-  - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item + menu, usage meter), `lib/usage-panel.js` (AI Usage panel), `lib/paths.js` (what the AI may touch without asking),
-    `lib/updates.js` (updates), `lib/search.js` (Ask), `lib/workspace.js` (folders; `workDir()` when none is open),
+  - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item, usage meter,
+    log in/out), `lib/settings-page.js` (Kural Settings tab, `media/settings.*`), `lib/usage-panel.js` (AI Usage panel), `lib/paths.js` (what the AI may touch without asking),
+    `lib/updates.js` (updates), `lib/search/` (Search & Ask side bar), `lib/workspace.js` (folders; `workDir()` when none is open),
     `lib/log.js`, `lib/ui.js` (font size).
   - `media/codicons/` — the Codicons icon font (CC BY 4.0) for every Kural page.
 - `docs/wiki/` — the GitHub wiki's pages; `scripts/push-wiki.sh` publishes them.
@@ -143,7 +144,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `until`, `inWords`): the status item of the chat's AI (`brain.engineOf(currentModel())`) reads "Claude 5h 50% · resets
   42m | Weekly 25% · resets 3d 4h", the others short; `chat.onChoice` (model pick, tab switch) redraws it. Clicking it
   opens the **AI Usage** bottom panel (`lib/usage-panel.js`, view `kural.usagePanel`, command `kural.showUsage`).
-- **Account** (`lib/account.js`): status item (plan) + QuickPick menu. Who's logged in comes from `claude auth status
+- **Account** (`lib/account.js`): status item (plan); clicking it (command `kural.account`) opens **Kural Settings**
+  (`lib/settings-page.js`, a WebviewPanel "kural.settings": a card per AI with who/plan/limits/buttons, then version,
+  updates and links). It replaced a QuickPick menu Adithya found too cluttered. `account.onChange` redraws the page. Who's logged in comes from `claude auth status
   --json` (email, orgName, subscriptionType), never from the Keychain (Claudemeter, removed, read the Keychain: prompts
   after every update, then failures). Log out = `claude auth logout` → `getStarted.loggedOut()` (locks Claude); once a new
   login passes its test, `chat.setupChanged()` (new processes with the new login; not earlier, or a process started
@@ -232,12 +235,51 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   webview's address (`S.pics` = `{base, root}` from `filesFor()`; `localResourceRoots` = media, project folders,
   globalStorage, tmp, home; the CSP lets the page load pictures only); web pictures load only on click (a picture URL can carry data away). Don't reuse `S.files`: it's
   the @-mention file list (a clash there hid every picture). Links: `a.link[data-url]` → `openUrl` (http/https only).
-- **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel and split panels beside the code
-  (`openSplit`, WebviewPanel "kural.chatEditor", restored by a serializer from saved `splitIds`). Each pane has its own
+- **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel and chat editors beside the code.
+  Dragging a chat tab into the editor area makes one (`lib/chat/tab-editor.js`): the page's tab sets `ResourceURLs`
+  = `kural-chat:/<id>.kuralchat` (what VS Code's editor drop target opens), which opens in the custom editor
+  "kural.chatTab" (`adoptDragged`: the side panel moves on to another chat), so VS Code does the split zones, moving and
+  restoring after a restart. Such a pane is `single`: its page hides its tab bar (`tabs` message `single`), `post("tabs")`
+  gives it only its own tab and leaves that tab out of the other panes' lists, `activate()` of it from elsewhere reveals
+  its editor, `cycle()`/new tab skip it, closing the chat disposes the editor (Adithya: the split showed "New chat" twice
+  and his other chats). No FileSystemProvider for that scheme on purpose: with one, VS Code shows a breadcrumb bar
+  with the made-up file name. A drop on top of a webview (another chat, Get started) lands in that webview instead: drop
+  on an editor's tab bar or a text editor. Checked in the app with DOM drag events (CDP can't start a native drag in a
+  background window). Older split panels (WebviewPanel "kural.chatEditor") still come back through their serializer
+  (`restoreSplit`, `splitIds`). Each pane has its own
   `activeId`; `this.activeId` is a getter for the pane being handled (`this.pane`) or the one you used last
   (`focusPane`). `post()` goes to every pane (each shows what's about its own tab), except `ONE_PANE` replies
   (full, attached, flash…) to the current pane. A reply sent after an `await` uses `postTo(pane, …)`. Use
   `shown(id)` for "is this tab on screen", never `tab.id === this.activeId`.
+- **Links and pictures in answers** (`media/chat.js` `fileLink`, `openPath`/`openImage` in the chat): a markdown link
+  that isn't http(s) is a file (`#L12`, `#L12-L20`, `:12` = the line); a folder → Explorer, pictures/binaries →
+  `vscode.open`, missing → a message. Pictures (`img.md-img[data-path|data-url]`, attachments, tool/generated ones) open
+  full size in a tab: local → VS Code's image viewer, web → a tiny WebviewPanel. web links → Kural's browser tab.
+- **Browser / Design Mode** (`lib/browser/index.js`): it's VS Code's own Integrated Browser (a real WebContentsView tab:
+  any site, the element picker, screenshots, console logs). Kural's pieces: `kural.browser.open` (any web link in the chat,
+  "Kural: Open Browser" → `workbench.action.browser.open {url, openToSide}`; bare names → `Browser.url`: localhost/IP =
+  http, else https), `kural.browser.pick` (+ → Pick from a browser: asks the address if no browser tab is open, then
+  `workbench.action.browser.addElementToChat`), and `kural.browser.attach(items)` (called by the patch below) →
+  `chat.addBrowserItems`: an element/console-log item = a pill `kind: "element"` (`element.note` = VS Code's own
+  description: HTML path, outer HTML, size, computed CSS; `comment` = the text typed in "Comment on Elements", inserted as
+  the start of the message; `elementNote()` adds "find the code that makes this element before changing anything"), a
+  picture = a chat attachment (`attachments.addData`). **rebrand.py `route_browser_to_kural`** (three anchors found by shape
+  with this build's short names; any miss → a `::warning::` and the browser stays plain): (1) the browser editor's
+  `_revealChatWidgetForAttachment` returns a stand-in whose `attachmentModel.addContext(...)` runs `kural.browser.attach`
+  with plain data (pictures base64; the instantiation service is kept as `this.__kural`, the command service name read
+  from the file); (2) the picked-element object gets `comment`; (3) inside the browser's code, VS Code's `chatIsEnabled`
+  gate (`G.enabled`, off because Kural sets `chat.disableAIFeatures`) is replaced by `<expr>.true()`, or the "Add to Chat"
+  buttons never show. The actions are NOT in the Command Palette (they're menu actions), only in the browser bar's
+  split button. `workbench.browser.openLocalhostLinks` is on by default (package.json). Tests: `test/rebrand-browser.test.js`
+  (the patch on a real workbench file: valid JS, idempotent, the stand-in's payload). Checked live: bar button there and
+  toggles, a pick's data → pill + comment + picture → Claude found and edited the right CSS → reload showed it; chat links
+  open Google inside Kural. NOT checked: a real mouse click on the page's element (CDP synthetic clicks don't reach the
+  Overlay inspector). The older proxy browser (`proxy.js`, `media/browser.*`, `media/browser-picker.js`, test
+  `browser-proxy.test.js`) only runs as a fallback when `workbench.action.browser.open` doesn't exist.
+- **Account names** (`lib/ai/names.js`, no vscode): the status item shows the name on the chat's AI's account, from the
+  programs' own plain files only when their email is the account's: `~/.claude.json` oauthAccount.displayName (Claude
+  Code's `auth status` has no name), `~/.gemini/oauth_creds.json`'s id_token `name` (Antigravity's own login is in the
+  keychain: never read), `~/.codex/auth.json`'s id_token. `chat.onChoice` redraws it. Test: `test/names.test.js`.
 - **History** (`lib/chat/archive.js`, no vscode inside): every chat in full, all workspaces, in
   `globalStorage/kural.kural/chats/`: `<id>.json` + `<id>.meta.json` (one file per chat, so several windows can save at
   once; `deleted.json` keeps deleted ids so a window that still has one open can't bring it back; pinned is re-read
@@ -252,7 +294,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Keyboard shortcuts in the chat**: VS Code's `focusedView` isn't set for webviews, so the page reports
   focus itself (`kural.chatFocused` context key).
 - **Version label** (`lib/version.js`): `install.sh` `stamp_build` writes `extension/build.json` (gitignored: branch,
-  commit, "with changes") unless HEAD is exactly the tag `v<version>`; with it, the chat and Account menu show
+  commit, "with changes") unless HEAD is exactly the tag `v<version>`; with it, the chat and Kural Settings show
   "Unreleased version · main (abc1234)" instead of `v<version>`. Release builds (CI) never have the file. The update check
   still compares the package version.
 - **Tab completion engines**: `lib/tab/local.js` (Ollama, raw FIM prompt `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>`
@@ -262,6 +304,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   panel's Set up/Download, or Get started's own model): a model left over in Ollama isn't "ready". Local requests use short context (1500/400 chars) and few tokens: CPU-only machines are slow.
   Claude can't go below ~0.5 s per suggestion (measured). `test/fake-ollama.js` imitates Ollama for testing
   (modes via /tmp/rec/fake-mode: {"delay": ms} or {"empty": true}).
+  **Installing Ollama** (`lib/ai/ollama-install.js`, no vscode; one shared job in `lib/tab/local.js`): the Tab panel's
+  Set up (`local.setup()`: choose → install/start Ollama → pull the model, "Step 1 of 2"), Get started and the chat
+  (`installOllama()`, a notification). Mac: `Ollama-darwin.zip` → `/Applications/Ollama.app` (else ~/Applications),
+  `unzip` lines counted for the install %, `open -a … --args hidden`. Windows: `OllamaSetup.exe /VERYSILENT` (no %).
+  Linux: ollama.com/install.sh via `pkexec`, its curl % and `>>>` steps read by `readLinux`. Fails → a message offering
+  ollama.com / the terminal installer. Test: `test/ollama-install.test.js` (a stand-in ollama.com). Not yet tried with the real download on any system.
 - **Tab completion speed (Claude)**: model time (~0.6 s, Haiku, thinking off) dominates. Don't add work before the
   request. Two warm processes (`pool: 2`), early return on `</insert>`, type-through reuse.
 - **Tab in the terminal** (`lib/tab/terminal.js`): a terminal completion provider (proposed API
@@ -277,7 +325,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   whose label doesn't fuzzy-match the typed text, so `suggestionItem()` gives such items an empty replacement range
   (always shown) and `inputData` = DEL × typed characters + the command (what the terminal gets on Tab; VS Code's own
   items use it, the extension API passes it through with `...item`). `inputData` isn't public API: after a VSCodium
-  update, check that "push this to main" + Tab still replaces the words.
+  update, check that "push this to main" + Tab still replaces the words. VS Code asks a provider only at its trigger
+  characters, so letters/digits/`.` are triggers too (a sentence ending in a word, "delete the file install.sh", was
+  never asked about whole); mid-word only plain words go to the model (and after 450 ms). The plain-words item has
+  VS Code's internal kind 101 "InlineSuggestionAlwaysOnTop" (not in the public enum) so it's first and Tab takes it;
+  a pause timer + `triggerSuggest` was tried and dropped (it showed "No suggestions." on every pause). `ACTIONS`: a
+  leading verb that isn't a program ("delete install.sh") counts; apostrophes inside words are English, not quotes.
+  Checked live in the app (`rm install.sh` first, Tab replaces the line).
 - **Tab learns from your work** (`lib/tab/activity.js`, no vscode inside; fed by extension.js and chat.js): per workspace
   (`workspaceState` "kural.activity.v1"): chat asks + changed files (`finishReply`; Undo removes the file; "Build it"
   uses the plan's question), Ctrl+K/Apply you accepted (`review.onDone(meta)`), accepted Tab suggestions (the inline item's
@@ -309,6 +363,26 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (chat, Ask, Tab, Usage) set their own accent colors in CSS; a light theme overrides them under `body.vscode-light`.
   Code in chat answers: `highlight()` in `media/chat.js` (any language, `.tk-*` classes in Dark+/Light+ colors).
   `test/theme.test.js` checks both themes' text contrast (4.5:1; icons and line numbers 3:1) and that they set the same keys.
+- **VS Code's Search and Output views are hidden** (`rebrand.py` `hide_builtin_views`): each view descriptor in
+  workbench.desktop.main.js gets VS Code's own never-true `when` (`<ContextKeyExpr>.regex("neverMatch",/doesNotMatch/)`,
+  found next to the Search view; marked `/*kural-hidden*/`), and their containers are `hideIfEmpty`, so the activity bar
+  icon and the panel tab go away. Same fingerprint rule as the Help menu patch (`patch_workbench`); a VSCodium whose code
+  doesn't match keeps both views with a `::warning::`. Checked by launching the patched app (both gone, "Search & Ask"
+  there). Edit → Find in Files still runs VS Code's command (it opens nothing now): Kural binds Ctrl/Cmd+Shift+F/H itself.
+- **Search & Ask** (`lib/search/`: `index.js` the view and Ask, `find.js` text search in the editor, `text.js` no
+  vscode: ripgrep args/parsing, include/exclude globs as VS Code reads them, in-memory search; `media/search-replace.js`
+  the regex and replace rules, loaded by both the extension and the page so the results' preview equals what Replace
+  does). ripgrep is VS Code's own (`rgPath`: `node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/<os>-<arch>`),
+  with VS Code's flags (`--hidden --follow --crlf --engine auto`, `--no-ignore-global/-parent` per the search settings,
+  `files.exclude`+`search.exclude` as `-g !…`); one ripgrep per workspace folder (settings can differ). Files open with
+  unsaved changes are searched in memory instead, and results follow edits (`later`/`again`) and disk changes. ripgrep
+  gives byte offsets: `fromRg` turns them into UTF-16 columns (VS Code positions). Replace = one WorkspaceEdit, each
+  match re-checked at its place with a sticky regex (changed since: skipped, and said), files that weren't dirty are
+  saved; Replace Preview = `vscode.diff` against a `kural-replace:` document. The page (`media/search.js`) draws only the
+  rows on screen (fixed row height, `measure()`), so 20 000 results stay fast. Title-bar buttons and F4 use context keys
+  `kural.searchTab` / `searchHasResults` / `searchTree` / `searchCollapsed` that the page reports (`ui`). Right-click =
+  package.json `webview/context` with each row's `data-vscode-context`. Tests: `test/search-text.test.js` (real
+  ripgrep when one is found: the built app's, or `rg` on PATH, or `KURAL_RG`).
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
   renames the program, the 4 helpers and `bin/kural` together; a mismatch crashes the app at launch. CI opens the real
   app on all three systems (not just `--version`, which never starts the helpers).
@@ -317,7 +391,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (extensions can't add to the Help menu) and rewrites that file's checksum (sha256, base64, no "="). It only patches
   if the old checksum matches and the anchor ("Ask @vscode" Help item) is found; otherwise it skips with a
   `::warning::` (shows in the CI summary). Because a menu patch can silently miss, updates are also checked daily and
-  reachable from the Chat panel's … menu and the Account menu.
+  reachable from the Chat panel's … menu and Kural Settings.
 - **Updates** (`lib/updates.js`): `autoCheck()` once a day (globalState `kural.update.lastCheck`, setting
   `kural.updates.autoCheck`), quiet unless there's a newer version (non-modal offer, not awaited: an ignored
   notification must not keep `busy` set, or Check for Updates silently does nothing); newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
@@ -331,7 +405,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
 - `node test/personal.live.js` — Tab and commit messages with vs without what you've been doing (real Haiku).
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts
-  Kural; on Ubuntu run "Developer: Reload Window"). View → Output → Kural shows every request with timings.
+  Kural; on Ubuntu run "Developer: Reload Window"). "Kural: Show Log" shows every request with timings (`lib/log.js`:
+  the last 5000 lines in memory, a read-only `kural-log:` editor tab; VS Code's Output tab is hidden).
 
 ## Branches (main is protected)
 Never commit to `main` directly: GitHub rejects pushes to it (repo rules "Protect main" / "Release tags").

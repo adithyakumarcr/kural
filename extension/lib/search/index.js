@@ -1,13 +1,16 @@
-// "Ask" in the left sidebar: a question in plain words ("where is the operator box pause variable?")
-// → the chat's model searches the project and lists the exact places (file + line). Click one to open it there.
-// (Plain text search is VS Code's own search, Ctrl+Shift+F.)
+// "Search & Ask" in the left side bar, two tabs (media/search.js is the page):
+//   Search: find and replace in the project's files: what VS Code's own Search view did (Kural hides that one, see
+//           scripts/rebrand.py). Ctrl+Shift+F / Ctrl+Shift+H. The work is in find.js and text.js.
+//   Ask:    a question in plain words ("where are the user's settings saved?") → the chat's model searches the
+//           project and lists the exact places (file + line). Click one to open it there.
 
 const vscode = require("vscode");
-const { fontScale, watchFontScale } = require("./ui");
+const { fontScale, watchFontScale } = require("../ui");
 const fs = require("fs");
 const path = require("path");
-const { log, LOGIN_RE } = require("./ai/claude");
-const brain = require("./ai");
+const { log, LOGIN_RE } = require("../ai/claude");
+const brain = require("../ai");
+const { TextSearch } = require("./find");
 
 const SCHEMA = {
   type: "object",
@@ -38,7 +41,8 @@ const ASK_PROMPT =
 const cfg = () => vscode.workspace.getConfiguration("kural");
 
 // "./src/a.py" or ".\\src\\a.py" (Windows) → "src/a.py"
-const ws = require("./workspace");
+const ws = require("../workspace");
+const HISTORY = "kural.searchHistory.v1";
 const cleanRel = (p) => p.replace(/^\.[\\/]/, "").replace(/\\/g, "/");
 
 class SearchView {
@@ -47,25 +51,64 @@ class SearchView {
     this.view = null;
     this.spare = null;      // a Claude process started ahead of time, so asking starts instantly
     this.current = null;    // { proc, id }
+    this.text = new TextSearch(context, (m) => this.post(m));
   }
 
   register() {
     watchFontScale(this.context, (m) => this.view && this.view.webview.postMessage(m));
+    this.text.register();
+    const cmd = (id, f) => vscode.commands.registerCommand(id, f);
+    const toPage = (m) => () => this.post(m);
     this.context.subscriptions.push(
       vscode.window.registerWebviewViewProvider("kural.search", this, { webviewOptions: { retainContextWhenHidden: true } }),
-      vscode.commands.registerCommand("kural.askSearch", async () => {
-        await vscode.commands.executeCommand("kural.search.focus");
-        const ed = vscode.window.activeTextEditor;
-        const text = ed && !ed.selection.isEmpty ? ed.document.getText(ed.selection) : "";
-        if (this.view) this.view.webview.postMessage({ type: "focus", text: text.length < 200 ? text : "" });
-      }),
-      { dispose: () => { if (this.spare) this.spare.proc.kill(); if (this.current) this.current.proc.kill(); } },
+      cmd("kural.askSearch", () => this.show("ask")),
+      // Ctrl+Shift+F / Ctrl+Shift+H (VS Code's own keys for its Search), and Explorer → Find in Folder…
+      cmd("kural.search.find", () => this.show("text")),
+      cmd("kural.search.replace", () => this.show("text", { replace: true })),
+      cmd("kural.search.inFolder", (uri) => this.show("text", { include: uri && uri.fsPath ? `./${ws.label(uri.fsPath)}` : "" })),
+      // The view's title bar (like VS Code's Search): refresh, clear, collapse/expand, tree/list, search editor.
+      cmd("kural.search.refresh", toPage({ type: "cmd", what: "refresh" })),
+      cmd("kural.search.clear", toPage({ type: "cmd", what: "clear" })),
+      cmd("kural.search.collapseAll", toPage({ type: "cmd", what: "collapseAll" })),
+      cmd("kural.search.expandAll", toPage({ type: "cmd", what: "expandAll" })),
+      cmd("kural.search.viewAsTree", toPage({ type: "cmd", what: "tree" })),
+      cmd("kural.search.viewAsList", toPage({ type: "cmd", what: "list" })),
+      cmd("kural.search.openEditor", toPage({ type: "cmd", what: "openEditor" })),
+      // F4 / Shift+F4: the next / previous result, from anywhere.
+      cmd("kural.search.next", toPage({ type: "cmd", what: "next" })),
+      cmd("kural.search.prev", toPage({ type: "cmd", what: "prev" })),
+      // Right-click on a result (package.json "webview/context"): the row's data-vscode-context comes as the argument.
+      cmd("kural.search.copy", (c) => c && vscode.env.clipboard.writeText(c.row === "match" ? c.text : c.label)),
+      cmd("kural.search.copyPath", (c) => c && vscode.env.clipboard.writeText(c.path)),
+      cmd("kural.search.copyAll", toPage({ type: "cmd", what: "copyAll" })),
+      cmd("kural.search.reveal", (c) => c && vscode.commands.executeCommand("revealInExplorer", vscode.Uri.file(c.path))),
+      cmd("kural.search.dismiss", (c) => c && this.post({ type: "cmd", what: "dismiss", row: c })),
+      { dispose: () => { if (this.spare) this.spare.proc.kill(); if (this.current) this.current.proc.kill(); this.text.stop(); } },
       // Folders added or removed: the ready-made Claude has the old list, so start a new one.
       vscode.workspace.onDidChangeWorkspaceFolders(() => {
         if (this.spare) { const s = this.spare; this.spare = null; s.proc.kill(); }
         if (this.view) this.prepare();
       }),
+      vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("search")) this.post(this.config()); }),
     );
+  }
+
+  // Open the view on a tab; the editor's selection (one line) becomes the search.
+  async show(tab, extra = {}) {
+    await vscode.commands.executeCommand("kural.search.focus");
+    const ed = vscode.window.activeTextEditor;
+    const sel = ed && !ed.selection.isEmpty ? ed.document.getText(ed.selection) : "";
+    const text = sel.length < 200 && (tab === "ask" || !sel.includes("\n")) ? sel : "";
+    const m = { type: "focus", tab, text, ...extra };
+    if (this.view && this.ready) this.post(m); else this.pending = m;
+  }
+
+  config() {
+    const s = vscode.workspace.getConfiguration("search");
+    return { type: "config", model: brain.currentModel(), history: this.context.workspaceState.get(HISTORY) || {},
+      onType: s.get("searchOnType") !== false, debounce: s.get("searchOnTypeDebouncePeriod") || 300,
+      collapse: s.get("collapseResults") || "auto", viewMode: s.get("defaultViewMode") || "list", lineNumbers: !!s.get("showLineNumbers"),
+      folders: ws.folders().length };
   }
 
   root() { return ws.root(); }
@@ -74,39 +117,71 @@ class SearchView {
     this.view = view;
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
     view.webview.options = { enableScripts: true, localResourceRoots: [media] };
+    this.ready = false;
     const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
     const uri = (f) => view.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     view.webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; font-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("search.css")}"></head>
-<body><div id="app"></div><script nonce="${nonce}" src="${uri("search.js")}"></script></body></html>`;
+<body data-vscode-context='{"preventDefaultContextMenuItems": true}'><div id="app"></div><script nonce="${nonce}" src="${uri("search-replace.js")}"></script><script nonce="${nonce}" src="${uri("search.js")}"></script></body></html>`;
     view.webview.onDidReceiveMessage((m) => this.onMessage(m).catch((e) => log(`search: ${e.stack}`)));
-    view.onDidDispose(() => { this.view = null; });
+    view.onDidDispose(() => { this.view = null; this.ready = false; });
   }
 
   post(m) { if (this.view) this.view.webview.postMessage(m); }
 
   async onMessage(m) {
     switch (m.type) {
-      case "ready": this.post({ type: "config", model: brain.currentModel() }); this.prepare(); break;
+      case "ready":
+        this.ready = true;
+        this.post(this.config());
+        if (this.pending) { this.post(this.pending); this.pending = null; }
+        this.prepare();
+        break;
+      // ---- Search ----
+      case "find": this.text.find(m.q, m.id).catch((e) => { log(`search: ${e.stack}`); this.post({ type: "textDone", id: m.id, total: 0, error: e.message }); }); break;
+      case "stopFind": this.text.stop(); break;
+      case "clearFind": this.text.clear(); this.badge(0); break;
+      case "replace": await this.text.replace(m.items, m.replace, { confirm: !!m.confirm }); break;
+      case "preview": await this.text.preview(m.file, m.match, m.replace); break;
+      case "replaceText": this.text.replaceChanged(m.replace); break;
+      case "history": await this.context.workspaceState.update(HISTORY, m.history); break;
+      case "copy": await vscode.env.clipboard.writeText(m.text); break;
+      case "searchEditor":
+        vscode.commands.executeCommand("search.action.openNewEditor", { query: m.q.pattern, isRegexp: !!m.q.isRegex, isCaseSensitive: !!m.q.matchCase,
+          matchWholeWord: !!m.q.wholeWord, filesToInclude: m.q.include || "", filesToExclude: m.q.exclude || "", onlyOpenEditors: !!m.q.onlyOpen,
+          useExcludeSettingsAndIgnoreFiles: m.q.useIgnore !== false, showIncludesExcludes: !!(m.q.include || m.q.exclude), triggerSearch: true, focusResults: true });
+        break;
+      case "settings": vscode.commands.executeCommand("workbench.action.openSettings", m.query || "search.exclude"); break;
+      // What the title bar shows (package.json "view/title" when-clauses) and the number on the side bar icon.
+      case "ui":
+        vscode.commands.executeCommand("setContext", "kural.searchTab", m.tab);
+        vscode.commands.executeCommand("setContext", "kural.searchHasResults", !!m.results);
+        vscode.commands.executeCommand("setContext", "kural.searchTree", !!m.tree);
+        vscode.commands.executeCommand("setContext", "kural.searchCollapsed", !!m.collapsed);
+        this.badge(m.tab === "text" ? m.results : 0);
+        break;
       case "ask": this.ask(m.q, m.id); break;
       case "cancel": this.cancel(); break;
       case "open": {
-        const uri = ws.resolve(m.file);
+        const uri = m.path ? vscode.Uri.file(m.path) : ws.resolve(m.file);
         if (!uri) return;
         const l = Math.max(0, (m.line || 1) - 1);
         const doc = await vscode.workspace.openTextDocument(uri);
         const text = l < doc.lineCount ? doc.lineAt(l).text : "";
-        // A text search selects the match; an Ask result selects the whole line so you spot it.
-        const sel = m.len ? new vscode.Range(l, m.col || 0, l, (m.col || 0) + m.len)
+        // A text search selects the match (it can go over lines); an Ask result selects the whole line so you spot it.
+        const sel = m.endLine ? new vscode.Range(l, m.col || 0, m.endLine - 1, m.endCol || 0)
+          : m.len ? new vscode.Range(l, m.col || 0, l, (m.col || 0) + m.len)
           : new vscode.Range(l, text.length - text.trimStart().length, l, text.trimEnd().length);
-        const ed = await vscode.window.showTextDocument(doc, { preview: !!m.preview, selection: sel });
+        const ed = await vscode.window.showTextDocument(doc, { preview: !!m.preview, preserveFocus: !!m.keepFocus, selection: sel });
         ed.revealRange(sel, vscode.TextEditorRevealType.InCenter);
         break;
       }
       case "log": log(`search panel: ${m.message}`); break;
     }
   }
+
+  badge(n) { if (this.view) this.view.badge = n ? { value: n, tooltip: `${n} search ${n === 1 ? "result" : "results"}` } : undefined; }
 
   // ---------- Ask ----------
   // Ask uses the model picked in the chat: a Claude model through Claude Code, a model on your computer through
@@ -151,7 +226,7 @@ class SearchView {
     this.prepare();
     const slot = this.spare;
     this.spare = null;
-    if (!slot) { this.post({ type: "error", id, message: "Couldn't start the model. See View → Output → Kural." }); return; }
+    if (!slot) { this.post({ type: "error", id, message: "Couldn't start the model. See Kural's log (Kural: Show Log)." }); return; }
     const t0 = Date.now();
     this.current = { proc: slot.proc, id };
     slot.handlers = {
@@ -180,7 +255,7 @@ class SearchView {
       onExit: (info) => {
         if (this.current && this.current.id === id) {
           this.current = null;
-          this.post({ type: "error", id, message: info.login ? `${brain.providerOf(slot.model).label} isn't logged in. Open Kural: Get Started.` : "The model stopped unexpectedly. See View → Output → Kural." });
+          this.post({ type: "error", id, message: info.login ? `${brain.providerOf(slot.model).label} isn't logged in. Open Kural: Get Started.` : "The model stopped unexpectedly. See Kural's log (Kural: Show Log)." });
         }
       },
     };

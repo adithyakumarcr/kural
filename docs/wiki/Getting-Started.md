@@ -33,7 +33,8 @@ Kural checks every step and helps with it. Until one way passes, nothing runs in
 
 ### Your own model
 
-1. **Ollama.** **Get Ollama** (on Ubuntu it runs the installer; on a Mac or Windows it opens the download page).
+1. **Ollama.** **Install Ollama**: Kural downloads Ollama from ollama.com, installs it and starts it (progress in a
+   notification; on Ubuntu the system asks for your password). If it fails, the message offers ollama.com instead.
 2. **A model.** Pick one you have, or download one that fits your computer's memory (the page suggests a few).
 3. **A test.** One request to that model, the way Kural will use it.
 

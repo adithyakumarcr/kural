@@ -98,43 +98,144 @@ def main(app, platform):
                     Image.open(icon).resize((size, size), Image.LANCZOS).save(tile)
         except ImportError:
             pass
-    # 6. Help → Check for Updates… (Kural's own updater, from GitHub releases).
-    add_update_menu(app)
+    # 6. VS Code's own code: Help → Check for Updates… (Kural's updater), and VS Code's Search and Output views hidden
+    #    (Kural's Search & Ask side bar does text search; Kural's log opens with "Kural: Show Log").
+    patch_workbench(app)
     print(f"rebranded {app} for {platform}")
 
 
-# Extensions can't add items to the Help menu, so the item goes into VS Code's own code, next to its
-# "Ask @vscode" Help item. VS Code checks that file against a fingerprint in product.json ("checksums")
-# and calls the install "corrupt" if it changed, so the fingerprint is updated too. If VS Code's code
-# looks different (another VSCodium version), the menu item is skipped; the command palette still has it.
+# Kural changes two things in VS Code's own code (workbench.desktop.main.js):
+#   - Help → Check for Updates…: extensions can't add items to the Help menu, so the item goes next to VS Code's
+#     "Ask @vscode" Help item.
+#   - VS Code's Search view and Output view never show: Kural's Search & Ask side bar has text search (find and
+#     replace) and Ask together, and Kural's log is "Kural: Show Log". Each view gets VS Code's own "never" condition
+#     (`when: <ContextKeyExpr>.regex("neverMatch",/doesNotMatch/)`, which the Search view already uses for a
+#     keybinding); its container is "hideIfEmpty", so the activity bar icon and the panel tab go away too.
+# VS Code checks that file against a fingerprint in product.json ("checksums") and calls the install "corrupt" if it
+# changed, so the fingerprint is updated too. If VS Code's code looks different (another VSCodium version), that part is
+# skipped with a warning (it shows in the CI summary); the rest still works (the command palette has the updater).
 HELP_ITEM = re.compile(r'(\w+)\.appendMenuItem\((\w+)\.MenubarHelpMenu,\{command:\{id:\w+\.ID,title:\w+\(\d+,"Ask @vscode"\)')
+NEVER = re.compile(r'when:([\w$]+)\.regex\("neverMatch",/doesNotMatch/\)')
+SEARCH_VIEW = re.compile(r'\{(id:[\w$]+,containerIcon:[\w$]+,name:[\w$]+\(\d+,"Search"\),ctorDescriptor:)')
+OUTPUT_VIEW = re.compile(r'\{(id:[\w$]+,name:[\w$]+\(\d+,"Output"\),containerIcon:[\w$]+,canMoveView:)')
+HIDDEN_MARK = '/*kural-hidden*/'
 
 
 def fingerprint(data):
     return base64.b64encode(hashlib.sha256(data).digest()).decode().rstrip("=")
 
 
-def add_update_menu(app):
+def add_update_menu(text):
+    if "kural.checkForUpdates" in text:
+        return text
+    m = HELP_ITEM.search(text)
+    if not m:
+        print("::warning::Help menu code not found; Help → Check for Updates not added")
+        return text
+    registry, ids = m.group(1), m.group(2)
+    item = (f'{registry}.appendMenuItem({ids}.MenubarHelpMenu,{{command:{{id:"kural.checkForUpdates",'
+            f'title:"Check for Updates..."}},group:"7_update",order:1}}),')
+    return text[:m.start()] + item + text[m.start():]
+
+
+def hide_builtin_views(text):
+    if HIDDEN_MARK in text:
+        return text
+    never = NEVER.search(text)
+    if not never:
+        print("::warning::VS Code's \"never\" condition not found; its Search and Output views stay")
+        return text
+    cond = f'{HIDDEN_MARK}when:{never.group(1)}.regex("neverMatch",/doesNotMatch/),'
+    for name, pattern in (("Search", SEARCH_VIEW), ("Output", OUTPUT_VIEW)):
+        found = list(pattern.finditer(text))
+        if len(found) != 1:
+            print(f"::warning::VS Code's {name} view found {len(found)} times (not once); it stays")
+            continue
+        m = found[0]
+        text = text[:m.start() + 1] + cond + text[m.start() + 1:]
+    return text
+
+
+# VS Code's Integrated Browser (a real browser tab: any site, an element picker, screenshots, console logs) sends what you
+# pick to VS Code's own chat panel, which Kural doesn't have. Kural routes it to its own chat instead: the browser
+# editor's "find the chat to attach to" step (`_revealChatWidgetForAttachment`) returns a small stand-in whose
+# `addContext(...)` runs Kural's command `kural.browser.attach` (lib/browser/attach.js) with plain data (pictures as
+# base64). Needed for that: the instantiation service (the 3rd constructor argument, kept as `this.__kural`), the
+# command service's name in this build, and the element's own comment ("Comment on Elements", Cursor's "tell it what to
+# change") added to the object that's attached. Each anchor is found by shape, with this build's own short names; if
+# one isn't found (another VSCodium), the browser stays as it is and a ::warning:: says so.
+BR_CTOR = re.compile(r'constructor\((\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+)\)\{super\(\1\),'
+                     r'(this\.telemetryService=\4,this\.logService=\5,this\.chatWidgetService=\6,this\.chatService=\7,)')
+BR_REVEAL = re.compile(r'async _revealChatWidgetForAttachment\((\w+)=!1\)\{const (\w+)=await this\.chatWidgetService\.revealWidget\(\1\)\?\?this\.chatWidgetService\.lastFocusedWidget;'
+                       r'return \2&&!\2\.viewModel&&await \w+\.toPromise\(\2\.onDidChangeViewModel\),\2\}')
+BR_ELEMENT = re.compile(r'kind:"element",icon:(\w+\.fromId\(\w+\.layout\.id\)),ancestors:(\w+)\.ancestors')
+BR_MARK = '/*kural-browser*/'
+# The browser's "Add to Chat" actions (element, comment, console logs, screenshots) and their toolbar menu are shown only
+# when VS Code's chat is enabled (context key `chatIsEnabled`, `G.enabled`), and Kural turns that off (it hides Copilot's
+# chat). Inside the browser's code, from its first action to the setting registered after the menu, that condition becomes
+# "always" (`<ContextKeyExpr>.true()`), so the buttons show and the actions run.
+BR_REGION_START = re.compile(r'var \w+=(\w+)\.equals\("activeEditor",\w+\.EDITOR_ID\),\w+=\w+\(\d+,"Browser"\),\w+=new \w+\("browserElementSelectionMode"')
+BR_REGION_END = '"workbench.browser.enableChatTools":{type:"boolean",default:!0,'
+BR_ENABLED = re.compile(r'\b(\w+)\.enabled\b')
+
+
+def route_browser_to_kural(text):
+    if BR_MARK in text:
+        return text
+    cmd = re.search(r'(\w+)=\w+\("commandService"\)', text)
+    inst = re.search(r'(\w+)=\w+\("instantiationService"\)', text)
+    ctor, reveal, element = BR_CTOR.search(text), BR_REVEAL.search(text), BR_ELEMENT.search(text)
+    if not (cmd and inst and ctor and reveal and element):
+        print("::warning::VS Code's browser code not found as expected; its 'Add to Chat' stays as it is "
+              f"(command service {bool(cmd)}, instantiation service {bool(inst)}, constructor {bool(ctor)}, "
+              f"attach step {bool(reveal)}, element {bool(element)})")
+        return text
+    # The constructor's 3rd argument must be the instantiation service, and its 6th the chat widget service (the class's
+    # decorators, after its long body, say so).
+    chat = re.search(r'(\w+)=\w+\("chatWidgetService"\)', text)
+    if not chat or f"__param(2,{inst.group(1)}),__param(3," not in text or not re.search(
+            r"__decorate\(\[__param\(1,\w+\),__param\(2,%s\),__param\(3,\w+\),__param\(4,\w+\),__param\(5,%s\)," % (inst.group(1), chat.group(1)), text):
+        print("::warning::VS Code's browser constructor changed; its 'Add to Chat' stays as it is")
+        return text
+    shim = (
+        'async _revealChatWidgetForAttachment(e=!1){const k=this.__kural,'
+        'b=u=>{u=u&&u.buffer instanceof Uint8Array?u.buffer:u;if(!u||!u.length)return"";let s="";for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s)};'
+        'return{viewModel:{},inputEditor:{getModel:()=>null},focusInput(){},attachmentModel:{delete(){},addContext:(...c)=>{'
+        'const items=c.map(x=>({kind:x.kind,name:x.name,fullName:x.fullName,value:typeof x.value=="string"?x.value:"",innerText:x.innerText,comment:x.comment,'
+        'mime:x.mimeType||x.imageMimeType,image:b(x.imageData||(typeof x.value=="string"?null:x.value))}));'
+        f'k.invokeFunction(a=>a.get({cmd.group(1)}).executeCommand("kural.browser.attach",items))}}}}}}}}{BR_MARK}')
+    # The condition: the chat service's `<Class>.enabled` key; its name and the expression class (`and`, `true`) are read
+    # from the first browser action's own precondition.
+    gate = re.search(r'precondition:(\w+)\.and\(\w+,\w+,\w+\.negate\(\),(\w+)\.enabled\),toggled:', text)
+    start = BR_REGION_START.search(text)
+    end = text.find(BR_REGION_END, start.end()) if start else -1
+    if not (gate and start and end > 0 and re.search(re.escape(gate.group(1)) + r"\.true\(\)", text)):
+        print("::warning::VS Code's browser actions not found as expected; the browser's 'Add to Chat' buttons stay hidden")
+    else:
+        region = text[start.start():end]
+        text = text[:start.start()] + re.sub(r'\b' + re.escape(gate.group(2)) + r'\.enabled\b', gate.group(1) + ".true()", region) + text[end:]
+        reveal = BR_REVEAL.search(text)
+    text = text[:reveal.start()] + shim + text[reveal.end():]
+    text = BR_CTOR.sub(lambda m: m.group(0).replace("super(" + m.group(1) + "),", "super(" + m.group(1) + "),this.__kural=" + m.group(3) + ",", 1), text, count=1)
+    text = BR_ELEMENT.sub(lambda m: f'kind:"element",comment:{m.group(2)}.comment,icon:{m.group(1)},ancestors:{m.group(2)}.ancestors', text, count=1)
+    return text
+
+
+def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
     with open(js_path, "rb") as f:
         data = f.read()
     product = load(pj_path)
     sums = product.get("checksums", {})
-    if b"kural.checkForUpdates" in data:
-        return
     if sums.get(rel) != fingerprint(data):
-        print("::warning::unexpected workbench fingerprint; Help → Check for Updates not added")
+        print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    m = HELP_ITEM.search(text)
-    if not m:
-        print("::warning::Help menu code not found; Help → Check for Updates not added")
+    new = route_browser_to_kural(hide_builtin_views(add_update_menu(text)))
+    if new == text:
         return
-    registry, ids = m.group(1), m.group(2)
-    item = (f'{registry}.appendMenuItem({ids}.MenubarHelpMenu,{{command:{{id:"kural.checkForUpdates",'
-            f'title:"Check for Updates..."}},group:"7_update",order:1}}),')
-    data = (text[:m.start()] + item + text[m.start():]).encode("utf-8")
+    data = new.encode("utf-8")
     with open(js_path, "wb") as f:
         f.write(data)
     sums[rel] = fingerprint(data)

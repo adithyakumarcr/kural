@@ -143,7 +143,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mode-dot.m-agent { background: var(--accent); } .mode-dot.m-auto { background: var(--yellow); } .mode-dot.m-plan { background: var(--green); } .mode-dot.m-ask { background: var(--blue); }
 .at { background: none; border: 0; color: var(--muted); font-size: calc(13px * var(--fs, 1)); padding: 0 6px; border-radius: 5px; }
 .at:hover { background: var(--hover); color: var(--vscode-foreground); }
-.send { width: 26px; height: 26px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: calc(14px * var(--fs, 1)); flex-shrink: 0; }
+.send { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: calc(14px * var(--fs, 1)); flex-shrink: 0; }
 .send.stop { font-size: calc(10px * var(--fs, 1)); }
 .send:hover { background: var(--accent-hi); }
 

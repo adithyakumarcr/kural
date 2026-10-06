@@ -99,8 +99,8 @@
       el("div", { class: "row" }, btn("Update Ollama", "getOllama", "primary")));
     return step(1, "Install Ollama", waiting ? "waiting" : "todo",
       el("p", {}, "Ollama runs AI models on your own computer. Free, and nothing leaves your computer."),
-      waiting ? el("p", { class: "note" }, "Install Ollama and start it. This page updates by itself when it's running.")
-        : el("div", { class: "row" }, btn("Get Ollama", "getOllama", "primary"), el("span", { class: "muted" }, S.platform === "linux" ? "runs the official installer in a terminal" : "opens ollama.com/download")),
+      waiting ? el("p", { class: "note" }, "Kural is downloading and installing Ollama (its progress is in the notification). This page updates by itself when it's running.")
+        : el("div", { class: "row" }, btn("Install Ollama", "getOllama", "primary"), el("span", { class: "muted" }, S.platform === "linux" ? "downloads and installs it for you (asks for your password)" : "downloads and installs it for you")),
       el("p", { class: "muted small" }, "Installed already? Start the Ollama app, then ", link("check again", "recheck"), "."));
   }
 

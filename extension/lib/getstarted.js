@@ -450,8 +450,8 @@ class GetStarted {
           if (quiet >= 180 && !run.warned) {
             run.warned = true;
             vscode.window.showWarningMessage(`Kural: installing ${c.program} has printed nothing for 3 minutes. It may still be downloading, or it may be stuck.`,
-              "Keep waiting", "Show output", "Stop").then((pick) => {
-              if (pick === "Show output") vscode.commands.executeCommand("kural.showLog");
+              "Keep waiting", "Show log", "Stop").then((pick) => {
+              if (pick === "Show log") vscode.commands.executeCommand("kural.showLog");
               if (pick === "Stop") run.ac.abort();
               if (pick === "Keep waiting") { run.last = Date.now(); run.warned = false; }
             });
