@@ -53,7 +53,7 @@ class LocalRouterClient {
     if (cached && Date.now()-cached.at < 60000) return cached.capabilities;
     const tags = await req("/api/tags");
     const installed = (tags.models || []).find((m) => m.name === model || m.name === `${model}:latest`);
-    if (!installed) throw new Error("Router model isn't installed; download it in Model Router");
+    if (!installed) throw new Error("Router model isn't installed; run: ollama pull all-minilm:22m");
     if (installed.remote_host || installed.remote_model) throw new Error("Cloud models cannot assist the local router");
     const info = await req("/api/show",{ model });
     if (info.remote_host || info.remote_model || (info.capabilities || []).includes("cloud")) throw new Error("Cloud models cannot assist the local router");

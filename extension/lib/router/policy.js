@@ -38,7 +38,7 @@ function traits(model, overrides = {}) {
 }
 function select(models, request, settings, task = classify(request.prompt)) {
   models = eligible(models,request,settings);
-  if (!models.length) return { error: "No allowed model can handle this request. Check Model Router's allowed models and privacy settings." };
+  if (!models.length) return { error: "No allowed model can handle this request. Turn on more models in Model Router." };
   const profile = profileOf(request.profile || settings.profile), preferences = settings.modelPreferences || {};
   const current = models.find((m) => m.id === request.current);
   let floor = profile === "quality" ? 3 : task.complexity === "simple" ? 1 : task.complexity === "complex" && profile === "balanced" ? 3 : 2;
