@@ -170,7 +170,9 @@ function activate(context) {
   chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)
   new SearchView(context).register();
   // Kural Browser: your app on localhost beside the code; "Select element" adds what you click to the chat.
-  new Browser(context, (info) => chat.addElement(info)).register();
+  const browser = new Browser(context, (info) => chat.addElement(info));
+  browser.onItems = (items) => chat.addBrowserItems(items);
+  browser.register();
   triggerOnCursor(context);
 
   context.subscriptions.push(

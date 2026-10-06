@@ -1,9 +1,12 @@
 ## Not released yet
 
-- **Kural Browser: pick an element for the chat**, like Cursor. **Kural: Open Browser** (or **+ → Pick from a
-  browser**) shows your app (localhost) beside the code; **Select element**, click something, and it's added to your
-  message with its HTML, styles, size and (React/Vue) the component and its file.
-- **Links to files in answers open them** (at the line), and a localhost link opens in the Kural Browser. Before, only
+- **A browser inside Kural, with Design Mode like Cursor.** Real web pages in a tab: your app on localhost or any
+  website. **Every web link in a chat answer opens there** (not in your outside browser). Click the browser bar's inspect
+  button (Cmd/Ctrl+Shift+C), click an element on the page, and it's added to your message with its HTML, size, computed
+  CSS and a picture; **Comment on Elements** adds what you want changed ("make this bigger") as the start of your
+  message. Kural finds the code behind the element and changes it; reload to see it. The dropdown also adds screenshots
+  and the console logs. **+ → Pick from a browser** opens it for you.
+- **Links to files in answers open them** (at the line), and a web link opens in Kural's browser tab. Before, only
   web links and `file:12` code were clickable; a link like `[install.sh](install.sh)` was plain text.
 - **Click a picture in the chat** to see it full size in its own tab.
 - **Terminal: plain words that end in a word work.** "i want to delete the file install.sh" now suggests

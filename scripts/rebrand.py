@@ -156,6 +156,71 @@ def hide_builtin_views(text):
     return text
 
 
+# VS Code's Integrated Browser (a real browser tab: any site, an element picker, screenshots, console logs) sends what you
+# pick to VS Code's own chat panel, which Kural doesn't have. Kural routes it to its own chat instead: the browser
+# editor's "find the chat to attach to" step (`_revealChatWidgetForAttachment`) returns a small stand-in whose
+# `addContext(...)` runs Kural's command `kural.browser.attach` (lib/browser/attach.js) with plain data (pictures as
+# base64). Needed for that: the instantiation service (the 3rd constructor argument, kept as `this.__kural`), the
+# command service's name in this build, and the element's own comment ("Comment on Elements", Cursor's "tell it what to
+# change") added to the object that's attached. Each anchor is found by shape, with this build's own short names; if
+# one isn't found (another VSCodium), the browser stays as it is and a ::warning:: says so.
+BR_CTOR = re.compile(r'constructor\((\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+)\)\{super\(\1\),'
+                     r'(this\.telemetryService=\4,this\.logService=\5,this\.chatWidgetService=\6,this\.chatService=\7,)')
+BR_REVEAL = re.compile(r'async _revealChatWidgetForAttachment\((\w+)=!1\)\{const (\w+)=await this\.chatWidgetService\.revealWidget\(\1\)\?\?this\.chatWidgetService\.lastFocusedWidget;'
+                       r'return \2&&!\2\.viewModel&&await \w+\.toPromise\(\2\.onDidChangeViewModel\),\2\}')
+BR_ELEMENT = re.compile(r'kind:"element",icon:(\w+\.fromId\(\w+\.layout\.id\)),ancestors:(\w+)\.ancestors')
+BR_MARK = '/*kural-browser*/'
+# The browser's "Add to Chat" actions (element, comment, console logs, screenshots) and their toolbar menu are shown only
+# when VS Code's chat is enabled (context key `chatIsEnabled`, `G.enabled`), and Kural turns that off (it hides Copilot's
+# chat). Inside the browser's code, from its first action to the setting registered after the menu, that condition becomes
+# "always" (`<ContextKeyExpr>.true()`), so the buttons show and the actions run.
+BR_REGION_START = re.compile(r'var \w+=(\w+)\.equals\("activeEditor",\w+\.EDITOR_ID\),\w+=\w+\(\d+,"Browser"\),\w+=new \w+\("browserElementSelectionMode"')
+BR_REGION_END = '"workbench.browser.enableChatTools":{type:"boolean",default:!0,'
+BR_ENABLED = re.compile(r'\b(\w+)\.enabled\b')
+
+
+def route_browser_to_kural(text):
+    if BR_MARK in text:
+        return text
+    cmd = re.search(r'(\w+)=\w+\("commandService"\)', text)
+    inst = re.search(r'(\w+)=\w+\("instantiationService"\)', text)
+    ctor, reveal, element = BR_CTOR.search(text), BR_REVEAL.search(text), BR_ELEMENT.search(text)
+    if not (cmd and inst and ctor and reveal and element):
+        print("::warning::VS Code's browser code not found as expected; its 'Add to Chat' stays as it is "
+              f"(command service {bool(cmd)}, instantiation service {bool(inst)}, constructor {bool(ctor)}, "
+              f"attach step {bool(reveal)}, element {bool(element)})")
+        return text
+    # The constructor's 3rd argument must be the instantiation service, and its 6th the chat widget service (the class's
+    # decorators, after its long body, say so).
+    chat = re.search(r'(\w+)=\w+\("chatWidgetService"\)', text)
+    if not chat or f"__param(2,{inst.group(1)}),__param(3," not in text or not re.search(
+            r"__decorate\(\[__param\(1,\w+\),__param\(2,%s\),__param\(3,\w+\),__param\(4,\w+\),__param\(5,%s\)," % (inst.group(1), chat.group(1)), text):
+        print("::warning::VS Code's browser constructor changed; its 'Add to Chat' stays as it is")
+        return text
+    shim = (
+        'async _revealChatWidgetForAttachment(e=!1){const k=this.__kural,'
+        'b=u=>{u=u&&u.buffer instanceof Uint8Array?u.buffer:u;if(!u||!u.length)return"";let s="";for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s)};'
+        'return{viewModel:{},inputEditor:{getModel:()=>null},focusInput(){},attachmentModel:{delete(){},addContext:(...c)=>{'
+        'const items=c.map(x=>({kind:x.kind,name:x.name,fullName:x.fullName,value:typeof x.value=="string"?x.value:"",innerText:x.innerText,comment:x.comment,'
+        'mime:x.mimeType||x.imageMimeType,image:b(x.imageData||(typeof x.value=="string"?null:x.value))}));'
+        f'k.invokeFunction(a=>a.get({cmd.group(1)}).executeCommand("kural.browser.attach",items))}}}}}}}}{BR_MARK}')
+    # The condition: the chat service's `<Class>.enabled` key; its name and the expression class (`and`, `true`) are read
+    # from the first browser action's own precondition.
+    gate = re.search(r'precondition:(\w+)\.and\(\w+,\w+,\w+\.negate\(\),(\w+)\.enabled\),toggled:', text)
+    start = BR_REGION_START.search(text)
+    end = text.find(BR_REGION_END, start.end()) if start else -1
+    if not (gate and start and end > 0 and re.search(re.escape(gate.group(1)) + r"\.true\(\)", text)):
+        print("::warning::VS Code's browser actions not found as expected; the browser's 'Add to Chat' buttons stay hidden")
+    else:
+        region = text[start.start():end]
+        text = text[:start.start()] + re.sub(r'\b' + re.escape(gate.group(2)) + r'\.enabled\b', gate.group(1) + ".true()", region) + text[end:]
+        reveal = BR_REVEAL.search(text)
+    text = text[:reveal.start()] + shim + text[reveal.end():]
+    text = BR_CTOR.sub(lambda m: m.group(0).replace("super(" + m.group(1) + "),", "super(" + m.group(1) + "),this.__kural=" + m.group(3) + ",", 1), text, count=1)
+    text = BR_ELEMENT.sub(lambda m: f'kind:"element",comment:{m.group(2)}.comment,icon:{m.group(1)},ancestors:{m.group(2)}.ancestors', text, count=1)
+    return text
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -167,7 +232,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = hide_builtin_views(add_update_menu(text))
+    new = route_browser_to_kural(hide_builtin_views(add_update_menu(text)))
     if new == text:
         return
     data = new.encode("utf-8")

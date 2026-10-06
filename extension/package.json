@@ -773,6 +773,7 @@
       "workbench.secondarySideBar.defaultVisibility": "visible",
       "workbench.startupEditor": "none",
       "workbench.tips.enabled": false,
+      "workbench.browser.openLocalhostLinks": true,
       "chat.commandCenter.enabled": false,
       "chat.disableAIFeatures": true,
       "editor.fontSize": 14,

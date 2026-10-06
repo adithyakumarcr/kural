@@ -132,7 +132,8 @@
         ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : fileLink(text, url)))
       // A bare web address: clickable too (not inside `code`, a link or a picture made above).
       .split(/(<code[^>]*>[\s\S]*?<\/code>|<a [^>]*>[\s\S]*?<\/a>|<img [^>]*>|<span class="img-[^>]*>[\s\S]*?<\/span>)/).map((part, i) => i % 2 ? part
-        : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')).join("");
+        : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')
+          .replace(/(^|[\s(>])(www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s<"]*[^\s<".,:;!?)\]'])?)/gi, '$1<a class="link" data-url="https://$2">$2</a>')).join("");
   }
 
   // "| a | b |" → ["a", "b"]   (a "|" inside `code` doesn't split)
@@ -986,8 +987,8 @@
         el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
           el("span", { class: "mi-icon" }, icon("issues")), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
           jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected")),
-        el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "browser" }); } },
-          el("span", { class: "mi-icon" }, icon("inspect")), el("span", { class: "mi-label" }, "Pick from a browser"), el("span", { class: "mi-hint" }, "your app on localhost: select an element")),
+        el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "browserPick" }); } },
+          el("span", { class: "mi-icon" }, icon("inspect")), el("span", { class: "mi-label" }, "Pick from a browser"), el("span", { class: "mi-hint" }, "your app: click an element to add it")),
         el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
           el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
           el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];
@@ -1441,7 +1442,11 @@ ${d.system}` : ""}`,
       case "activeFile": S.activeFile = m.file; S.includeActive = true; renderChips(); break;
       case "files": S.files = m.files; if (S.popup) renderPopup(); break;
       case "pics": S.pics = m.pics; break;
-      case "insertPill": closeHistory(); insertPill(m.ctx); break;
+      case "insertPill":
+        closeHistory(); insertPill(m.ctx);
+        if (m.text) document.execCommand("insertText", false, m.text);   // (a comment typed in the browser starts your message)
+        input.focus();
+        break;
       case "pasted":
         if (m.ctx) insertPill(m.ctx, pasteRange);
         else { input.focus(); if (pasteRange) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(pasteRange); } document.execCommand("insertText", false, m.text); }

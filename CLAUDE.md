@@ -254,16 +254,28 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Links and pictures in answers** (`media/chat.js` `fileLink`, `openPath`/`openImage` in the chat): a markdown link
   that isn't http(s) is a file (`#L12`, `#L12-L20`, `:12` = the line); a folder → Explorer, pictures/binaries →
   `vscode.open`, missing → a message. Pictures (`img.md-img[data-path|data-url]`, attachments, tool/generated ones) open
-  full size in a tab: local → VS Code's image viewer, web → a tiny WebviewPanel. localhost links → the Kural Browser.
-- **Kural Browser** (`lib/browser/`: `index.js` the tab, `proxy.js` no vscode; pages `media/browser.*`, picker
-  `media/browser-picker.js`): the page loads in an iframe from a proxy on 127.0.0.1:<random> (a cross-origin page can't
-  be reached into, so the picker comes with the page: one `<script>` first in `<head>`; CSP/X-Frame-Options/COOP/COEP
-  dropped; gzip/br decoded; Location and Set-Cookie (Domain, Secure, SameSite=None) pointed at the proxy; websocket
-  upgrades piped, and destroyed on close (a server waits for them forever). Picker ↔ tab by postMessage (`kuralPick`,
-  `kuralNav`; `picked`/`page`, checked against the frame's window). A pick → `chat.addElement` → a pill `kind:
-  "element"` (`element` = the details) → `elementNote()` in the prompt (dedupe key includes the selector). The webview
-  CSP's `frame-src` is the proxy only. Test: `test/browser-proxy.test.js` (a stand-in dev server). Checked in the app:
-  page through the proxy, outline, pick → pill with the real URL, the model reads the styles.
+  full size in a tab: local → VS Code's image viewer, web → a tiny WebviewPanel. web links → Kural's browser tab.
+- **Browser / Design Mode** (`lib/browser/index.js`): it's VS Code's own Integrated Browser (a real WebContentsView tab:
+  any site, the element picker, screenshots, console logs). Kural's pieces: `kural.browser.open` (any web link in the chat,
+  "Kural: Open Browser" → `workbench.action.browser.open {url, openToSide}`; bare names → `Browser.url`: localhost/IP =
+  http, else https), `kural.browser.pick` (+ → Pick from a browser: asks the address if no browser tab is open, then
+  `workbench.action.browser.addElementToChat`), and `kural.browser.attach(items)` (called by the patch below) →
+  `chat.addBrowserItems`: an element/console-log item = a pill `kind: "element"` (`element.note` = VS Code's own
+  description: HTML path, outer HTML, size, computed CSS; `comment` = the text typed in "Comment on Elements", inserted as
+  the start of the message; `elementNote()` adds "find the code that makes this element before changing anything"), a
+  picture = a chat attachment (`attachments.addData`). **rebrand.py `route_browser_to_kural`** (three anchors found by shape
+  with this build's short names; any miss → a `::warning::` and the browser stays plain): (1) the browser editor's
+  `_revealChatWidgetForAttachment` returns a stand-in whose `attachmentModel.addContext(...)` runs `kural.browser.attach`
+  with plain data (pictures base64; the instantiation service is kept as `this.__kural`, the command service name read
+  from the file); (2) the picked-element object gets `comment`; (3) inside the browser's code, VS Code's `chatIsEnabled`
+  gate (`G.enabled`, off because Kural sets `chat.disableAIFeatures`) is replaced by `<expr>.true()`, or the "Add to Chat"
+  buttons never show. The actions are NOT in the Command Palette (they're menu actions), only in the browser bar's
+  split button. `workbench.browser.openLocalhostLinks` is on by default (package.json). Tests: `test/rebrand-browser.test.js`
+  (the patch on a real workbench file: valid JS, idempotent, the stand-in's payload). Checked live: bar button there and
+  toggles, a pick's data → pill + comment + picture → Claude found and edited the right CSS → reload showed it; chat links
+  open Google inside Kural. NOT checked: a real mouse click on the page's element (CDP synthetic clicks don't reach the
+  Overlay inspector). The older proxy browser (`proxy.js`, `media/browser.*`, `media/browser-picker.js`, test
+  `browser-proxy.test.js`) only runs as a fallback when `workbench.action.browser.open` doesn't exist.
 - **Account names** (`lib/ai/names.js`, no vscode): the status item shows the name on the chat's AI's account, from the
   programs' own plain files only when their email is the account's: `~/.claude.json` oauthAccount.displayName (Claude
   Code's `auth status` has no name), `~/.gemini/oauth_creds.json`'s id_token `name` (Antigravity's own login is in the

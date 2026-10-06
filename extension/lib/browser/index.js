@@ -1,7 +1,13 @@
-// Kural Browser: your web app (http://localhost:3000…) in a tab beside the code, with "Select element": click
-// something on the page and it's added to the chat as context, the way Cursor does it. The page comes through a small
-// proxy on this computer (proxy.js) that adds the picker (media/browser-picker.js) to it. Opened with "Kural: Open
-// Browser", the chat's + menu ("Pick from a browser"), or a localhost link in an answer.
+// Kural's browser: web pages (your app on localhost, any site) in a tab inside Kural, with Cursor's "Design Mode": turn on
+// the element picker, click something on the page, and it's added to the chat (its HTML, size, computed CSS, a picture
+// of it, and a comment you can type: "make this bigger"). Opened with "Kural: Open Browser", the chat's + menu
+// ("Pick from a browser"), or any web link in an answer.
+//
+// It is VS Code's own Integrated Browser (a real browser tab: any site, login, dev tools, the picker, screenshots,
+// console logs), which is in the editor already. Its "add to chat" went to VS Code's chat panel, which Kural doesn't
+// have; scripts/rebrand.py makes it call `kural.browser.attach` (below) instead, which puts it in Kural's chat.
+// If that browser isn't there (an older VS Code), the little proxy browser of this file's second half takes over: the
+// page comes through a proxy on this computer (proxy.js) that adds a picker of Kural's own (media/browser-picker.js).
 
 const vscode = require("vscode");
 const fs = require("fs");
@@ -24,8 +30,44 @@ class Browser {
   register() {
     this.context.subscriptions.push(
       vscode.commands.registerCommand("kural.browser.open", (url) => this.open(typeof url === "string" ? url : undefined)),
+      vscode.commands.registerCommand("kural.browser.pick", () => this.pick()),
+      // From VS Code's own browser (patched in rebrand.py): what you picked or captured goes to Kural's chat.
+      vscode.commands.registerCommand("kural.browser.attach", (items) => this.attach(items)),
       { dispose: () => { if (this.proxy) this.proxy.close(); } },
     );
+  }
+
+  // Is VS Code's Integrated Browser here (and patched to talk to Kural)?
+  async builtIn() {
+    if (this._builtIn === undefined) this._builtIn = (await vscode.commands.getCommands(true)).includes("workbench.action.browser.open");
+    return this._builtIn;
+  }
+
+  async attach(items) {
+    log(`browser: ${(items || []).length} item(s) from the browser: ${(items || []).map((x) => `${x.kind}${x.image ? "+picture" : ""}`).join(", ")}`);
+    if (this.onItems) await this.onItems(items);
+  }
+
+  // "localhost:3000" and "3000" are http; other names (www.google.com) are https.
+  static url(text) {
+    let u = String(text || "").trim();
+    if (/^\d{2,5}$/.test(u)) return `http://localhost:${u}`;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) return u;
+    return /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|\d+\.\d+\.\d+\.\d+)(:\d+)?(\/|$)/i.test(u) ? `http://${u}` : `https://${u}`;
+  }
+
+  // Click-an-element mode: open the browser (asking for the address if nothing is open yet), then switch the picker on.
+  async pick() {
+    if (!(await this.builtIn())) { await this.open(); return; }
+    const open = vscode.window.tabGroups.all.flatMap((g) => g.tabs).some((t) => /browser/i.test(t.input && t.input.viewType || "") || /browser/i.test(t.label || ""));
+    if (!open) {
+      const typed = await vscode.window.showInputBox({ title: "Open your app in Kural's browser", prompt: "Address of the page (3000, localhost:5173, https://…)",
+        value: this.context.globalState.get(LAST) || "localhost:3000" });
+      if (!typed) return;
+      await this.open(typed);
+      await new Promise((r) => setTimeout(r, 2500));   // (the page has to load before an element can be picked)
+    }
+    await vscode.commands.executeCommand("workbench.action.browser.addElementToChat");
   }
 
   async ensureProxy() {
@@ -38,7 +80,12 @@ class Browser {
   }
 
   async open(url) {
-    url = url || this.context.globalState.get(LAST) || "http://localhost:3000";
+    url = Browser.url(url || this.context.globalState.get(LAST) || "http://localhost:3000");
+    this.context.globalState.update(LAST, url);
+    if (await this.builtIn()) {
+      await vscode.commands.executeCommand("workbench.action.browser.open", { url, openToSide: true });
+      return;
+    }
     await this.ensureProxy();
     if (!this.panel) this.create(); else this.panel.reveal();
     this.go(url);

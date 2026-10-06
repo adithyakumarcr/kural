@@ -1543,12 +1543,12 @@ class ChatView {
         if (items.length && pane) this.postTo(pane, { type: "attached", items });
         break;
       }
-      // A link to your own app (localhost) opens in the Kural Browser, where you can pick elements; others in your browser.
+      // Web links open in Kural's browser tab (the Integrated Browser), where you can also pick elements of the page.
       case "openUrl":
-        if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(m.url || "")) vscode.commands.executeCommand("kural.browser.open", m.url);
-        else if (/^https?:\/\//.test(m.url || "")) vscode.env.openExternal(vscode.Uri.parse(m.url));
+        if (/^https?:\/\//i.test(m.url || "")) vscode.commands.executeCommand("kural.browser.open", m.url);   // (inside Kural)
         break;
       case "browser": vscode.commands.executeCommand("kural.browser.open", m.url); break;
+      case "browserPick": vscode.commands.executeCommand("kural.browser.pick"); break;
       case "ticketSearch": {
         const out = await this.tickets.search(m.query || "", (text) => pane && this.postTo(pane, { type: "ticketStatus", id: m.id, text }));
         if (!out.cancelled && pane) this.postTo(pane, { type: "ticketResults", id: m.id, ...out });
@@ -1747,6 +1747,30 @@ class ChatView {
     vscode.window.setStatusBarMessage(`Kural: added ${info.short} to the chat`, 3000);
   }
 
+  // What VS Code's Integrated Browser sends ("Add Element to Chat", "Comment on Elements", screenshots, console logs;
+  // rebrand.py routes it here as `kural.browser.attach`): elements and console logs become pills in the message
+  // you're writing (with the comment typed in the browser as the start of your message); pictures become attachments.
+  async addBrowserItems(items) {
+    await this.reveal();
+    const pane = this.cur();
+    if (!pane) return;
+    const added = [];
+    for (const x of items || []) {
+      if (x.image) {
+        const ext = /png/i.test(x.mime || "") ? "png" : "jpg";
+        const a = this.attachments.addData(`${x.kind === "element" ? "element" : "screenshot"}-${Date.now() % 100000}.${ext}`, x.image);
+        if (a) this.postTo(pane, { type: "attached", items: [a] });
+      }
+      if (x.kind !== "element" || !x.value) { if (x.image) added.push("a screenshot"); continue; }
+      const url = (/^URL: (\S+)/m.exec(x.value) || [])[1] || "browser";
+      const label = x.name && x.name.length < 60 ? `<${x.name}>` : "<element>";
+      const ctx = { kind: "element", path: url, label, element: { note: x.value, text: x.innerText || "", comment: x.comment || "", short: x.name || "element", url } };
+      this.postTo(pane, { type: "insertPill", ctx, text: x.comment ? ` ${x.comment}` : "" });
+      added.push(label);
+    }
+    if (added.length) vscode.window.setStatusBarMessage(`Kural: added ${added.join(", ")} to the chat`, 3000);
+  }
+
   // A file the chat mentions or links: open it (at the line). A folder: show it in the Explorer. A picture or another
   // file that isn't text: VS Code's own viewer. Not there: say so (a model can name a file that doesn't exist).
   async openPath(p, line, endLine) {
@@ -1841,6 +1865,13 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 
 // What the model reads about an element you picked in the Kural Browser.
 function elementNote(e) {
+  // From VS Code's Integrated Browser: its own description of the element (HTML path, outer HTML, size, computed CSS).
+  if (e.note) {
+    const out = [e.note];
+    if (e.comment) out.push(`My instruction for this element: ${e.comment}`);
+    out.push("(Find the code that makes this element in my project, searching for its classes, id or text, before you change anything.)");
+    return out.join("\n\n");
+  }
   const lines = [`An element I picked on the page ${e.url || ""}${e.title ? ` ("${e.title}")` : ""}:`,
     `- element: <${e.short || e.tag}>, selector: ${e.selector || "?"}${e.size ? `, ${e.size[0]}x${e.size[1]} px` : ""}`];
   if (e.component && e.component.name) lines.push(`- ${e.component.framework || ""} component: ${e.component.name}${e.component.file ? ` (${e.component.file}${e.component.line ? `:${e.component.line}` : ""})` : ""}`);

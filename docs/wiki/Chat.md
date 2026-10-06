@@ -48,7 +48,7 @@ your next message, because which tools the model has is fixed when it starts.
 - **+ → Link ticket** (Claude): link a Jira epic, story or task; Kural then knows which ticket you're working on in every
   message, and reads its details from Jira when needed. Needs the Atlassian connector in Claude (claude.ai → Settings →
   Connectors).
-- **+ → Pick from a browser**: opens the [[Kural Browser|Browser]] to select an element of your app and add it here.
+- **+ → Pick from a browser**: opens the [[Browser]] to select an element of your app and add it here.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
 - The file you're looking at is added by itself ("current file"); click its × to leave it out.
@@ -66,8 +66,8 @@ your next message, because which tools the model has is fixed when it starts.
   answer.
 - **Click a picture** to see it full size in its own tab.
 - **Links** to files (`[install.sh](install.sh)`, `[app.js:12](src/app.js#L12)`) and `file.py:12` style references
-  open the file at that line; a folder shows in the Explorer. Links to your own app (`http://localhost:…`) open in the
-  [[Kural Browser|Browser]]; other web links in your browser.
+  open the file at that line; a folder shows in the Explorer. Web links open in Kural's own [[Browser]] tab (so you can
+  pick elements of the page).
 - **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;
   **Latest** brings you back down.
 - **Stop** (the square button) stops the answer.
