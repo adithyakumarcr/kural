@@ -30,6 +30,9 @@ Use the context: the shell, the folder, the git branch and remotes, recent comma
 "commit with message fixed the login bug" -> <cmd>git commit -m "Fixed the login bug"</cmd>
 "commit everything" -> <cmd>git commit -am "..."</cmd> with a short message that names what the changes do
 "show files changed today" -> <cmd>find . -type f -newermt "$(date +%F)" -not -path "./.git/*"</cmd>
+"i want to delete the file install.sh" -> <cmd>rm install.sh</cmd>
+"rename notes.md to todo.md" -> <cmd>mv notes.md todo.md</cmd>
+"make a folder called assets" -> <cmd>mkdir assets</cmd>
 For a commit message they wrote, keep their words (fix the capital letter and obvious typos only) and close the quote;
 if they didn't write one, write a short one from the changes. The command must fit on ONE line: never a heredoc, never
 $(cat <<EOF …), never several -m, no trailers (no Co-Authored-By or similar): only the message itself. Never add destructive options (--force, -f, rm -rf,
@@ -120,11 +123,18 @@ function isProgram(word) {
 }
 // Words only people write, not commands: after a program name ("git push this to the main branch") two are needed.
 const PERSONAL = /^(this|that|these|the|my|a|an|please|me|it|its|them|which|what|how|into)$/i;
+// Plain English verbs that start a request ("delete install.sh", "rename a.txt to b.txt") but aren't programs here
+// (each is still checked against PATH: a "remove" program would make it a command).
+const ACTIONS = /^(delete|remove|rename|move|copy|duplicate|create|show|list|undo|revert|switch|uninstall|restart|count|compress|extract|download|upload|change|update|add|clean|stage|unstage|discard|empty|erase|zip|unzip)$/i;
 function plainWords(typed) {
   const t = String(typed || "").trim();
   const words = t.split(/\s+/);
+  if (words.length < 2) return false;
+  // Shell syntax: a command. (An apostrophe inside a word is English: "I'd like to…", "what's".)
+  if (/[|><$`=;&\\]|(^|\s)--?[A-Za-z]|"|(^|\s)'|'(\s|$)/.test(t)) return false;
+  // "delete install.sh", "remove the build folder": a request when it starts with such a verb that isn't a program.
+  if (ACTIONS.test(words[0]) && !isProgram(words[0])) return true;
   if (words.length < 3) return false;
-  if (/[|><$`=;&\\]|(^|\s)--?[A-Za-z]|["']/.test(t)) return false;   // shell syntax: a command
   if (/[\/\\]|^[.~]/.test(words[0])) return false;                     // ./run.sh, /usr/bin/python3, ~/bin/x: a program
   // A wrong guess replaces your command line, so only clear sentences count.
   if (isProgram(words[0])) return words.filter((w) => PERSONAL.test(w)).length >= 2;

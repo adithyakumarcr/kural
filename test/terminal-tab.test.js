@@ -21,12 +21,14 @@ check("must continue what you typed", () => assert.strictEqual(tidy("<cmd>rm -rf
 // Plain words → a command (the chat's model). Which lines count as plain words:
 check("plain words are noticed", () => {
   for (const t of ["Push this code to fix/code-editor branch", "commit with message please fix the login", "delete all the build folders",
-    "show me what changed today", "git push this to the main branch"]) assert.ok(plainWords(t), t);
+    "show me what changed today", "git push this to the main branch", "i want to delete the file install.sh", "I'd like to rename notes.md to todo.md",
+    "delete install.sh", "remove the build folder", "rename a.txt to b.txt"]) assert.ok(plainWords(t), t);
 });
 check("commands stay commands", () => {
   for (const t of ["git push origin main", 'git commit -m "fix it"', "ls -la", "npm run build -- --watch", "cd src/app", "python3 main.py --port 80",
     "grep -rn foo .", "echo hello > out.txt", "ga", "make",
-    "./run.sh build all now", "/usr/bin/python3 a.py b c", "kubectl get pods in prod", "make clean all and test"]) assert.ok(!plainWords(t), t);
+    "./run.sh build all now", "/usr/bin/python3 a.py b c", "kubectl get pods in prod", "make clean all and test", "rm install.sh", "git commit -m 'fix it'",
+    "delete", "echo 'hi there' now"]) assert.ok(!plainWords(t), t);
 });
 check("the model's command, one line, quote closed", () => {
   assert.strictEqual(tidyIntent("<cmd>git push origin fix/code-editor</cmd>"), "git push origin fix/code-editor");

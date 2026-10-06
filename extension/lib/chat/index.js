@@ -158,7 +158,11 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.split", () => this.openSplit()),
       // (Panels opened by older versions come back through this serializer; new ones are tab editors, tab-editor.js.)
       vscode.window.registerWebviewPanelSerializer("kural.chatEditor", { deserializeWebviewPanel: async (panel) => this.restoreSplit(panel) }),
-      vscode.commands.registerCommand("kural.chat.newTab", () => { this.reveal(); this.newTab(true); }),
+      vscode.commands.registerCommand("kural.chat.newTab", async () => {
+        // (From a chat dragged into the editor area: the new chat goes into the side panel, which has the tabs.)
+        if (this.cur() && this.cur().single) { await vscode.commands.executeCommand("kural.chat.focus"); this.focusPane = this.side() || null; }
+        this.reveal(); this.newTab(true);
+      }),
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
@@ -273,6 +277,9 @@ class ChatView {
   activate(id, pane = this.cur()) {
     const tab = this.tab(id);
     if (!tab) return;
+    // Open in its own editor already (dragged out): go there instead of showing it twice.
+    const own = this.panes.find((p) => p.single && p.activeId === id && p !== pane);
+    if (own && own.panel) { own.panel.reveal(); return; }
     if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
@@ -284,9 +291,13 @@ class ChatView {
   }
 
   cycle(dir) {
-    if (!this.tabs.length) return;
-    const i = this.tabs.findIndex((t) => t.id === this.activeId);
-    this.activate(this.tabs[(i + dir + this.tabs.length) % this.tabs.length].id);
+    const pane = this.cur();
+    if (pane && pane.single) return;   // (a dragged-out chat has no other tabs)
+    const out = new Set(this.panes.filter((p) => p.single).map((p) => p.activeId));
+    const list = this.tabs.filter((t) => !out.has(t.id) || t.id === this.activeId);
+    if (!list.length) return;
+    const i = list.findIndex((t) => t.id === this.activeId);
+    this.activate(list[(i + dir + list.length) % list.length].id);
   }
 
   // Closing a tab keeps it in History (clock button), unless it was never used (or you deleted it: keep = false).
@@ -301,8 +312,9 @@ class ChatView {
     this.tabs.splice(i, 1);
     if (keep && tab.messages.length) this.archive.save(tab, this.card(tab));
     if (!this.tabs.length) this.newTab(true);
-    // Every pane that showed it moves to the tab before it.
-    const showing = this.panes.filter((p) => p.activeId === id);
+    // Its own editor (dragged out) closes with it; every other pane that showed it moves to the tab before it.
+    for (const p of this.panes.filter((q) => q.single && q.activeId === id)) { p.closing = true; p.panel.dispose(); }
+    const showing = this.panes.filter((p) => p.activeId === id && !p.single);
     for (const p of showing) this.activate(this.tabs[Math.max(0, Math.min(i - 1, this.tabs.length - 1))].id, p);
     if (!showing.length) this.postTabs();
     this.postHistory();
@@ -550,7 +562,9 @@ class ChatView {
       const other = this.tabs.find((t) => t.id !== id && !this.panes.some((q) => q.activeId === t.id)) || this.newTab(false);
       this.activate(other.id, p);
     }
-    this.adoptSplit(panel, id);
+    const pane = this.adoptSplit(panel, id);
+    pane.single = true;
+    this.postTabs();
     this.save();
   }
   // After a restart VS Code brings the panel back; give it the chat it showed before.
@@ -566,9 +580,11 @@ class ChatView {
     panel.onDidDispose(() => {
       this.panes.splice(this.panes.indexOf(pane), 1);
       if (this.focusPane === pane) this.focusPane = null;
+      this.postTabs();   // (a dragged-out chat goes back into the side panel's tabs)
       this.save();
     });
     this.postTabs();
+    return pane;
   }
 
   // Show the chat you're working in: the panel beside the code, or the side panel.
@@ -581,7 +597,16 @@ class ChatView {
   // Replies to one pane (the tab it opened, a file it picked, focus, short notices) go only to that pane.
   // Everything else goes to all panes; each one keeps what's about the tab it shows.
   post(msg) {
-    if (msg.type === "tabs") { for (const p of this.panes) this.postTo(p, { ...msg, activeId: p.activeId }); return; }
+    if (msg.type === "tabs") {
+      // A chat dragged into the editor area (a "single" pane) shows only itself, and leaves the other panes' tab bars
+      // until its editor closes (like moving a tab in VS Code).
+      const out = new Set(this.panes.filter((p) => p.single).map((p) => p.activeId));
+      for (const p of this.panes) {
+        const tabs = p.single ? msg.tabs.filter((t) => t.id === p.activeId) : msg.tabs.filter((t) => !out.has(t.id) || t.id === p.activeId);
+        this.postTo(p, { ...msg, tabs, activeId: p.activeId, single: !!p.single });
+      }
+      return;
+    }
     if (ONE_PANE.has(msg.type)) { const p = this.cur(); if (p) this.postTo(p, msg); return; }
     for (const p of this.panes) this.postTo(p, msg);
   }
@@ -1651,13 +1676,10 @@ class ChatView {
         break;
       }
       case "copy": await vscode.env.clipboard.writeText(m.code); vscode.window.setStatusBarMessage("Copied", 1500); break;
-      case "openFile": {
-        const uri = this.resolvePath(m.path);
-        if (!uri) return;
-        const line = Math.max(0, (m.line || 1) - 1), end = Math.max(line, (m.endLine || m.line || 1) - 1);
-        await vscode.window.showTextDocument(uri, { preview: false, selection: m.line ? new vscode.Range(line, 0, end, 0) : undefined });
-        break;
-      }
+      case "openFile": await this.openPath(m.path, m.line, m.endLine); break;
+      // A picture in the chat, clicked: in its own editor tab, full size (VS Code's picture viewer; a web picture in a
+      // small page of its own).
+      case "openImage": await this.openImage(m.path, m.url); break;
       case "files": await this.sendFiles(); break;
       case "paste": this.post({ type: "pasted", ctx: this.pasteToRef(m.text), text: m.text }); break;
       case "login": {   // log in to the program the chat's model needs
@@ -1705,6 +1727,35 @@ class ChatView {
   lastAsk(tab) {
     const u = [...tab.messages].reverse().find((x) => x.role === "user");
     return u ? ChatView.textOf(u.segments || []) : "";
+  }
+
+  // A file the chat mentions or links: open it (at the line). A folder: show it in the Explorer. A picture or another
+  // file that isn't text: VS Code's own viewer. Not there: say so (a model can name a file that doesn't exist).
+  async openPath(p, line, endLine) {
+    const uri = this.resolvePath(p);
+    if (!uri) return;
+    let st;
+    try { st = await vscode.workspace.fs.stat(uri); } catch { vscode.window.showWarningMessage(`Kural can't find ${p}.`); return; }
+    if (st.type & vscode.FileType.Directory) { await vscode.commands.executeCommand("revealInExplorer", uri); return; }
+    if (/\.(png|jpe?g|gif|webp|bmp|ico|svg|pdf|mp4|webm|mp3|wav|zip)$/i.test(uri.fsPath)) { await vscode.commands.executeCommand("vscode.open", uri, { preview: false }); return; }
+    const l = Math.max(0, (line || 1) - 1), e = Math.max(l, (endLine || line || 1) - 1);
+    try {
+      await vscode.window.showTextDocument(uri, { preview: false, selection: line ? new vscode.Range(l, 0, e, 0) : undefined });
+    } catch { await vscode.commands.executeCommand("vscode.open", uri, { preview: false }); }
+  }
+
+  async openImage(p, url) {
+    if (p) {
+      const uri = this.resolvePath(p);
+      if (uri) { await vscode.commands.executeCommand("vscode.open", uri, { preview: false }); return; }
+    }
+    if (!/^https:\/\//.test(url || "")) return;
+    const panel = vscode.window.createWebviewPanel("kural.picture", "Picture", vscode.ViewColumn.Active, { enableScripts: false });
+    const safe = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    panel.webview.html = `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline';">
+<style>html,body{height:100%;margin:0;background:var(--vscode-editor-background)}body{display:grid;place-items:center}img{max-width:100%;max-height:100vh;object-fit:contain}</style>
+</head><body><img src="${safe}" alt=""></body></html>`;
   }
 
   resolvePath(p) {

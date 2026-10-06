@@ -74,28 +74,31 @@
     return el("button", { class: "link", onclick: () => post({ type }) }, icon(iconName), el("span", { class: "lt" }, el("span", {}, label), hint ? el("span", { class: "muted small" }, hint) : null));
   }
 
+  // Layout: the page's header carries the version and updates (one line, always in sight); then your AIs, two cards
+  // to a row; then the rest of Kural as a compact grid of links.
   function render() {
     app.replaceChildren(
-      el("header", {}, el("h1", {}, "Kural Settings"), el("span", { class: "grow" }),
-        S.loading ? el("span", { class: "muted small" }, icon("loading", "spin"), " checking who's logged in…") : null),
-      el("div", { class: "sechead" }, el("h2", {}, "Accounts and usage"), el("span", { class: "grow" }),
+      el("header", {},
+        el("div", { class: "title" }, el("h1", {}, "Kural Settings"),
+          el("div", { class: "muted" }, S.loading ? [icon("loading", "spin"), " checking who's logged in…"] : "Your AI accounts, their usage, and Kural itself.")),
+        el("span", { class: "grow" }),
+        el("div", { class: "update" },
+          el("div", { class: "row" }, el("span", { class: "muted" }, S.version),
+            el("button", { class: "btn primary", disabled: S.checking, onclick: () => post({ type: "updates" }) }, icon(S.checking ? "loading" : "sync", S.checking ? "spin" : ""), " Check for updates")),
+          el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.autoUpdates, onchange: (e) => post({ type: "autoUpdates", value: e.target.checked }) }), "Look for updates once a day"))),
+      el("div", { class: "sechead" }, el("h2", {}, "Your AI"), el("span", { class: "grow" }),
         el("button", { class: "btn", disabled: S.refreshing, title: "Ask each AI for its usage now (Claude: one tiny request)", onclick: () => post({ type: "refresh" }) },
-          icon("refresh", S.refreshing ? "spin" : ""), " Refresh")),
+          icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage")),
       el("div", { class: "cards" }, S.cards.map(card)),
-      el("div", { class: "sechead" }, el("h2", {}, "Kural")),
-      el("div", { class: "kural" },
-        el("section", { class: "card" },
-          el("div", { class: "head" }, icon("versions"), el("h3", {}, "Version"), el("span", { class: "grow" }), el("span", { class: "muted" }, S.version)),
-          el("label", { class: "check" }, el("input", { type: "checkbox", checked: S.autoUpdates, onchange: (e) => post({ type: "autoUpdates", value: e.target.checked }) }), "Look for updates once a day"),
-          el("div", { class: "acts" }, el("button", { class: "btn primary", disabled: S.checking, onclick: () => post({ type: "updates" }) }, icon(S.checking ? "loading" : "sync", S.checking ? "spin" : ""), " Check for updates"))),
-        el("div", { class: "links" },
-          link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
-          link("dashboard", "AI Usage panel", "every limit, at the bottom of the window", "usagePanel"),
-          link("symbol-keyword", "Tab Completion", "engine, speed, model", "tab"),
-          link("settings", "All of Kural's settings", "in VS Code's settings", "allSettings"),
-          link("list-unordered", "Kural's log", "every request, with timings", "log"),
-          link("book", "Kural guide", "what every feature does", "guide"),
-          link("lightbulb", "Ask for a feature", "on GitHub", "feature"))));
+      el("div", { class: "sechead" }, el("h2", {}, "More")),
+      el("div", { class: "links" },
+        link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
+        link("dashboard", "AI Usage panel", "every limit, at the bottom", "usagePanel"),
+        link("symbol-keyword", "Tab Completion", "engine, speed, model", "tab"),
+        link("settings", "All settings", "Kural's, in VS Code's settings", "allSettings"),
+        link("list-unordered", "Kural's log", "every request, with timings", "log"),
+        link("book", "Kural guide", "what every feature does", "guide"),
+        link("lightbulb", "Ask for a feature", "on GitHub", "feature")));
   }
 
   window.addEventListener("message", (e) => { if (e.data.type === "state") { S = e.data; render(); } });

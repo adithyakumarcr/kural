@@ -1,0 +1,21 @@
+/* Kural Browser: a slim bar like VS Code's own, the page below. */
+:root { --accent: #8b6cef; --accent-hi: #a68af9; --border: var(--vscode-widget-border, rgba(128,128,128,.25)); }
+body.vscode-light { --accent: #6447d6; --accent-hi: #5a3cc8; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+#app { display: flex; flex-direction: column; height: 100vh; }
+.bar { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--border); background: var(--vscode-editorGroupHeader-tabsBackground, transparent); }
+.ib { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.ib:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
+.codicon { font-size: calc(16px * var(--fs, 1)); }
+.addr { flex: 1; min-width: 60px; height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--vscode-input-border, var(--border));
+  background: var(--vscode-input-background); color: var(--vscode-input-foreground); font: inherit; outline: 0; }
+.addr:focus { border-color: var(--vscode-focusBorder); }
+.pick { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--border);
+  background: none; color: inherit; font: inherit; cursor: pointer; flex-shrink: 0; }
+.pick:hover { border-color: var(--accent); }
+.pick.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.note { padding: 4px 10px; font-size: .92em; background: color-mix(in srgb, var(--accent) 16%, transparent); border-bottom: 1px solid var(--border); }
+.hidden { display: none !important; }
+.page { flex: 1; width: 100%; border: 0; background: #fff; }
