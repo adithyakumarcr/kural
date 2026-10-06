@@ -191,6 +191,13 @@ jobs:
           tag="$GITHUB_REF_NAME"
           ./scripts/release-notes.sh "${tag#v}" > notes.md
           title="Kural Code Editor $tag"
-          pre=()
-          case "$tag" in *-*) pre=(--prerelease); title="$title (test version)";; esac
-          gh release create "$tag" dist/* --title "$title" --notes-file notes.md "${pre[@]}"
+          prerelease=false
+          case "$tag" in *-*) prerelease=true; title="$title (test version)";; esac
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Updating existing release $tag"
+            gh release edit "$tag" --title "$title" --notes-file notes.md --prerelease="$prerelease"
+            gh release upload "$tag" dist/* --clobber
+          else
+            echo "Creating release $tag"
+            gh release create "$tag" dist/* --title "$title" --notes-file notes.md --prerelease="$prerelease" --verify-tag
+          fi
