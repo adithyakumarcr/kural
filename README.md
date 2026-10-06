@@ -276,8 +276,9 @@ cursor.
   exact `file:line` places.
 - **Kural Settings** (person icon in the status bar, which shows your account's name): your accounts and usage,
   updates, the guide, in one tab.
-- **Kural Browser.** Your app on localhost beside the code: **Select element**, click something, and it's added to the
-  chat with its HTML, styles and component (like Cursor).
+- **Browser with Design Mode.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
+  answer opens there). Click the inspect button, click an element, and it's added to the chat with its HTML, CSS and a
+  picture; add a comment ("make this bigger") and Kural finds the code behind it and changes it, like Cursor.
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **AI Usage** (bottom panel, next to Terminal). Each limit in words: "5-hour limit 50% used, resets in 42 min",
   "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex. The status bar shows the chat's AI the

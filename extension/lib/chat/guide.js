@@ -32,13 +32,17 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Each change
   can be reviewed, kept or undone. Pictures in answers are shown; click one to see it full size in its own tab. Links to
-  files in an answer open the file (at the line); links to your app on localhost open in the Kural Browser. The clock
+  files in an answer open the file (at the line); web links open in Kural's browser tab. The clock
   button: every chat from every workspace (search, pin, delete). Drag a chat tab into the editor area to open it there,
   split like VS Code's editors (drop on a side: beside, above or below); it then shows only that chat, and leaves the
   side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code").
-- Kural Browser ("Kural: Open Browser", or + in the chat: "Pick from a browser"): your app (localhost:3000…) in a tab
-  beside the code. "Select element", then click something on the page: it's added to your message (tag, selector, text,
-  HTML, styles, size, the React/Vue component and its file when the dev build tells), like Cursor. Esc stops picking.
+- Kural's browser (Command Palette "Kural: Open Browser", or + in the chat: "Pick from a browser", or ANY web link in an
+  answer, which opens there instead of the outside browser): real web pages inside Kural, your app on localhost or any
+  site, with Design Mode like Cursor. The browser bar's inspect button ("Add Element to Chat", Cmd/Ctrl+Shift+C): click
+  something on the page and it's added to your message with its HTML, size and computed CSS and a picture of it; "Comment
+  on Elements" adds what you want changed ("make this bigger") as the start of your message; its dropdown also adds a
+  screenshot, an area or the full page, and the console logs. Then Kural finds the code behind the element in the project
+  and changes it; reload the page to see it.
 - Devices over SSH (a Raspberry Pi, a board computer…): + → Link device → add one (name, address, username, password).
   Kural uses the password once to put its own SSH key on the device and doesn't save it anywhere (no keychain); after
   that it logs in with the key. A chat linked to a device can run commands and read/write files on it (asking first in
