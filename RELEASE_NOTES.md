@@ -1,3 +1,36 @@
+## Not released yet
+
+- **Send while it works.** Pressing Enter while an answer runs used to stop it. Now your message is queued (shown above
+  the box) and the AI takes it in at its next step, after the command or edit it's doing, inside the same answer
+  ("You added this while it worked", with what it did after that below it). If the answer ends first, your message is
+  answered right after as your next one. Claude, ChatGPT (Codex) and models on your computer add it to the running
+  answer; Google Gemini answers it next. **Stop** (or Esc) still stops the answer, and a queued message it hasn't read
+  goes back into the box.
+- **No more "All the agents you started have reported back…".** Kural took a long command (Claude Code reports it as a
+  background task) for an agent and sent its team message a few seconds after the answer, so the AI answered once more
+  about agents that never existed. Only real agents count now.
+- **File links find the file.** A file named in an answer (`devices.test.js`, or a link to it) opens the project's file
+  even when the answer gives only its name or a path from inside another folder; several with that name: you pick one.
+  Before, Kural said it couldn't find it.
+- **Ask uses the fastest model.** Search & Ask's Ask always uses the fastest model you have: Claude's Haiku, or the
+  lightest Gemini or Codex model (your own model only when there's no cloud AI), whatever the chat uses.
+- **An empty box shows no results.** Emptying the Search box clears the results at once (also with search-as-you-type
+  off), and emptying Ask's question clears the old answer.
+- **Model Router: a slider.** What reads your requests is now a slider from **Faster** to **Quality** with four steps
+  (Native, MiniLM, Granite, Qwen3) instead of four names; the panel names the step and offers **Download** when needed.
+- **The mode menu without radio buttons.** Agent / Auto / Plan / Ask: the mode you're in is the highlighted row.
+- **Windows: "Windows protected your PC".** The install steps now say exactly what to click (the small **More info**
+  link, then **Run anyway**) and why: the installer isn't code-signed yet. The Windows build is ready to be signed: as
+  soon as a code signing certificate is added to the repository's secrets, Kural.exe, the installer and its
+  uninstaller are signed (`scripts/sign-win.sh`, with jsign; every build checks the signing step with a throwaway
+  certificate). See [docs/windows-signing.md](docs/windows-signing.md).
+- **Fork a chat.** Hover any message in an idle chat: **Fork from here** opens a new chat with the conversation through
+  that message (with its attached context and tool results), the same model, mode and other choices. The original chat
+  and your files stay as they are.
+- **Welcome.** Kural opens VS Code's Welcome page (Start, Recent, Walkthroughs) with a **Get started with Kural**
+  walkthrough: set up your AI, open a project, make your first change, pick a theme (**Kural: Welcome**).
+- **The terminal's "Show suggestions" hint is hidden** by default; suggestions still work.
+
 ## What's new in 1.1.0-alpha.6
 
 - **Model Router like Cursor's Auto.** Pick **Auto → Balance**, **Cost** or **Intelligence** in the chat's model menu (the
@@ -399,5 +432,9 @@ Kural's **Get started** page helps you install **Claude Code** and log in the fi
 `sudo apt install ./kural_*_amd64.deb`
 
 ### Windows
-Run the setup. If Windows says "Windows protected your PC", click **More info → Run anyway**
-(Kural isn't code-signed). Installs for your user; no admin rights needed.
+Run the setup (installs for your user; no admin rights needed). Windows will probably say **"Windows protected your
+PC"** with only a **Don't run** button, because Kural's installer isn't code-signed yet:
+1. Click **More info** (the small underlined link under the text).
+2. Click **Run anyway** (the publisher shows as "Unknown publisher").
+
+Kural's own updates don't show this again.

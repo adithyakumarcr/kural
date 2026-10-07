@@ -9,7 +9,7 @@ Download the file for your computer from [Releases](https://github.com/adithyaku
 |---|---|---|
 | Mac with Apple Silicon (M1–M5) | `Kural-…-macos-arm64.dmg` | Open it, drag **Kural** into **Applications**. The first time, allow it in Terminal: `xattr -dr com.apple.quarantine /Applications/Kural.app` (Kural isn't signed with a paid Apple ID). |
 | Ubuntu 22.04 / 24.04 (x64) | `kural_…_amd64.deb` | `sudo apt install ./kural_*_amd64.deb`, then open **Kural Code Editor**, or type `kural .` in a folder. |
-| Windows 10 / 11 (x64) | `Kural-…-windows-x64-setup.exe` | Run it. If Windows says "Windows protected your PC": **More info → Run anyway**. No admin rights needed. |
+| Windows 10 / 11 (x64) | `Kural-…-windows-x64-setup.exe` | Run it. No admin rights needed. Windows will probably say **"Windows protected your PC"** with only **Don't run**: the installer isn't code-signed yet. Click the small **More info** link, then **Run anyway**. Kural's own updates don't ask again. |
 
 Building from the source instead: `./install.sh` in the repository (Mac or Ubuntu). `./install.sh --fresh` installs like
 a brand-new user (your Kural settings and chats move to a backup folder first). `./install.sh --from-scratch-install`
