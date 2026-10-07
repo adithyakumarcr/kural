@@ -143,7 +143,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   models through Ollama (`HELPERS`: minilm, granite, qwen3; centroids of the examples, computed once by `prepare()` and
   saved under globalStorage `router/`, so routing is one embedding: 8-49 ms); `index.js` ModelRouter; `learn.js`
   RouterMemory; `panel.js`). Auto picks only from the AIs with accounts (Claude, Gemini, Codex): `eligible` drops local
-  and Tab-only models; there is no per-model allow-list (Adithya: Auto uses every model of your AIs). Profiles **cost /
+  and Tab-only models; there is no per-model allow-list (Adithya: Auto uses every model of your AIs). The panel has
+  nothing to choose but the helper (Adithya, 7 Oct 2026): no profile (the chat's model menu is the only place,
+  `setRouterProfile`; `kural.modelRouter.profile` is just a new chat's first default and Tab's Auto engine), no model
+  chips (one plain line per AI, counted with `eligible`), and an info button explaining the helpers (`ABOUT`; numbers
+  from the `HELPERS` notes, so they stay in step). Profiles **cost /
   balance / intelligence** (old ids speed / balanced / quality map via `ALIASES`; keep accepting them). `select()`:
   `needTier(profile, task)` (complex = 3 in every profile; Intelligence simple = 2, standard = 3; Cost standard = 1 for
   search/explain, 2 for edit/review) → the lightest model with that tier (`traits`: tier from name + the program's

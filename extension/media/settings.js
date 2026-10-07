@@ -96,7 +96,7 @@
         link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
         link("dashboard", "AI Usage panel", "every limit, at the bottom", "usagePanel"),
         link("symbol-keyword", "Tab Completion", "engine, speed, model", "tab"),
-        link("git-compare", "Model Router", "Auto profiles, what reads your requests", "router"),
+        link("git-compare", "Model Router", "what reads your requests, which AIs Auto uses", "router"),
         link("export", "Export settings", "your preferences to a file, for another computer", "exportSettings"),
         link("desktop-download", "Import settings", "from a file you exported", "importSettings"),
         link("settings", "All settings", "Kural's, in VS Code's settings", "allSettings"),
