@@ -17,10 +17,17 @@ goes further, for testing a first start: Kural's data is deleted (no backup), Cl
 logged out on the computer, the macOS permissions you gave Kural are reset, and, if you say so, those programs are
 removed too. It asks before changing anything; Ollama and its models stay.
 
-## 2. Get started: where Kural's AI comes from
+## 2. Welcome to Kural
 
-The first time Kural opens, the **Get started** page asks you to pick one: Claude, Google Gemini, ChatGPT (Codex) or your own
-model. Any one is enough; you can add others later.
+Kural opens the editor's **Welcome** page when there are no editors to restore. **Start** has New File, Open File,
+Open Folder and Clone Git Repository; **Recent** reopens projects; **Walkthroughs** includes **Get started with Kural**
+and guides from your installed extensions.
+
+Open it again with **Kural: Welcome** in the Command Palette or **Help → Welcome**. The checkbox at the bottom controls
+whether it appears on startup; an existing startup preference is respected.
+
+In **Get started with Kural**, choose **Set up your AI** to open the setup page. Pick Claude, Google Gemini,
+ChatGPT (Codex) or your own model. Any one is enough; you can add others later.
 Kural checks every step and helps with it. Until one way passes, nothing runs in the background, so there are no errors.
 
 ### Claude
