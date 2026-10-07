@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.1.0-alpha.6
 
 - **Model Router like Cursor's Auto.** Pick **Auto → Balance**, **Cost** or **Intelligence** in the chat's model menu (the
   only place for it), and Auto picks the intensity too. The profile and the size of the task decide together: a quick
