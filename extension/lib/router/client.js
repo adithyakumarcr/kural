@@ -13,9 +13,9 @@ const abortError = () => Object.assign(new Error("Cancelled"),{ name: "AbortErro
 // The helpers Model Router offers (Ollama models; all Apache-2.0). Measured on examples.json with 10-fold cross-validation
 // on an Apple M5 (docs/wiki/Model-Router.md): share of request sizes read right, and time per request.
 const HELPERS = {
-  granite: { model: "granite-embedding:30m", label: "Granite", size: "63 MB", note: "84 % of sizes right, 10 ms" },
-  qwen3: { model: "qwen3-embedding:0.6b", label: "Qwen3 Embedding", size: "640 MB", note: "90 % of sizes right, 45 ms" },
-  minilm: { model: "all-minilm:22m", label: "MiniLM", size: "46 MB", note: "79 % of sizes right, 7 ms" },
+  granite: { model: "granite-embedding:30m", label: "Granite", size: "63 MB", note: "87 % of task sizes right, about 8 ms" },
+  qwen3: { model: "qwen3-embedding:0.6b", label: "Qwen3 Embedding", size: "640 MB", note: "90 % of task sizes right, about 50 ms" },
+  minilm: { model: "all-minilm:22m", label: "MiniLM", size: "46 MB", note: "82 % of task sizes right, about 8 ms" },
 };
 const MODEL = HELPERS.minilm.model;   // (the first helper Kural offered; still accepted)
 const helperOf = (assistant) => HELPERS[assistant] || null;

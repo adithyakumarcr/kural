@@ -124,7 +124,7 @@ function page(nonce) {
       : h.state === "offline" ? "Ollama isn't running, so " + h.label + " can't help. Start Ollama or set it up in Tab Completion; Native is used meanwhile."
       : h.state === "missing" ? h.label + " (" + h.model + ", about " + h.size + ") isn't on this computer; Native is used until it's downloaded."
       : !h.ready ? "Getting " + h.label + " ready (a few seconds, once)..."
-      : h.label + " helps read the request: " + h.note + " together with Native.";
+      : h.label + " reads your requests together with Native: " + h.note + ".";
     dl.hidden = !(S.download || (h && h.state === "missing"));
     dl.textContent = S.download ? "Stop" : "Download";
     dl.onclick = () => send(S.download ? "stopDownload" : "download");
