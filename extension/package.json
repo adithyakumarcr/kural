@@ -836,7 +836,7 @@
             "Prefer the most capable model, even when it's slower or uses more of your limits"
           ],
           "default": "balance",
-          "description": "Default Auto profile, like Cursor's: Balance, Cost (saves your usage limits) or Intelligence."
+          "description": "Auto profile of a new chat until you pick one in the chat's model menu (Auto → Balance, Cost or Intelligence; a new chat then keeps your last pick). Also what Tab's Auto engine follows (kural.modelRouter.tab)."
         },
         "kural.modelRouter.saveTokens": {
           "type": "boolean",
@@ -882,7 +882,7 @@
         "kural.modelRouter.tab": {
           "type": "boolean",
           "default": false,
-          "description": "Apply native profile and allowed-model rules when Tab Completion uses Auto. No helper inference runs while typing."
+          "description": "When Tab Completion's engine is Auto, let the profile setting (kural.modelRouter.profile) pick one engine: Intelligence prefers Claude, Cost and Balance the local model. No helper model runs while typing."
         },
         "kural.modelRouter.assistant": {
           "type": "string",

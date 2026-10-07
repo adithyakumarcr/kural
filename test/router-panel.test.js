@@ -1,0 +1,122 @@
+// The Model Router panel (lib/router/panel.js): no profile row (Balance, Cost, Intelligence are picked in the chat's model
+// menu), no list of models to choose from (Auto uses every cloud model of the AIs you set up; the panel only says which),
+// and an info button that explains Native, MiniLM, Granite and Qwen3. The page script runs on a tiny stand-in DOM, so a
+// broken render fails here instead of showing an empty panel.
+const assert = require("assert"), Module = require("module");
+const updates = [];
+const vscode = {
+  workspace: { getConfiguration: () => ({ get: (_, d) => d, update: async (...a) => { updates.push(a); } }) },
+  ConfigurationTarget: { Global: 1 },
+  Uri: { joinPath: (...parts) => parts.join("/") },
+};
+const load = Module._load;
+Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
+const { RouterPanel, _page } = require("../extension/lib/router/panel");
+const { HELPERS } = require("../extension/lib/router/client");
+
+// Every element with an id, as a stand-in: text, class, hidden, attributes, click; #assistant gets its buttons.
+function dom(html, nonce) {
+  const node = (props = {}) => {
+    const cls = new Set(), attrs = {};
+    return Object.assign({
+      textContent: "", title: "", onclick: null,
+      get className() { return [...cls].join(" "); },
+      set className(v) { cls.clear(); for (const c of String(v).split(/\s+/)) if (c) cls.add(c); },
+      classList: { toggle: (c, on = !cls.has(c)) => { if (on) cls.add(c); else cls.delete(c); return on; }, contains: (c) => cls.has(c) },
+      setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: (k) => attrs[k],
+    }, props);
+  };
+  const els = new Map();
+  for (const m of html.matchAll(/<\w+[^>]*\bid="(\w+)"[^>]*>/g)) els.set(m[1], node({ hidden: /\bhidden\b/.test(m[0].replace(/"[^"]*"/g, "")) }));
+  const seg = /id="assistant">([\s\S]*?)<\/div>/.exec(html)[1];
+  els.get("assistant").children = [...seg.matchAll(/data-v="(\w+)"/g)].map((m) => node({ dataset: { v: m[1] } }));
+  const sent = [], listeners = {};
+  const js = html.split(`<script nonce="${nonce}">`)[1].split("</script>")[0];
+  new Function("acquireVsCodeApi", "document", "window", js)(
+    () => ({ postMessage: (m) => sent.push(m) }), { getElementById: (id) => els.get(id) },
+    { addEventListener: (type, f) => { listeners[type] = f; } });
+  return { $: (id) => els.get(id), sent, state: (s) => listeners.message({ data: { type: "state", ...s } }) };
+}
+
+let passed = 0, failed = 0;
+const check = async (name, fn) => { try { await fn(); passed++; console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } };
+
+(async () => {
+  const html = _page("N", "vscode-resource:", "codicons.css");
+
+  await check("no profile row: Balance, Cost and Intelligence are picked in the chat's model menu", () => {
+    assert.ok(!/Auto prefers|data-v="(cost|balance|intelligence)"/.test(html));
+  });
+
+  await check("info button (a Codicon) and a box explaining all four, with HELPERS' numbers", () => {
+    assert.ok(html.includes("font-src vscode-resource:") && html.includes('href="codicons.css"'));
+    assert.ok(/id="info"[^>]*aria-controls="about"[^>]*><i class="codicon codicon-info"/.test(html));
+    for (const name of ["Native", "MiniLM", "Granite", "Qwen3"]) assert.ok(html.includes(`<b>${name}</b>`), name);
+    assert.ok(html.includes(`${HELPERS.granite.note} · ${HELPERS.granite.size} download <span class="id">(${HELPERS.granite.model})</span>`));
+    assert.ok(html.includes("74 % of task sizes right, instant"));
+  });
+
+  await check("the page script renders: helper, the AIs Auto picks from, last choice; the info box opens and closes", () => {
+    const p = dom(html, "N");
+    assert.strictEqual(p.sent[0].type, "ready");
+    p.state({ assistant: "granite", helper: { ...HELPERS.granite, state: "missing", ready: false }, download: null,
+      ais: [{ name: "Claude", count: 3, names: ["Opus", "Sonnet", "Haiku"] }, { name: "Google Gemini", count: 0, names: [] },
+        { name: "ChatGPT (Codex)", count: 2, names: ["GPT-5", "GPT-5 mini"] }],
+      last: { model: "sonnet", label: "Sonnet", reason: "balance profile · standard edit task" } });
+    assert.strictEqual(p.$("ais").textContent, "Every cloud model you have: 3 from Claude, 2 from ChatGPT (Codex). Not set up: Google Gemini. " +
+      "Models on this computer only when you pick them yourself.");
+    assert.ok(p.$("ais").title.includes("Claude: Opus, Sonnet, Haiku"));
+    assert.ok(p.$("assistant").children.find((b) => b.dataset.v === "granite").classList.contains("on"));
+    assert.strictEqual(p.$("download").hidden, false);   // Granite isn't on this computer yet
+    assert.strictEqual(p.$("last").textContent, "Sonnet · balance profile · standard edit task");
+    assert.strictEqual(p.$("about").hidden, true);
+    p.$("info").onclick();
+    assert.strictEqual(p.$("about").hidden, false);
+    assert.strictEqual(p.$("info").getAttribute("aria-expanded"), "true");
+    p.$("info").onclick();
+    assert.strictEqual(p.$("about").hidden, true);
+    p.state({ assistant: "native", helper: null, download: null, ais: [{ name: "Claude", count: 0, names: [] }], last: null });
+    assert.strictEqual(p.$("ais").className, "text warn");
+    assert.ok(p.$("ais").textContent.startsWith("Nothing yet: set up Claude"));
+    assert.strictEqual(p.$("download").hidden, true);
+  });
+
+  await check("the panel's state: every cloud model per AI (never local or Tab-only), no profile, the last model's name", async () => {
+    const models = [
+      { id: "opus", label: "Opus", provider: "Claude", providerId: "claude", ready: true, local: false },
+      { id: "haiku", label: "Haiku", provider: "Claude", providerId: "claude", ready: true, local: false },
+      { id: "agy:default", label: "Gemini default", provider: "Google Gemini", providerId: "agy", ready: false, local: false },
+      { id: "codex:gpt-5", label: "GPT-5", provider: "ChatGPT (Codex)", providerId: "codex", ready: true, local: false },
+      { id: "ollama:llama3.2", label: "llama3.2", provider: "Ollama", providerId: "ollama", ready: true, local: true },
+      { id: "ollama:qwen2.5-coder:1.5b-base", label: "qwen2.5-coder:1.5b-base (Tab only)", provider: "Ollama", providerId: "ollama",
+        ready: true, local: true, completionOnly: true },
+    ];
+    const posted = [];
+    const router = { options: () => ({ assistant: "native", url: "http://127.0.0.1:11434" }), availableModels: async () => models,
+      last: { model: "codex:gpt-5", reason: "cost profile · simple search task" } };
+    const panel = new RouterPanel({}, router);
+    panel.view = { webview: { postMessage: (m) => posted.push(m) } };
+    await panel.push();
+    const s = posted[0];
+    assert.ok(!("profile" in s) && !("profiles" in s) && !("models" in s));
+    assert.deepStrictEqual(s.ais.map((a) => [a.name, a.count]), [["Claude", 2], ["Google Gemini", 0], ["ChatGPT (Codex)", 1]]);
+    assert.deepStrictEqual(s.ais[0].names, ["Opus", "Haiku"]);
+    assert.strictEqual(s.last.label, "GPT-5");
+  });
+
+  await check("the panel sets the helper, never the profile", async () => {
+    let handler = null;
+    const view = { webview: { cspSource: "vscode-resource:", asWebviewUri: (u) => u, onDidReceiveMessage: (f) => { handler = f; } }, onDidDispose: () => {} };
+    const panel = new RouterPanel({ extensionUri: "ext" }, { options: () => ({}), availableModels: async () => [] });
+    panel.resolveWebviewView(view);
+    assert.ok(view.webview.options.localResourceRoots.length === 1 && view.webview.html.includes('href="ext/media/codicons/codicon.css"'));
+    panel.view = null;   // (no state pushes in this check)
+    await handler({ type: "profile", value: "cost" });
+    assert.deepStrictEqual(updates, []);
+    await handler({ type: "assistant", value: "granite" });
+    assert.deepStrictEqual(updates, [["modelRouter.assistant", "granite", 1]]);
+  });
+
+  console.log(`router-panel: ${passed} passed, ${failed} failed`);
+  process.exitCode = failed ? 1 : 0;
+})();
