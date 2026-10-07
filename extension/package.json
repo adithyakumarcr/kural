@@ -71,6 +71,11 @@
         "title": "Kural: Close Chat Tab"
       },
       {
+        "command": "kural.chat.moveToPanel",
+        "title": "Kural: Move Chat Back to the Kural Panel",
+        "icon": "$(layout-sidebar-right)"
+      },
+      {
         "command": "kural.askSearch",
         "title": "Kural: Ask Where Something Is",
         "icon": "$(search)"
@@ -274,6 +279,23 @@
         "command": "kural.modelRouter",
         "title": "Kural: Model Router",
         "icon": "$(git-compare)"
+      },
+      {
+        "command": "kural.scm.commitMessage",
+        "title": "Kural: Suggest a Commit Message",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "kural.settings.export",
+        "title": "Kural: Export Settings"
+      },
+      {
+        "command": "kural.settings.import",
+        "title": "Kural: Import Settings"
+      },
+      {
+        "command": "kural.showCrashReports",
+        "title": "Kural: Show Crash Reports"
       }
     ],
     "viewsContainers": {
@@ -409,6 +431,11 @@
         {
           "command": "kural.chat.open",
           "group": "navigation@90"
+        },
+        {
+          "command": "kural.chat.moveToPanel",
+          "when": "activeCustomEditorId == kural.chatTab || activeWebviewPanelId == kural.chatEditor",
+          "group": "navigation"
         }
       ],
       "editor/context": [
@@ -487,6 +514,10 @@
         {
           "command": "kural.search.dismiss",
           "when": "false"
+        },
+        {
+          "command": "kural.chat.moveToPanel",
+          "when": "activeCustomEditorId == kural.chatTab || activeWebviewPanelId == kural.chatEditor"
         }
       ],
       "webview/context": [
@@ -526,6 +557,26 @@
           "command": "kural.search.inFolder",
           "when": "explorerResourceIsFolder",
           "group": "4_search@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "kural.chat.moveToPanel",
+          "when": "resourceScheme == kural-chat",
+          "group": "1_kural"
+        }
+      ],
+      "scm/inputBox": [
+        {
+          "command": "kural.scm.commitMessage",
+          "when": "scmProvider == git"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "kural.scm.commitMessage",
+          "when": "scmProvider == git",
+          "group": "navigation"
         }
       ]
     },
@@ -951,6 +1002,7 @@
   "author": "Adithya Chinnakkonda",
   "enabledApiProposals": [
     "terminalCompletionProvider",
-    "terminalDataWriteEvent"
+    "terminalDataWriteEvent",
+    "contribSourceControlInputBoxMenu"
   ]
 }

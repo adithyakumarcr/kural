@@ -28,6 +28,9 @@ const { Devices } = require("./lib/devices");
 const { ModelRouter } = require("./lib/router");
 const { RouterPanel } = require("./lib/router/panel");
 const { RouterMemory } = require("./lib/router/learn");
+const scmCommit = require("./lib/scm/commit");
+const settingsIO = require("./lib/settings-io");
+const { CrashLog } = require("./lib/crash");
 const usageHub = require("./lib/ai/usage");
 const brain = require("./lib/ai");
 const ws = require("./lib/workspace");
@@ -53,10 +56,15 @@ function openClaudeCode() {
   t.sendText(win ? `& "${bin}"` : `"${bin}"`);
 }
 
+let crashLog = null;
 function activate(context) {
   initLog(context);
+  // Crash reports: what went wrong when Kural last closed unexpectedly (lib/crash), and errors in Kural's own code.
+  crashLog = new CrashLog(context);
+  crashLog.start();
   const updater = new Updater(context);   // Help → Check for Updates…, and once a day by itself
   updater.autoCheck();
+  updater.lastUpdate();   // (how the last update went: said when it failed)
   log(`Kural ${require("./lib/version").versionLabel(context.extensionPath, context.extension.packageJSON.version)} starting; claude at ${findClaude() || "(not found)"}`);
   // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
   // AI work without a project open happens in Kural's own folder, never in your home folder (see workspace.js).
@@ -117,6 +125,12 @@ function activate(context) {
     name: "edit", fallbackModel: () => "sonnet", effort: "medium", systemPrompt: EDIT_SYSTEM_PROMPT,
     restartAfter: 10, timeoutMs: 180000, clearEach: true,
   }, (s) => { if (s === "login" || s === "missing") setState(s); });
+  // The Source Control panel's commit message (sparkle button): the chat's model, one plain message (lib/scm/commit.js).
+  const scmSession = new brain.Session({
+    name: "scm-commit", quiet: true, fallbackModel: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
+    systemPrompt: scmCommit.SYSTEM_PROMPT, restartAfter: 20, timeoutMs: 60000, clearEach: true, earlyStop: "</msg>",
+  }, () => {});
+  scmCommit.registerCommitMessages(context, scmSession);
   const commitSession = new brain.Session({
     name: "commit", quiet: true, fallbackModel: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
     systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 20000, clearEach: true, earlyStop: "</cmd>",
@@ -189,9 +203,13 @@ function activate(context) {
 
   context.subscriptions.push(
     status,
-    { dispose: () => { tabSession.stop(); editSession.stop(); commitSession.stop(); } },
+    { dispose: () => { tabSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); } },
     vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity,router)),
     vscode.commands.registerCommand("kural.tab.accepted", (a) => { if (a) activity.tabAccepted(a.file, a.lang, a.before, a.text); }),
+    vscode.commands.registerCommand("kural.showCrashReports", () => crashLog.show()),
+    // Your preferences to a file and back (Kural Settings → Export / Import settings).
+    vscode.commands.registerCommand("kural.settings.export", () => settingsIO.exportSettings(context).catch((e) => vscode.window.showErrorMessage(`Kural: ${e.message}`))),
+    vscode.commands.registerCommand("kural.settings.import", () => settingsIO.importSettings(context, devices).catch((e) => vscode.window.showErrorMessage(`Kural: ${e.message}`))),
     vscode.commands.registerCommand("kural.router.forget", () => {
       router.memory.forget();
       vscode.window.showInformationMessage("Model Router forgot what it learned in this workspace.");
@@ -265,7 +283,7 @@ function activate(context) {
   getStarted.onChange((ready) => {
     state = "ready"; refresh();
     if (getStarted.claudeReady && cfg().get("tabCompletion.enabled")) tabSession.start();
-    if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); wordsSession.stop(); }
+    if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); wordsSession.stop(); }
     chat.readyChanged(ready);
   });
   getStarted.start();
@@ -285,6 +303,6 @@ function watchEdits(context, activity) {
   }));
 }
 
-function deactivate() {}
+function deactivate() { if (crashLog) crashLog.stop(); }   // (a normal close: this window's marker says so)
 
 module.exports = { activate, deactivate };

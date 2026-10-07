@@ -121,6 +121,9 @@ class SettingsPage {
       case "allSettings": vscode.commands.executeCommand("workbench.action.openSettings", "@ext:kural.kural"); break;
       case "guide": open(WIKI); break;
       case "feature": open(ISSUES); break;
+      case "exportSettings": vscode.commands.executeCommand("kural.settings.export"); break;
+      case "crashes": vscode.commands.executeCommand("kural.showCrashReports"); break;
+      case "importSettings": vscode.commands.executeCommand("kural.settings.import"); break;
     }
   }
 }
