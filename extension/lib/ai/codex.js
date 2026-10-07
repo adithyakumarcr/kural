@@ -689,6 +689,20 @@ class CodexAgent {
     this.next();
   }
 
+  // What this update added (Codex's totals add up over the thread; cached input is part of its input): to the usage hub
+  // (AI Usage panel) and, as a kural_usage event, to the chat (this chat's tokens, how full its context is).
+  countTokens(u) {
+    const num = (x) => Math.max(0, Number(x) || 0), tot = u.total || {}, last = u.last || {};
+    const now = { input: num(tot.inputTokens), cached: num(tot.cachedInputTokens), output: num(tot.outputTokens) };
+    const was = this.tokensSoFar || { input: 0, cached: 0, output: 0 };
+    this.tokensSoFar = now;
+    const tokens = { input: Math.max(0, (now.input - now.cached) - (was.input - was.cached)), cacheRead: Math.max(0, now.cached - was.cached),
+      output: Math.max(0, now.output - was.output), cacheWrite: 0 };
+    usage.addTokens("codex", tokens);
+    const used = num(last.totalTokens) || num(last.inputTokens) + num(last.outputTokens);
+    this.emit({ type: "kural_usage", tokens, context: used ? { used, window: num(u.modelContextWindow) || null } : null });
+  }
+
   // ---- streaming blocks (thinking, text), like Claude Code's stream_event ----
   open(type) {
     const t = this.turn;
@@ -730,6 +744,8 @@ class CodexAgent {
   // ---- what Codex tells us ----
   onNotification(method, p) {
     if (method === "account/rateLimits/updated") { rateReport(p.rateLimits); return; }
+    // Tokens: Codex sends the thread's totals (and its last request's, and the model's context window) as they change.
+    if (method === "thread/tokenUsage/updated") { if (!p.threadId || p.threadId === this.threadId) this.countTokens(p.tokenUsage || {}); return; }
     if (method === "account/updated") { if (p.authMode) this.loggedIn = true; return; }   // you logged in meanwhile
     const t = this.turn;
     // Only this thread's current turn (Codex's own helper agents have their own threads).
