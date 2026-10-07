@@ -20,7 +20,7 @@
   const S = {
     tab: saved.tab || "text",
     // Ask
-    q: saved.q || "", running: null, result: saved.result && saved.result.kind === "ask" ? saved.result : null, collapsed: new Set(), progress: [], model: "sonnet",
+    q: saved.q || "", running: null, result: saved.q && saved.result && saved.result.kind === "ask" ? saved.result : null, collapsed: new Set(), progress: [], model: "sonnet",
     // Search
     f: { ...F0, ...(saved.f || {}) }, tree: saved.tree, cfg: { onType: true, debounce: 300, collapse: "auto", viewMode: "list", lineNumbers: false, folders: 1, history: {} },
     files: new Map(),     // path -> { path, label, matches }
@@ -344,7 +344,8 @@
     });
   }
   inputKeys("find", findIn); inputKeys("replace", replaceIn); inputKeys("include", includeIn); inputKeys("exclude", excludeIn);
-  findIn.addEventListener("input", () => { grow(findIn); S.f.pattern = findIn.value; changed(false); });
+  // (An emptied box clears the results at once, also with search-as-you-type off: no results under an empty box.)
+  findIn.addEventListener("input", () => { grow(findIn); S.f.pattern = findIn.value; changed(!S.f.pattern); });
   replaceIn.addEventListener("input", () => { grow(replaceIn); S.f.replace = replaceIn.value; keep(); renderRows(); post({ type: "replaceText", replace: S.f.replace }); });
   includeIn.addEventListener("input", () => { S.f.include = includeIn.value; changed(false); });
   excludeIn.addEventListener("input", () => { S.f.exclude = excludeIn.value; changed(false); });
@@ -503,7 +504,14 @@
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); run(); }
     if (e.key === "Escape" && S.running) post({ type: "cancel" });
   });
-  input.addEventListener("input", () => grow(input));
+  // Emptying the question clears the answer below it (it belonged to the old question), and stops one still running.
+  input.addEventListener("input", () => {
+    grow(input);
+    if (input.value.trim() || (!S.result && !S.running)) return;
+    if (S.running) post({ type: "cancel" });
+    S.q = ""; S.running = null; S.result = null; S.collapsed.clear();
+    keep(); renderTop(); renderResults();
+  });
 
   // ==================================================================================================
   window.addEventListener("message", (ev) => {

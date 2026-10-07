@@ -1,8 +1,9 @@
 // "Search & Ask" in the left side bar, two tabs (media/search.js is the page):
 //   Search: find and replace in the project's files: what VS Code's own Search view did (Kural hides that one, see
 //           scripts/rebrand.py). Ctrl+Shift+F / Ctrl+Shift+H. The work is in find.js and text.js.
-//   Ask:    a question in plain words ("where are the user's settings saved?") → the chat's model searches the
-//           project and lists the exact places (file + line). Click one to open it there.
+//   Ask:    a question in plain words ("where are the user's settings saved?") → the fastest model you have (Haiku
+//           for Claude, the lightest Codex / Gemini model: brain.fastestModel) searches the project and lists the exact
+//           places (file + line). Click one to open it there.
 
 const vscode = require("vscode");
 const { fontScale, watchFontScale } = require("../ui");
@@ -107,7 +108,7 @@ class SearchView {
 
   config() {
     const s = vscode.workspace.getConfiguration("search");
-    return { type: "config", model: brain.currentModel(), history: this.context.workspaceState.get(HISTORY) || {},
+    return { type: "config", model: brain.fastestModel(), history: this.context.workspaceState.get(HISTORY) || {},
       onType: s.get("searchOnType") !== false, debounce: s.get("searchOnTypeDebouncePeriod") || 300,
       collapse: s.get("collapseResults") || "auto", viewMode: s.get("defaultViewMode") || "list", lineNumbers: !!s.get("showLineNumbers"),
       folders: ws.folders().length };
@@ -186,8 +187,9 @@ class SearchView {
   badge(n) { if (this.view) this.view.badge = n ? { value: n, tooltip: `${n} search ${n === 1 ? "result" : "results"}` } : undefined; }
 
   // ---------- Ask ----------
-  // Ask uses the model picked in the chat: a Claude model through Claude Code, a model on your computer through
-  // Kural's own engine (same tools, read-only, and the answer as JSON).
+  // Ask uses the fastest model you have (Adithya: finding places should be quick): Haiku through Claude Code, the
+  // lightest Codex / Gemini model, or a model on your computer through Kural's own engine (same tools, read-only, and
+  // the answer as JSON). The chat's AI comes first when it's a cloud one, so Ask uses the account you're using.
   // It reads only inside your project: anything else is refused (nobody is there to ask, and on a Mac reading your
   // Documents or Desktop would make macOS ask about Kural).
   makeProc(model, handlers) {
@@ -202,8 +204,8 @@ class SearchView {
     }, { tools: ["Read", "Grep", "Glob"], allowedTools: ["Read", "Grep", "Glob"], effort: "low" }, { ...handlers, onPermission });
   }
 
-  // Start the next one now, so the next question doesn't wait for it to start (for the chat's current model).
-  prepare(model = brain.currentModel()) {
+  // Start the next one now, so the next question doesn't wait for it to start (with the fastest model).
+  prepare(model = brain.fastestModel()) {
     if (this.spare && this.spare.model !== model) { const s = this.spare; this.spare = null; s.proc.kill(); }
     if (this.spare || !this.root() || !brain.usable(model).ok) return;
     const slot = { proc: null, handlers: null, model };
@@ -223,7 +225,7 @@ class SearchView {
     this.cancel();
     const ctl = new AbortController(), job = { id,proc: { kill: () => ctl.abort() } };
     this.current = job;
-    let model = brain.currentModel();
+    const model = brain.fastestModel();
     try {
       if (this.router.options().search) {
         const t0 = Date.now();
@@ -239,19 +241,14 @@ class SearchView {
           if (results.length) { this.current = null; this.post({ type: "askResult",id,answer: "Candidate code locations, ranked locally.",results,ms: Date.now()-t0,model: `Kural Router (${ranked.source})` }); return; }
         }
       }
-      const chat = this.activeChat();
-      if (chat && chat.autoRoute) {
-        const choice = await this.router.route({ prompt: q,current: model,profile: chat.routingProfile,mode: "ask" },ctl.signal);
-        if (choice.error) { this.post({ type: "error",id,message: choice.error }); this.current = null; return; }
-        model = choice.model;
-      }
+      // (No Auto routing here: Ask always takes the fastest model, also when the chat is on Auto.)
     } catch { /* Router or retrieval errors: use the existing model search. */ }
     if (ctl.signal.aborted || this.current !== job) return;
     this.current = null;
     return this.askBaseline(q,id,model);
   }
 
-  askBaseline(q, id, model = brain.currentModel()) {
+  askBaseline(q, id, model = brain.fastestModel()) {
     this.cancel();
     const root = this.root();
     if (!root) { this.post({ type: "error", id, message: "Open a folder first." }); return; }
