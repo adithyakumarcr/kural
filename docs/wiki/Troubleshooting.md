@@ -11,6 +11,15 @@
   and the setting `kural.tabCompletion.terminal` on.
 - **A model on my computer is slow:** pick a smaller one, or lower `kural.localModels.contextLength`.
 - **Mac says Kural is damaged:** run `xattr -dr com.apple.quarantine /Applications/Kural.app` in Terminal.
+- **Kural closed unexpectedly / "Kural quit unexpectedly":** the next start saves a crash report and offers **Show
+  report** and **Report a bug** (also **Kural: Show Crash Reports**). A common cause: Kural's app was replaced while it
+  was still running (an install while Kural was open). `./install.sh` and Kural's own updates now wait until Kural has
+  fully closed before replacing it.
+- **Mac: the window edges don't show the resize arrows:** this comes from macOS 26 and 27, not from Kural (Kural doesn't
+  change the window). macOS made the corners much rounder and moved the area that grabs a corner mostly *outside* the
+  window, and on macOS 27 edge resizing fails in other apps too. What works: put the pointer just outside the window's
+  edge or corner; double-click the title bar to fill the screen; or **Window → Move & Resize** in the menu bar (halves,
+  quarters, fill), also by dragging the window against a screen edge.
 - **Mac asks for access to Music, Photos or other folders:** Kural only needs your project folder, and it doesn't look
   into Desktop, Documents, Downloads, Music or Photos by itself; the AI asks you in the chat before it reads a file
   outside the project. So this should only come after you said **Allow** to such a file (or opened that folder as your

@@ -16,6 +16,33 @@
 - **The web in every mode.** Claude can now search the web and read pages in Plan and Ask too (before: only Agent and
   Auto), without asking. ChatGPT (Codex) uses live web search instead of its cached copy of the web; the commands it
   runs still have no internet. Google Gemini already searched the web with its own tools.
+- **One dropdown for how the AI worked.** Its thoughts, reads, searches, commands and edits are one line above the
+  answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works, what it's doing now). Click it for every
+  step. Permission cards, questions, agents and pictures stay in sight.
+- **Edit an earlier message.** Hover a message you sent: **Edit** puts it back in the box; send it and it replaces that
+  message and everything after it. If later answers changed files, Kural asks whether the code goes back too.
+- **Restore code to any earlier message** (like Cursor's checkpoints): hover a message, **Restore code**, and every file
+  the AI changed after it is put back. Kural keeps a checkpoint of each file before the AI changes it for 30 days, so
+  this (and Undo) also works after a restart and after **Keep**.
+- **Tokens and the context window.** A ring next to the send button shows how full the conversation's context window
+  is; hover it for this chat's tokens read (and from the cache) and written. The AI Usage panel shows each AI's tokens
+  per day: today, the last 7 and 30 days.
+- **Move a dragged-out chat back to the Kural panel:** a button in its editor's title bar (and its tab's right-click
+  menu).
+- **Commit messages in Source Control.** The sparkle button in the commit message box writes one from your staged
+  changes (or all changes), in the style of your recent commits.
+- **Export and import your settings** (Kural Settings → Export settings / Import settings): Kural's settings, your
+  editor settings, keyboard shortcuts, the list of extensions, the chat's defaults and your devices (never passwords or
+  keys), in one file. On import you choose which parts.
+- **Crash reports.** When Kural closed unexpectedly, the next start says so once and saves a report on your computer
+  (macOS's crash report, VS Code's logs, the window that ended): **Show report** or **Report a bug** (copies it and opens
+  the form). **Kural: Show Crash Reports** lists them. Nothing is sent unless you send it.
+- **Fixed: after Check for Updates, Kural didn't start again or said it "quit unexpectedly".** The new version replaced
+  the app while parts of the old one were still closing. The update now waits until every part of Kural has quit,
+  swaps the app in one step (the old one comes back if that fails), writes `update.log`, and tells you at the next
+  start if something went wrong. `./install.sh` waits for Kural to close instead of forcing it.
+- **No coloured dot** next to Agent, Auto, Plan and Ask, and **no "Now connected" pop-ups** when Claude Code's setup
+  changes.
 
 ## What's new in 1.1.0-alpha.5
 

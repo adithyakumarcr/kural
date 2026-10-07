@@ -33,11 +33,20 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Each change
-  can be reviewed, kept or undone. Pictures in answers are shown; click one to see it full size in its own tab. Links to
+  can be reviewed, kept or undone. How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
+  answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
+  it. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
+  whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
+  the conversation stays; checkpoints are kept 30 days, also after a restart). Next to the send button: how full the
+  conversation's context window is (hover: this chat's tokens read, from cache, written). Pictures in answers are shown;
+  click one to see it full size in its own tab. Links to
   files in an answer open the file (at the line); web links open in Kural's browser tab. The clock
   button: every chat from every workspace (search, pin, delete). Drag a chat tab into the editor area to open it there,
   split like VS Code's editors (drop on a side: beside, above or below); it then shows only that chat, and leaves the
-  side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code").
+  side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code"). To bring it back: the button in
+  that editor's title bar, "Move Chat Back to the Kural Panel" (or close its editor tab).
+- Source Control panel: the sparkle button in the commit message box writes a commit message from your staged changes
+  (or all changes), in the style of your recent commits, with the chat's model; edit it and commit as usual.
 - Kural's browser (Command Palette "Kural: Open Browser", or + in the chat: "Pick from a browser", or ANY web link in an
   answer, which opens there instead of the outside browser): real web pages inside Kural, your app on localhost or any
   site, with Design Mode like Cursor. The browser bar's inspect button ("Add Element to Chat", Cmd/Ctrl+Shift+C): click
@@ -82,7 +91,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
   "5-hour limit 50% used, resets in 42 min", "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex.
   The status bar shows the chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"), the
-  others short; orange from 80 %, red from 95 %; click it for the panel.
+  others short; orange from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
+  the cache) and written, today, 7 days and 30 days (every Kural feature: chat, Tab Completion, Ctrl+K…).
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
   Inside the project it doesn't ask (Agent mode still asks before commands). Kural never looks through Desktop,
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
@@ -92,8 +102,15 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
   for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
   page, switch account, log out, log in, set up; then Kural's version and Check for updates, Get started, Tab Completion,
-  all settings, the log, the guide. Kural's log: "Kural: Show Log" (an editor tab; Kural hides VS Code's Output tab).
-- Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings.
+  all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
+  editor settings, shortcuts, extensions, chat defaults, devices: no passwords or keys; you pick what to import).
+  Kural's log: "Kural: Show Log" (an editor tab; Kural hides VS Code's Output tab).
+- Crash reports: when Kural closed unexpectedly, the next start saves a report (macOS's crash reports, VS Code's logs, which
+  windows ended) on this computer and offers Show report / Report a bug (copies it; you paste it into the bug form).
+  "Kural: Show Crash Reports" lists them.
+- Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings. It
+  installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), puts the old version back if the
+  install fails, and says at the next start if it didn't finish.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
   buttons and focus.
 - Full guide: ${WIKI}
