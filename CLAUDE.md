@@ -47,6 +47,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item, usage meter,
     log in/out), `lib/settings-page.js` (Kural Settings tab, `media/settings.*`), `lib/usage-panel.js` (AI Usage panel), `lib/paths.js` (what the AI may touch without asking),
     `lib/updates.js` (updates), `lib/search/` (Search & Ask side bar), `lib/workspace.js` (folders; `workDir()` when none is open),
+    `lib/crash/` (crash reports), `lib/settings-io.js` (export/import), `lib/scm/commit.js` (Source Control commit message),
     `lib/log.js`, `lib/ui.js` (font size).
   - `media/codicons/` — the Codicons icon font (CC BY 4.0) for every Kural page.
 - `docs/wiki/` — the GitHub wiki's pages; `scripts/push-wiki.sh` publishes them.
@@ -417,10 +418,52 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Updates** (`lib/updates.js`): `autoCheck()` once a day (globalState `kural.update.lastCheck`, setting
   `kural.updates.autoCheck`), quiet unless there's a newer version (non-modal offer, not awaited: an ignored
   notification must not keep `busy` set, or Check for Updates silently does nothing); newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
-  (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then restart.
-  Mac/Windows: a detached script waits for Kural's main process (`process.ppid`) to quit, swaps the app / runs the setup,
-  starts Kural. The script clears `CachedProfilesData/*/extensions.builtin.cache` (else the restarted Kural shows the
-  old extension description) and drops ELECTRON_*/VSCODE_* env vars. Tested end to end on Ubuntu only.
+  (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then quit at once.
+  Mac/Windows: `afterQuit` writes a script FILE (not `sh -c`: `pgrep -f <app>` would find itself) that waits for Kural's
+  main process (`process.ppid`) AND every process running from inside the app (`<app>/Contents/`, the install folder on
+  Windows; 20 s, then stopped), then installs. Replacing the app while any helper still ran crashed it ("Kural quit
+  unexpectedly") and the new one sometimes didn't start. Mac swap (`macSteps`): old app → `<app>.kural-old`, `ditto` the
+  new one, back on failure; write access checked BEFORE quitting (`byHand` otherwise). Each step goes to
+  `<globalStorage>/update.log`; `lastUpdate()` at the next start reports a failure (globalState `kural.update.pending`).
+  A quit vetoed by a dialog: a notification after 20 s (the script keeps waiting). The script clears
+  `CachedProfilesData/*/extensions.builtin.cache` and drops ELECTRON_*/VSCODE_* env vars. `test/updates-script.test.js`
+  runs the real Mac script on a stand-in app (its stand-ins start detached: a zombie child keeps `kill -0` true).
+- **install.sh** (Mac): Kural is found by its path (`pgrep -f /Applications/Kural.app/Contents/`, never `-x Kural`: that
+  also hits test copies) and is never force-killed: it waits until Kural has really gone (the 6 Oct crashes were the app
+  deleted 1 s after a `pkill` while Kural still showed a dialog). Run from Kural's own terminal (which dies with Kural),
+  the replacing step goes to a detached script (`perl -MPOSIX setsid`, log in /tmp) that waits for Kural to close.
+  Ubuntu: waits for Kural to be closed before `apt install`; inside Kural's terminal it refuses with a message.
+- **Crash log** (`lib/crash/`: `scan.js` no vscode, `index.js`): per window a marker `<globalStorage>/sessions/<ext host
+  pid>.json` (refreshed every minute, `clean` on deactivate); at start, unclean markers of dead pids + macOS
+  `~/Library/Logs/DiagnosticReports/Kural*.ips` (parsed: exception, crashed thread, frames) + VS Code's logs of the
+  sessions since the last scan (`CRASH_LINE`, last errors) → `<globalStorage>/crashes/crash-*.md` and one notification
+  (Show report / Report a bug: copies it, opens the bug form). Uncaught errors whose stack is Kural's → `kural-errors.log`.
+  VS Code's Crashpad is NOT turned on: it sets `ignoreSystemCrashHandler`, which would lose macOS's readable reports.
+- **Checkpoints, Edit, Restore code** (`lib/chat/changes.js`, `restoreTo`/`rewindTo`/`laterChanges` in the chat):
+  every snapshot is also saved to `<globalStorage>/checkpoints/<id>.json` (≤10 MB, deleted after 30 days; Keep no longer
+  drops it), and each change records `after` (hash of the file as the AI left it) to warn about your later edits.
+  Restore = each file back to the snapshot of the EARLIEST answer after the message that changed it; changes become
+  "undone". Edit = optional restore (modal), messages cut at the index, a new session with `carryOver {edited}` (the
+  handoff record), like a provider switch. Page: `.msg-actions` on user messages, `S.editing` + `.edit-bar`, `editIndex`
+  in the send message.
+- **Steps dropdown** (`media/chat.js` `layout`/`stepsNode`): thinking, tools (not team posts), answered permissions and
+  the text before the last step go into ONE `.steps` group per answer; pending permissions/questions, agent cards, team
+  posts, pictures and the text after the last step stay outside. An answer with steps is redrawn on each new block
+  (`appendBlock` → `rerender`); `patchBlock` still patches inside the group and refreshes `.steps-line`.
+- **Tokens** (`lib/ai/usage.js` `addTokens`/`tokenTotals`, per provider per day, 35 days, saved with the rest): Claude's
+  `result.modelUsage` (all models) in `ClaudeProcess.onData` (every Claude process); Codex `thread/tokenUsage/updated`
+  (totals: deltas), Gemini's per-answer usage and Ollama's `prompt_eval_count/eval_count` → the hub + a `kural_usage`
+  event to the chat. The chat keeps `tab.tokens` and `tab.context {used, window}` (Claude: the last lead message's usage,
+  `modelUsage.contextWindow`) → the ring next to the send button; the AI Usage panel shows read/cache/written.
+- **Settings export/import** (`lib/settings-io.js`): JSON `format: "kural-settings"`; kural.* without machine-scoped
+  keys, the user settings.json (JSONC parsed) and keybindings.json, non-built-in extensions, chat defaults
+  (`kural.chat.last`), devices without auth state. Import: QuickPick of what's in the file; keybindings merged without
+  duplicates. Tests: `test/settings-io.test.js` (also the checkpoints on disk).
+- **Commit message in Source Control** (`lib/scm/commit.js`): `scm/inputBox` menu (enabledApiProposals
+  `contribSourceControlInputBoxMenu`) + `scm/title`; the git extension's API (`repo.diff(true)`, else unstaged; recent
+  subjects); its own `brain.Session` ("scm-commit", `<msg>…</msg>`).
+- **Moving a dragged-out chat back** (`kural.chat.moveToPanel`): editor/title button when `activeCustomEditorId ==
+  kural.chatTab`; disposes the pane and activates the chat in the side panel.
 
 ## Test
 - `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script, Get started checks).
