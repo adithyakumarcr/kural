@@ -74,11 +74,27 @@ your next message, because which tools the model has is fixed when it starts.
   answer.
 - **Click a picture** to see it full size in its own tab.
 - **Links** to files (`[install.sh](install.sh)`, `[app.js:12](src/app.js#L12)`) and `file.py:12` style references
-  open the file at that line; a folder shows in the Explorer. Web links open in Kural's own [[Browser]] tab (so you can
-  pick elements of the page).
+  open the file at that line; a folder shows in the Explorer. When the answer gives only a file's name
+  (`devices.test.js`) or a path from inside another folder, Kural finds that file in your project (not in
+  `node_modules`); if several files have that name, it asks which one. Web links open in Kural's own [[Browser]] tab
+  (so you can pick elements of the page).
 - **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;
   **Latest** brings you back down.
-- **Stop** (the square button) stops the answer.
+- **Stop** (the square button, or Esc) stops the answer.
+
+## Sending while it works (a queue)
+
+Pressing **Enter** while an answer is running doesn't stop it. Your message goes into a queue, shown above the input
+box ("Queued: Kural adds it at its next step"), and the AI takes it in as soon as it can:
+
+- **Into the same answer.** After the command, edit or search it's doing, the AI reads your message and carries on with
+  it. The answer shows it where it arrived: **You added this while it worked**, then what it did after that. Claude,
+  ChatGPT (Codex) and models on your computer do this.
+- **As your next message.** If the answer ends before there was a step to add it at (a short answer with no commands),
+  your message is answered right after, as a new message. Google Gemini always does this.
+
+While it works and you've typed something, the button next to **Stop** sends it (Enter does the same). **Stop** (or
+Esc) stops the answer, and any queued message it hasn't read yet goes back into the input box, so nothing is lost.
 
 ## Going back: edit a message, restore the code
 
