@@ -105,6 +105,13 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
 ## Tabs, history, two chats
 
 - **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close.
+- **Fork from here**: hover a message and click the branch icon after the answer finishes (or stop it first).
+  A new chat contains the recorded conversation through that message: messages, attached context, and tool results.
+  Earlier images and PDFs are sent again with your next message if their files are still available. It keeps your
+  model, intensity, mode, mood and linked context. The original chat stays intact; current project files stay as they
+  are. File-change cards inherited from the original can be reviewed, but **Keep**, **Undo** and **Restore code** in
+  the fork act only on its own changes. Both chats are saved in History. Forking a chat in its own editor opens
+  another editor beside it.
 - **History** (clock button): every chat from every workspace, in full. Search, **pin** chats to the top, delete
   them. A chat from another workspace opens to read; **Open its folder**, or **Continue here** (a new chat here that knows
   the old conversation).

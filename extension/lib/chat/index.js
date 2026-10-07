@@ -15,6 +15,7 @@ const ws = require("../workspace");
 const { Attachments } = require("./attachments");
 const { within, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
+const { forkConversation } = require("./fork");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("../ai/ollama");
 const brain = require("../ai");
 const { installOllama } = require("../tab/local");
@@ -279,6 +280,18 @@ class ChatView {
 
   tab(id) { return this.tabs.find((t) => t.id === id); }
   active() { return this.tab(this.activeId); }
+
+  forkFrom(source, index, pane = this.cur()) {
+    const tab = forkConversation(source, index, { id: shortId(), sessionId: newSessionId() });
+    if (!tab) return;
+    this.tabs.push(tab);
+    // An editor containing a single chat keeps its original conversation in place.
+    if (pane && pane.single) { this.openSplit(tab.id); this.postTabs(); }
+    else { this.activate(tab.id, pane); if (pane) this.postTo(pane, { type: "focus" }); }
+    this.postHistory();
+    this.save();
+    return tab;
+  }
 
   // ---------- panes ----------
   // The pane a command or reply is for: the one that sent the message being handled, else the one you used last.
@@ -776,7 +789,7 @@ class ChatView {
   laterChanges(tab, index) {
     const byFile = new Map(), last = new Map();
     tab.messages.slice(index + 1).forEach((m) => {
-      if (m.role !== "assistant") return;
+      if (m.role !== "assistant" || m.inherited) return;
       for (const c of m.changes || []) {
         if (c.state === "undone" || !c.file) continue;
         if (!byFile.has(c.file)) byFile.set(c.file, c);
@@ -792,6 +805,7 @@ class ChatView {
     const files = this.laterChanges(tab, index), restored = [], missing = [];
     for (const f of files) ((await this.changes.undo(f.change.id)) ? restored : missing).push(f.rel);
     tab.messages.slice(index + 1).forEach((m) => {
+      if (m.inherited) return;
       for (const c of m.changes || []) if (c.state !== "undone" && !missing.includes(c.rel)) { c.state = "undone"; if (this.activity) this.activity.undone(c.rel); }
     });
     log(`chat ${tab.id}: code restored to before message ${index}: ${restored.length} file(s)${missing.length ? `, checkpoint missing for ${missing.join(", ")}` : ""}`);
@@ -878,7 +892,7 @@ class ChatView {
     for (let i = index; i >= 1; i--) {
       const a = tab.messages[i];
       if (a.role !== "assistant") continue;
-      if (!a.routing || !a.routing.model || a.running || (kind === "good" && a.error) ||
+      if (a.inherited || !a.routing || !a.routing.model || a.running || (kind === "good" && a.error) ||
         (a.routingJudged && !(kind === "bad" && a.routingJudged === "good"))) return null;
       const u = tab.messages[i - 1];
       return u && u.role === "user" ? { answer: a, prompt: ChatView.textOf(u.segments || []), model: a.routing.model } : null;
@@ -1232,7 +1246,7 @@ class ChatView {
     if (tab.pendingModel && isClaude(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
-    r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0 };
+    r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0, dispatched: false };
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
@@ -1243,13 +1257,14 @@ class ChatView {
     if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
     // Continued from another workspace, or switched to a model on another engine (Claude ↔ your computer): the first
     // message carries the conversation so far.
-    const carry = tab.carryOver && !tab.started ? (tab.carryOver.edited
+    const carry = tab.carryOver && !tab.started ? (tab.carryOver.fork
+      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThis chat branches from that conversation at the selected message. Continue from it using my next message. The workspace files are still in their current state.\n\n`
+      : tab.carryOver.edited
       ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far. I've changed my next message: answer it as it is now.\n\n`
       : tab.carryOver.model
       ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far (with another model). Carry on from it.\n\n`
       : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
         "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
-    delete tab.carryOver;
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
     let retrieved = "";
@@ -1265,7 +1280,7 @@ class ChatView {
     const built = await this.buildPrompt(text,contexts);
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
     if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds,changedProvider ? previousMedia : []);
+    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
     user.sentText = journal.textOf(prompt).slice(carry.length);
     r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
@@ -1274,7 +1289,9 @@ class ChatView {
       tab.granted = [...new Set([...(tab.granted || []), ...meta.flatMap((a) => [a.path, a.original]).filter(Boolean)])].slice(-50);
     }
     r.pendingSend = prompt;
+    r.turn.dispatched = true;
     r.proc.send(prompt);
+    delete tab.carryOver;
     log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
     this.save();
   }
@@ -1614,7 +1631,8 @@ class ChatView {
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
     if (this.router && (reply.models || []).length === 1) this.router.taskDone(reply.model,reply.ms,!m.is_error);
-    tab.started = true;
+    // Stop can happen while context is still being prepared, before the provider receives anything.
+    if (r.turn.dispatched !== false) tab.started = true;
     tab.updatedAt = Date.now();
     r.pendingSend = null;
     if (m.subtype === "error_during_execution") reply.error = "stopped";
@@ -1854,6 +1872,7 @@ class ChatView {
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
         Number.isInteger(m.editIndex) ? m.editIndex : null); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
+      case "fork": if (tab) this.forkFrom(tab, m.index, pane); break;
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
@@ -2052,7 +2071,7 @@ class ChatView {
 
   async onChangeAction(tab, m) {
     const msg = tab.messages[m.msgIndex];
-    if (!msg || !msg.changes) return;
+    if (!msg || !msg.changes || (msg.inherited && m.action !== "review")) return;
     const targets = m.id === "*" ? msg.changes.filter((c) => c.state === "pending") : msg.changes.filter((c) => c.id === m.id);
     for (const c of targets) {
       if (m.action === "review") { await this.changes.review(c.id); continue; }

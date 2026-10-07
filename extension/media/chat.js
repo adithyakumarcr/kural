@@ -509,7 +509,7 @@
   // Files the answers after message i changed that aren't undone (what "Restore code" would put back).
   function laterFiles(i) {
     const files = new Set();
-    for (const m of S.tab.messages.slice(i + 1)) if (m.role === "assistant") for (const c of m.changes || []) if (c.state !== "undone") files.add(c.rel);
+    for (const m of S.tab.messages.slice(i + 1)) if (m.role === "assistant" && !m.inherited) for (const c of m.changes || []) if (c.state !== "undone") files.add(c.rel);
     return files.size;
   }
   // Editing an earlier message: its text (and @ mentions) go into the input box, with a bar saying what sending does.
@@ -533,15 +533,22 @@
       (S.editing.attachments ? " Add its attachments again with +." : "")), el("button", { class: "cb", onclick: () => cancelEdit() }, "Cancel"));
   }
 
+  function forkButton(i) {
+    return el("button", { class: "msg-act", "aria-label": "Fork from here",
+      title: "Fork from here\nStart a new chat with the conversation through this message. This chat and your files stay as they are.",
+      onclick: () => S.tab.status !== "idle" ? busyNote() : post({ type: "fork", tabId: S.tab.id, index: i }) }, icon("git-branch"));
+  }
+
   function messageNode(m, i) {
     if (m.role === "user") {
       // Hover: Edit (what you send replaces this message and everything after it) and Restore code (the files the AI
       // changed after this message go back; the conversation stays).
-      const idle = S.tab.status === "idle" && !S.tab.visiting, later = laterFiles(i);
-      const actions = idle ? el("div", { class: "msg-actions" },
+      const later = laterFiles(i);
+      const actions = !S.tab.visiting ? el("div", { class: "msg-actions" },
         el("button", { class: "msg-act", title: "Edit this message: what you send replaces it and everything after it", onclick: () => startEdit(i) }, icon("edit")),
         later ? el("button", { class: "msg-act", title: `Restore the code to before this message (${later} file${later === 1 ? "" : "s"} the AI changed after it)`,
-          onclick: () => S.tab.status !== "idle" ? busyNote() : post({ type: "restore", tabId: S.tab.id, index: i }) }, icon("discard")) : null) : null;
+          onclick: () => S.tab.status !== "idle" ? busyNote() : post({ type: "restore", tabId: S.tab.id, index: i }) }, icon("discard")) : null,
+        forkButton(i)) : null;
       return el("div", { class: `msg user${S.editing && S.editing.tabId === S.tab.id && S.editing.index === i ? " editing" : ""}`, "data-i": i }, actions,
         (m.contexts || []).length || (m.mode && m.mode !== "agent") ? el("div", { class: "ctx-line" },
           m.mode && m.mode !== "agent" ? el("span", { class: `mode-tag ${m.mode}` }, modeLabel(m.mode)) : null,
@@ -587,6 +594,7 @@
         el("button", { class: "cb primary solid big", disabled: S.tab.status !== "idle", onclick: () => post({ type: "buildPlan", tabId: S.tab.id, msgIndex: i }) }, "Build it")]));
     if (m.changes && m.changes.length) out.append(changesNode(m, i));
     if (!m.running && m.ms && last) out.append(el("div", { class: "meta" }, `${(m.ms / 1000).toFixed(1)} s`));
+    if (!m.running && !S.tab.visiting) out.append(el("div", { class: "answer-actions" }, forkButton(i)));
     return el("div", { class: "msg assistant", "data-i": i }, out);
   }
 
@@ -803,14 +811,14 @@
   }
 
   function changesNode(m, i) {
-    const pending = m.changes.filter((c) => c.state === "pending").length;
+    const pending = m.inherited ? 0 : m.changes.filter((c) => c.state === "pending").length;
     const act = (action, id) => post({ type: "change", msgIndex: i, id, action });
     return el("div", { class: "card" },
       el("div", { class: "card-head" }, `${m.changes.length} file${m.changes.length === 1 ? "" : "s"} changed`),
       m.changes.map((c) => el("div", { class: `row ${c.state}` },
         el("span", { class: "row-file", title: c.rel, onclick: () => act("review", c.id) }, base(c.rel), el("span", { class: "row-dir" }, dir(c.rel))),
         el("span", { class: "add" }, `+${c.added}`), el("span", { class: "del" }, `−${c.removed}`),
-        c.state === "pending" ? el("span", { class: "row-btns" },
+        m.inherited ? el("span", { class: "row-state" }, "From original chat") : c.state === "pending" ? el("span", { class: "row-btns" },
           el("button", { class: "cb", onclick: () => act("review", c.id) }, "Review"),
           el("button", { class: "cb", onclick: () => act("undo", c.id) }, "Undo"),
           el("button", { class: "cb primary", onclick: () => act("keep", c.id) }, "Keep"))

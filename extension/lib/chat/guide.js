@@ -13,6 +13,10 @@ with an AI assistant built in. Its AI comes from Claude (Claude Code with the us
 (Google's Antigravity CLI with a Google account: free, AI Pro, Ultra; Google's Gemini CLI is no longer used: Google
 stopped personal accounts there on 26 Sept 2026), ChatGPT (OpenAI's Codex CLI with a ChatGPT plan), or the user's own
 model on their computer (Ollama, offline, no account). Features and how to use them:
+- Welcome (Command Palette: "Kural: Welcome", also Help → Welcome): opens by default when there are no editors to
+  restore. Start has New File, Open File, Open Folder and Clone Git Repository; Recent reopens projects;
+  Walkthroughs includes "Get started with Kural" (AI setup, a project, chat, theme) and installed extensions' guides.
+  "Show welcome page on startup" at the bottom turns it on/off.
 - Get started (Command Palette: "Kural: Get Started"): pick Claude, Google Gemini, ChatGPT (Codex) or your own model;
   Kural checks each step (install, log in or download a model, a test request). Any one is enough; all can be set up.
   "Install for me" installs in the background (Gemini: Google's Antigravity installer; Codex: Homebrew or npm,
@@ -37,7 +41,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
   it. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
-  the conversation stays; checkpoints are kept 30 days, also after a restart). Next to the send button: how full the
+  the conversation stays; checkpoints are kept 30 days, also after a restart). Hover any message in an idle chat:
+  "Fork from here" opens a new chat with the recorded conversation through that message, including attached context
+  and tool results. It keeps the model, mode and other choices; the original chat and current files stay as they are.
+  Inherited file-change cards can be reviewed; keep/undo belongs to the original chat. Both chats appear in History.
+  Next to the send button: how full the
   conversation's context window is (hover: this chat's tokens read, from cache, written). Pictures in answers are shown;
   click one to see it full size in its own tab. Links to
   files in an answer open the file (at the line); web links open in Kural's browser tab. The clock
@@ -89,6 +97,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
+  The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
   "5-hour limit 50% used, resets in 42 min", "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex.
   The status bar shows the chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"), the

@@ -76,8 +76,9 @@ code-signed). It installs for your user only, so you don't need admin rights.
 
 ### 2. Get started (Kural walks you through it)
 
-The first time you open Kural, **Get started** asks where its AI should come from, then checks each step and helps
-with it. Either way is enough; you can add the other later.
+Kural opens a **Welcome** page with **Start**, **Recent**, and **Walkthroughs**. Choose **Get started with Kural → Set up
+your AI** (or **Kural: Get Started** in the Command Palette). The setup page asks where its AI should come from, then
+checks each step and helps with it. Any one is enough; you can add others later.
 
 **Claude**
 1. **Claude Code installed.** **Install for me** runs Anthropic's official installer in a terminal (or copy the command).
