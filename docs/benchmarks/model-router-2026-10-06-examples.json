@@ -1,0 +1,1005 @@
+{
+ "timestamp": "2026-10-06T20:11:09.372Z",
+ "runtime": "v26.10.0",
+ "platform": "darwin",
+ "arch": "arm64",
+ "cpu": "Apple M5",
+ "totalMemoryGB": 16,
+ "corpus": "Small hand-labelled synthetic smoke corpus. Labels reflect the router's task definitions; this is not a representative accuracy evaluation.",
+ "measures": [
+  {
+   "assistant": "native",
+   "kind": "warm policy overhead",
+   "samples": 1000,
+   "medianMs": 0.003,
+   "p95Ms": 0.006
+  },
+  {
+   "assistant": "native",
+   "model": null,
+   "deadlineMs": 5000,
+   "firstRequestMs": 0.094,
+   "firstSource": "native",
+   "warmupMs": 0.009,
+   "warmupSource": "native",
+   "samples": 24,
+   "assisted": 0,
+   "allDecisions": {
+    "medianMs": 0.004,
+    "p95Ms": 0.006
+   },
+   "assistedInference": null,
+   "repeatedPrompt": "Find where login sessions are stored",
+   "repeatPrimeSource": "native",
+   "repeatMs": 0.005,
+   "repeatSource": "native",
+   "taskChecks": {
+    "intentCorrect": 17,
+    "complexityCorrect": 21,
+    "bothCorrect": 16,
+    "total": 24
+   },
+   "ranking": {
+    "samples": 8,
+    "assisted": 0,
+    "allDecisions": {
+     "medianMs": 0.01,
+     "p95Ms": 0.327
+    },
+    "assistedInference": null,
+    "top1Correct": 6,
+    "top3Correct": 7,
+    "contextTop1Correct": 0,
+    "searchTop1Correct": 0,
+    "cases": [
+     {
+      "query": "Where are login sessions stored?",
+      "file": "src/auth/session.js",
+      "source": "native",
+      "ms": 0.327,
+      "top": [
+       "src/auth/session.js",
+       "src/jobs/queue.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Which code remembers who is signed in?",
+      "file": "src/auth/session.js",
+      "source": "native",
+      "ms": 0.012,
+      "top": [],
+      "top1Correct": false,
+      "top3Correct": false,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Where do we retry requests when the server rate limits us?",
+      "file": "src/network/retry.js",
+      "source": "native",
+      "ms": 0.01,
+      "top": [
+       "src/network/retry.js",
+       "src/checkout/totals.js",
+       "src/database/migrate.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "How does the app load its settings from disk?",
+      "file": "src/config/read.js",
+      "source": "native",
+      "ms": 0.009,
+      "top": [
+       "src/config/read.js",
+       "src/ui/theme.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Which function prevents simultaneous changes to pending jobs?",
+      "file": "src/jobs/queue.js",
+      "source": "native",
+      "ms": 0.008,
+      "top": [
+       "src/jobs/queue.js",
+       "src/auth/session.js",
+       "src/network/retry.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Where is sales tax added to the final bill?",
+      "file": "src/checkout/totals.js",
+      "source": "native",
+      "ms": 0.012,
+      "top": [
+       "src/jobs/queue.js",
+       "src/checkout/totals.js"
+      ],
+      "top1Correct": false,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Where do we switch between light and dark colours?",
+      "file": "src/ui/theme.js",
+      "source": "native",
+      "ms": 0.007,
+      "top": [
+       "src/ui/theme.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Find the code that changes the database schema",
+      "file": "src/database/migrate.js",
+      "source": "native",
+      "ms": 0.006,
+      "top": [
+       "src/database/migrate.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     }
+    ]
+   },
+   "usage": {
+    "decisions": 28,
+    "calls": 0,
+    "inputTokens": 0,
+    "fallbacks": 0
+   },
+   "cases": [
+    {
+     "prompt": "Find where login sessions are stored",
+     "intent": "search",
+     "complexity": "simple",
+     "predictedIntent": "search",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 0.006,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Explain what this single line does: return count + 1",
+     "intent": "explain",
+     "complexity": "simple",
+     "predictedIntent": "explain",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 0.007,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Rename userCount to activeUsers in this function",
+     "intent": "edit",
+     "complexity": "simple",
+     "predictedIntent": "edit",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 0.006,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Fix the typo in this comment",
+     "intent": "edit",
+     "complexity": "simple",
+     "predictedIntent": "edit",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 0.005,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Locate the function that handles HTTP retries",
+     "intent": "search",
+     "complexity": "simple",
+     "predictedIntent": "search",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 0.005,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "What does this one-line expression return? Boolean(value)",
+     "intent": "explain",
+     "complexity": "simple",
+     "predictedIntent": "explain",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 0.005,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Implement an email validation function with unit tests",
+     "intent": "edit",
+     "complexity": "standard",
+     "predictedIntent": "edit",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Add retry handling for HTTP 429 to this client module",
+     "intent": "edit",
+     "complexity": "standard",
+     "predictedIntent": "edit",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Fix the bug in this authentication module",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "review",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Review this function's diff for regressions",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "review",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Investigate why this parser function crashes on empty input",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "explain",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.005,
+     "intentCorrect": false,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Track down why the total on this invoice is incorrect",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "explain",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": false,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Design a distributed architecture for job processing",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "other",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": false,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Review OAuth token storage for security weaknesses",
+     "intent": "review",
+     "complexity": "complex",
+     "predictedIntent": "review",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "native",
+     "ms": 0.003,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Implement queue locking across multiple modules",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "edit",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "native",
+     "ms": 0.003,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Plan a database migration with backfill and rollback",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "other",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "native",
+     "ms": 0.003,
+     "intentCorrect": false,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Review concurrent access to shared state for races",
+     "intent": "review",
+     "complexity": "complex",
+     "predictedIntent": "review",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "native",
+     "ms": 0.003,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Build a plugin architecture across the project",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "edit",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "native",
+     "ms": 0.003,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Give me three names for this project",
+     "intent": "other",
+     "complexity": "simple",
+     "predictedIntent": "other",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": true,
+     "complexityCorrect": false
+    },
+    {
+     "prompt": "Discuss the tradeoffs of this naming convention",
+     "intent": "other",
+     "complexity": "standard",
+     "predictedIntent": "other",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Which module remembers who is signed in?",
+     "intent": "search",
+     "complexity": "simple",
+     "predictedIntent": "other",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": false,
+     "complexityCorrect": false
+    },
+    {
+     "prompt": "Walk me through this short expression: items.length",
+     "intent": "explain",
+     "complexity": "simple",
+     "predictedIntent": "other",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.004,
+     "intentCorrect": false,
+     "complexityCorrect": false
+    },
+    {
+     "prompt": "Make the checkout function calculate sales tax and cover it with tests",
+     "intent": "edit",
+     "complexity": "standard",
+     "predictedIntent": "other",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 0.005,
+     "intentCorrect": false,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Rename architecture.md to design.md",
+     "intent": "edit",
+     "complexity": "simple",
+     "predictedIntent": "edit",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 0.005,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    }
+   ],
+   "status": null
+  },
+  {
+   "assistant": "minilm",
+   "model": "all-minilm:22m",
+   "deadlineMs": 5000,
+   "firstRequestMs": 288.101,
+   "firstSource": "minilm",
+   "warmupMs": 9.698,
+   "warmupSource": "minilm",
+   "samples": 24,
+   "assisted": 20,
+   "allDecisions": {
+    "medianMs": 7.202,
+    "p95Ms": 8.403
+   },
+   "assistedInference": {
+    "medianMs": 7.202,
+    "p95Ms": 8.403
+   },
+   "repeatedPrompt": "Find where login sessions are stored",
+   "repeatPrimeSource": "minilm",
+   "repeatMs": 0.047,
+   "repeatSource": "minilm",
+   "taskChecks": {
+    "intentCorrect": 20,
+    "complexityCorrect": 20,
+    "bothCorrect": 17,
+    "total": 24
+   },
+   "ranking": {
+    "samples": 8,
+    "assisted": 8,
+    "allDecisions": {
+     "medianMs": 56.607,
+     "p95Ms": 57.101
+    },
+    "assistedInference": {
+     "medianMs": 56.607,
+     "p95Ms": 57.101
+    },
+    "top1Correct": 8,
+    "top3Correct": 8,
+    "contextTop1Correct": 6,
+    "searchTop1Correct": 5,
+    "cases": [
+     {
+      "query": "Where are login sessions stored?",
+      "file": "src/auth/session.js",
+      "source": "minilm",
+      "ms": 54.209,
+      "top": [
+       "src/auth/session.js",
+       "src/jobs/queue.js",
+       "src/config/read.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": true,
+      "searchTop1Correct": true,
+      "context": [
+       "src/auth/session.js"
+      ],
+      "search": [
+       "src/auth/session.js"
+      ]
+     },
+     {
+      "query": "Which code remembers who is signed in?",
+      "file": "src/auth/session.js",
+      "source": "minilm",
+      "ms": 53.772,
+      "top": [
+       "src/auth/session.js",
+       "src/database/migrate.js",
+       "src/ui/theme.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Where do we retry requests when the server rate limits us?",
+      "file": "src/network/retry.js",
+      "source": "minilm",
+      "ms": 55.986,
+      "top": [
+       "src/network/retry.js",
+       "src/jobs/queue.js",
+       "src/checkout/totals.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": true,
+      "searchTop1Correct": true,
+      "context": [
+       "src/network/retry.js"
+      ],
+      "search": [
+       "src/network/retry.js"
+      ]
+     },
+     {
+      "query": "How does the app load its settings from disk?",
+      "file": "src/config/read.js",
+      "source": "minilm",
+      "ms": 56.776,
+      "top": [
+       "src/config/read.js",
+       "src/ui/theme.js",
+       "src/auth/session.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": false,
+      "searchTop1Correct": false,
+      "context": [],
+      "search": []
+     },
+     {
+      "query": "Which function prevents simultaneous changes to pending jobs?",
+      "file": "src/jobs/queue.js",
+      "source": "minilm",
+      "ms": 57.101,
+      "top": [
+       "src/jobs/queue.js",
+       "src/network/retry.js",
+       "src/database/migrate.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": true,
+      "searchTop1Correct": true,
+      "context": [
+       "src/jobs/queue.js"
+      ],
+      "search": [
+       "src/jobs/queue.js"
+      ]
+     },
+     {
+      "query": "Where is sales tax added to the final bill?",
+      "file": "src/checkout/totals.js",
+      "source": "minilm",
+      "ms": 56.356,
+      "top": [
+       "src/checkout/totals.js",
+       "src/jobs/queue.js",
+       "src/format/date.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": true,
+      "searchTop1Correct": true,
+      "context": [
+       "src/checkout/totals.js"
+      ],
+      "search": [
+       "src/checkout/totals.js"
+      ]
+     },
+     {
+      "query": "Where do we switch between light and dark colours?",
+      "file": "src/ui/theme.js",
+      "source": "minilm",
+      "ms": 56.607,
+      "top": [
+       "src/ui/theme.js",
+       "src/database/migrate.js",
+       "src/jobs/queue.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": true,
+      "searchTop1Correct": true,
+      "context": [
+       "src/ui/theme.js"
+      ],
+      "search": [
+       "src/ui/theme.js"
+      ]
+     },
+     {
+      "query": "Find the code that changes the database schema",
+      "file": "src/database/migrate.js",
+      "source": "minilm",
+      "ms": 56.91,
+      "top": [
+       "src/database/migrate.js",
+       "src/ui/theme.js"
+      ],
+      "top1Correct": true,
+      "top3Correct": true,
+      "contextTop1Correct": true,
+      "searchTop1Correct": false,
+      "context": [
+       "src/database/migrate.js"
+      ],
+      "search": []
+     }
+    ]
+   },
+   "usage": {
+    "decisions": 28,
+    "calls": 31,
+    "inputTokens": 4546,
+    "fallbacks": 4
+   },
+   "cases": [
+    {
+     "prompt": "Find where login sessions are stored",
+     "intent": "search",
+     "complexity": "simple",
+     "predictedIntent": "search",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "minilm",
+     "ms": 8.514,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Explain what this single line does: return count + 1",
+     "intent": "explain",
+     "complexity": "simple",
+     "predictedIntent": "explain",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "minilm",
+     "ms": 8.403,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Rename userCount to activeUsers in this function",
+     "intent": "edit",
+     "complexity": "simple",
+     "predictedIntent": "edit",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "minilm",
+     "ms": 8.376,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Fix the typo in this comment",
+     "intent": "edit",
+     "complexity": "simple",
+     "predictedIntent": "edit",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "minilm",
+     "ms": 7.64,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Locate the function that handles HTTP retries",
+     "intent": "search",
+     "complexity": "simple",
+     "predictedIntent": "search",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "minilm",
+     "ms": 7.22,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "What does this one-line expression return? Boolean(value)",
+     "intent": "explain",
+     "complexity": "simple",
+     "predictedIntent": "explain",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "minilm",
+     "ms": 7.768,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Implement an email validation function with unit tests",
+     "intent": "edit",
+     "complexity": "standard",
+     "predictedIntent": "edit",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "minilm",
+     "ms": 7.314,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Add retry handling for HTTP 429 to this client module",
+     "intent": "edit",
+     "complexity": "standard",
+     "predictedIntent": "edit",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "minilm",
+     "ms": 7.411,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Fix the bug in this authentication module",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "review",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "minilm",
+     "ms": 7.202,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Review this function's diff for regressions",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "review",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 7.216,
+     "intentCorrect": true,
+     "complexityCorrect": true,
+     "fallback": "Ambiguous semantic match; native routing used"
+    },
+    {
+     "prompt": "Investigate why this parser function crashes on empty input",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "explain",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 7.273,
+     "intentCorrect": false,
+     "complexityCorrect": true,
+     "fallback": "Ambiguous semantic match; native routing used"
+    },
+    {
+     "prompt": "Track down why the total on this invoice is incorrect",
+     "intent": "review",
+     "complexity": "standard",
+     "predictedIntent": "review",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "minilm",
+     "ms": 7.225,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Design a distributed architecture for job processing",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "other",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "minilm",
+     "ms": 6.654,
+     "intentCorrect": false,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Review OAuth token storage for security weaknesses",
+     "intent": "review",
+     "complexity": "complex",
+     "predictedIntent": "review",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "minilm",
+     "ms": 6.903,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Implement queue locking across multiple modules",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "edit",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "minilm",
+     "ms": 4.807,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Plan a database migration with backfill and rollback",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "other",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "minilm",
+     "ms": 6.908,
+     "intentCorrect": false,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Review concurrent access to shared state for races",
+     "intent": "review",
+     "complexity": "complex",
+     "predictedIntent": "review",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "minilm",
+     "ms": 6.963,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Build a plugin architecture across the project",
+     "intent": "edit",
+     "complexity": "complex",
+     "predictedIntent": "edit",
+     "predictedComplexity": "complex",
+     "model": "opus",
+     "source": "minilm",
+     "ms": 6.433,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Give me three names for this project",
+     "intent": "other",
+     "complexity": "simple",
+     "predictedIntent": "other",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "minilm",
+     "ms": 6.589,
+     "intentCorrect": true,
+     "complexityCorrect": false
+    },
+    {
+     "prompt": "Discuss the tradeoffs of this naming convention",
+     "intent": "other",
+     "complexity": "standard",
+     "predictedIntent": "other",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "minilm",
+     "ms": 7.108,
+     "intentCorrect": true,
+     "complexityCorrect": false
+    },
+    {
+     "prompt": "Which module remembers who is signed in?",
+     "intent": "search",
+     "complexity": "simple",
+     "predictedIntent": "search",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "minilm",
+     "ms": 6.837,
+     "intentCorrect": true,
+     "complexityCorrect": false
+    },
+    {
+     "prompt": "Walk me through this short expression: items.length",
+     "intent": "explain",
+     "complexity": "simple",
+     "predictedIntent": "other",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "native",
+     "ms": 7.18,
+     "intentCorrect": false,
+     "complexityCorrect": false,
+     "fallback": "Ambiguous semantic match; native routing used"
+    },
+    {
+     "prompt": "Make the checkout function calculate sales tax and cover it with tests",
+     "intent": "edit",
+     "complexity": "standard",
+     "predictedIntent": "edit",
+     "predictedComplexity": "standard",
+     "model": "sonnet",
+     "source": "minilm",
+     "ms": 7.115,
+     "intentCorrect": true,
+     "complexityCorrect": true
+    },
+    {
+     "prompt": "Rename architecture.md to design.md",
+     "intent": "edit",
+     "complexity": "simple",
+     "predictedIntent": "edit",
+     "predictedComplexity": "simple",
+     "model": "haiku",
+     "source": "native",
+     "ms": 6.877,
+     "intentCorrect": true,
+     "complexityCorrect": true,
+     "fallback": "Ambiguous semantic match; native routing used"
+    }
+   ],
+   "status": {
+    "ok": true,
+    "source": "minilm"
+   },
+   "downloadBytes": 45960996,
+   "details": {
+    "parent_model": "",
+    "format": "gguf",
+    "family": "bert",
+    "families": [
+     "bert"
+    ],
+    "parameter_size": "23M",
+    "quantization_level": "F16",
+    "context_length": 512,
+    "embedding_length": 384
+   }
+  }
+ ],
+ "ollamaVersion": "0.35.0",
+ "limit": "Routing/ranking overhead and hand-labelled synthetic smoke checks only. Three answering-model descriptors are synthetic; no answering CLI starts. No representative accuracy, full-answer speedup, token saving or forced model unloading is measured. First request may use a resident model. Warmup resets an initial failure cooldown only for this benchmark; later errors retain runtime fallback behaviour.",
+ "note": "After per-label example sentences (6 per label), per-half acceptance and the explicit-words rule. Compare with model-router-2026-10-06-native-minilm.json (before). Same 24-prompt synthetic corpus; small, and its disagreements were used to choose the merge rule, so treat this as a smoke check, not an accuracy evaluation."
+}

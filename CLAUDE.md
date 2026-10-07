@@ -47,6 +47,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item, usage meter,
     log in/out), `lib/settings-page.js` (Kural Settings tab, `media/settings.*`), `lib/usage-panel.js` (AI Usage panel), `lib/paths.js` (what the AI may touch without asking),
     `lib/updates.js` (updates), `lib/search/` (Search & Ask side bar), `lib/workspace.js` (folders; `workDir()` when none is open),
+    `lib/crash/` (crash reports), `lib/settings-io.js` (export/import), `lib/scm/commit.js` (Source Control commit message),
     `lib/log.js`, `lib/ui.js` (font size).
   - `media/codicons/` — the Codicons icon font (CC BY 4.0) for every Kural page.
 - `docs/wiki/` — the GitHub wiki's pages; `scripts/push-wiki.sh` publishes them.
@@ -136,6 +137,28 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `isTransient`. Only for Claude and Codex (`deviceOk`): Ollama has no MCP in Kural's engine, and Gemini (agy) can't
   ask before a command. Tests: `test/devices.test.js` with `test/fake-ssh.js` (`KURAL_SSH_BIN`). Real check: a local
   sshd (`apt install openssh-server`, `sshd -p 2222`).
+- **Model Router** (`lib/router/`: `policy.js` decides, no vscode; `words.js` Kural's word classifier ("Native": a
+  linear model on words/word pairs, weights in `words-model.json`, made by `node scripts/train-router.js` from
+  `examples.json`, 270 labelled requests; `test/router-words.test.js` fails when the weights are stale); `client.js` helper
+  models through Ollama (`HELPERS`: minilm, granite, qwen3; centroids of the examples, computed once by `prepare()` and
+  saved under globalStorage `router/`, so routing is one embedding: 8-49 ms); `index.js` ModelRouter; `learn.js`
+  RouterMemory; `panel.js`). Auto picks only from the AIs with accounts (Claude, Gemini, Codex): `eligible` drops local
+  and Tab-only models; there is no per-model allow-list (Adithya: Auto uses every model of your AIs). Profiles **cost /
+  balance / intelligence** (old ids speed / balanced / quality map via `ALIASES`; keep accepting them). `select()`:
+  `needTier(profile, task)` (complex = 3 in every profile; Intelligence simple = 2, standard = 3; Cost standard = 1 for
+  search/explain, 2 for edit/review) → the lightest model with that tier (`traits`: tier from name + the program's
+  description, "legacy/older" lose ties) → limit pressure (`limitUsed` from `usage.current(provider)`, `router.usageOf`;
+  ≥98 % skipped unless it's the only one) + stay bonuses growing with `historyChars` (never against the needed tier or a
+  lighter model that's enough) + `learned` lean. Returns `effort` too (chat sets `tab.effort` unless you picked one:
+  `effortPinned`). `classify(prompt, context, helper)`: words' probabilities, blended 50/50 with the helper's
+  (`HELPER_WEIGHT`, `TEMPERATURE` 0.01: chosen by `test/router-eval-blend.js`), then attached context bumps (files, sizes by
+  stat only, error output, browser elements). Measured (10-fold CV, M5): Native 74 %, MiniLM 82 %, Granite 87 %, Qwen3 90 %
+  of sizes; old keyword rules 53 %; generative routers (qwen3 4b/1.7b) 351/241 ms = over the 200 ms budget
+  (docs/wiki/Model-Router.md, docs/benchmarks/). In the chat, a provider switch whose handoff is too big (or lost an
+  attachment) re-routes within the current AI (`provider: here`) instead of refusing. Learning: `routerFeedback` in the
+  chat: next message = good, `setModel` right after = better, every change undone = bad (replaces good); workspaceState
+  `kural.router.memory.v1`, command `kural.router.forget`. Tests: `test/router.test.js`, `test/router-chat.test.js`,
+  `test/router-words.test.js`; live: `node test/router-eval.js`, `node test/router-latency.js`.
 - **Usage meter** (`lib/ai/usage.js` hub, drawn by `lib/account.js`): Claude Code sends `rate_limit_event`
   (`unifiedWindows.five_hour/seven_day.utilization`) after every answer; `ClaudeProcess.onData` and `claudeTest` report
   it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini (agy): `--print /usage` weekly limits, and
@@ -395,10 +418,52 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Updates** (`lib/updates.js`): `autoCheck()` once a day (globalState `kural.update.lastCheck`, setting
   `kural.updates.autoCheck`), quiet unless there's a newer version (non-modal offer, not awaited: an ignored
   notification must not keep `busy` set, or Check for Updates silently does nothing); newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
-  (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then restart.
-  Mac/Windows: a detached script waits for Kural's main process (`process.ppid`) to quit, swaps the app / runs the setup,
-  starts Kural. The script clears `CachedProfilesData/*/extensions.builtin.cache` (else the restarted Kural shows the
-  old extension description) and drops ELECTRON_*/VSCODE_* env vars. Tested end to end on Ubuntu only.
+  (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then quit at once.
+  Mac/Windows: `afterQuit` writes a script FILE (not `sh -c`: `pgrep -f <app>` would find itself) that waits for Kural's
+  main process (`process.ppid`) AND every process running from inside the app (`<app>/Contents/`, the install folder on
+  Windows; 20 s, then stopped), then installs. Replacing the app while any helper still ran crashed it ("Kural quit
+  unexpectedly") and the new one sometimes didn't start. Mac swap (`macSteps`): old app → `<app>.kural-old`, `ditto` the
+  new one, back on failure; write access checked BEFORE quitting (`byHand` otherwise). Each step goes to
+  `<globalStorage>/update.log`; `lastUpdate()` at the next start reports a failure (globalState `kural.update.pending`).
+  A quit vetoed by a dialog: a notification after 20 s (the script keeps waiting). The script clears
+  `CachedProfilesData/*/extensions.builtin.cache` and drops ELECTRON_*/VSCODE_* env vars. `test/updates-script.test.js`
+  runs the real Mac script on a stand-in app (its stand-ins start detached: a zombie child keeps `kill -0` true).
+- **install.sh** (Mac): Kural is found by its path (`pgrep -f /Applications/Kural.app/Contents/`, never `-x Kural`: that
+  also hits test copies) and is never force-killed: it waits until Kural has really gone (the 6 Oct crashes were the app
+  deleted 1 s after a `pkill` while Kural still showed a dialog). Run from Kural's own terminal (which dies with Kural),
+  the replacing step goes to a detached script (`perl -MPOSIX setsid`, log in /tmp) that waits for Kural to close.
+  Ubuntu: waits for Kural to be closed before `apt install`; inside Kural's terminal it refuses with a message.
+- **Crash log** (`lib/crash/`: `scan.js` no vscode, `index.js`): per window a marker `<globalStorage>/sessions/<ext host
+  pid>.json` (refreshed every minute, `clean` on deactivate); at start, unclean markers of dead pids + macOS
+  `~/Library/Logs/DiagnosticReports/Kural*.ips` (parsed: exception, crashed thread, frames) + VS Code's logs of the
+  sessions since the last scan (`CRASH_LINE`, last errors) → `<globalStorage>/crashes/crash-*.md` and one notification
+  (Show report / Report a bug: copies it, opens the bug form). Uncaught errors whose stack is Kural's → `kural-errors.log`.
+  VS Code's Crashpad is NOT turned on: it sets `ignoreSystemCrashHandler`, which would lose macOS's readable reports.
+- **Checkpoints, Edit, Restore code** (`lib/chat/changes.js`, `restoreTo`/`rewindTo`/`laterChanges` in the chat):
+  every snapshot is also saved to `<globalStorage>/checkpoints/<id>.json` (≤10 MB, deleted after 30 days; Keep no longer
+  drops it), and each change records `after` (hash of the file as the AI left it) to warn about your later edits.
+  Restore = each file back to the snapshot of the EARLIEST answer after the message that changed it; changes become
+  "undone". Edit = optional restore (modal), messages cut at the index, a new session with `carryOver {edited}` (the
+  handoff record), like a provider switch. Page: `.msg-actions` on user messages, `S.editing` + `.edit-bar`, `editIndex`
+  in the send message.
+- **Steps dropdown** (`media/chat.js` `layout`/`stepsNode`): thinking, tools (not team posts), answered permissions and
+  the text before the last step go into ONE `.steps` group per answer; pending permissions/questions, agent cards, team
+  posts, pictures and the text after the last step stay outside. An answer with steps is redrawn on each new block
+  (`appendBlock` → `rerender`); `patchBlock` still patches inside the group and refreshes `.steps-line`.
+- **Tokens** (`lib/ai/usage.js` `addTokens`/`tokenTotals`, per provider per day, 35 days, saved with the rest): Claude's
+  `result.modelUsage` (all models) in `ClaudeProcess.onData` (every Claude process); Codex `thread/tokenUsage/updated`
+  (totals: deltas), Gemini's per-answer usage and Ollama's `prompt_eval_count/eval_count` → the hub + a `kural_usage`
+  event to the chat. The chat keeps `tab.tokens` and `tab.context {used, window}` (Claude: the last lead message's usage,
+  `modelUsage.contextWindow`) → the ring next to the send button; the AI Usage panel shows read/cache/written.
+- **Settings export/import** (`lib/settings-io.js`): JSON `format: "kural-settings"`; kural.* without machine-scoped
+  keys, the user settings.json (JSONC parsed) and keybindings.json, non-built-in extensions, chat defaults
+  (`kural.chat.last`), devices without auth state. Import: QuickPick of what's in the file; keybindings merged without
+  duplicates. Tests: `test/settings-io.test.js` (also the checkpoints on disk).
+- **Commit message in Source Control** (`lib/scm/commit.js`): `scm/inputBox` menu (enabledApiProposals
+  `contribSourceControlInputBoxMenu`) + `scm/title`; the git extension's API (`repo.diff(true)`, else unstaged; recent
+  subjects); its own `brain.Session` ("scm-commit", `<msg>…</msg>`).
+- **Moving a dragged-out chat back** (`kural.chat.moveToPanel`): editor/title button when `activeCustomEditorId ==
+  kural.chatTab`; disposes the pane and activates the chat in the side panel.
 
 ## Test
 - `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script, Get started checks).

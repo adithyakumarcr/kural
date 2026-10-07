@@ -14,6 +14,11 @@ files, runs commands and answers. With code selected, Ctrl+L adds it to your mes
 
 Every file change shows under the answer: open the before/after, **keep** it or **undo** it.
 
+**The web, in every mode.** Claude, Google Gemini and ChatGPT (Codex) can search the web and read web pages in all four
+modes, Plan and Ask too (a plan often needs current docs or versions), without asking: it changes nothing on your
+computer. Codex uses live search (not its cached copy of the web); the commands it runs still have no internet. A model
+on this computer has no web tools.
+
 **Outside your project, Kural asks first.** In every mode the AI reads (and in Agent mode changes) files in your
 project without asking. A file anywhere else gets a card first: **Read this file?** or **Change this file?** (Allow /
 Skip). Files you attached are fine. That keeps the AI out of your other folders, and on a Mac it means macOS never asks
@@ -55,8 +60,11 @@ your next message, because which tools the model has is fixed when it starts.
 
 ## In the answer
 
-- **Thinking.** One steady line above the answer: "Thinking…" with the model's latest thought, then "Thought for 12 s".
-  Click it to read all of it.
+- **How it worked: one dropdown.** Everything the AI did on the way (its thoughts, the files it read, its searches,
+  commands, edits, permissions you answered, and the short notes it wrote between them) is one line above the answer:
+  "Worked for 34 s · 2 thoughts, 3 reads, 1 command". While it works the line says what it's doing now. Click it to see
+  every step. What needs you (a permission card, a question), agents' cards, the team's messages and pictures stay in
+  sight, outside it.
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.
 - **Code blocks** have **Copy**, **Insert** (at your cursor) and **Apply** (Kural applies it to the file and you review
   it, like [[Inline Edit]]).
@@ -72,6 +80,28 @@ your next message, because which tools the model has is fixed when it starts.
   **Latest** brings you back down.
 - **Stop** (the square button) stops the answer.
 
+## Going back: edit a message, restore the code
+
+Hover a message you sent for two buttons:
+
+- **Edit** puts it back in the input box (with its @ mentions); change it and send. It replaces that message and
+  everything after it, and the AI continues from the conversation before it (it doesn't remember the replaced part).
+  If answers after it changed files, Kural asks whether the code goes back too (**Restore Code** / **Keep Code**).
+  **Cancel** (or Esc) leaves editing.
+- **Restore code** puts back every file the AI changed after that message, as it was before it (like Cursor's
+  checkpoints). The conversation stays; those changes show as Undone. Kural asks first, and says if you edited one of
+  those files yourself since (your edits go too). What commands changed (installs, generated files) isn't undone.
+
+Kural keeps a checkpoint of each file before the AI changes it, on your computer, for 30 days: restoring works after
+a restart and after you pressed **Keep**.
+
+## Context and tokens
+
+Next to the send button, a small ring shows how full the conversation's context window is (for example 5 % of
+Sonnet's 1,000,000 tokens). Hover it for the numbers and for this chat's tokens: how many the AI read (and how many of
+those came from the cache, which is cheap) and wrote. Near full, the AI starts summarising or forgetting the oldest
+parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage panel ([[Account and Updates]]).
+
 ## Tabs, history, two chats
 
 - **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close.
@@ -83,6 +113,15 @@ your next message, because which tools the model has is fixed when it starts.
   tab. It shows only that chat (its editor tab is its tab), and the side panel stops listing it until you close the
   editor. Both chats can work at the same time; move it anywhere, even to another screen. It comes back after a restart.
   (Command Palette: **Kural: Open a Chat Beside the Code** does the same with a new chat.)
+- **Back to the panel**: the button in that chat editor's title bar, **Move Chat Back to the Kural Panel** (also on its
+  tab's right-click menu): the editor closes and the side panel shows the chat among its tabs. Closing the editor tab
+  also puts it back among the side panel's tabs.
+
+## Commit messages in Source Control
+
+In the Source Control panel, the sparkle button in the commit message box (and in the panel's title bar) writes a
+commit message for you: from your staged changes, or all changes when nothing is staged, in the style of your recent
+commits, with the chat's model. Edit it if you like and commit as usual.
 
 ## Your Claude Code setup
 

@@ -11,6 +11,7 @@ const path = require("path");
 const { log, LOGIN_RE } = require("../ai/claude");
 const brain = require("../ai");
 const { TextSearch } = require("./find");
+const { retrieve } = require("../router/retrieve");
 
 const SCHEMA = {
   type: "object",
@@ -46,8 +47,9 @@ const HISTORY = "kural.searchHistory.v1";
 const cleanRel = (p) => p.replace(/^\.[\\/]/, "").replace(/\\/g, "/");
 
 class SearchView {
-  constructor(context) {
+  constructor(context, router = null, activeChat = () => null) {
     this.context = context;
+    this.router = router; this.activeChat = activeChat;
     this.view = null;
     this.spare = null;      // a Claude process started ahead of time, so asking starts instantly
     this.current = null;    // { proc, id }
@@ -201,8 +203,7 @@ class SearchView {
   }
 
   // Start the next one now, so the next question doesn't wait for it to start (for the chat's current model).
-  prepare() {
-    const model = brain.currentModel();
+  prepare(model = brain.currentModel()) {
     if (this.spare && this.spare.model !== model) { const s = this.spare; this.spare = null; s.proc.kill(); }
     if (this.spare || !this.root() || !brain.usable(model).ok) return;
     const slot = { proc: null, handlers: null, model };
@@ -217,13 +218,46 @@ class SearchView {
     if (this.current) { const c = this.current; this.current = null; c.proc.kill(); this.post({ type: "done", id: c.id, cancelled: true }); }
   }
 
-  ask(q, id) {
+  async ask(q, id) {
+    if (!this.router || !vscode.workspace.isTrusted) return this.askBaseline(q,id);
+    this.cancel();
+    const ctl = new AbortController(), job = { id,proc: { kill: () => ctl.abort() } };
+    this.current = job;
+    let model = brain.currentModel();
+    try {
+      if (this.router.options().search) {
+        const t0 = Date.now();
+        this.post({ type: "progress",id,text: "Finding candidate code locally…" });
+        const candidates = await retrieve(q,ctl.signal);
+        if (ctl.signal.aborted) return;
+        this.post({ type: "progress",id,text: "Ranking relevant code…" });
+        const ranked = await this.router.rank(q,candidates,ctl.signal);
+        if (ctl.signal.aborted) return;
+        const relevant = ranked.candidates.filter((c) => c.relevance >= (ranked.source !== "native" ? .35 : .6)).slice(0,10);
+        if (relevant.length) {
+          const results = verify(relevant.map((c) => ({ ...c,why: "Matched locally to your question; inspect this location to confirm" })));
+          if (results.length) { this.current = null; this.post({ type: "askResult",id,answer: "Candidate code locations, ranked locally.",results,ms: Date.now()-t0,model: `Kural Router (${ranked.source})` }); return; }
+        }
+      }
+      const chat = this.activeChat();
+      if (chat && chat.autoRoute) {
+        const choice = await this.router.route({ prompt: q,current: model,profile: chat.routingProfile,mode: "ask" },ctl.signal);
+        if (choice.error) { this.post({ type: "error",id,message: choice.error }); this.current = null; return; }
+        model = choice.model;
+      }
+    } catch { /* Router or retrieval errors: use the existing model search. */ }
+    if (ctl.signal.aborted || this.current !== job) return;
+    this.current = null;
+    return this.askBaseline(q,id,model);
+  }
+
+  askBaseline(q, id, model = brain.currentModel()) {
     this.cancel();
     const root = this.root();
     if (!root) { this.post({ type: "error", id, message: "Open a folder first." }); return; }
-    const can = brain.usable();
+    const can = brain.usable(model);
     if (!can.ok) { this.post({ type: "error", id, message: can.why }); vscode.commands.executeCommand("kural.getStarted"); return; }
-    this.prepare();
+    this.prepare(model);
     const slot = this.spare;
     this.spare = null;
     if (!slot) { this.post({ type: "error", id, message: "Couldn't start the model. See Kural's log (Kural: Show Log)." }); return; }
@@ -283,7 +317,10 @@ function verify(results) {
     if (!uri) continue;
     const rel = ws.label(uri.fsPath);
     let lines;
-    try { lines = fs.readFileSync(uri.fsPath, "utf8").split("\n"); } catch { continue; }
+    try {
+      const doc = (vscode.workspace.textDocuments || []).find((d) => d.uri.scheme === "file" && d.uri.fsPath === uri.fsPath);
+      lines = (doc ? doc.getText() : fs.readFileSync(uri.fsPath, "utf8")).split("\n");
+    } catch { continue; }
     const line = Math.min(Math.max(1, r.line || 1), lines.length);
     out.push({ file: rel, line, why: r.why || "", text: (lines[line - 1] || "").replace(/\r$/, "") });
   }

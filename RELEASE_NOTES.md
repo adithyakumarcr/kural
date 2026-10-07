@@ -1,3 +1,49 @@
+## Not released yet
+
+- **Model Router like Cursor's Auto.** Profiles **Balance**, **Cost** and **Intelligence**, and Auto picks the intensity
+  too. The profile and the size of the task decide together: a quick question goes to a light model even under
+  Intelligence, and complex work gets the most capable model even under Cost. Auto picks from your Claude, Google
+  Gemini and ChatGPT (Codex) models and switches between those AIs with the conversation handed over; models on this
+  computer are only picked by you, and there's no list of models to tick any more. It leans away from an AI past half its
+  usage limit and skips one at 98 %, keeps a long chat on its AI on close calls, reads what you attached (files, error
+  output, a picked element), and learns from what you do after its answers (**Kural: Forget What Model Router Learned**).
+  When a conversation is too big to hand over, it stays with the current AI instead of refusing. Hover over the model on
+  an answer to see why it was chosen.
+- **Auto reads requests much better.** Kural's own word classifier (trained on 270 labelled requests) replaces the
+  keyword rules: 74 % of task sizes right instead of 53 %, with no download. Helper models through Ollama get more right:
+  MiniLM 82 %, Granite 87 % (63 MB), Qwen3 Embedding 90 % (640 MB), all under 50 ms. Choose one in the Model Router panel
+  and click **Download**. Small language models were measured too and were slower than the 200 ms budget.
+- **The web in every mode.** Claude can now search the web and read pages in Plan and Ask too (before: only Agent and
+  Auto), without asking. ChatGPT (Codex) uses live web search instead of its cached copy of the web; the commands it
+  runs still have no internet. Google Gemini already searched the web with its own tools.
+- **One dropdown for how the AI worked.** Its thoughts, reads, searches, commands and edits are one line above the
+  answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works, what it's doing now). Click it for every
+  step. Permission cards, questions, agents and pictures stay in sight.
+- **Edit an earlier message.** Hover a message you sent: **Edit** puts it back in the box; send it and it replaces that
+  message and everything after it. If later answers changed files, Kural asks whether the code goes back too.
+- **Restore code to any earlier message** (like Cursor's checkpoints): hover a message, **Restore code**, and every file
+  the AI changed after it is put back. Kural keeps a checkpoint of each file before the AI changes it for 30 days, so
+  this (and Undo) also works after a restart and after **Keep**.
+- **Tokens and the context window.** A ring next to the send button shows how full the conversation's context window
+  is; hover it for this chat's tokens read (and from the cache) and written. The AI Usage panel shows each AI's tokens
+  per day: today, the last 7 and 30 days.
+- **Move a dragged-out chat back to the Kural panel:** a button in its editor's title bar (and its tab's right-click
+  menu).
+- **Commit messages in Source Control.** The sparkle button in the commit message box writes one from your staged
+  changes (or all changes), in the style of your recent commits.
+- **Export and import your settings** (Kural Settings → Export settings / Import settings): Kural's settings, your
+  editor settings, keyboard shortcuts, the list of extensions, the chat's defaults and your devices (never passwords or
+  keys), in one file. On import you choose which parts.
+- **Crash reports.** When Kural closed unexpectedly, the next start says so once and saves a report on your computer
+  (macOS's crash report, VS Code's logs, the window that ended): **Show report** or **Report a bug** (copies it and opens
+  the form). **Kural: Show Crash Reports** lists them. Nothing is sent unless you send it.
+- **Fixed: after Check for Updates, Kural didn't start again or said it "quit unexpectedly".** The new version replaced
+  the app while parts of the old one were still closing. The update now waits until every part of Kural has quit,
+  swaps the app in one step (the old one comes back if that fails), writes `update.log`, and tells you at the next
+  start if something went wrong. `./install.sh` waits for Kural to close instead of forcing it.
+- **No coloured dot** next to Agent, Auto, Plan and Ask, and **no "Now connected" pop-ups** when Claude Code's setup
+  changes.
+
 ## What's new in 1.1.0-alpha.5
 
 - **A browser inside Kural, with Design Mode like Cursor.** Real web pages in a tab: your app on localhost or any

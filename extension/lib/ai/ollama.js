@@ -17,6 +17,7 @@
 // No vscode here (tests run without it).
 
 const os = require("os");
+const { excludedModel } = require("./model-policy");
 
 const MIN_VERSION = "0.8.0";    // streaming answers with tool calls (Kural's engine needs them)
 const VARIANT = /^kural-/;      // our larger-context copies: not shown as separate models
@@ -110,7 +111,7 @@ class Ollama {
   // Installed models, with what they can do: [{ name, size (bytes), params ("30.5B"), capabilities, chat }]
   async models() {
     const list = ((await (await this.req("/api/tags", { timeoutMs: 3000 })).json()).models || [])
-      .filter((m) => !VARIANT.test(m.name));
+      .filter((m) => !VARIANT.test(m.name) && !excludedModel(m.name));
     for (const m of list) {
       if (!this.caps.has(m.name)) {
         try { this.caps.set(m.name, (await (await this.req("/api/show", { body: { model: m.name }, timeoutMs: 5000 })).json()).capabilities || []); }
@@ -126,6 +127,7 @@ class Ollama {
 
   // Download a model ("qwen3-coder:30b"). onProgress({ percent, status, completed, total }).
   async pull(name, onProgress = () => {}, signal) {
+    if (excludedModel(name)) throw new Error("Qwen 0.5B is not supported; choose another model");
     const res = await this.req("/api/pull", { body: { model: name, stream: true }, timeoutMs: 6 * 60 * 60 * 1000, signal });
     const reader = res.body.getReader();
     let buf = "", last = { percent: 0, status: "starting" };
@@ -170,7 +172,7 @@ class Ollama {
     try {
       const res = await fetchPage(`https://ollama.com/search?c=tools&q=${encodeURIComponent(query)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const found = parseSearch(await res.text()).filter(usable);
+      const found = parseSearch(await res.text()).map((m) => ({...m,sizes:m.sizes.filter((size) => !excludedModel(`${m.name}:${size}`))})).filter(usable);
       if (found.length || query) return { results: found, from: "ollama.com" };
     } catch (e) { /* offline, or the page changed */ }
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);

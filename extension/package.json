@@ -31,13 +31,19 @@
         "kural.tabCompletion.ollamaUrl",
         "kural.chat.mode",
         "kural.chat.fullClaudeCodeSetup",
-        "kural.chat.model"
+        "kural.chat.model",
+        "kural.modelRouter.assistant",
+        "kural.modelRouter.modelPreferences"
       ]
     }
   },
   "main": "./extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "kural.router.forget",
+        "title": "Kural: Forget What Model Router Learned (This Workspace)"
+      },
       {
         "command": "kural.tab.forget",
         "title": "Kural: Forget What Tab Completion Learned (This Workspace)"
@@ -63,6 +69,11 @@
       {
         "command": "kural.chat.closeTab",
         "title": "Kural: Close Chat Tab"
+      },
+      {
+        "command": "kural.chat.moveToPanel",
+        "title": "Kural: Move Chat Back to the Kural Panel",
+        "icon": "$(layout-sidebar-right)"
       },
       {
         "command": "kural.askSearch",
@@ -263,6 +274,28 @@
         "command": "kural.browser.open",
         "title": "Kural: Open Browser (Pick Elements for the Chat)",
         "icon": "$(globe)"
+      },
+      {
+        "command": "kural.modelRouter",
+        "title": "Kural: Model Router",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "kural.scm.commitMessage",
+        "title": "Kural: Suggest a Commit Message",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "kural.settings.export",
+        "title": "Kural: Export Settings"
+      },
+      {
+        "command": "kural.settings.import",
+        "title": "Kural: Import Settings"
+      },
+      {
+        "command": "kural.showCrashReports",
+        "title": "Kural: Show Crash Reports"
       }
     ],
     "viewsContainers": {
@@ -289,6 +322,11 @@
         {
           "id": "kural-usage",
           "title": "AI Usage",
+          "icon": "media/usage-icon.svg"
+        },
+        {
+          "id": "kural-router",
+          "title": "Model Router",
           "icon": "media/usage-icon.svg"
         }
       ]
@@ -321,6 +359,13 @@
           "type": "webview",
           "id": "kural.usagePanel",
           "name": "AI Usage"
+        }
+      ],
+      "kural-router": [
+        {
+          "type": "webview",
+          "id": "kural.routerPanel",
+          "name": "Model Router"
         }
       ]
     },
@@ -386,6 +431,11 @@
         {
           "command": "kural.chat.open",
           "group": "navigation@90"
+        },
+        {
+          "command": "kural.chat.moveToPanel",
+          "when": "activeCustomEditorId == kural.chatTab || activeWebviewPanelId == kural.chatEditor",
+          "group": "navigation"
         }
       ],
       "editor/context": [
@@ -464,6 +514,10 @@
         {
           "command": "kural.search.dismiss",
           "when": "false"
+        },
+        {
+          "command": "kural.chat.moveToPanel",
+          "when": "activeCustomEditorId == kural.chatTab || activeWebviewPanelId == kural.chatEditor"
         }
       ],
       "webview/context": [
@@ -503,6 +557,26 @@
           "command": "kural.search.inFolder",
           "when": "explorerResourceIsFolder",
           "group": "4_search@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "kural.chat.moveToPanel",
+          "when": "resourceScheme == kural-chat",
+          "group": "1_kural"
+        }
+      ],
+      "scm/inputBox": [
+        {
+          "command": "kural.scm.commitMessage",
+          "when": "scmProvider == git"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "kural.scm.commitMessage",
+          "when": "scmProvider == git",
+          "group": "navigation"
         }
       ]
     },
@@ -725,7 +799,7 @@
         "kural.tabCompletion.localModel": {
           "type": "string",
           "default": "qwen2.5-coder:1.5b-base",
-          "description": "Ollama model for local Tab Completion suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:0.5b-base / 1.5b-base / 3b-base)."
+          "description": "Ollama model for local Tab Completion suggestions (a base model with fill-in-the-middle, e.g. qwen2.5-coder:1.5b-base / 3b-base)."
         },
         "kural.tabCompletion.ollamaUrl": {
           "type": "string",
@@ -748,6 +822,110 @@
           "type": "boolean",
           "default": true,
           "description": "Check for a new Kural version once a day (it asks before installing anything)."
+        },
+        "kural.modelRouter.profile": {
+          "type": "string",
+          "enum": [
+            "balance",
+            "cost",
+            "intelligence"
+          ],
+          "enumDescriptions": [
+            "Meet the task's quality needs, then prefer speed; steer away from an AI close to its limit",
+            "Save your usage limits: the lightest model that can do the task, on the AI with the most room left",
+            "Prefer the most capable model, even when it's slower or uses more of your limits"
+          ],
+          "default": "balance",
+          "description": "Default Auto profile, like Cursor's: Balance, Cost (saves your usage limits) or Intelligence."
+        },
+        "kural.modelRouter.saveTokens": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask the router to prefer fewer tokens and retries while meeting the selected profile."
+        },
+        "kural.modelRouter.timeoutMs": {
+          "type": "integer",
+          "default": 1500,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Maximum time for optional local router assistance before native policy takes over."
+        },
+        "kural.modelRouter.search": {
+          "type": "boolean",
+          "default": false,
+          "description": "Rank local Search & Ask candidates with native matching or the selected local helper, then fall back to the existing AI search when needed."
+        },
+        "kural.modelRouter.context": {
+          "type": "boolean",
+          "default": false,
+          "description": "Retrieve and rank optional workspace snippets for chat. Explicit attachments and instructions are preserved."
+        },
+        "kural.modelRouter.contextChars": {
+          "type": "integer",
+          "default": 12000,
+          "minimum": 1000,
+          "maximum": 60000,
+          "description": "Character budget for automatically retrieved context, excluding explicit attachments."
+        },
+        "kural.modelRouter.handoffChars": {
+          "type": "integer",
+          "default": 120000,
+          "minimum": 10000,
+          "maximum": 1000000,
+          "description": "Maximum recorded conversation size for an automatic provider handoff. Larger conversations stay intact and require a manual choice or larger budget."
+        },
+        "kural.modelRouter.checkpoints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reassess after failed tool steps in Auto model selection. Live switching currently supports Claude and local models within their provider."
+        },
+        "kural.modelRouter.tab": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply native profile and allowed-model rules when Tab Completion uses Auto. No helper inference runs while typing."
+        },
+        "kural.modelRouter.assistant": {
+          "type": "string",
+          "enum": [
+            "native",
+            "minilm",
+            "granite",
+            "qwen3"
+          ],
+          "enumDescriptions": [
+            "Kural's word classifier: built in, instant",
+            "MiniLM (all-minilm:22m, 46 MB) through Ollama on this computer, with the word classifier",
+            "Granite (granite-embedding:30m, 63 MB) through Ollama, with the word classifier: a good balance",
+            "Qwen3 Embedding (qwen3-embedding:0.6b, 640 MB) through Ollama, with the word classifier: the most accurate"
+          ],
+          "default": "native",
+          "description": "How Auto reads how much work a request is. The helper models run through Ollama on this computer (download them in Model Router); without one, Kural's built-in word classifier decides."
+        },
+        "kural.modelRouter.modelPreferences": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "quality": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "speed": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "tokens": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              }
+            },
+            "additionalProperties": false
+          },
+          "description": "Per-model quality, speed and token-efficiency hints, rated 1 (low) to 3 (high). These are not measured guarantees."
         }
       }
     },
@@ -824,6 +1002,7 @@
   "author": "Adithya Chinnakkonda",
   "enabledApiProposals": [
     "terminalCompletionProvider",
-    "terminalDataWriteEvent"
+    "terminalDataWriteEvent",
+    "contribSourceControlInputBoxMenu"
   ]
 }
