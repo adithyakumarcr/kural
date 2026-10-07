@@ -22,10 +22,11 @@ const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
 const { GUIDE } = require("./guide");
-const { registerTabEditor, openBeside } = require("./tab-editor");
+const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
 const { profileOf } = require("../router/policy");
 const journal = require("../router/journal");
+const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
 
@@ -108,7 +109,7 @@ class ChatView {
     this.pulls = new Map();        // model downloads in progress: name -> { percent, status }
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
-    this.changes = new ChangeTracker();
+    this.changes = new ChangeTracker(path.join(context.globalStorageUri.fsPath, "checkpoints"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
     this.lastEditor = vscode.window.activeTextEditor;
@@ -173,6 +174,7 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
+      vscode.commands.registerCommand("kural.chat.moveToPanel", (uri) => this.moveToPanel(uri)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
       vscode.commands.registerCommand("kural.chat.localModels", async () => { await this.reveal(); this.post({ type: "showLocal" }); }),
       vscode.commands.registerCommand("kural.chat.attach", async () => { this.reveal(); await this.onMessage({ type: "attachPick" }); }),
@@ -285,6 +287,8 @@ class ChatView {
   get activeId() { const p = this.cur(); return p ? p.activeId : this._activeId; }
   set activeId(v) { const p = this.cur(); if (p) p.activeId = v; else this._activeId = v; }
   shown(id) { return this.panes.some((p) => p.activeId === id); }   // is this tab on screen somewhere?
+  // The whole chat again, in every pane that shows it (after its messages changed: a rollback, an edit).
+  redraw(tab) { for (const p of this.panes) if (p.activeId === tab.id) this.postTo(p, { type: "full", tab: this.viewTab(tab) }); }
 
   activate(id, pane = this.cur()) {
     const tab = this.tab(id);
@@ -431,6 +435,7 @@ class ChatView {
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
     autoRoute: !!t.autoRoute, routingProfile: t.routingProfile, routingState: t.routingState || null, modelName: t.modelName || null,
+    tokens: t.tokens || null, context: t.context || null,
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
     device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
@@ -581,6 +586,19 @@ class ChatView {
     pane.single = true;
     this.postTabs();
     this.save();
+  }
+  // A chat in the editor area goes back among the side panel's tabs, and the side panel shows it (the button in the chat
+  // editor's title bar, its tab's right-click menu, or the Command Palette). Closing that editor does the first part too.
+  async moveToPanel(uri) {
+    const fromUri = uri && uri.scheme === SCHEME ? tabOf(uri) : null;
+    const pane = this.panes.find((p) => p.kind === "editor" && (fromUri ? p.activeId === fromUri : p === this.focusPane))
+      || this.panes.find((p) => p.kind === "editor" && p.panel && p.panel.active);
+    if (!pane) return;
+    const id = pane.activeId;
+    pane.closing = true; pane.panel.dispose();
+    await vscode.commands.executeCommand("kural.chat.focus");
+    const side = this.side();
+    if (side && this.tab(id)) this.activate(id, side);
   }
   // After a restart VS Code brings the panel back; give it the chat it showed before.
   restoreSplit(panel) {
@@ -737,6 +755,92 @@ class ChatView {
       ? [{ id: `ollama:${tabModel}`,label: `${tabModel} (Tab only)`,provider: "Ollama",providerId: "ollama",local: true,
         ready: !!tabInstalled && !(tabInstalled.capabilities || []).includes("cloud") && !/cloud/i.test(tabModel),completionOnly: true }] : [];
     return [...claude,...clis,...local,...completion].filter((model) => !excludedModel(model.id));
+  }
+
+  // ---------- tokens ----------
+  // This chat's tokens (all answers) and how full its context is now ({ used, window } tokens). Shown under the input.
+  countTokens(tab, reply, t, context) {
+    const add = (a, b) => { const o = { ...(a || {}) }; for (const k of ["input", "output", "cacheRead", "cacheWrite"]) o[k] = (o[k] || 0) + (Number(b[k]) || 0); return o; };
+    if (t) { tab.tokens = add(tab.tokens, t); if (reply) reply.tokens = add(reply.tokens, t); }
+    if (context) {
+      const window = context.window || (tab.context && tab.context.window) || null;
+      tab.context = { used: context.used != null ? context.used : (tab.context && tab.context.used) || 0, window };
+    }
+    clearTimeout(this.tokenPost);
+    this.tokenPost = setTimeout(() => this.postTabs(), 150);
+  }
+
+  // ---------- checkpoints: back to before an earlier message ----------
+  // Files the AI changed in answers after message `index` that aren't undone yet: { file, rel, change (the earliest
+  // answer's: its snapshot is the file as it was before), changedSince (you edited it after the AI's last change) }.
+  laterChanges(tab, index) {
+    const byFile = new Map(), last = new Map();
+    tab.messages.slice(index + 1).forEach((m) => {
+      if (m.role !== "assistant") return;
+      for (const c of m.changes || []) {
+        if (c.state === "undone" || !c.file) continue;
+        if (!byFile.has(c.file)) byFile.set(c.file, c);
+        last.set(c.file, c);
+      }
+    });
+    return [...byFile.values()].map((c) => ({ file: c.file, rel: c.rel, change: c,
+      changedSince: !!last.get(c.file).after && !this.changes.unchangedSince(c.file, last.get(c.file).after) }));
+  }
+
+  // Puts each of those files back as it was before message `index`. { restored: [rel], missing: [rel] }
+  async restoreCode(tab, index) {
+    const files = this.laterChanges(tab, index), restored = [], missing = [];
+    for (const f of files) ((await this.changes.undo(f.change.id)) ? restored : missing).push(f.rel);
+    tab.messages.slice(index + 1).forEach((m) => {
+      for (const c of m.changes || []) if (c.state !== "undone" && !missing.includes(c.rel)) { c.state = "undone"; if (this.activity) this.activity.undone(c.rel); }
+    });
+    log(`chat ${tab.id}: code restored to before message ${index}: ${restored.length} file(s)${missing.length ? `, checkpoint missing for ${missing.join(", ")}` : ""}`);
+    return { restored, missing };
+  }
+
+  // "Restore code" on a message: asks first (it overwrites files), then rolls back. The conversation stays.
+  async restoreTo(tab, index) {
+    const m = tab.messages[index];
+    if (!m || m.role !== "user" || tab.status !== "idle") return;
+    const files = this.laterChanges(tab, index);
+    if (!files.length) { this.post({ type: "flash", text: "Nothing to restore: no changes after this message" }); return; }
+    const since = files.filter((f) => f.changedSince).map((f) => f.rel);
+    const go = await vscode.window.showWarningMessage("Put the code back as it was before this message?", { modal: true,
+      detail: `${files.length} file${files.length === 1 ? "" : "s"} the AI changed after it go${files.length === 1 ? "es" : ""} back: ${files.map((f) => f.rel).join(", ")}.` +
+        (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: those edits go too.` : "") +
+        "\n\nWhat commands changed (installs, generated files) isn't undone. The conversation stays." }, "Restore Code");
+    if (go !== "Restore Code") return;
+    const { restored, missing } = await this.restoreCode(tab, index);
+    this.redraw(tab);
+    this.save();
+    this.post({ type: "flash", text: missing.length ? `Restored ${restored.length}; no checkpoint for ${missing.join(", ")}` : `Code restored to before that message (${restored.length} file${restored.length === 1 ? "" : "s"})` });
+  }
+
+  // Editing message `index`: the chat goes back to just before it. Asks whether the code goes back too when answers after
+  // it changed files. The AI starts a new session that gets the conversation up to there (journal.handoff), the same way
+  // a switch to another AI does, so it doesn't remember the replaced part. false = cancelled.
+  async rewindTo(tab, index) {
+    const m = tab.messages[index];
+    if (!m || m.role !== "user") return false;
+    const files = this.laterChanges(tab, index);
+    if (files.length) {
+      const since = files.filter((f) => f.changedSince).map((f) => f.rel);
+      const go = await vscode.window.showWarningMessage("Also put the code back as it was before this message?", { modal: true,
+        detail: `The answers after it changed ${files.length} file${files.length === 1 ? "" : "s"}: ${files.map((f) => f.rel).join(", ")}.` +
+          (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: restoring loses those edits.` : "") }, "Restore Code", "Keep Code");
+      if (!go) return false;
+      if (go === "Restore Code") await this.restoreCode(tab, index);
+    }
+    const old = this.runtime.get(tab.id);
+    if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
+    this.endDevice(old);
+    tab.messages = tab.messages.slice(0, index);
+    tab.sessionId = newSessionId(); tab.started = false; tab.context = null;
+    tab.carryOver = index > 0 ? { model: true, edited: true, text: journal.handoff(tab.messages) } : null;
+    if (!tab.carryOver) delete tab.carryOver;
+    log(`chat ${tab.id}: edited message ${index}: the conversation goes back to before it`);
+    this.redraw(tab);
+    return true;
   }
 
   routingRequest(tab, text, attachments = [], contexts = []) {
@@ -1019,11 +1123,14 @@ class ChatView {
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
-  async send(tab, segments, contexts, attachIds = [], requestId = null) {
+  async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null) {
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
     if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
+    // An earlier message edited: the chat goes back to just before it (and the code too, if you say so), then this one is
+    // sent in its place.
+    if (editIndex !== null && !(await this.rewindTo(tab, editIndex))) return;
     let routed = null;
     const previousMedia = [...new Map(tab.messages.flatMap((m) => m.attachments || [])
       .filter((a) => ["image","pdf"].includes(a.kind)).map((a) => [a.path,a])).values()];
@@ -1095,7 +1202,7 @@ class ChatView {
     const changedProvider = tab.engine && tab.engine !== engine;
     if (changedProvider) {
       if (tab.messages.length > 2) tab.carryOver = { model: true, text: journal.handoff(tab.messages.slice(0,-2)) };
-      tab.sessionId = newSessionId(); tab.started = false;
+      tab.sessionId = newSessionId(); tab.started = false; tab.context = null;
       const old = this.runtime.get(tab.id);
       if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
       this.endDevice(old);
@@ -1136,7 +1243,9 @@ class ChatView {
     if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
     // Continued from another workspace, or switched to a model on another engine (Claude ↔ your computer): the first
     // message carries the conversation so far.
-    const carry = tab.carryOver && !tab.started ? (tab.carryOver.model
+    const carry = tab.carryOver && !tab.started ? (tab.carryOver.edited
+      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far. I've changed my next message: answer it as it is now.\n\n`
+      : tab.carryOver.model
       ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far (with another model). Carry on from it.\n\n`
       : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
         "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
@@ -1184,6 +1293,16 @@ class ChatView {
     const turn = r.turn;
     const reply = turn && turn.reply;
     if (reply && reply.journal) journal.record(reply.journal,m);
+    // Tokens and the context window (Codex, Gemini and Kural's engine say so with their own event; Claude in its messages).
+    if (m.type === "kural_usage") { this.countTokens(tab, reply, m.tokens, m.context); return; }
+    if (!m.parent_tool_use_id && m.type === "assistant" && m.message && m.message.usage && isClaude(tab.model)) {
+      const u = m.message.usage, used = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"].reduce((a, k) => a + (Number(u[k]) || 0), 0);
+      if (used) this.countTokens(tab, null, null, { used });
+    }
+    if (m.type === "result" && isClaude(tab.model)) {
+      const windows = Object.values(m.modelUsage || {}).map((x) => Number(x.contextWindow) || 0).filter(Boolean);
+      this.countTokens(tab, reply, usageHub.fromResult(m), windows.length ? { window: Math.max(...windows) } : null);
+    }
     if (reply && !m.parent_tool_use_id && m.type === "assistant" && m.message && m.message.model) {
       tab.modelName = shownModel(tab,m.message.model);
       this.post({ type: "modelName",tabId: tab.id,name: tab.modelName });
@@ -1732,7 +1851,9 @@ class ChatView {
       case "localDelete": await this.deleteLocal(m.name); break;
       case "installOllama": installOllama(); break;
       case "openWorkspace": this.openWorkspaceOf(m.id); break;
-      case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null); break;
+      case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
+        Number.isInteger(m.editIndex) ? m.editIndex : null); break;
+      case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
