@@ -16,6 +16,7 @@ const { log } = require("./ai/claude");
 
 const REPO = "adithyakumarcr/kural";
 const LAST_CHECK = "kural.update.lastCheck";
+const UPDATE_PENDING = "kural.update.pending";   // an update started: lastUpdate() reports how it went
 const DAY = 24 * 60 * 60 * 1000;
 
 // "1.2.0-beta.2" → { nums: [1,2,0], pre: ["beta", 2] }
@@ -96,22 +97,54 @@ function sha256(file) {
   });
 }
 
-// Start a small script that waits for Kural (process `pid`) to quit, then runs `then`.
-// It gets a clean environment: Kural's internal variables (ELECTRON_RUN_AS_NODE, VSCODE_…) would make the
-// restarted Kural start as plain Node, or think it's a child of the old one.
-function afterQuit(pid, then) {
+// Start a small script (a file, run detached) that waits for Kural to quit COMPLETELY, then installs and starts the new
+// version, writing what it does to `logFile` (read at the next start: lastUpdate()). Completely: the main process
+// (`pid`) and every process started from inside the app (`inside`: the helpers, the extension host…), which exit a
+// moment after it. Replacing the app while any of them still ran made Kural crash on the way out ("Kural quit
+// unexpectedly", 6 Oct 2026) and the new one sometimes didn't start. It gets a clean environment: Kural's internal
+// variables (ELECTRON_RUN_AS_NODE, VSCODE_…) would make the restarted Kural start as plain Node.
+function afterQuit({ pid, inside, steps, logFile, dir }) {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) if (!/^(ELECTRON_|VSCODE_|KURAL_RAW)/.test(k)) env[k] = v;
   if (process.platform === "win32") {
-    const ps = `Wait-Process -Id ${pid} -ErrorAction SilentlyContinue; ${then}`;
-    spawn("powershell.exe", ["-NoProfile", "-WindowStyle", "Hidden", "-Command", ps], { detached: true, stdio: "ignore", windowsHide: true, env }).unref();
+    const script = path.join(dir, "install.ps1");
+    fs.writeFileSync(script, [
+      `function Log($m) { Add-Content -Path ${qp(logFile)} -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }`,
+      `Log "waiting for Kural (pid ${pid}) to quit"`,
+      `Wait-Process -Id ${pid} -ErrorAction SilentlyContinue`,
+      // Everything else running from Kural's folder: up to 20 s, then it's stopped.
+      `$left = Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith(${qp(inside)}, [System.StringComparison]::OrdinalIgnoreCase) }`,
+      `if ($left) { $left | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue; Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith(${qp(inside)}, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue }`,
+      steps, ""].join("\r\n"));
+    spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore", windowsHide: true, env }).unref();
   } else {
-    const sh = `while kill -0 ${pid} 2>/dev/null; do sleep 0.3; done; ${then}`;
-    spawn("/bin/sh", ["-c", sh], { detached: true, stdio: "ignore", env }).unref();
+    // (A file, not sh -c: the app's path is in the script, and "pgrep -f <app>" would otherwise find the script itself.)
+    const script = path.join(dir, "install.sh");
+    fs.writeFileSync(script, unixScript({ pid, inside, steps, logFile }), { mode: 0o700 });
+    spawn("/bin/sh", [script], { detached: true, stdio: "ignore", env }).unref();
   }
 }
 
 const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;           // sh quoting
+// The Mac/Linux script (test/updates-script.test.js runs it on a stand-in app).
+function unixScript({ pid, inside, steps, logFile, waitTicks = 66 }) {
+  return ["#!/bin/sh",
+    `log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> ${q(logFile)}; }`,
+    `log "waiting for Kural (pid ${pid}) to quit"`,
+    `while kill -0 ${pid} 2>/dev/null; do sleep 0.3; done`,
+    // Everything else running from inside the app: up to 20 s, then it's stopped.
+    `i=0; while pgrep -f ${q(inside)} >/dev/null 2>&1 && [ $i -lt ${waitTicks} ]; do sleep 0.3; i=$((i+1)); done`,
+    `if pgrep -f ${q(inside)} >/dev/null 2>&1; then log "stopping what's still running"; pkill -f ${q(inside)}; sleep 2; pkill -9 -f ${q(inside)}; sleep 1; fi`,
+    steps, ""].join("\n");
+}
+// The Mac steps: the old app set aside, the new one copied in, the old one back if that fails; then start it.
+function macSteps({ app, fresh, version, clear = "", open = "open" }) {
+  const old = `${app}.kural-old`;
+  return [clear, `rm -rf ${q(old)}`, `log "installing ${version}"`,
+    `if mv ${q(app)} ${q(old)} && ditto ${q(fresh)} ${q(app)}; then xattr -dr com.apple.quarantine ${q(app)} 2>/dev/null; rm -rf ${q(old)}; log "installed ${version}";`,
+    `else log "failed: couldn't put the new version in place; the old one stays"; rm -rf ${q(app)}; mv ${q(old)} ${q(app)}; fi`,
+    `${open} ${q(app)} && log "started" || log "failed: couldn't start Kural"`].join("\n");
+}
 const qp = (s) => `'${String(s).replace(/'/g, "''")}'`;             // PowerShell quoting
 
 // VS Code keeps a cache of its built-in extensions' descriptions (Kural's own extension is one) and
@@ -248,7 +281,8 @@ class Updater {
       }
       log(`update: installed ${version}; restarting`);
       // (KURAL_RESTART_ARGS: extra start options, only for testing, e.g. when Kural runs as root in a test machine)
-      afterQuit(pid, `${clear}exec /usr/share/kural/kural ${process.env.KURAL_RESTART_ARGS || ""}`);
+      afterQuit({ pid, inside: "/usr/share/kural/", logFile: this.updateLog, dir, steps: [clear, `log "installed ${version}"`,
+        `/usr/share/kural/kural ${process.env.KURAL_RESTART_ARGS || ""} >/dev/null 2>&1 & log "started"`].join("\n") });
     } else if (process.platform === "darwin") {
       // process.execPath is …/Kural.app/Contents/MacOS/Kural (or a helper inside it): the app is everything before /Contents/.
       const at = process.execPath.indexOf(".app/");
@@ -261,18 +295,55 @@ class Updater {
       if (r.status !== 0) throw new Error("couldn't unpack the download");
       const fresh = path.join(unpacked, "Kural.app");
       if (!fs.existsSync(fresh)) throw new Error("the download doesn't contain Kural.app");
+      // Kural can only replace itself where you may write (an app installed by another user of this Mac can't be).
+      try { fs.accessSync(app, fs.constants.W_OK); fs.accessSync(path.dirname(app), fs.constants.W_OK); }
+      catch { this.byHand(file, `Kural can't replace itself in ${path.dirname(app)} (no permission).`); return; }
       log(`update: replacing ${app} with ${version} after Kural quits`);
-      afterQuit(pid, `${clear}rm -rf ${q(app)} && ditto ${q(fresh)} ${q(app)} && xattr -dr com.apple.quarantine ${q(app)}; open ${q(app)}`);
+      // The old app is set aside first and comes back if copying the new one fails: never half an app.
+      afterQuit({ pid, inside: `${app}/Contents/`, logFile: this.updateLog, dir, steps: macSteps({ app, fresh, version, clear }) });
     } else if (process.platform === "win32") {
       const exe = process.execPath;   // …\Kural\Kural.exe
       log(`update: running the setup for ${version} after Kural quits`);
-      afterQuit(pid, `${clear}Start-Process -Wait -FilePath ${qp(file)} -ArgumentList '/S'; Start-Process -FilePath ${qp(exe)}`);
+      afterQuit({ pid, inside: path.dirname(exe) + path.sep, logFile: this.updateLog, dir, steps: [clear,
+        `Log "installing ${version}"`,
+        `$p = Start-Process -Wait -PassThru -FilePath ${qp(file)} -ArgumentList '/S'`,
+        `if ($p.ExitCode -eq 0) { Log "installed ${version}" } else { Log ("failed: the setup ended with " + $p.ExitCode) }`,
+        `Start-Process -FilePath ${qp(exe)}; Log "started"`].join("\r\n") });
     } else {
       throw new Error("updating isn't supported on this system");
     }
-    vscode.window.showInformationMessage(`Kural ${version} is installed. Restarting…`);
-    setTimeout(() => vscode.commands.executeCommand("workbench.action.quit"), 1500);
+    await this.context.globalState.update(UPDATE_PENDING, { version, at: Date.now() });
+    vscode.window.showInformationMessage(`Kural ${version} is ready. Kural closes and starts again…`);
+    // (Linux: the files are already replaced, so close quickly. Mac/Windows install after Kural has closed.)
+    setTimeout(() => vscode.commands.executeCommand("workbench.action.quit"), process.platform === "linux" ? 300 : 1500);
+    // Still here after 20 s: something kept Kural open (an unsaved file, a running task). The update waits for it.
+    setTimeout(() => vscode.window.showWarningMessage(`Kural ${version} installs as soon as Kural closes. Something kept it open (an unsaved file or a running task?): close Kural yourself to finish.`), 20000);
+  }
+
+  // Couldn't install it here: the download is shown in the Finder / Explorer to install by hand.
+  byHand(file, why) {
+    log(`update: ${why}`);
+    vscode.window.showWarningMessage(`${why} Install the download by hand: replace Kural with the one in it.`, "Show the download")
+      .then((p) => { if (p) vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(file)); });
+  }
+
+  get updateLog() { return path.join(this.context.globalStorageUri.fsPath, "update.log"); }
+
+  // At startup: how the last update went (its script's log). Said only when it failed; logged either way.
+  lastUpdate() {
+    const pending = this.context.globalState.get(UPDATE_PENDING);
+    if (!pending) return;
+    this.context.globalState.update(UPDATE_PENDING, undefined);
+    let text = "";
+    try { text = fs.readFileSync(this.updateLog, "utf8"); } catch { /* the script didn't run */ }
+    const lines = text.trim().split("\n").filter(Boolean).slice(-8);
+    log(`update: last update to ${pending.version}: ${lines.length ? lines.join(" | ") : "no record"}`);
+    const failed = lines.find((l) => / failed/.test(l));
+    if (failed) vscode.window.showWarningMessage(`Kural's update to ${pending.version} didn't finish: ${failed.replace(/^\S+ \S+ failed: /, "")}.`, "Open releases page")
+      .then((p) => p && vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${REPO}/releases`)));
+    else if (compareVersions(this.version, pending.version) < 0) log(`update: still on ${this.version} after the update to ${pending.version}`);
+    try { if (text.length > 64 * 1024) fs.writeFileSync(this.updateLog, lines.join("\n") + "\n"); } catch { /* keep it */ }
   }
 }
 
-module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk };
+module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk, unixScript, macSteps };
