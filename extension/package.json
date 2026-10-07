@@ -2,7 +2,7 @@
   "name": "kural",
   "displayName": "Kural",
   "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude (your Claude Code login) or your own model on this computer (Ollama, offline).",
-  "version": "1.1.0-alpha.5",
+  "version": "1.1.0-alpha.6",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
