@@ -39,6 +39,20 @@ sed -i -e 's/^APP_NAME="codium"/APP_NAME="kural"/' -e 's/^NAME="VSCodium"/NAME="
        -e 's/^SERVERDATAFOLDER=".vscodium-server"/SERVERDATAFOLDER=".kural-server"/' "$APP/bin/kural"
 [ -f "$APP/bin/codium-tunnel.exe" ] && mv "$APP/bin/codium-tunnel.exe" "$APP/bin/kural-tunnel.exe"
 
+# Windows asks who made a program before it runs it: an unsigned installer gets SmartScreen's "Windows protected your
+# PC". With a code signing certificate set up (CI secrets, docs/windows-signing.md), Kural.exe and the tunnel
+# program are signed here, the installer and its uninstaller by makensis (installer/sign.nsh). Without one: unsigned,
+# as before, with a note.
+SIGN="$(pwd)/scripts/sign-win.sh"
+SIGN_DEF=()
+if [ -n "${KURAL_SIGN_STORETYPE:-}" ]; then
+  echo "Signing ..."
+  "$SIGN" "$APP/Kural.exe" $([ -f "$APP/bin/kural-tunnel.exe" ] && echo "$APP/bin/kural-tunnel.exe")
+  SIGN_DEF=(-DSIGN="$SIGN")
+else
+  "$SIGN" Kural.exe
+fi
+
 echo "Making the portable zip ..."
 ZIP="dist/Kural-$VER-windows-x64.zip"
 rm -f "$ZIP"
@@ -46,7 +60,7 @@ rm -f "$ZIP"
 
 echo "Making the installer (takes a few minutes) ..."
 SETUP="dist/Kural-$VER-windows-x64-setup.exe"
-makensis -V2 -DVERSION="$VER" -DSRC="$(pwd)/$APP" -DICON="$(pwd)/$WORK/icons/icon.ico" -DOUT="$(pwd)/$SETUP" installer/kural.nsi
+makensis -V2 -DVERSION="$VER" -DSRC="$(pwd)/$APP" -DICON="$(pwd)/$WORK/icons/icon.ico" -DOUT="$(pwd)/$SETUP" ${SIGN_DEF[@]+"${SIGN_DEF[@]}"} installer/kural.nsi
 echo
 echo "Built: $SETUP"
 echo "       $ZIP"

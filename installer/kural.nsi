@@ -7,6 +7,7 @@ SetCompressor /SOLID lzma
 RequestExecutionLevel user
 
 !include "MUI2.nsh"
+!include "sign.nsh"   ; signed when a code signing certificate is set up (-DSIGN). (makensis reads from this folder)
 
 Name "Kural Code Editor"
 OutFile "${OUT}"

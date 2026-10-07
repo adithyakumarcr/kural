@@ -142,12 +142,51 @@ jobs:
   windows:
     needs: test
     runs-on: ubuntu-24.04        # the installer is made with NSIS, which runs on Linux
+    outputs:
+      signed: ${{ steps.build.outputs.signed }}
+    # Code signing (Windows SmartScreen's "Windows protected your PC"): set these in Settings → Secrets and variables →
+    # Actions once there's a certificate (docs/windows-signing.md). Without them the build is unsigned, as before.
+    env:
+      KURAL_SIGN_STORETYPE: ${{ secrets.WINDOWS_SIGN_STORETYPE }}
+      KURAL_SIGN_KEYSTORE: ${{ secrets.WINDOWS_SIGN_KEYSTORE }}
+      KURAL_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
+      KURAL_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
+      KURAL_SIGN_KEYPASS: ${{ secrets.WINDOWS_SIGN_KEYPASS }}
+      KURAL_SIGN_TSA: ${{ secrets.WINDOWS_SIGN_TSA }}
+      SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
+      - uses: actions/setup-java@v4   # for jsign, which signs Windows programs on Linux
+        with: { distribution: temurin, java-version: 21 }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq python3-pil nsis zip
-      - run: ./build-win.sh
+      - name: Get jsign 7.5 (checked against its known SHA-256)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/jsign.jar" https://github.com/ebourg/jsign/releases/download/7.5/jsign-7.5.jar
+          echo "602a51c3545a6dc4fb99bd2ea7152b26d1345916d0c93ddfbd5936cb735af91c  $RUNNER_TEMP/jsign.jar" | sha256sum -c -
+          echo "JSIGN_JAR=$RUNNER_TEMP/jsign.jar" >> "$GITHUB_ENV"
+      # Every build: the signing step works (a throwaway certificate; nothing it makes is published).
+      - run: ./scripts/sign-win-check.sh
+      - name: Build (signed when a certificate is set up)
+        id: build
+        run: |
+          # A .pfx kept as a secret (base64): to a file only this job can read.
+          if [ -n "$SIGN_PFX_BASE64" ]; then
+            umask 077; echo "$SIGN_PFX_BASE64" | base64 -d > "$RUNNER_TEMP/sign.pfx"
+            export KURAL_SIGN_KEYSTORE="$RUNNER_TEMP/sign.pfx" KURAL_SIGN_STORETYPE="${KURAL_SIGN_STORETYPE:-PKCS12}"
+          fi
+          # Azure Artifact Signing: an access token for the signing service, from its service principal.
+          if [ "$KURAL_SIGN_STORETYPE" = TRUSTEDSIGNING ] && [ -n "$AZURE_CLIENT_ID" ]; then
+            az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" >/dev/null
+            KURAL_SIGN_STOREPASS="$(az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv)"
+            echo "::add-mask::$KURAL_SIGN_STOREPASS"; export KURAL_SIGN_STOREPASS
+          fi
+          ./build-win.sh
+          if [ -n "$KURAL_SIGN_STORETYPE" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: "dist/Kural-*-windows-*", if-no-files-found: error }
 
@@ -173,6 +212,16 @@ jobs:
           Write-Host "Kural processes running: $($procs.Count)"
           if ($procs.Count -lt 2) { throw "Kural quit or didn't open a window" }
           $procs | Stop-Process -Force
+      - name: Signed (when a certificate is set up)
+        if: needs.windows.outputs.signed == 'true'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\Kural-*-setup.exe | Select-Object -First 1
+          foreach ($f in @($setup.FullName, "$env:LOCALAPPDATA\Programs\Kural\Kural.exe", "$env:LOCALAPPDATA\Programs\Kural\Uninstall Kural.exe")) {
+            $s = Get-AuthenticodeSignature $f
+            Write-Host "$f : $($s.Status) ($($s.SignerCertificate.Subject))"
+            if ($s.Status -ne "Valid") { throw "$f isn't validly signed: $($s.StatusMessage)" }
+          }
 
   # ---------- Release (tags only) ----------
   release:
