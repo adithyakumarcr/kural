@@ -158,6 +158,29 @@ const text = (ev) => ev.filter((m) => m.type === "stream_event" && m.event.delta
     srv.close();
     assert.strictEqual(text(events), word);
   });
+  // Enter while it answers queues the message (lib/chat queueSend): the engine takes it in at its next step.
+  const echoes = (ev) => ev.filter((m) => m.type === "user" && m.isReplay).map((m) => m.message.content);
+  await check("a message sent while it runs a tool joins that answer (before the model's next step), echoed when taken", async () => {
+    const { events, result, agent } = await ask({}, "read the readme", null, (a) => a.send("also say hi"));
+    assert.deepStrictEqual(echoes(events), ["read the readme", "also say hi"]);
+    const tool = events.findIndex((m) => m.type === "user" && !m.isReplay);
+    const added = events.findIndex((m) => m.isReplay && m.message.content === "also say hi");
+    assert.ok(tool >= 0 && added > tool, "after the tool's result");
+    assert.match(result.result, /You said: also say hi/);
+    await new Promise((r) => setTimeout(r, 100));
+    assert.strictEqual(events.filter((m) => m.type === "result").length, 1);   // one answer
+    assert.deepStrictEqual(agent.history.filter((m) => m.role === "user").map((m) => m.content), ["read the readme", "also say hi"]);
+  });
+  await check("a message sent while it answers without tools: answered next, as its own turn", async () => {
+    const { events } = await ask({}, "hello there", null, (a) => a.send("second question"));
+    await new Promise((r) => setTimeout(r, 300));
+    const results = events.filter((m) => m.type === "result");
+    assert.strictEqual(results.length, 2);
+    assert.match(results[1].result, /You said: second question/);
+    assert.deepStrictEqual(echoes(events), ["hello there", "second question"]);
+    assert.ok(events.findIndex((m) => m.isReplay && m.message.content === "second question") > events.indexOf(results[0]));
+  });
+
   await check("a failed message isn't kept (it would fail every time after)", async () => {
     const { agent } = await ask({ model: "not-there:1b" }, "hello");
     assert.strictEqual(agent.history.length, 0);

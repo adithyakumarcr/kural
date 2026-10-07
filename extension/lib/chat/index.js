@@ -448,7 +448,7 @@ class ChatView {
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
     autoRoute: !!t.autoRoute, routingProfile: t.routingProfile, routingState: t.routingState || null, modelName: t.modelName || null,
-    tokens: t.tokens || null, context: t.context || null,
+    tokens: t.tokens || null, context: t.context || null, queued: this.queuedOf(this.runtime.get(t.id)),
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
     device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
@@ -954,6 +954,7 @@ class ChatView {
     if (r && r.proc && !r.proc.exited && r.procKey === this.procKey(tab)) return;
     if (r && r.turn && r.turn.reply.running) return;   // never restart in the middle of an answer
     if (r && [...r.agents.values()].some((a) => a.state === "running")) return;   // … or while agents still work
+    if (r && r.steers && r.steers.length) return;      // … or with a queued message it hasn't taken in yet
     if (isLocal(tab.model) && !this.localReady.has(tab.model)) {   // a local model is prepared first (quietly)
       this.prepareLocal(tab).then((p) => { if (!p.error && tab.status === "idle") this.warm(tab); });
       return;
@@ -1033,7 +1034,10 @@ class ChatView {
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
     const editing = tab.mode === "agent" || tab.mode === "auto";
     const team = this.teamSize(tab);
-    const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map() };
+    // steers: messages you sent while it answered, given to the program but not taken in yet (see queueSend);
+    // expect: every message given to the program, in order, until its echo says it was taken in (onEcho).
+    const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map(),
+      steers: [], expect: [] };
     // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
     r.teamFile = team ? path.join(privateTmp("teams"), `${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
@@ -1050,7 +1054,7 @@ class ChatView {
     const local = isLocal(tab.model);
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
-      name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, mode: tab.mode,
+      name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode,
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
@@ -1086,11 +1090,14 @@ class ChatView {
       log(`chat ${tab.id}: couldn't reopen the saved conversation; starting a fresh one`);
       tab.started = false;
       const pending = r.pendingSend;
+      this.giveBack(tab, r);
       const nr = this.startProc(tab, true);
-      if (nr && pending) { nr.pendingSend = pending; nr.turn = r.turn; nr.proc.send(pending); }
+      if (nr && pending) { nr.pendingSend = pending; nr.turn = r.turn; this.sendTo(nr, pending, "turn"); }
       return;
     }
     r.proc = null;
+    // Messages you queued that it never took in: back into the box, not lost.
+    this.giveBack(tab, r);
     if (last && last.role === "assistant" && last.running) {
       last.running = false;
       last.error = info.login ? "login" : "The model stopped unexpectedly. See Kural's log (Kural: Show Log).";
@@ -1098,7 +1105,88 @@ class ChatView {
       tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(last) });
       this.postTabs(); this.save();
+    } else if (tab.status !== "idle") { tab.status = "idle"; this.postTabs(); }   // (it was waiting for a queued message)
+  }
+
+  // ---------- messages sent while it answers (a queue) ----------
+  // Enter while an answer runs doesn't stop it (Adithya): the message goes to the program at once, which takes it in at
+  // its next step: Claude Code and Kural's engine add it to the running answer (after the tool it's running), Codex too
+  // (turn/steer); otherwise (Gemini, or the answer ends first) it's answered next, as its own turn. Every program echoes
+  // a message when it takes it in (Claude Code: --replay-user-messages), so the chat shows it where it went: inside the
+  // answer ("steer" block) or as your next message. Until then it's in the queue above the box. Stop gives back what
+  // wasn't taken in yet (into the box); for that the program is stopped for good, since it can't hand them back.
+
+  // Give a message to the program, remembering it until its echo comes (onEcho).
+  sendTo(r, content, kind, steer = null) {
+    if (r.proc.echoes) (r.expect = r.expect || []).push({ kind, text: journal.textOf(content).trim(), steer });
+    r.proc.send(content);
+  }
+
+  queuedOf(r) { return ((r && r.steers) || []).map((s) => ({ id: s.id, text: ChatView.textOf(s.segments).trim().slice(0, 300) })); }
+
+  async queueSend(tab, segments, contexts, attachIds, requestId) {
+    const r = this.runtime.get(tab.id);
+    const live = (x) => x && !x.stale && x.proc && !x.proc.exited && x.turn && x.turn.dispatched && (x.turn.reply.running || (x.steers || []).length);
+    if (!live(r)) { this.post({ type: "flash", text: "Kural is still starting the answer: send it in a moment" }); return; }
+    if (!r.proc.echoes) { this.post({ type: "flash", text: "To send a message while it answers, update Claude Code (claude update)" }); return; }
+    let text = ChatView.textOf(segments).trim();
+    if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
+    const built = await this.buildPrompt(text, contexts);
+    if (!live(r) || this.runtime.get(tab.id) !== r) { this.post({ type: "flash", text: "The answer ended: send it again" }); return; }
+    const { content, meta } = this.attachments.content(built, attachIds, []);
+    if (meta.length) tab.granted = [...new Set([...(tab.granted || []), ...meta.flatMap((a) => [a.path, a.original]).filter(Boolean)])].slice(-50);
+    const s = { id: shortId(), segments, attachments: meta, at: Date.now(),
+      contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
+    (r.steers = r.steers || []).push(s);
+    this.sendTo(r, content, "steer", s);
+    s.sentText = journal.textOf(content);
+    this.post({ type: "queued", tabId: tab.id, requestId, queued: this.queuedOf(r) });
+    log(`chat ${tab.id}: queued a message while it answers (${JSON.stringify(content).length} chars, ${meta.length} attachments)`);
+  }
+
+  // The program says it took in a message (its echo). A queued one goes into the running answer, or, if that answer is
+  // over, becomes your next message with an answer of its own. (The echo of a normal message is just checked off.)
+  onEcho(tab, r, m) {
+    const text = journal.textOf(m.message && m.message.content).trim();
+    r.expect = r.expect || []; r.steers = r.steers || [];
+    let i = r.expect.findIndex((x) => x.text === text);
+    if (i < 0) i = 0;
+    const [x] = r.expect.splice(i, 1);
+    if (!x || x.kind !== "steer") return;
+    const s = x.steer;
+    r.steers = r.steers.filter((y) => y !== s);
+    clearTimeout(r.queueTimer);
+    const reply = r.turn && r.turn.reply;
+    if (reply && reply.running) {
+      const block = { k: "steer", segments: s.segments, attachments: s.attachments.length ? s.attachments : undefined, at: Date.now() };
+      reply.blocks.push(block);
+      this.post({ type: "block", tabId: tab.id, block });
+      if (r.turn.ask) r.turn.ask += `\n${ChatView.textOf(s.segments).trim()}`;
+      log(`chat ${tab.id}: the queued message went into the running answer`);
+    } else {
+      const user = { role: "user", segments: s.segments, mode: tab.mode, contexts: s.contexts, sentText: s.sentText,
+        ...(s.attachments.length ? { attachments: s.attachments } : {}) };
+      const next = this.newReply(tab, null);
+      tab.messages.push(user, next);
+      tab.status = "running";
+      tab.updatedAt = Date.now();
+      this.post({ type: "append", tabId: tab.id, requestId: null, msgs: [user, next] });
+      this.beginTurn(tab, r, next, ChatView.textOf(s.segments).trim(), s.attachments);
+      log(`chat ${tab.id}: the queued message is answered next`);
     }
+    this.post({ type: "queued", tabId: tab.id, queued: this.queuedOf(r) });
+    this.postTabs(); this.save();
+  }
+
+  // Queued messages it never took in (it stopped, or you pressed Stop): back into the box.
+  giveBack(tab, r) {
+    if (!r) return;
+    clearTimeout(r.queueTimer);
+    const back = (r.steers || []).splice(0);
+    r.expect = (r.expect || []).filter((x) => x.kind !== "steer");
+    if (!back.length) return;
+    log(`chat ${tab.id}: ${back.length} queued message${back.length === 1 ? "" : "s"} back in the box`);
+    this.post({ type: "unqueue", tabId: tab.id, items: back.map((s) => ({ segments: s.segments, attachments: s.attachments.length })), queued: [] });
   }
 
   // ---------- sending ----------
@@ -1137,10 +1225,31 @@ class ChatView {
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
+  // A new answer, empty for now.
+  newReply(tab, routed) {
+    return { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, team: this.teamSize(tab), teamStyle: tab.teamStyle,
+      teamLabel: this.teamLabel(tab), model: tab.model, models: [tab.model], routing: routed, journal: { tools: [] } };
+  }
+
+  // The program starts answering `reply`: what the turn tracks (changes, agents, the team's board).
+  beginTurn(tab, r, reply, ask, attachments = null) {
+    r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0, dispatched: !!attachments, ...(attachments ? { attachments } : {}) };
+    r.agents = new Map();   // Task call id -> agent card
+    r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
+    r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
+    if (r.teamFile) { r.round = (r.round || 0) + 1; r.finished = []; this.writeTeamFile(r); }
+    clearInterval(r.watchdog);
+    if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
+    clearInterval(r.busyTimer);
+    if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
+  }
+
   async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null) {
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
-    if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
+    if (tab.visiting) return;   // (a chat from another workspace: read only)
+    // While it answers: into the queue (not an edit of an earlier message: that waits for the answer to end).
+    if (tab.status !== "idle") { if (editIndex === null) await this.queueSend(tab, segments, contexts, attachIds, requestId); return; }
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
     // An earlier message edited: the chat goes back to just before it (and the code too, if you say so), then this one is
     // sent in its place.
@@ -1202,8 +1311,7 @@ class ChatView {
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
-    const reply = { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, team: this.teamSize(tab), teamStyle: tab.teamStyle,
-      teamLabel: this.teamLabel(tab), model: tab.model, models: [tab.model], routing: routed, journal: { tools: [] } };
+    const reply = this.newReply(tab, routed);
     tab.messages.push(user, reply);
     tab.status = "running";
     tab.updatedAt = Date.now();
@@ -1246,15 +1354,7 @@ class ChatView {
     if (tab.pendingModel && isClaude(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
-    r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0, dispatched: false };
-    r.agents = new Map();   // Task call id -> agent card
-    r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
-    r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
-    if (r.teamFile) { r.round = (r.round || 0) + 1; r.finished = []; this.writeTeamFile(r); }
-    clearInterval(r.watchdog);
-    if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
-    clearInterval(r.busyTimer);
-    if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
+    this.beginTurn(tab, r, reply, ask);
     // Continued from another workspace, or switched to a model on another engine (Claude ↔ your computer): the first
     // message carries the conversation so far.
     const carry = tab.carryOver && !tab.started ? (tab.carryOver.fork
@@ -1290,7 +1390,7 @@ class ChatView {
     }
     r.pendingSend = prompt;
     r.turn.dispatched = true;
-    r.proc.send(prompt);
+    this.sendTo(r, prompt, "turn");
     delete tab.carryOver;
     log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
     this.save();
@@ -1307,6 +1407,8 @@ class ChatView {
 
   // ---------- Claude's output ----------
   onClaude(tab, r, m) {
+    // The program took in a message we gave it (its echo): a queued one shows where it went.
+    if (m.type === "user" && m.isReplay && !m.parent_tool_use_id) { this.onEcho(tab, r, m); return; }
     const turn = r.turn;
     const reply = turn && turn.reply;
     if (reply && reply.journal) journal.record(reply.journal,m);
@@ -1347,8 +1449,10 @@ class ChatView {
       const a = m.tool_use_id && r.agents.get(m.tool_use_id);
       if (m.subtype === "task_started" && m.task_id && m.tool_use_id) r.tasks.set(m.task_id, m.tool_use_id);
       const end = m.subtype === "task_notification" ? m.status : m.subtype === "task_updated" && m.patch ? m.patch.status : null;
-      if (m.subtype === "task_notification") r.lastNotifyAt = Date.now();
       const owner = a || (m.task_id && r.agents.get(r.tasks.get(m.task_id)));
+      // Only an agent's report wakes the lead. (Claude Code reports a long Bash command as a background task too: counted
+      // as an agent, it made Kural send "All the agents you started have reported back…" after an ordinary command.)
+      if (m.subtype === "task_notification" && owner) r.lastNotifyAt = Date.now();
       if (owner) owner.lastActive = Date.now();
       // What the agent is doing right now ("Running the tests"), shown on its card.
       if (m.subtype === "task_progress" && owner && owner.state === "running" && m.description) {
@@ -1580,9 +1684,9 @@ class ChatView {
     reply.waitingFor = [];
     log(`chat ${tab.id}: all agents reported; asking the lead for the conclusion`);
     // (A project team works in phases: after the planners report, the next phase starts; so don't say "final".)
-    r.proc.send("All the agents you started have reported back. If your instructions have a next phase (the user's OK, " +
+    this.sendTo(r, "All the agents you started have reported back. If your instructions have a next phase (the user's OK, " +
       "building, checking), go on with it now. Otherwise give me the final answer: the result or decision, why, and any " +
-      "disagreement that remains.");
+      "disagreement that remains.", "nudge");
   }
 
   // What Claude loaded from your setup: connectors / MCP servers, plugins, skills. Shown in the
@@ -1644,14 +1748,26 @@ class ChatView {
       if (b.k === "agent" && b.state === "running") b.state = reply.error ? "stopped" : "done";
     }
     if (reply.mode === "plan" && !reply.error) reply.planReady = true;
-    tab.status = "idle";
+    // A message you queued that it hasn't taken in yet: it's answered next (its echo opens that answer, onEcho), so the
+    // chat stays busy meanwhile. Never taken in within 30 s (the program got stuck): back into the box.
+    const queued = !!(r.steers || []).length && !r.stale && r.proc && !r.proc.exited;
+    tab.status = queued ? "running" : "idle";
+    if (queued) {
+      clearTimeout(r.queueTimer);
+      r.queueTimer = setTimeout(() => {
+        if (!r.steers.length || r.turn.reply.running) return;
+        this.giveBack(tab, r);
+        if (tab.status !== "idle") { tab.status = "idle"; this.postTabs(); }
+      }, 30000);
+    }
     if (!this.shown(tab.id)) tab.unread = true;
     this.finishTurn(tab, r);
     // Tab learns what you're working on, and which files the chat changed for it.
     if (this.activity && r.turn.ask && reply.error !== "stopped") this.activity.addWork("chat", r.turn.ask, (reply.changes || []).map((c) => c.rel));
     this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
     this.postTabs(); this.save();
-    // If you changed mode/intensity while it was answering, get the new setup ready now.
+    // If you changed mode/intensity while it was answering, get the new setup ready now (not with a queued message
+    // waiting in this one: warm() waits for that).
     if (r.procKey !== this.procKey(tab)) this.warm(tab);
   }
 
@@ -1660,6 +1776,7 @@ class ChatView {
     const routing = this.routingJobs.get(tab.id); if (routing) { routing.abort(); this.routingJobs.delete(tab.id); }
     delete tab.routingState;
     if (r) {
+      this.giveBack(tab, r);   // queued messages it hadn't taken in: back into the box
       if (r.checkpointAbort) r.checkpointAbort.abort();
       clearInterval(r.watchdog); clearInterval(r.busyTimer);
       if (r.teamFile) fs.rm(r.teamFile, { force: true }, () => {});
@@ -1935,8 +2052,9 @@ class ChatView {
         const r = this.runtime.get(tab.id);
         // Agents working in the background don't stop on an interrupt, and a paused lead has
         // nothing to interrupt: end the whole process. The conversation is saved, so the next
-        // message picks it up again.
-        if (!r || !r.proc || r.proc.exited || [...r.agents.values()].some((a) => a.state === "running")) { this.forceStop(tab, r); break; }
+        // message picks it up again. The same with a queued message it hasn't taken in: after an interrupt it would
+        // answer that one; stopped, the message goes back into the box (giveBack).
+        if (!r || !r.proc || r.proc.exited || [...r.agents.values()].some((a) => a.state === "running") || (r.steers || []).length) { this.forceStop(tab, r); break; }
         for (const res of r.perms.values()) res(false);
         r.perms.clear();
         r.proc.interrupt();
@@ -2125,9 +2243,20 @@ class ChatView {
   }
 
   // A file the chat mentions or links: open it (at the line). A folder: show it in the Explorer. A picture or another
-  // file that isn't text: VS Code's own viewer. Not there: say so (a model can name a file that doesn't exist).
+  // file that isn't text: VS Code's own viewer. Just a name ("devices.test.js") or a path from another folder: the
+  // project's file it means (ws.find); several: you pick. Not there: say so (a model can name a file that doesn't exist).
   async openPath(p, line, endLine) {
-    const uri = this.resolvePath(p);
+    let uri = p ? null : this.resolvePath(p);
+    if (p) {
+      const found = await ws.find(p);
+      if (found.length > 1) {
+        const pick = await vscode.window.showQuickPick(found.map((f) => ({ label: path.basename(f.uri.fsPath), description: f.label, uri: f.uri })),
+          { placeHolder: `More than one file matches ${p}: which one?` });
+        if (!pick) return;
+        uri = pick.uri;
+      } else if (found.length) uri = found[0].uri;
+      else { vscode.window.showWarningMessage(`Kural can't find ${p} in this project.`); return; }
+    }
     if (!uri) return;
     let st;
     try { st = await vscode.workspace.fs.stat(uri); } catch { vscode.window.showWarningMessage(`Kural can't find ${p}.`); return; }

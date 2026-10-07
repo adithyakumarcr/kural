@@ -26,10 +26,15 @@ function canCheckpoint(runtime) {
     !(runtime.turn.journal.tools || []).some((t) => t.status === "running");
 }
 
+// What you wrote, from the chat's pieces (text and @ mentions).
+const segmentsText = (segs) => (segs || []).map((s) => s.t === "text" ? s.v : s.ctx ? `@${s.ctx.path || s.ctx.label || ""}` : "").join("").trim();
+
 function handoff(messages) {
   const history = messages.filter((m) => m.role === "user" || (m.blocks || []).length || m.journal).map((m) => m.role === "user"
     ? { role: "user", segments: m.segments, sentText: m.sentText, contexts: m.contexts, attachments: m.attachments }
     : { role: "assistant", model: m.model, text: (m.blocks || []).filter((b) => b.k === "text").map((b) => b.text).join(""),
+      // Messages you sent while it was answering, which it took into this answer.
+      ...((m.blocks || []).some((b) => b.k === "steer") ? { userAddedWhileAnswering: m.blocks.filter((b) => b.k === "steer").map((b) => segmentsText(b.segments)) } : {}),
       tools: m.journal && m.journal.tools || [], changes: m.changes || [], error: m.error });
   return "<kural_handoff>\n" + JSON.stringify(history) + "\n</kural_handoff>\n" +
     "Continue the user's task from this recorded conversation. Tool operations marked complete have already happened; " +

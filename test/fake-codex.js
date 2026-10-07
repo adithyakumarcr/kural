@@ -95,12 +95,20 @@ function handle(m) {
       const th = threads[p.threadId];
       if (!th) return fail(`thread not found: ${p.threadId}`);
       const id = `turn_${++turnN}`;
-      turns.set(id, { interrupted: false });
+      turns.set(id, { interrupted: false, steered: [], done: false });
       reply({ turn: { id, items: [], status: "inProgress", error: null } });
       run(p.threadId, id, th, p).catch((e) => process.stderr.write(e.stack));
       return;
     }
     case "turn/interrupt": { const t = turns.get(p.turnId); if (t) t.interrupted = true; return reply({}); }
+    // More input for the running turn (a message you sent while Codex works). FAKE_CODEX_NO_STEER: an older Codex.
+    case "turn/steer": {
+      if (process.env.FAKE_CODEX_NO_STEER) return fail(`unknown method ${m.method}`);
+      const t = turns.get(p.expectedTurnId);
+      if (!t || t.done) return fail("no active turn to steer");
+      t.steered.push((p.input || []).filter((x) => x.type === "text").map((x) => x.text).join("\n"));
+      return reply({ turnId: p.expectedTurnId });
+    }
     case "account/logout": fs.writeFileSync(file, "loggedout"); return reply({});
     // The browser login: the page's address, then (as if you finished in the browser) logged in after 1 s.
     case "account/login/start": {
@@ -119,7 +127,8 @@ async function run(threadId, turnId, th, p) {
   const ids = { threadId, turnId };
   const started = (item) => note("item/started", { item, ...ids, startedAtMs: Date.now() });
   const completed = (item) => note("item/completed", { item, ...ids, completedAtMs: Date.now() });
-  const end = (status, error = null) => note("turn/completed", { threadId, turn: { id: turnId, items: [], status, error, durationMs: 5 } });
+  const end = (status, error = null) => { turns.get(turnId).done = true; note("turn/completed", { threadId, turn: { id: turnId, items: [], status, error, durationMs: 5 } }); };
+  const steered = () => turns.get(turnId).steered.length ? ` Also: ${turns.get(turnId).steered.join("; ")}.` : "";
   const say = async (text, pieces = [text]) => {
     const item = { type: "agentMessage", id: `msg_${turnId}_${Math.random().toString(36).slice(2, 6)}`, text: "", phase: null };
     started(item);
@@ -148,7 +157,7 @@ async function run(threadId, turnId, th, p) {
     const ans = await ask("item/commandExecution/requestApproval", { kind: "command", ...ids, itemId: item.id, startedAtMs: Date.now(), command: item.command, cwd: th.cwd, reason: "Run the tests" });
     if (ans && ans.decision === "accept") {
       completed({ ...item, status: "completed", aggregatedOutput: "all 3 tests pass\n", exitCode: 0 });
-      await say("Tests pass.");
+      await say(`Tests pass.${steered()}`);
     } else {
       completed({ ...item, status: "declined" });
       await say("Okay, I won't run them.");

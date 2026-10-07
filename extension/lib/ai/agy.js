@@ -441,11 +441,15 @@ class AgyAgent {
     } catch { /* best effort */ }
   }
 
+  // Sent while agy answers: it waits for the next turn (agy has no way to add to a running answer that Kural knows
+  // of). Each message is echoed when agy takes it (like Claude Code's --replay-user-messages): the chat shows a queued
+  // message as asked only then.
   send(content) {
     if (this.exited) return;
     this.queue.push(content);
     if (!this.proc) this.spawn(); else this.next();
   }
+  get echoes() { return true; }
 
   // Claude-style blocks → agy's text. Pictures and PDFs are saved where agy may read them, and the message says where.
   toText(content) {
@@ -472,6 +476,7 @@ class AgyAgent {
     this.busy = true;
     this.stopped = false;
     this.turn = { t0: Date.now(), text: "", segment: "", block: null, tools: new Map(), denied: [] };
+    this.emit({ type: "user", isReplay: true, message: { role: "user", content } });
     const priming = !this.primed;
     const line = JSON.stringify({ event: "user", message: { role: "user", content: this.toText(content) } });
     this.primed = true;

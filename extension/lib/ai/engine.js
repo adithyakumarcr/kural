@@ -79,7 +79,9 @@ class LocalAgent {
 
   start() {
     if (this.opts.resume && this.file()) { try { this.history = JSON.parse(fs.readFileSync(this.file(), "utf8")).messages || []; } catch { /* a new conversation */ } }
-    setImmediate(() => this.emit({ type: "system", subtype: "init", model: this.model, tools: this.offered, mcp_servers: [] }));
+    // (Next tick: the caller sets up its handlers first. The first message waits for it, so "init" comes first, as with
+    // Claude Code.)
+    this.inited = new Promise((done) => setImmediate(() => { this.emit({ type: "system", subtype: "init", model: this.model, tools: this.offered, mcp_servers: [] }); done(); }));
     return true;
   }
 
@@ -89,11 +91,26 @@ class LocalAgent {
     try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify({ model: this.model, messages: this.history })); } catch { /* best effort */ }
   }
 
-  // Your message: a string, or Claude-style blocks (text and images).
+  // Your message: a string, or Claude-style blocks (text and images). Sent while it answers: added to that answer before
+  // the model's next step (after the tools it's running), or answered next if the answer ends first. Echoed when taken
+  // (like Claude Code's --replay-user-messages), so the chat knows which.
   send(content) {
     if (this.exited) return;
     this.queue.push(content);
     if (!this.busy) this.next();
+  }
+  get echoes() { return true; }
+  echo(content) { this.emit({ type: "user", isReplay: true, message: { role: "user", content } }); }
+
+  // Claude-style blocks → one Ollama message (pictures as base64 images).
+  toMessage(content) {
+    const msg = { role: "user", content: "" };
+    for (const b of typeof content === "string" ? [{ type: "text", text: content }] : content) {
+      if (b.type === "text") msg.content += (msg.content ? "\n\n" : "") + b.text;
+      else if (b.type === "image" && b.source && b.source.data) (msg.images = msg.images || []).push(b.source.data);
+      else if (b.type === "document") msg.content += `\n\n(A PDF was attached: ${b.title || "document"}. This model can't read PDFs.)`;
+    }
+    return msg;
   }
 
   setModel(m) { this.model = m; }
@@ -115,14 +132,10 @@ class LocalAgent {
     this.busy = true;
     this.stopped = false;
     const t0 = Date.now();
-    const msg = { role: "user", content: "" };
-    for (const b of typeof content === "string" ? [{ type: "text", text: content }] : content) {
-      if (b.type === "text") msg.content += (msg.content ? "\n\n" : "") + b.text;
-      else if (b.type === "image" && b.source && b.source.data) (msg.images = msg.images || []).push(b.source.data);
-      else if (b.type === "document") msg.content += `\n\n(A PDF was attached: ${b.title || "document"}. This model can't read PDFs.)`;
-    }
+    if (this.inited) await this.inited;
+    this.echo(content);
     const before = this.history.length;
-    this.history.push(msg);
+    this.history.push(this.toMessage(content));
     let result;
     try { result = await this.turn(); }
     catch (e) {
@@ -166,6 +179,8 @@ class LocalAgent {
       this.emit({ type: "user", message: { role: "user", content: results } });
       // Kural can await a routing decision here: every tool finished, and the next model request has not started.
       if (!this.stopped && this.h.onCheckpoint) await this.h.onCheckpoint();
+      // Messages you sent meanwhile join this answer here, before the model's next step.
+      while (!this.stopped && this.queue.length) { const c = this.queue.shift(); this.echo(c); this.history.push(this.toMessage(c)); }
     }
     return { type: "result", subtype: "success", is_error: false, result: `${text}\n\n(Stopped after ${MAX_STEPS} tool steps.)`.trim() };
   }

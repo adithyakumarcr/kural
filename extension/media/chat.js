@@ -302,13 +302,18 @@
   const modeBtn = el("button", { class: "pick mode-pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
   const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
+  // While an answer runs and you've typed something: send it to the queue (the button beside it is Stop).
+  const queueBtn = el("button", { class: "send queue-send hidden", title: "Send (Enter): Kural adds it to the answer at its next step, or answers it next",
+    onclick: () => sendMessage() }, icon("arrow-up"));
+  // Messages you sent while it answered that it hasn't taken in yet.
+  const queueEl = el("div", { class: "queue hidden" });
   // How full this chat's context window is (a ring + "38k"), and on hover this chat's tokens (read, from cache, written).
   const ctxEl = el("span", { class: "ctx-meter hidden" });
   const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const editBar = el("div", { class: "edit-bar hidden" });   // "Editing an earlier message …" (startEdit)
-  const composer = el("div", { class: "composer" }, popupEl, editBar, chipsEl, input,
+  const composer = el("div", { class: "composer" }, popupEl, queueEl, editBar, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }), ctxEl,
-      sendBtn));   // (type @ to mention a project file; + attaches anything)
+      queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
   const visitBar = el("div", { class: "visit hidden" });
   const body = el("div", { class: "body" }, listEl, historyEl, localEl, jumpBtn);
@@ -486,7 +491,23 @@
     else if (b.k === "question") w.append(questionNode(b));
     else if (b.k === "think") w.append(thinkNode(b, m.running && !b.done));
     else if (b.k === "image") w.append(imageNode(b));
+    else if (b.k === "steer") w.append(steerNode(b));
     return w;
+  }
+
+  // A message you sent while it was answering, which it took into this answer (Enter doesn't stop an answer: it queues).
+  function steerNode(b) {
+    return el("div", { class: "steer" },
+      el("div", { class: "steer-label" }, icon("comment-discussion"), " You added this while it worked"),
+      el("div", { class: "bubble" }, (b.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)), attachmentsRow(b.attachments)));
+  }
+  // Attached files under a message: pictures shown (click: full size), the rest as chips (click: open).
+  function attachmentsRow(list) {
+    return (list || []).length ? el("div", { class: "att-row" }, list.map((a) =>
+      a.kind === "image" && fileSrc(a.path)
+        ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openImage", path: a.original || a.path }) })
+        : el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
+          kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null;
   }
   // A new block at the end of an answer that's on screen: added after the last block; the rest stays as it is.
   function appendBlock(i) {
@@ -496,8 +517,8 @@
     // (A permission or question card also changes the line under the answer ("Waiting for your OK above"): redraw.)
     if (pending === i) return;   // a redraw of this answer is coming anyway
     // (An answer with steps is laid out again: a new step pulls the text before it into the dropdown.)
-    if (!out || (k > 0 && !prev) || pending !== null || msg.blocks[k].k === "perm" || msg.blocks[k].k === "question" ||
-      layout(msg).group.length) return rerender(i);
+    if (!out || (k > 0 && !prev) || pending !== null || msg.blocks[k].k === "perm" || msg.blocks[k].k === "question" || msg.blocks[k].k === "steer" ||
+      parts(msg).some((p) => p.group.length)) return rerender(i);
     // A previous live thinking box is finished once something comes after it.
     if (prev && msg.blocks[k - 1].k === "think") prev.replaceWith(blockNode(msg, msg.blocks[k - 1], k - 1));
     const node = blockNode(msg, msg.blocks[k], k);
@@ -513,8 +534,9 @@
     return files.size;
   }
   // Editing an earlier message: its text (and @ mentions) go into the input box, with a bar saying what sending does.
-  const busyNote = () => { const f = document.querySelector(".flash") || document.body.appendChild(el("div", { class: "flash" }));
-    f.textContent = "Wait for the answer to finish (or stop it) first"; f.classList.add("on"); clearTimeout(S.flashTimer); S.flashTimer = setTimeout(() => f.classList.remove("on"), 1600); };
+  const flash = (text, ms = 1600) => { const f = document.querySelector(".flash") || document.body.appendChild(el("div", { class: "flash" }));
+    f.textContent = text; f.classList.add("on"); clearTimeout(S.flashTimer); S.flashTimer = setTimeout(() => f.classList.remove("on"), ms); };
+  const busyNote = () => flash("Wait for the answer to finish (or stop it) first");
   function startEdit(i) {
     if (S.tab.status !== "idle") return busyNote();
     const m = S.tab.messages[i];
@@ -558,11 +580,7 @@
           ((pics) => pics.length ? el("div", { class: "att-row" }, pics.map((c) => el("img", { class: "att-photo", src: fileSrc(c.path), alt: base(c.path),
             title: `Open ${base(c.path)} full size`, onclick: () => post({ type: "openImage", path: c.path }) }))) : null)(
             (m.segments || []).filter((s) => s.t !== "text" && s.ctx && s.ctx.kind !== "selection" && IMG_RE.test(s.ctx.path || "") && fileSrc(s.ctx.path)).map((s) => s.ctx)),
-          (m.attachments || []).length ? el("div", { class: "att-row" }, m.attachments.map((a) =>
-            a.kind === "image" && fileSrc(a.path)
-              ? el("img", { class: "att-photo", src: fileSrc(a.path), alt: a.name, title: `Open ${a.name}`, onclick: () => post({ type: "openImage", path: a.original || a.path }) })
-              : el("span", { class: "chip att sent", title: `Open ${a.path}`, onclick: () => post({ type: "openFile", path: a.path }) },
-                kindIcon(a.kind), el("span", { class: "att-name" }, a.name)))) : null));
+          attachmentsRow(m.attachments)));
     }
     const out = el("div", { class: "answer" });
     const last = i === S.tab.messages.length - 1;
@@ -570,9 +588,12 @@
     if (m.models && m.models.length) out.append(el("div", { class: "model-attribution", ...(m.routing && m.routing.reason ? { title: m.routing.reason } : {}) },m.models.map(modelLabel).join(" → ") +
       (m.routing ? ` · ${m.routing.source || "native"} · ${Number(m.routing.ms).toFixed(1)} ms routing` : "")));
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
-    const L = layout(m);
-    if (L.group.length) out.append(stepsNode(m, L.group));
-    L.outside.forEach((k) => out.append(blockNode(m, m.blocks[k], k)));
+    const P = parts(m);
+    P.forEach((p, n) => {
+      if (p.group.length) out.append(stepsNode(m, p.group, n, n === P.length - 1));
+      p.outside.forEach((k) => out.append(blockNode(m, m.blocks[k], k)));
+      if (p.steer !== null) out.append(blockNode(m, m.blocks[p.steer], p.steer));   // what you added while it worked
+    });
     const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
     const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
     if (m.running && waiting) out.append(el("div", { class: "working" }, el("span", { class: "wait-dot" }), asking ? "Waiting for your answer above" : "Waiting for your OK above"));
@@ -611,19 +632,29 @@
   // you've answered, and the short notes the model writes between them, so the chat shows the answer, not a stack of
   // "Thought for…" boxes and commands (Adithya). What stays outside: the text after the last step (the answer), anything
   // waiting for you (a permission or a question), agents' cards, the team's messages and pictures.
+  // A message you added while it worked ("steer") splits the answer in parts, each with its own dropdown: what it did
+  // after reading your message shows after it, not above it.
   const isStep = (b) => b.k === "think" || (b.k === "tool" && b.name !== "mcp__team__post") || (b.k === "perm" && b.state !== "pending");
-  function layout(m) {
-    const blocks = m.blocks || [];
+  function layoutOf(m, ks) {
     let last = -1;
-    blocks.forEach((b, k) => { if (isStep(b)) last = k; });
+    ks.forEach((k) => { if (isStep(m.blocks[k])) last = k; });
     const group = [], outside = [];
-    blocks.forEach((b, k) => { if (last >= 0 && k <= last && (isStep(b) || b.k === "text")) group.push(k); else outside.push(k); });
+    ks.forEach((k) => { const b = m.blocks[k]; if (last >= 0 && k <= last && (isStep(b) || b.k === "text")) group.push(k); else outside.push(k); });
     return { group, outside };
   }
+  function parts(m) {
+    const out = [];
+    let cur = [];
+    (m.blocks || []).forEach((b, k) => { if (b.k === "steer") { out.push({ ...layoutOf(m, cur), steer: k }); cur = []; } else cur.push(k); });
+    out.push({ ...layoutOf(m, cur), steer: null });
+    return out;
+  }
+  // The part still being written (the last): its dropdown is the live one.
+  function layout(m) { const p = parts(m); return p[p.length - 1]; }
   const STEP_KIND = { Bash: "command", run_command: "command", Read: "read", Grep: "search", Glob: "search", read_file: "read", list_dir: "search",
     Edit: "edit", Write: "edit", NotebookEdit: "edit", write_file: "edit", WebSearch: "web search", WebFetch: "web page" };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : w.endsWith("search") ? "es" : "s"}`;
-  function stepsLabel(m, ks) {
+  function stepsLabel(m, ks, live = true) {
     const count = {};
     for (const k of ks) {
       const b = m.blocks[k];
@@ -631,9 +662,9 @@
       if (kind) count[kind] = (count[kind] || 0) + 1;
     }
     const order = ["thought", "read", "search", "edit", "command", "web search", "web page", "step"];
-    const parts = order.filter((k) => count[k]).map((k) => plural(count[k], k));
-    const secs = m.ms ? Math.max(1, Math.round(m.ms / 1000)) : 0;
-    return `${m.running ? "Working…" : secs ? `Worked for ${secs} s` : "Worked"}${parts.length ? ` · ${parts.join(", ")}` : ""}`;
+    const kinds = order.filter((k) => count[k]).map((k) => plural(count[k], k));
+    const secs = m.ms && live ? Math.max(1, Math.round(m.ms / 1000)) : 0;   // (the time: the whole answer's, on its last part)
+    return `${m.running && live ? "Working…" : secs ? `Worked for ${secs} s` : "Worked"}${kinds.length ? ` · ${kinds.join(", ")}` : ""}`;
   }
   // While it works: what it's doing now (its latest thought, or the step).
   function currentStep(m, ks) {
@@ -644,13 +675,16 @@
     if (b.k === "text") return lastLine(b.text);
     return "";
   }
-  function stepsNode(m, ks) {
-    const node = el("div", { class: `steps${m._stepsOpen ? " open" : ""}${m.running ? " live" : ""}` });
+  // n: which part of the answer (see parts); live: the last part (its dropdown shows what it's doing now).
+  function stepsNode(m, ks, n = 0, live = true) {
+    const open = () => !!(m._stepsOpen && m._stepsOpen[n]);
+    const running = m.running && live;
+    const node = el("div", { class: `steps${open() ? " open" : ""}${running ? " live" : ""}` });
     node.append(
-      el("div", { class: "steps-head", title: m._stepsOpen ? "Hide the steps" : "Show every step", onclick: () => {
-        m._stepsOpen = !node.classList.contains("open"); node.classList.toggle("open", m._stepsOpen); } },
-        el("span", { class: "think-caret" }), el("span", { class: "steps-label" }, stepsLabel(m, ks)),
-        m.running ? el("span", { class: "steps-line" }, currentStep(m, ks)) : null),
+      el("div", { class: "steps-head", title: open() ? "Hide the steps" : "Show every step", onclick: () => {
+        m._stepsOpen = { ...(m._stepsOpen || {}), [n]: !node.classList.contains("open") }; node.classList.toggle("open", open()); } },
+        el("span", { class: "think-caret" }), el("span", { class: "steps-label" }, stepsLabel(m, ks, live)),
+        running ? el("span", { class: "steps-line" }, currentStep(m, ks)) : null),
       el("div", { class: "steps-body" }, ks.map((k) => blockNode(m, m.blocks[k], k, true))));
     return node;
   }
@@ -847,6 +881,7 @@
     else if (S.activeFile)
       chipsEl.append(el("button", { class: "chip ghost", onclick: () => { S.includeActive = true; renderChips(); } }, "+ ", S.activeFile.name));
     for (const a of S.attachments) chipsEl.append(attachChip(a, () => { S.attachments = S.attachments.filter((x) => x.id !== a.id); renderChips(); }));
+    renderQueueBtn();
   }
   const KIND_ICON = { image: "file-media", pdf: "file-pdf", text: "file-text", folder: "folder", file: "file" };
   const kindIcon = (kind) => el("span", { class: "att-icon" }, icon(KIND_ICON[kind] || "file"));
@@ -904,12 +939,29 @@
     sendBtn.replaceChildren(icon(running ? "debug-stop" : "arrow-up"));
     sendBtn.title = running ? "Stop (Esc)" : "Send (Enter)";
     sendBtn.classList.toggle("stop", running);
-    input.dataset.placeholder = {
+    renderQueueBtn();
+    renderQueue();
+    // (While it answers, Enter doesn't stop it: what you send is added to the answer at its next step, or answered next.)
+    input.dataset.placeholder = running ? "Add to this answer: Kural reads it at its next step (Esc stops)…" : {
       agent: "Ask Kural to change something…  @ to mention a file",
       auto: "Ask Kural to change something (runs commands without asking)…",
       plan: "Describe what you want; Kural plans it first…",
       ask: "Ask about your code…  @ to mention a file",
     }[t.mode] || "";
+  }
+  const hasDraft = () => !isEmptyInput() || S.attachments.length > 0;
+  function renderQueueBtn() { queueBtn.classList.toggle("hidden", !(S.tab && S.tab.status !== "idle" && !S.tab.visiting && hasDraft())); }
+
+  // The queue above the box: what you sent while it answered and it hasn't taken in yet.
+  function renderQueue() {
+    const q = (S.tab && S.tab.queued) || [];
+    queueEl.classList.toggle("hidden", !q.length);
+    if (!q.length) { queueEl.replaceChildren(); return; }
+    const it = q.length === 1 ? "it" : "them";
+    queueEl.replaceChildren(
+      el("div", { class: "queue-head", title: `Kural adds ${it} to the answer at its next step, or answers ${it} right after. Stop puts ${it} back in the box.` },
+        icon("history"), ` Queued${q.length > 1 ? ` (${q.length})` : ""}: Kural adds ${it} at its next step`),
+      ...q.map((x) => el("div", { class: "queue-item", title: x.text }, x.text)));
   }
 
   // Your message as pieces: text and pills.
@@ -930,11 +982,20 @@
 
   function isEmptyInput() { return !readInput().some((s) => s.t === "pill" || s.v.trim()); }
 
+  // The round button: Stop while it answers, else Send.
   function sendOrStop() {
     const t = S.tab;
     if (!t) return;
     if (t.status !== "idle") { post({ type: "stop", tabId: t.id }); return; }
+    sendMessage();
+  }
+  // Enter (and the send arrow): send. While an answer runs it goes to the queue: Kural adds it to that answer at its next
+  // step, or answers it right after. Enter never stops an answer (Adithya: it used to): Stop is the button, or Esc.
+  function sendMessage() {
+    const t = S.tab;
+    if (!t || t.visiting) return;
     if (isEmptyInput() && !S.attachments.length) return;
+    if (t.status !== "idle" && S.editing && S.editing.tabId === t.id) return busyNote();   // (an edit waits for the answer)
     const segments = readInput();
     const contexts = segments.filter((s) => s.t === "pill").map((s) => s.ctx);
     if (S.activeFile && S.includeActive) contexts.unshift({ kind: "current", path: S.activeFile.path, name: S.activeFile.name });
@@ -944,6 +1005,17 @@
     const editIndex = S.editing && S.editing.tabId === t.id ? S.editing.index : undefined;
     post({ type: "send", tabId: t.id, requestId, segments, contexts, attachments: S.pendingSend.attachments, editIndex });
     closePopup(); closeHistory();
+  }
+
+  // Kural took the message you sent (as a new message, or into the queue): the box and its attachments empty (only if
+  // you haven't typed something else since).
+  function acceptDraft(requestId) {
+    const P = S.pendingSend;
+    if (!P || !S.tab || P.tabId !== S.tab.id || !requestId || requestId !== P.requestId) return;
+    if (JSON.stringify(readInput()) === P.segments) input.replaceChildren();
+    S.attachments = S.attachments.filter((a) => !P.attachments.includes(a.id));
+    S.pendingSend = null; renderChips();
+    if (S.editing && S.editing.tabId === S.tab.id) { S.editing = null; renderEditBar(); }
   }
 
   // --- caret ---
@@ -1022,7 +1094,7 @@
   }
   function closePopup() { S.popup = null; popupEl.classList.add("hidden"); }
 
-  input.addEventListener("input", () => { checkMention(); requestAnimationFrame(caretIntoView); });
+  input.addEventListener("input", () => { checkMention(); requestAnimationFrame(caretIntoView); renderQueueBtn(); });
   // A new line (Shift+Enter) or typing past the box's height: keep the line you're on in view. The box scrolls inside
   // (max-height); without this the caret went below its edge. At the end of the text, go to the very bottom (a caret on
   // an empty last line has no size to measure).
@@ -1047,7 +1119,7 @@
       if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(); return; }
       if (e.key === "Escape") { e.preventDefault(); closePopup(); return; }
     }
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendOrStop(); }
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
     else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); requestAnimationFrame(caretIntoView); }
     else if (e.key === "Escape" && S.tab && S.tab.status !== "idle") post({ type: "stop", tabId: S.tab.id });
     else if (e.key === "Escape" && S.editing) { e.preventDefault(); cancelEdit(); }   // (Escape leaves editing an earlier message)
@@ -1124,9 +1196,11 @@
     } else if (kind === "ticket") {
       items = ticketItems(t);
     } else if (kind === "mode") {
+      // (No radio circles here, Adithya: the mode you're in is the highlighted row.)
       items = [el("div", { class: "mh" }, "Mode", el("span", { class: "mh-key" }, keys("Control+P plan"))), ...S.modes.map((md) =>
-        el("div", { class: `mi ${t.mode === md.id ? "on" : ""}`, onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
-          el("span", { class: `check radio${t.mode === md.id ? " on" : ""}` }), el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
+        el("div", { class: `mi mode-row ${t.mode === md.id ? "on" : ""}`, "aria-checked": String(t.mode === md.id), role: "menuitemradio",
+          onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
+          el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
@@ -1522,7 +1596,7 @@ ${d.system}` : ""}`,
         // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.
         tabBar.classList.toggle("hidden", !!m.single);
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
-          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device,
+          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device, queued: s.queued,
           autoRoute: s.autoRoute,routingProfile: s.routingProfile,routingState: s.routingState,modelName: s.modelName,tokens: s.tokens,context: s.context }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
@@ -1555,13 +1629,28 @@ ${d.system}` : ""}`,
       case "showHistory": openHistory(); break;
       case "modelName": if (mine) { S.tab.modelName = m.name; renderFoot(); } break;
       case "append": if (mine) {
-        if (m.msgs.some((x) => x.role === "user") && S.pendingSend && S.pendingSend.tabId === S.tab.id && m.requestId === S.pendingSend.requestId) {
-          if (JSON.stringify(readInput()) === S.pendingSend.segments) input.replaceChildren();
-          S.attachments = S.attachments.filter((a) => !S.pendingSend.attachments.includes(a.id));
-          S.pendingSend = null; renderChips();
-          if (S.editing && S.editing.tabId === S.tab.id) { S.editing = null; renderEditBar(); }
-        }
+        if (m.msgs.some((x) => x.role === "user")) acceptDraft(m.requestId);
         for (const x of m.msgs) S.tab.messages.push(x); renderAll();
+      } break;
+      // A message you sent while it answered is in the queue (Kural took it: the box empties), or left it.
+      case "queued": if (mine) { acceptDraft(m.requestId); S.tab.queued = m.queued || []; renderQueue(); renderQueueBtn(); } break;
+      // Queued messages it never took in (you pressed Stop, or it stopped): back into the box, before what you're typing.
+      case "unqueue": if (mine) {
+        S.tab.queued = m.queued || [];
+        const nodes = [];
+        for (const it of m.items || []) {
+          if (nodes.length) nodes.push(document.createTextNode("\n\n"));
+          for (const x of it.segments || []) nodes.push(x.t === "text" ? document.createTextNode(x.v) : pillNode(x.ctx, false));
+        }
+        if (nodes.length) {
+          if (!isEmptyInput()) nodes.push(document.createTextNode("\n\n"));
+          const first = input.firstChild;
+          for (const n of nodes) input.insertBefore(n, first);
+          input.focus();
+          const lost = (m.items || []).some((it) => it.attachments);
+          flash(`Your queued message${m.items.length > 1 ? "s are" : " is"} back in the box${lost ? ": add the attachments again with +" : ""}`, 2600);
+        }
+        renderQueue(); renderQueueBtn();
       } break;
       case "delta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
