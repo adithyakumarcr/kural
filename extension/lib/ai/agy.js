@@ -577,7 +577,10 @@ class AgyAgent {
     const input = Number(u.input_tokens) || 0, output = (Number(u.output_tokens) || 0) + (Number(u.thinking_tokens) || 0);
     const d = { input: Math.max(0, input - this.usedSoFar.input), output: Math.max(0, output - this.usedSoFar.output) };
     this.usedSoFar = { input, output };
-    if (d.input || d.output) usage.report("agy", { tokens: d });
+    if (!d.input && !d.output) return;
+    usage.report("agy", { tokens: d });   // (today's line in the status bar's tooltip)
+    usage.addTokens("agy", d);
+    this.emit({ type: "kural_usage", tokens: { input: d.input, output: d.output, cacheRead: 0, cacheWrite: 0 }, context: null });
   }
 
   endTurn(result) {

@@ -5,6 +5,8 @@
 //
 // A report: { provider: "claude" | "codex" | "agy", windows: [{ id, label, usedPercent, resetsAt (ms), period? }],
 //             tokens?: { input, output }, plan?: "Pro" }
+// Tokens: addTokens(provider, { input, output, cacheRead, cacheWrite }) after every answer (every program, every Kural
+// feature: chat, Tab Completion, Ctrl+K…), counted per day for the AI Usage panel ("1.2M read · 45k written").
 // Nothing here ever reads a login or a key: only what the providers' own programs report.
 
 const state = new Map();       // provider -> { windows, tokens, plan, at }
@@ -15,17 +17,67 @@ function report(provider, info) {
   const old = state.get(provider) || {};
   const next = { ...old, at: Date.now() };
   if (Array.isArray(info.windows) && info.windows.length) next.windows = info.windows.filter((w) => w && Number.isFinite(w.usedPercent));
-  if (info.tokens) next.tokens = addTokens(old.tokens, info.tokens);
+  if (info.tokens) next.tokens = addTokensToday(old.tokens, info.tokens);
   if (info.plan) next.plan = info.plan;
   state.set(provider, next);
   for (const f of listeners) { try { f(provider, next); } catch { /* a listener's own problem */ } }
 }
 
 // Tokens are counted per day (agy reports what each answer used).
-function addTokens(old, t) {
+function addTokensToday(old, t) {
   const day = new Date().toDateString();
   const base = old && old.day === day ? old : { day, input: 0, output: 0 };
   return { day, input: base.input + (t.input || 0), output: base.output + (t.output || 0) };
+}
+
+// ---------- tokens per day ----------
+const KEEP_DAYS = 35;
+const dayKey = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const FIELDS = ["input", "output", "cacheRead", "cacheWrite"];
+const n = (x) => Math.max(0, Math.round(Number(x) || 0));
+// { input (fresh), output, cacheRead, cacheWrite } from a Claude-style usage ({ input_tokens, output_tokens,
+// cache_read_input_tokens, cache_creation_input_tokens }); null when there's nothing.
+function fromUsage(u) {
+  if (!u || typeof u !== "object") return null;
+  const t = { input: n(u.input_tokens), output: n(u.output_tokens), cacheRead: n(u.cache_read_input_tokens), cacheWrite: n(u.cache_creation_input_tokens) };
+  return FIELDS.some((f) => t[f]) ? t : null;
+}
+// Claude Code's result: modelUsage covers every model the answer used (agents too); usage only the main one.
+function fromResult(m) {
+  if (m && m.modelUsage && typeof m.modelUsage === "object" && Object.keys(m.modelUsage).length) {
+    const t = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    for (const u of Object.values(m.modelUsage)) {
+      t.input += n(u.inputTokens); t.output += n(u.outputTokens); t.cacheRead += n(u.cacheReadInputTokens); t.cacheWrite += n(u.cacheCreationInputTokens);
+    }
+    if (FIELDS.some((f) => t[f])) return t;
+  }
+  return fromUsage(m && m.usage);
+}
+function addTokens(provider, t, now = Date.now()) {
+  if (!provider || !t || !FIELDS.some((f) => n(t[f]))) return;
+  const old = state.get(provider) || {};
+  const days = { ...(old.days || {}) }, key = dayKey(now), d = { ...(days[key] || {}) };
+  for (const f of FIELDS) d[f] = n(d[f]) + n(t[f]);
+  days[key] = d;
+  const keep = Object.keys(days).sort().slice(-KEEP_DAYS);
+  const next = { ...old, days: Object.fromEntries(keep.map((k) => [k, days[k]])), at: old.at || now };
+  state.set(provider, next);
+  for (const f of listeners) { try { f(provider, next); } catch { /* a listener's own problem */ } }
+}
+// Totals over the last `days` days (1 = today): { input, output, cacheRead, cacheWrite, read (all input), written }.
+function tokenTotals(provider, days = 1, now = Date.now()) {
+  const s = state.get(provider), out = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const from = dayKey(now - (days - 1) * 86400000);
+  for (const [k, d] of Object.entries((s && s.days) || {})) if (k >= from) for (const f of FIELDS) out[f] += n(d[f]);
+  return { ...out, read: out.input + out.cacheRead + out.cacheWrite, written: out.output };
+}
+// "1.2M", "45k", "812".
+function tokenWords(x) {
+  const v = n(x);
+  if (v >= 1e9) return `${(v / 1e9).toFixed(v >= 1e10 ? 0 : 1)}B`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(v >= 1e4 ? 0 : 1)}k`;
+  return String(v);
 }
 
 // Claude Code's rate_limit_event → a report. { rate_limit_info: { unifiedWindows: { five_hour: { utilization 0–1,
@@ -89,4 +141,5 @@ const providers = () => [...state.keys()];
 const snapshot = () => Object.fromEntries(state);
 function restore(saved) { for (const [k, v] of Object.entries(saved || {})) if (!state.has(k) && v) state.set(k, v); }
 
-module.exports = { report, fromClaude, current, limitName, until, inWords, onChange, providers, snapshot, restore, _reset: () => state.clear() };
+module.exports = { report, fromClaude, current, limitName, until, inWords, onChange, providers, snapshot, restore,
+  addTokens, tokenTotals, fromUsage, fromResult, tokenWords, dayKey, _reset: () => state.clear() };

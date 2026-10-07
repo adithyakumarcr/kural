@@ -16,6 +16,7 @@ const http = require("http");
 const https = require("https");
 const { Tools, definitions, SUPPORTED } = require("./tools");
 const { within } = require("../paths");
+const usageHub = require("./usage");
 const READS = new Set(["Read", "Grep", "Glob"]);
 
 // A POST to Ollama with Node's own http, not fetch: fetch gives up after 5 minutes without an answer, and a big model
@@ -219,6 +220,12 @@ class LocalAgent {
         if (d.thinking) { open("thinking"); this.emit({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "thinking_delta", thinking: d.thinking } } }); }
         if (d.content) { open("text"); content += d.content; this.emit({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: d.content } } }); }
         if (d.tool_calls && d.tool_calls.length) calls = calls.concat(d.tool_calls);
+        // The last chunk says how many tokens went in and came out: this chat's tokens and how full the window is.
+        if (m.done && (m.prompt_eval_count || m.eval_count)) {
+          const tokens = { input: m.prompt_eval_count || 0, output: m.eval_count || 0, cacheRead: 0, cacheWrite: 0 };
+          usageHub.addTokens("ollama", tokens);
+          this.emit({ type: "kural_usage", tokens, context: { used: tokens.input + tokens.output, window: this.opts.contextLength || null } });
+        }
         // Image models answer with pictures (base64): the chat saves and shows them.
         for (const img of [...(d.images || []), ...(m.image ? [m.image] : [])]) {
           if (typeof img === "string" && img.length > 100) this.emit({ type: "kural_image", data: img, mime: img.startsWith("/9j/") ? "image/jpeg" : "image/png" });
