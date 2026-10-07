@@ -131,9 +131,12 @@ remove_program() {   # remove_program <bin name> <npm package> <brew name>
     npm uninstall -g "$npm" >/dev/null 2>&1 && say "$name: removed (npm)" && return 0
     npm uninstall -g --prefix "$HOME/.npm-global" "$npm" >/dev/null 2>&1 && say "$name: removed (npm)" && return 0
   fi
+  # (Also your home's real path: a home reached through a link, like macOS's /var → /private/var, gives programs a real
+  # path that doesn't start with $HOME. It's the same folder.)
+  local home_real; home_real=$(cd "$HOME" 2>/dev/null && pwd -P || echo "$HOME")
   case "$real" in
-    "$HOME/.local/share/claude/"*) rm -f "$b"; gone "$HOME/.local/share/claude"; say "$name: removed"; return 0 ;;
-    "$HOME/"*) rm -f "$b" "$real" && say "$name: removed ($real)"; return 0 ;;
+    "$HOME/.local/share/claude/"*|"$home_real/.local/share/claude/"*) rm -f "$b"; gone "$HOME/.local/share/claude"; say "$name: removed"; return 0 ;;
+    "$HOME/"*|"$home_real/"*) rm -f "$b" "$real" && say "$name: removed ($real)"; return 0 ;;
   esac
   say "$name: installed at $real in a way this script doesn't know; remove it yourself if you want."
 }
