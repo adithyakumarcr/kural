@@ -1,0 +1,1021 @@
+{
+  "timestamp": "2026-10-06T14:41:47.212Z",
+  "runtime": "v20.20.2",
+  "platform": "linux",
+  "arch": "x64",
+  "cpu": "Intel(R) Core(TM) Ultra 7 255H",
+  "totalMemoryGB": 30.8,
+  "corpus": "Small hand-labelled synthetic smoke corpus. Labels reflect the router's task definitions; this is not a representative accuracy evaluation.",
+  "measures": [
+    {
+      "assistant": "native",
+      "kind": "warm policy overhead",
+      "samples": 1000,
+      "medianMs": 0.011,
+      "p95Ms": 0.016
+    },
+    {
+      "assistant": "native",
+      "model": null,
+      "deadlineMs": 1500,
+      "firstRequestMs": 0.088,
+      "firstSource": "native",
+      "warmupMs": 0.015,
+      "warmupSource": "native",
+      "samples": 24,
+      "assisted": 0,
+      "allDecisions": {
+        "medianMs": 0.012,
+        "p95Ms": 0.019
+      },
+      "assistedInference": null,
+      "repeatedPrompt": "Find where login sessions are stored",
+      "repeatPrimeSource": "native",
+      "repeatMs": 0.013,
+      "repeatSource": "native",
+      "taskChecks": {
+        "intentCorrect": 17,
+        "complexityCorrect": 20,
+        "bothCorrect": 15,
+        "total": 24
+      },
+      "ranking": {
+        "samples": 8,
+        "assisted": 0,
+        "allDecisions": {
+          "medianMs": 0.02,
+          "p95Ms": 0.621
+        },
+        "assistedInference": null,
+        "top1Correct": 6,
+        "top3Correct": 7,
+        "contextTop1Correct": 0,
+        "searchTop1Correct": 0,
+        "cases": [
+          {
+            "query": "Where are login sessions stored?",
+            "file": "src/auth/session.js",
+            "source": "native",
+            "ms": 0.621,
+            "top": [
+              "src/auth/session.js",
+              "src/jobs/queue.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Which code remembers who is signed in?",
+            "file": "src/auth/session.js",
+            "source": "native",
+            "ms": 0.044,
+            "top": [],
+            "top1Correct": false,
+            "top3Correct": false,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Where do we retry requests when the server rate limits us?",
+            "file": "src/network/retry.js",
+            "source": "native",
+            "ms": 0.023,
+            "top": [
+              "src/network/retry.js",
+              "src/checkout/totals.js",
+              "src/database/migrate.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "How does the app load its settings from disk?",
+            "file": "src/config/read.js",
+            "source": "native",
+            "ms": 0.02,
+            "top": [
+              "src/config/read.js",
+              "src/ui/theme.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Which function prevents simultaneous changes to pending jobs?",
+            "file": "src/jobs/queue.js",
+            "source": "native",
+            "ms": 0.017,
+            "top": [
+              "src/jobs/queue.js",
+              "src/auth/session.js",
+              "src/network/retry.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Where is sales tax added to the final bill?",
+            "file": "src/checkout/totals.js",
+            "source": "native",
+            "ms": 0.017,
+            "top": [
+              "src/jobs/queue.js",
+              "src/checkout/totals.js"
+            ],
+            "top1Correct": false,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Where do we switch between light and dark colours?",
+            "file": "src/ui/theme.js",
+            "source": "native",
+            "ms": 0.016,
+            "top": [
+              "src/ui/theme.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Find the code that changes the database schema",
+            "file": "src/database/migrate.js",
+            "source": "native",
+            "ms": 0.013,
+            "top": [
+              "src/database/migrate.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          }
+        ]
+      },
+      "usage": {
+        "decisions": 28,
+        "calls": 0,
+        "inputTokens": 0,
+        "fallbacks": 0
+      },
+      "cases": [
+        {
+          "prompt": "Find where login sessions are stored",
+          "intent": "search",
+          "complexity": "simple",
+          "predictedIntent": "search",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 0.019,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Explain what this single line does: return count + 1",
+          "intent": "explain",
+          "complexity": "simple",
+          "predictedIntent": "explain",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 0.014,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Rename userCount to activeUsers in this function",
+          "intent": "edit",
+          "complexity": "simple",
+          "predictedIntent": "edit",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 0.012,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Fix the typo in this comment",
+          "intent": "edit",
+          "complexity": "simple",
+          "predictedIntent": "edit",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 0.012,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Locate the function that handles HTTP retries",
+          "intent": "search",
+          "complexity": "simple",
+          "predictedIntent": "search",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 0.012,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "What does this one-line expression return? Boolean(value)",
+          "intent": "explain",
+          "complexity": "simple",
+          "predictedIntent": "explain",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 0.012,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Implement an email validation function with unit tests",
+          "intent": "edit",
+          "complexity": "standard",
+          "predictedIntent": "edit",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.018,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Add retry handling for HTTP 429 to this client module",
+          "intent": "edit",
+          "complexity": "standard",
+          "predictedIntent": "edit",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Fix the bug in this authentication module",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "review",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Review this function's diff for regressions",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "review",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Investigate why this parser function crashes on empty input",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "explain",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.012,
+          "intentCorrect": false,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Track down why the total on this invoice is incorrect",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "explain",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": false,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Design a distributed architecture for job processing",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "other",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": false,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Review OAuth token storage for security weaknesses",
+          "intent": "review",
+          "complexity": "complex",
+          "predictedIntent": "review",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 0.01,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Implement queue locking across multiple modules",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "edit",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 0.012,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Plan a database migration with backfill and rollback",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "other",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 0.01,
+          "intentCorrect": false,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Review concurrent access to shared state for races",
+          "intent": "review",
+          "complexity": "complex",
+          "predictedIntent": "review",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Build a plugin architecture across the project",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "edit",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 0.01,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Give me three names for this project",
+          "intent": "other",
+          "complexity": "simple",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": true,
+          "complexityCorrect": false
+        },
+        {
+          "prompt": "Discuss the tradeoffs of this naming convention",
+          "intent": "other",
+          "complexity": "standard",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Which module remembers who is signed in?",
+          "intent": "search",
+          "complexity": "simple",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.012,
+          "intentCorrect": false,
+          "complexityCorrect": false
+        },
+        {
+          "prompt": "Walk me through this short expression: items.length",
+          "intent": "explain",
+          "complexity": "simple",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.011,
+          "intentCorrect": false,
+          "complexityCorrect": false
+        },
+        {
+          "prompt": "Make the checkout function calculate sales tax and cover it with tests",
+          "intent": "edit",
+          "complexity": "standard",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 0.014,
+          "intentCorrect": false,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Rename architecture.md to design.md",
+          "intent": "edit",
+          "complexity": "simple",
+          "predictedIntent": "edit",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 0.022,
+          "intentCorrect": true,
+          "complexityCorrect": false
+        }
+      ],
+      "status": null
+    },
+    {
+      "assistant": "minilm",
+      "model": "all-minilm:22m",
+      "deadlineMs": 1500,
+      "firstRequestMs": 358.572,
+      "firstSource": "native",
+      "warmupMs": 13.376,
+      "warmupSource": "minilm",
+      "samples": 24,
+      "assisted": 3,
+      "allDecisions": {
+        "medianMs": 13.672,
+        "p95Ms": 16.019
+      },
+      "assistedInference": {
+        "medianMs": 15.332,
+        "p95Ms": 15.728
+      },
+      "repeatedPrompt": "What does this one-line expression return? Boolean(value)",
+      "repeatPrimeSource": "minilm",
+      "repeatMs": 0.265,
+      "repeatSource": "minilm",
+      "taskChecks": {
+        "intentCorrect": 18,
+        "complexityCorrect": 20,
+        "bothCorrect": 16,
+        "total": 24
+      },
+      "ranking": {
+        "samples": 8,
+        "assisted": 8,
+        "allDecisions": {
+          "medianMs": 104.688,
+          "p95Ms": 117.777
+        },
+        "assistedInference": {
+          "medianMs": 104.688,
+          "p95Ms": 117.777
+        },
+        "top1Correct": 8,
+        "top3Correct": 8,
+        "contextTop1Correct": 6,
+        "searchTop1Correct": 5,
+        "cases": [
+          {
+            "query": "Where are login sessions stored?",
+            "file": "src/auth/session.js",
+            "source": "minilm",
+            "ms": 114.251,
+            "top": [
+              "src/auth/session.js",
+              "src/jobs/queue.js",
+              "src/config/read.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": true,
+            "searchTop1Correct": true,
+            "context": [
+              "src/auth/session.js"
+            ],
+            "search": [
+              "src/auth/session.js"
+            ]
+          },
+          {
+            "query": "Which code remembers who is signed in?",
+            "file": "src/auth/session.js",
+            "source": "minilm",
+            "ms": 96.136,
+            "top": [
+              "src/auth/session.js",
+              "src/database/migrate.js",
+              "src/ui/theme.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Where do we retry requests when the server rate limits us?",
+            "file": "src/network/retry.js",
+            "source": "minilm",
+            "ms": 92.142,
+            "top": [
+              "src/network/retry.js",
+              "src/jobs/queue.js",
+              "src/checkout/totals.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": true,
+            "searchTop1Correct": true,
+            "context": [
+              "src/network/retry.js"
+            ],
+            "search": [
+              "src/network/retry.js"
+            ]
+          },
+          {
+            "query": "How does the app load its settings from disk?",
+            "file": "src/config/read.js",
+            "source": "minilm",
+            "ms": 97.73,
+            "top": [
+              "src/config/read.js",
+              "src/ui/theme.js",
+              "src/auth/session.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": false,
+            "searchTop1Correct": false,
+            "context": [],
+            "search": []
+          },
+          {
+            "query": "Which function prevents simultaneous changes to pending jobs?",
+            "file": "src/jobs/queue.js",
+            "source": "minilm",
+            "ms": 117.777,
+            "top": [
+              "src/jobs/queue.js",
+              "src/network/retry.js",
+              "src/database/migrate.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": true,
+            "searchTop1Correct": true,
+            "context": [
+              "src/jobs/queue.js"
+            ],
+            "search": [
+              "src/jobs/queue.js"
+            ]
+          },
+          {
+            "query": "Where is sales tax added to the final bill?",
+            "file": "src/checkout/totals.js",
+            "source": "minilm",
+            "ms": 108.808,
+            "top": [
+              "src/checkout/totals.js",
+              "src/jobs/queue.js",
+              "src/format/date.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": true,
+            "searchTop1Correct": true,
+            "context": [
+              "src/checkout/totals.js"
+            ],
+            "search": [
+              "src/checkout/totals.js"
+            ]
+          },
+          {
+            "query": "Where do we switch between light and dark colours?",
+            "file": "src/ui/theme.js",
+            "source": "minilm",
+            "ms": 104.688,
+            "top": [
+              "src/ui/theme.js",
+              "src/database/migrate.js",
+              "src/jobs/queue.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": true,
+            "searchTop1Correct": true,
+            "context": [
+              "src/ui/theme.js"
+            ],
+            "search": [
+              "src/ui/theme.js"
+            ]
+          },
+          {
+            "query": "Find the code that changes the database schema",
+            "file": "src/database/migrate.js",
+            "source": "minilm",
+            "ms": 98.259,
+            "top": [
+              "src/database/migrate.js",
+              "src/ui/theme.js"
+            ],
+            "top1Correct": true,
+            "top3Correct": true,
+            "contextTop1Correct": true,
+            "searchTop1Correct": false,
+            "context": [
+              "src/database/migrate.js"
+            ],
+            "search": []
+          }
+        ]
+      },
+      "usage": {
+        "decisions": 28,
+        "calls": 13,
+        "inputTokens": 3863,
+        "fallbacks": 22
+      },
+      "cases": [
+        {
+          "prompt": "Find where login sessions are stored",
+          "intent": "search",
+          "complexity": "simple",
+          "predictedIntent": "search",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 12.984,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Explain what this single line does: return count + 1",
+          "intent": "explain",
+          "complexity": "simple",
+          "predictedIntent": "explain",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 15.062,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Rename userCount to activeUsers in this function",
+          "intent": "edit",
+          "complexity": "simple",
+          "predictedIntent": "edit",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 14.785,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Fix the typo in this comment",
+          "intent": "edit",
+          "complexity": "simple",
+          "predictedIntent": "edit",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 12.64,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Locate the function that handles HTTP retries",
+          "intent": "search",
+          "complexity": "simple",
+          "predictedIntent": "search",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "native",
+          "ms": 12.289,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "What does this one-line expression return? Boolean(value)",
+          "intent": "explain",
+          "complexity": "simple",
+          "predictedIntent": "explain",
+          "predictedComplexity": "simple",
+          "model": "haiku",
+          "source": "minilm",
+          "ms": 15.332,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Implement an email validation function with unit tests",
+          "intent": "edit",
+          "complexity": "standard",
+          "predictedIntent": "edit",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "minilm",
+          "ms": 15.728,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Add retry handling for HTTP 429 to this client module",
+          "intent": "edit",
+          "complexity": "standard",
+          "predictedIntent": "edit",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 13.906,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Fix the bug in this authentication module",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "review",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 11.368,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Review this function's diff for regressions",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "review",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 12.688,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Investigate why this parser function crashes on empty input",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "explain",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 14.058,
+          "intentCorrect": false,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Track down why the total on this invoice is incorrect",
+          "intent": "review",
+          "complexity": "standard",
+          "predictedIntent": "explain",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 15.837,
+          "intentCorrect": false,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Design a distributed architecture for job processing",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "other",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 16.304,
+          "intentCorrect": false,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Review OAuth token storage for security weaknesses",
+          "intent": "review",
+          "complexity": "complex",
+          "predictedIntent": "review",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 12.92,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Implement queue locking across multiple modules",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "edit",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 10.989,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Plan a database migration with backfill and rollback",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "other",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 13.453,
+          "intentCorrect": false,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Review concurrent access to shared state for races",
+          "intent": "review",
+          "complexity": "complex",
+          "predictedIntent": "review",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 11.546,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Build a plugin architecture across the project",
+          "intent": "edit",
+          "complexity": "complex",
+          "predictedIntent": "edit",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 9.289,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Give me three names for this project",
+          "intent": "other",
+          "complexity": "simple",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 12.695,
+          "intentCorrect": true,
+          "complexityCorrect": false,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Discuss the tradeoffs of this naming convention",
+          "intent": "other",
+          "complexity": "standard",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 13.672,
+          "intentCorrect": true,
+          "complexityCorrect": true,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Which module remembers who is signed in?",
+          "intent": "search",
+          "complexity": "simple",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 16.019,
+          "intentCorrect": false,
+          "complexityCorrect": false,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Walk me through this short expression: items.length",
+          "intent": "explain",
+          "complexity": "simple",
+          "predictedIntent": "other",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "native",
+          "ms": 14.98,
+          "intentCorrect": false,
+          "complexityCorrect": false,
+          "fallback": "Ambiguous semantic match; native routing used"
+        },
+        {
+          "prompt": "Make the checkout function calculate sales tax and cover it with tests",
+          "intent": "edit",
+          "complexity": "standard",
+          "predictedIntent": "edit",
+          "predictedComplexity": "standard",
+          "model": "sonnet",
+          "source": "minilm",
+          "ms": 14.94,
+          "intentCorrect": true,
+          "complexityCorrect": true
+        },
+        {
+          "prompt": "Rename architecture.md to design.md",
+          "intent": "edit",
+          "complexity": "simple",
+          "predictedIntent": "edit",
+          "predictedComplexity": "complex",
+          "model": "opus",
+          "source": "native",
+          "ms": 13.376,
+          "intentCorrect": true,
+          "complexityCorrect": false,
+          "fallback": "Ambiguous semantic match; native routing used"
+        }
+      ],
+      "status": {
+        "ok": true,
+        "source": "minilm"
+      },
+      "downloadBytes": 45960996,
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "bert",
+        "families": [
+          "bert"
+        ],
+        "parameter_size": "23M",
+        "quantization_level": "F16",
+        "context_length": 512,
+        "embedding_length": 384
+      }
+    }
+  ],
+  "ollamaVersion": "0.35.0",
+  "limit": "Routing/ranking overhead and hand-labelled synthetic smoke checks only. Three answering-model descriptors are synthetic; no answering CLI starts. No representative accuracy, full-answer speedup, token saving or forced model unloading is measured. First request may use a resident model. Warmup resets an initial failure cooldown only for this benchmark; later errors retain runtime fallback behaviour."
+}

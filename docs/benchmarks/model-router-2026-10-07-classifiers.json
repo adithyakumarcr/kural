@@ -1,0 +1,150 @@
+{
+ "date": "2026-10-07",
+ "machine": "Apple M5, 16 GB, macOS, Ollama (Metal)",
+ "corpus": "extension/lib/router/examples.json: 270 requests (90 simple, 90 standard, 90 complex), labelled for Kural; 10-fold stratified cross-validation (each request classified with only the other 90 % as examples or training data). Hyperparameters (blend weight 0.5, temperature 0.01) were chosen on the same folds: the blend numbers are slightly optimistic.",
+ "nativeKeywordRules": {
+  "size": 53.3,
+  "kind": 67,
+  "under": 98
+ },
+ "wordClassifier": {
+  "size": 73.7,
+  "kind": 78.1,
+  "under": 35,
+  "msPerRequest": 0.008
+ },
+ "embeddingsAlone": {
+  "all-minilm:22m": {
+   "dims": 384,
+   "embedMedianMs": 7.3,
+   "embedP95Ms": 8.4,
+   "size": {
+    "knn": 70.4,
+    "centroid": 78.5,
+    "logreg": 78.9
+   },
+   "kindKnn": 61.1,
+   "underCentroid": 24
+  },
+  "embeddinggemma": {
+   "dims": 768,
+   "embedMedianMs": 19.5,
+   "embedP95Ms": 21.2,
+   "size": {
+    "knn": 78.5,
+    "centroid": 88.5,
+    "logreg": 88.5
+   },
+   "kindKnn": 84.4,
+   "underCentroid": 14
+  },
+  "granite-embedding:30m": {
+   "dims": 384,
+   "embedMedianMs": 9.5,
+   "embedP95Ms": 10.8,
+   "size": {
+    "knn": 77.4,
+    "centroid": 84.4,
+    "logreg": 83.3
+   },
+   "kindKnn": 70.4,
+   "underCentroid": 21
+  },
+  "nomic-embed-text": {
+   "dims": 768,
+   "embedMedianMs": 13.9,
+   "embedP95Ms": 22.8,
+   "size": {
+    "knn": 72.2,
+    "centroid": 78.5,
+    "logreg": 81.9
+   },
+   "kindKnn": 74.8,
+   "underCentroid": 28
+  },
+  "qwen3-embedding:0.6b": {
+   "dims": 1024,
+   "embedMedianMs": 44.9,
+   "embedP95Ms": 52.3,
+   "size": {
+    "knn": 80,
+    "centroid": 89.6,
+    "logreg": 91.5
+   },
+   "kindKnn": 78.9,
+   "underCentroid": 14
+  },
+  "snowflake-arctic-embed:33m": {
+   "dims": 384,
+   "embedMedianMs": 11,
+   "embedP95Ms": 14.7,
+   "size": {
+    "knn": 66.3,
+    "centroid": 75.9,
+    "logreg": 77
+   },
+   "kindKnn": 44.8,
+   "underCentroid": 29
+  }
+ },
+ "blendedWithWords_weight0_5_temp0_01": {
+  "granite-embedding:30m": {
+   "size": 87.4,
+   "under": 14,
+   "kind": 85.6
+  },
+  "qwen3-embedding:0.6b": {
+   "size": 90.4,
+   "under": 10,
+   "kind": 88.5
+  },
+  "all-minilm:22m": {
+   "size": 82.2,
+   "under": 25,
+   "kind": 84.4
+  },
+  "embeddinggemma": {
+   "size": 89.6,
+   "under": 9,
+   "kind": 91.5
+  }
+ },
+ "generativeRouters": {
+  "note": "Zero-shot route choice with a JSON-schema answer, 45 requests (15 per size), Arch-Router style prompt. Arch-Router-1.5B itself is research-licensed (katanemo-research), so it was not used.",
+  "qwen3:4b": {
+   "correct": "41/45",
+   "medianMs": 351,
+   "p95Ms": 358
+  },
+  "qwen3:1.7b": {
+   "correct": "34/45",
+   "medianMs": 241,
+   "p95Ms": 289
+  }
+ },
+ "routeEndToEnd": {
+  "note": "ModelRouter.route() with 7 cloud models, 120 requests, after the helper got ready",
+  "native": {
+   "medianMs": 0,
+   "p95Ms": 0.1
+  },
+  "minilm": {
+   "medianMs": 8.1,
+   "p95Ms": 8.9
+  },
+  "granite": {
+   "medianMs": 8.3,
+   "p95Ms": 9.2
+  },
+  "qwen3": {
+   "medianMs": 49.4,
+   "p95Ms": 53.6
+  },
+  "gettingReadyOnceMs": {
+   "minilm": 1947,
+   "granite": 1421,
+   "qwen3": 12263
+  }
+ },
+ "decision": "Native = the word classifier (no download). Helpers offered: Granite (63 MB, 87 % blended), Qwen3 Embedding (640 MB, 90 % blended), MiniLM (46 MB, 82 % blended). embeddinggemma was as accurate as Qwen3 (89.6 %, 20 ms) but is under the Gemma licence terms; Apache-2.0 models were preferred."
+}

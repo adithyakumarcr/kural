@@ -215,6 +215,12 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
   <sub>Pick the roles and how they work &nbsp;·&nbsp; Then they discuss and decide (sped up)</sub>
 </p>
 
+### Model Router
+
+Choose **Auto → Balance, Cost or Intelligence** in the chat model menu, like Cursor's Auto. For every message Kural picks the model and the intensity from your Claude, Google Gemini and ChatGPT (Codex) models, switching between those AIs with the conversation handed over (models on this computer are only picked by you). It reads how much work the request is (Kural's own word classifier, or a helper model like Granite or Qwen3 Embedding for up to 90 % accuracy at under 50 ms), what you attached, how much of each AI's usage limit is left (**Cost** saves your limits), how long the conversation is, and what you did after its earlier answers. A quick question goes to a light model even under Intelligence, and complex work gets the most capable one even under Cost. Each answer shows the model; hover over it for the reasons.
+
+Model ratings, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
+
 ### Tab Completion
 
 Suggestions appear as you type or when you place the cursor, also in the middle of a line. Write a comment, press
@@ -229,7 +235,7 @@ Click **Tab Completion** in the status bar for its panel. There you can:
 - pick the engine: **Auto**, **Local model** or **Claude**, and its model,
 - see how long the last suggestion took.
 
-In **Auto**, the local model and Claude race, and the first good answer wins.
+In **Auto**, the local model and Claude race, and the first good answer wins. With Model Router’s Auto Tab policy enabled, the router selects one engine using your profile and allowed models.
 
 ![The Tab Completion panel: speed, engine and model](docs/screenshots/tab-panel.gif)
 

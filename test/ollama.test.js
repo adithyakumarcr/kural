@@ -41,6 +41,22 @@ const SEARCH_HTML = `<ul>
     assert.deepStrictEqual(m.filter((x) => x.chat).map((x) => x.name), ["qwen3-coder:30b", "qwen3:8b"]);
     assert.strictEqual(m.length, 4);
   });
+  await check("Qwen 0.5B is not offered or downloaded, while 0.6B remains eligible", async () => {
+    const requests = [];
+    const filtered = new Ollama(() => "http://127.0.0.1:1", async (url) => {
+      requests.push(url);
+      return { ok: true, json: async () => url.endsWith("/api/tags")
+        ? { models: ["qwen2.5-coder:0.5b-base", "qwen3:0.6b"].map(name => ({name})) }
+        : { capabilities: ["completion", "tools"] } };
+    });
+    assert.deepStrictEqual((await filtered.models()).map(m => m.name), ["qwen3:0.6b"]);
+    const count = requests.length;
+    await assert.rejects(filtered.pull("qwen2.5-coder:0.5b-base"), /not supported/);
+    assert.strictEqual(requests.length, count);
+    const html = '<ul><li><a href="/library/qwen2.5"><h2>qwen2.5</h2><p>Local model.</p><span>tools</span><span>0.5b</span><span>1.5b</span></a></li></ul>';
+    const result = await filtered.search("qwen", async () => ({ok:true,text:async()=>html}));
+    assert.deepStrictEqual(result.results[0].sizes, ["1.5b"]);
+  });
   await check("bigger context: a copy made once, then reused, and not listed as a model", async () => {
     const v = await ol.withContext("qwen3-coder:30b", 32768);
     assert.strictEqual(v, "kural-qwen3-coder-30b-32k");

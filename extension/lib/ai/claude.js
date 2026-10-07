@@ -222,6 +222,8 @@ class ClaudeProcess {
       }
       // How much of your plan is used (sent after every answer): for the usage meter in the status bar.
       if (msg.type === "rate_limit_event") { const u = usage.fromClaude(msg); if (u) usage.report("claude", u); continue; }
+      // Tokens each answer used (every Claude process: chat, Tab Completion, Ctrl+K…): the AI Usage panel's totals.
+      if (msg.type === "result") usage.addTokens("claude", usage.fromResult(msg));
       if (msg.type === "control_request" && msg.request && msg.request.subtype === "can_use_tool") {
         this.answerPermission(msg);
         continue;

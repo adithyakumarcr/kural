@@ -5,6 +5,7 @@
 const vscode = require("vscode");
 const { log } = require("../ai/claude");
 const { tidyLocal } = require("./local");
+const { completionModel } = require("../ai/model-policy");
 
 const COMPLETION_SYSTEM_PROMPT = `You are the autocomplete engine of a code editor.
 You get a file with the cursor marked <CURSOR>. Reply with exactly one <insert>...</insert> block containing ONLY the
@@ -108,6 +109,12 @@ function sleep(ms, token) {
 
 // Remember recent answers, so going back to the same spot shows the suggestion instantly.
 const cache = new Map();
+let cachedPreferences = null;
+function preferenceKey(cfg,router) {
+  const s = router && router.options();
+  return JSON.stringify([cfg.get("tabCompletion.engine"),cfg.get("tabCompletion.localModel"),cfg.get("tabCompletion.model"),
+    s && [s.tab,s.profile,s.saveTokens]]);
+}
 function cacheKey(doc, offset) { return `${doc.uri.toString()}#${doc.version}#${offset}`; }
 
 // The last suggestion shown. If you type the same characters it suggests, the rest of it
@@ -130,12 +137,14 @@ const SPEEDS = [
 
 // engine "auto": the local model when Ollama has it, else Claude. "local" / "claude": that one
 // (local still falls back to Claude if Ollama isn't there, so Tab keeps working).
-function completionProvider(session, review, onTiming = () => {}, local = null, activity = null) {
+function completionProvider(session, review, onTiming = () => {}, local = null, activity = null, router = null) {
   return {
     async provideInlineCompletionItems(document, position, ctx, token) {
       const cfg = vscode.workspace.getConfiguration("kural");
       if (!cfg.get("tabCompletion.enabled") || review.busy()) return [];
       if (document.uri.scheme !== "file" && document.uri.scheme !== "untitled") return [];
+      const preferences = preferenceKey(cfg,router);
+      if (preferences !== cachedPreferences) { cache.clear(); shown = null; cachedPreferences = preferences; }
 
       const offset = document.offsetAt(position);
       const key = cacheKey(document, offset);
@@ -156,8 +165,14 @@ function completionProvider(session, review, onTiming = () => {}, local = null, 
       const after = all.slice(offset, offset + 200);
       const lineEndAt = all.indexOf("\n", offset);
       const restOfLine = all.slice(offset, lineEndAt < 0 ? all.length : lineEndAt);
-      const engineSetting = cfg.get("tabCompletion.engine");
+      let engineSetting = cfg.get("tabCompletion.engine");
       const useLocal = local && engineSetting !== "claude" && await local.ready();
+      if (router && engineSetting === "auto") {
+        const cached = router.tabEngine({ language: document.languageId,localModel: completionModel(cfg.get("tabCompletion.localModel")),
+          claudeModel: cfg.get("tabCompletion.model"),localReady: !!useLocal,claudeReady: require("../ai/claude").isSetUp() });
+        if (cached) engineSetting = cached;
+      }
+      if (engineSetting === "none") return [];
       const viaClaude = async (tok = token) => {
         const note = activity ? activity.tabNote(rel, document.languageId) : "";
         const text = await session.ask(completionPrompt(all, offset, document.languageId, rel, note), tok);
@@ -168,10 +183,10 @@ function completionProvider(session, review, onTiming = () => {}, local = null, 
         return raw == null ? "" : trimOverlap(tidyLocal(raw, restOfLine), after);
       };
       let insert = "", engine = "claude";
-      if (!useLocal) insert = await viaClaude();
+      if (!useLocal || engineSetting === "claude") insert = await viaClaude();
       else if (engineSetting === "local") { insert = await viaLocal(); engine = "local"; }
       else [insert, engine] = await race(viaLocal, viaClaude, token);
-      if (token.isCancellationRequested || !insert || !insert.trim()) return [];
+      if (token.isCancellationRequested || preferenceKey(vscode.workspace.getConfiguration("kural"),router) !== preferences || !insert || !insert.trim()) return [];
       cache.set(key, insert);
       shown = { uri: document.uri.toString(), start: offset, before: all.slice(Math.max(0, offset - 300), offset), insert };
       if (cache.size > 200) cache.delete(cache.keys().next().value);

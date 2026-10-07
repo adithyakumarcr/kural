@@ -75,23 +75,68 @@ clear_cache() {   # clear_cache <Kural's user data folder>
 # ---------- Mac ----------
 mac() {
   local APPDIR=/Applications/Kural.app
-  quit_kural() {   # a running Kural would keep using the old files
-    pgrep -x Kural >/dev/null || return 0
-    echo "Closing Kural ..."
-    osascript -e 'quit app "Kural"' >/dev/null 2>&1 || true
-    for _ in $(seq 1 20); do pgrep -x Kural >/dev/null || return 0; sleep 0.5; done
-    pkill -x Kural || true; sleep 1
+  local DATA="$HOME/Library/Application Support/Kural"
+  # Kural from /Applications, by its path (a copy elsewhere, like a test copy, isn't touched): the app and everything it
+  # started from inside it (its helpers, the extension host).
+  kural_running() { pgrep -f "$APPDIR/Contents/" >/dev/null 2>&1; }
+  # Is this script running in Kural's own terminal? Then it ends when Kural closes.
+  inside_kural() {
+    local p=$$ c
+    while [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
+      c=$(ps -o command= -p "$p" 2>/dev/null) || return 1
+      case "$c" in *"$APPDIR/Contents/"*) return 0 ;; esac
+      p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+    done
+    return 1
   }
+  # Close Kural and wait until it (and every helper) has really gone. Never forced: deleting the app while Kural still
+  # runs (it may be asking you to save a file) made it crash ("Kural quit unexpectedly", 6 Oct 2026).
+  quit_kural() {
+    kural_running || return 0
+    echo "Closing Kural ..."
+    osascript -e "tell application \"$APPDIR\" to quit" >/dev/null 2>&1 || true
+    local i=0
+    while kural_running; do
+      i=$((i+1))
+      [ $i -eq 60 ] && echo "Kural is still open: it may be asking you something (save a file?). Close it; the install waits for it."
+      sleep 0.5
+    done
+  }
+  qs() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }   # sh quoting
+  # The steps that change the app: run here, or, from Kural's own terminal (which closes with Kural), by a small script of
+  # their own that waits for Kural to close (its log is in /tmp), so the install isn't cut off halfway.
+  replace_app() {   # $1: shell code to run once Kural has closed
+    if inside_kural; then
+      [ "$FRESH" = 1 ] || [ "$SCRATCH" = 1 ] && die "--fresh and --from-scratch-install can't run from Kural's own terminal (it closes with Kural). Use the Terminal app."
+      local s log="${TMPDIR:-/tmp}/kural-install-$(date +%Y%m%d-%H%M%S).log"
+      s=$(mktemp "${TMPDIR:-/tmp}/kural-install.XXXXXX")
+      printf '#!/bin/sh\nwhile pgrep -f %s >/dev/null 2>&1; do sleep 0.5; done\n%s\n' "$(qs "$APPDIR/Contents/")" "$1" > "$s"
+      # Its own session (setsid), so closing Kural's terminal doesn't stop it.
+      nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' /bin/sh "$s" > "$log" 2>&1 &
+      echo "This terminal is inside Kural and closes with it: the install finishes by itself once Kural has closed, then Kural opens again."
+      echo "(Its log: $log)"
+      osascript -e "tell application \"$APPDIR\" to quit" >/dev/null 2>&1 || true
+      exit 0
+    fi
+    quit_kural
+    [ "$SCRATCH" = 1 ] && scratch_wipe
+    if [ "$FRESH" = 1 ]; then
+      fresh_start "$DATA" "$HOME/.kural" "$HOME/Library/Caches/com.kural" \
+        "$HOME/Library/Caches/com.kural.ShipIt" "$HOME/Library/Saved Application State/com.kural.savedState" \
+        "$HOME/Library/HTTPStorages/com.kural" "$HOME/Library/Preferences/com.kural.plist"
+      defaults delete com.kural >/dev/null 2>&1 || true   # macOS also keeps those preferences in memory
+    fi
+    sh -c "$1"
+  }
+  # (VS Code's cache of the built-in extensions' descriptions: see clear_cache.)
+  local clear="rm -f $(qs "$DATA")/CachedProfilesData/*/extensions.builtin.cache 2>/dev/null"
+  local start=":"; [ "$OPEN" = 1 ] && start="open $(qs "$APPDIR")"
 
   if [ "$MODE" = ext ]; then
     [ -d "$APPDIR" ] || die "Kural isn't installed yet. Run ./install.sh first."
-    quit_kural
-    clear_cache "$HOME/Library/Application Support/Kural"
-    rm -rf "$APPDIR/Contents/Resources/app/extensions/kural"
-    ditto extension "$APPDIR/Contents/Resources/app/extensions/kural"
-    # Changed files inside an app break its signature, so sign it again (ad-hoc, like the build does).
-    codesign --force --deep --sign - "$APPDIR" 2>/dev/null
-    echo "Updated the Kural extension in $APPDIR"
+    local EXT="$APPDIR/Contents/Resources/app/extensions/kural"
+    # Changed files inside an app break its signature, so it's signed again (ad-hoc, like the build does).
+    replace_app "$clear; rm -rf $(qs "$EXT") && ditto $(qs "$PWD/extension") $(qs "$EXT") && codesign --force --deep --sign - $(qs "$APPDIR") 2>/dev/null; echo 'Updated the Kural extension in $APPDIR'; $start"
   else
     [ "$(uname -m)" = arm64 ] || die "this Mac build is for Apple Silicon (M1–M5)."
     command -v python3 >/dev/null || die "python3 is missing. Install Apple's command-line tools: xcode-select --install"
@@ -103,22 +148,9 @@ mac() {
       export PATH="$PWD/build/venv/bin:$PATH"
     fi
     ./build-mac.sh
-    quit_kural
-    [ "$SCRATCH" = 1 ] && scratch_wipe
-    if [ "$FRESH" = 1 ]; then
-      fresh_start "$HOME/Library/Application Support/Kural" "$HOME/.kural" "$HOME/Library/Caches/com.kural" \
-        "$HOME/Library/Caches/com.kural.ShipIt" "$HOME/Library/Saved Application State/com.kural.savedState" \
-        "$HOME/Library/HTTPStorages/com.kural" "$HOME/Library/Preferences/com.kural.plist"
-      defaults delete com.kural >/dev/null 2>&1 || true   # macOS also keeps those preferences in memory
-    fi
-    clear_cache "$HOME/Library/Application Support/Kural"
-    echo "Installing into $APPDIR ..."
-    rm -rf "$APPDIR"
-    ditto build/mac/Kural.app "$APPDIR"
-    xattr -dr com.apple.quarantine "$APPDIR" 2>/dev/null || true   # built here, so normally not needed
+    # (The old app goes only after the new one is copied next to it: never half an app.)
+    replace_app "$clear; echo 'Installing into $APPDIR ...'; rm -rf $(qs "$APPDIR.new") && ditto $(qs "$PWD/build/mac/Kural.app") $(qs "$APPDIR.new") && rm -rf $(qs "$APPDIR") && mv $(qs "$APPDIR.new") $(qs "$APPDIR") && xattr -dr com.apple.quarantine $(qs "$APPDIR") 2>/dev/null; echo Done.; $start"
   fi
-  echo "Done."
-  if [ "$OPEN" = 1 ]; then open "$APPDIR"; fi
 }
 
 # ---------- Ubuntu / Debian ----------
@@ -140,11 +172,22 @@ linux() {
   fi
   ./make-deb.sh
   local deb; deb=$(ls -t dist/kural_*_amd64.deb | head -1)
+  # apt replaces Kural's files: with Kural open they'd change under it (it can crash). Close it first. From Kural's own
+  # terminal that can't work (closing Kural ends this script): use another terminal.
+  local p=$$ c
+  while [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
+    c=$(ps -o command= -p "$p" 2>/dev/null) || break
+    case "$c" in */usr/share/kural/*) die "this terminal is inside Kural, which has to close for the install. Run ./install.sh from another terminal." ;; esac
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+  done
+  if pgrep -f /usr/share/kural/ >/dev/null 2>&1; then
+    echo "Kural is open: close it (the install replaces its files). Waiting ..."
+    while pgrep -f /usr/share/kural/ >/dev/null 2>&1; do sleep 0.5; done
+  fi
   [ "$SCRATCH" = 1 ] && scratch_wipe
   echo "Installing $deb ..."
   sudo apt install -y "./$deb"
   if [ "$FRESH" = 1 ]; then
-    if pgrep -x kural >/dev/null; then echo "Closing Kural ..."; pkill -x kural || true; sleep 2; fi
     fresh_start "${XDG_CONFIG_HOME:-$HOME/.config}/Kural" "$HOME/.kural"
   fi
   clear_cache "${XDG_CONFIG_HOME:-$HOME/.config}/Kural"

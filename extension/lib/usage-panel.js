@@ -13,6 +13,7 @@ const PROVIDERS = [
   { id: "claude", name: "Claude", page: "https://claude.ai/settings/usage" },
   { id: "agy", name: "Google Gemini" },
   { id: "codex", name: "ChatGPT (Codex)" },
+  { id: "ollama", name: "Your own model" },   // (no limits: only its tokens, when it has some)
 ];
 
 class UsagePanel {
@@ -35,7 +36,7 @@ class UsagePanel {
 
   state() {
     const list = PROVIDERS.map((p) => {
-      const setUp = p.id === "claude" ? !!(this.gs && this.gs.passed) : !!(brain.cli[p.id] && brain.cli[p.id].ready);
+      const setUp = p.id === "claude" ? !!(this.gs && this.gs.passed) : p.id === "ollama" ? false : !!(brain.cli[p.id] && brain.cli[p.id].ready);
       const u = usage.current(p.id);
       const who = p.id === "claude" ? this.account && this.account.auth : this.account && this.account.cliAuth[p.id];
       const plan = (who && who.loggedIn && who.plan) ? (p.id === "claude" ? `Claude ${who.plan}` : who.plan) : "";
@@ -43,8 +44,10 @@ class UsagePanel {
         id: p.id, name: p.name, setUp, plan, at: u ? u.at : null, page: p.page || (CLIS[p.id] && CLIS[p.id].usageUrl) || "",
         windows: u ? (u.windows || []).map((w) => ({ name: usage.limitName(w), used: Math.round(w.usedPercent), resetsAt: w.resetsAt || null, reset: !!w.reset })) : [],
         tokens: u && u.tokens ? { input: u.tokens.input, output: u.tokens.output } : null,
+        // Tokens read (fresh input + from cache + written to cache) and written (output): today, 7 days, 30 days.
+        usage: [1, 7, 30].map((d) => usage.tokenTotals(p.id, d)),
       };
-    }).filter((p) => p.setUp || p.windows.length || p.tokens);
+    }).filter((p) => p.setUp || p.windows.length || p.tokens || p.usage[2].read || p.usage[2].written);
     return { type: "state", list, refreshing: this.refreshing };
   }
 
@@ -102,6 +105,10 @@ function page(nonce, csp, codicons) {
   .links { display: flex; gap: 6px; margin-top: 2px; }
   a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: none; } a:hover { text-decoration: underline; }
   .codicon { vertical-align: -3px; }
+  .toks { border-collapse: collapse; margin: 6px 0 6px; font-size: .95em; }
+  .toks th { font-weight: normal; color: var(--muted); text-align: right; padding: 0 0 2px 14px; }
+  .toks td { padding: 1px 0 1px 14px; } .toks td:first-child { padding-left: 0; }
+  .toks .num { text-align: right; font-variant-numeric: tabular-nums; }
   .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 </style></head><body>
 <div class="top"><span class="muted" id="sum"></span>
@@ -129,12 +136,12 @@ function page(nonce, csp, codicons) {
     const s = Math.round((Date.now() - t) / 1000);
     return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + " min ago" : s < 86400 ? Math.round(s / 3600) + " h ago" : new Date(t).toLocaleDateString();
   }
-  const tok = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n || 0);
+  const tok = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n || 0);
   function render() {
     $("rico").className = "codicon codicon-refresh" + (S.refreshing ? " spin" : "");
     $("refresh").disabled = S.refreshing;
     if (!S.list.length) { $("sum").textContent = "No AI set up yet."; $("list").replaceChildren(); return; }
-    $("sum").textContent = "How much of each plan's limits you've used, and when each starts again.";
+    $("sum").textContent = "How much of each plan's limits you've used, when each starts again, and how many tokens each AI read and wrote.";
     $("list").replaceChildren(...S.list.map((p) => {
       const box = el("div", "prov", el("h3", "", p.name, p.plan ? el("span", "muted", p.plan) : null));
       for (const w of p.windows) {
@@ -144,8 +151,14 @@ function page(nonce, csp, codicons) {
         box.append(el("div", "lim",
           el("div", "text", el("span", "", el("span", "name", w.name), " ", el("span", "pct " + lvl, w.used + "% used")), el("span", "muted", reset)), bar));
       }
-      if (!p.windows.length && p.tokens) box.append(el("div", "lim muted", "Today: " + tok(p.tokens.input) + " tokens in, " + tok(p.tokens.output) + " out"));
-      if (!p.windows.length && !p.tokens) box.append(el("div", "lim muted", p.id === "claude" ? "No numbers yet. Claude sends them with each answer; Refresh asks now." : "No numbers yet. Refresh asks now."));
+      const [d1, d7, d30] = p.usage;
+      if (d30.read || d30.written) {
+        // Tokens: what the AI read (your messages, files, the conversation; most of it from the cache) and wrote.
+        const row = (label, t) => el("tr", "", el("td", "muted", label), el("td", "num", tok(t.read)), el("td", "num muted", t.read ? Math.round(100 * t.cacheRead / t.read) + "%" : "–"), el("td", "num", tok(t.written)));
+        box.append(el("table", "toks", el("tr", "", el("th", ""), el("th", "num", "read"), el("th", "num", "from cache"), el("th", "num", "written")),
+          row("Today", d1), row("7 days", d7), row("30 days", d30)));
+      } else if (!p.windows.length && p.tokens) box.append(el("div", "lim muted", "Today: " + tok(p.tokens.input) + " tokens in, " + tok(p.tokens.output) + " out"));
+      if (!p.windows.length && !p.tokens && !d30.read) box.append(el("div", "lim muted", p.id === "claude" ? "No numbers yet. Claude sends them with each answer; Refresh asks now." : "No numbers yet. Refresh asks now."));
       const links = el("div", "links muted");
       if (p.at) links.append("Updated " + ago(p.at));
       if (p.page) { const a = el("a", "", "usage page"); a.onclick = () => vscode.postMessage({ type: "page", id: p.id }); if (p.at) links.append(" · "); links.append(a); }

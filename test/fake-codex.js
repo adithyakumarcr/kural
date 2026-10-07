@@ -23,7 +23,10 @@ const fs = require("fs"), os = require("os"), path = require("path");
 const file = process.env.FAKE_CODEX_FILE || path.join(os.tmpdir(), "kural-fake-codex-state");
 const read = (f) => { try { return fs.readFileSync(f, "utf8").trim(); } catch { return ""; } };
 const state = () => process.env.FAKE_CODEX_STATE || read(file) || "ok";
+// (Leading `-c key=value` options set config, like the real codex: skipped here, but kept for tests to check.)
+const config = [];
 const args = process.argv.slice(2);
+while (args[0] === "-c") config.push(args.splice(0, 2)[1]);
 
 if (args[0] === "--version") { console.log("codex-cli 0.160.0"); process.exit(0); }
 if (args[0] === "login" && args[1] === "status") {

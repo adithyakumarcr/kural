@@ -22,8 +22,13 @@ const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
 const { GUIDE } = require("./guide");
-const { registerTabEditor, openBeside } = require("./tab-editor");
+const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
+const { profileOf } = require("../router/policy");
+const journal = require("../router/journal");
+const usageHub = require("../ai/usage");
+const { retrieve } = require("../router/retrieve");
+const { excludedModel, completionModel } = require("../ai/model-policy");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -55,6 +60,8 @@ const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
+// Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
+const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
@@ -101,7 +108,8 @@ class ChatView {
     this.localReady = new Map();   // "ollama:<name>" -> the larger-context copy's name, once prepared
     this.pulls = new Map();        // model downloads in progress: name -> { percent, status }
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
-    this.changes = new ChangeTracker();
+    this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
+    this.changes = new ChangeTracker(path.join(context.globalStorageUri.fsPath, "checkpoints"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
     this.lastEditor = vscode.window.activeTextEditor;
@@ -166,6 +174,7 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
+      vscode.commands.registerCommand("kural.chat.moveToPanel", (uri) => this.moveToPanel(uri)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
       vscode.commands.registerCommand("kural.chat.localModels", async () => { await this.reveal(); this.post({ type: "showLocal" }); }),
       vscode.commands.registerCommand("kural.chat.attach", async () => { this.reveal(); await this.onMessage({ type: "attachPick" }); }),
@@ -184,7 +193,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { for (const r of this.runtime.values()) if (r.proc) r.proc.kill(); } },
+      { dispose: () => { for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -193,6 +202,7 @@ class ChatView {
     const last = this.context.globalState.get(LAST_KEY) || {};
     return {
       model: this.usableModel(validModel(last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet")),
+      autoRoute: !!last.autoRoute, routingProfile: profileOf(last.routingProfile || cfg().get("modelRouter.profile")),
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
@@ -214,6 +224,7 @@ class ChatView {
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     const prev = this.context.globalState.get(LAST_KEY) || {};
     this.context.globalState.update(LAST_KEY, { ...prev, model: tab.model, effort: tab.effort, mode: tab.mode, team: tab.team || 0,
+      autoRoute: !!tab.autoRoute, routingProfile: tab.routingProfile,
       mood: tab.mood, roles: tab.roles, teamStyle: tab.teamStyle });
   }
 
@@ -221,6 +232,8 @@ class ChatView {
   fix(tab) {
     const d = this.lastChoices();
     if (!validModel(tab.model)) tab.model = d.model;
+    tab.autoRoute = !!tab.autoRoute; tab.routingProfile = profileOf(tab.routingProfile || d.routingProfile);
+    delete tab.routingState;
     // Which engine has this conversation (chats from before Kural had its own engine: the one their model uses).
     if (!tab.engine && tab.messages && tab.messages.length) tab.engine = engineOf(tab.model);
     if (tab.engine === "local") tab.engine = "ollama";   // (its old name)
@@ -253,6 +266,7 @@ class ChatView {
     const tab = {
       id: shortId(), title: "New chat", renamed: false,
       model: d.model, effort: d.effort, mode: d.mode, team: d.team, mood: d.mood, roles: d.roles, teamStyle: d.teamStyle,
+      autoRoute: d.autoRoute, routingProfile: d.routingProfile,
       sessionId: newSessionId(), started: false, workspace: this.here,
       messages: [], status: "idle", unread: false, allowAll: false, modelName: null,
       createdAt: Date.now(), updatedAt: Date.now(),
@@ -273,6 +287,8 @@ class ChatView {
   get activeId() { const p = this.cur(); return p ? p.activeId : this._activeId; }
   set activeId(v) { const p = this.cur(); if (p) p.activeId = v; else this._activeId = v; }
   shown(id) { return this.panes.some((p) => p.activeId === id); }   // is this tab on screen somewhere?
+  // The whole chat again, in every pane that shows it (after its messages changed: a rollback, an edit).
+  redraw(tab) { for (const p of this.panes) if (p.activeId === tab.id) this.postTo(p, { type: "full", tab: this.viewTab(tab) }); }
 
   activate(id, pane = this.cur()) {
     const tab = this.tab(id);
@@ -304,7 +320,9 @@ class ChatView {
   closeTab(id, keep = true) {
     const tab = this.tab(id);
     if (!tab) return;
+    const routing = this.routingJobs.get(id); if (routing) { routing.abort(); this.routingJobs.delete(id); }
     const r = this.runtime.get(id);
+    if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
     this.endDevice(r);
     this.runtime.delete(id);
@@ -416,6 +434,8 @@ class ChatView {
   }
 
   summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
+    autoRoute: !!t.autoRoute, routingProfile: t.routingProfile, routingState: t.routingState || null, modelName: t.modelName || null,
+    tokens: t.tokens || null, context: t.context || null,
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
     device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
@@ -567,6 +587,19 @@ class ChatView {
     this.postTabs();
     this.save();
   }
+  // A chat in the editor area goes back among the side panel's tabs, and the side panel shows it (the button in the chat
+  // editor's title bar, its tab's right-click menu, or the Command Palette). Closing that editor does the first part too.
+  async moveToPanel(uri) {
+    const fromUri = uri && uri.scheme === SCHEME ? tabOf(uri) : null;
+    const pane = this.panes.find((p) => p.kind === "editor" && (fromUri ? p.activeId === fromUri : p === this.focusPane))
+      || this.panes.find((p) => p.kind === "editor" && p.panel && p.panel.active);
+    if (!pane) return;
+    const id = pane.activeId;
+    pane.closing = true; pane.panel.dispose();
+    await vscode.commands.executeCommand("kural.chat.focus");
+    const side = this.side();
+    if (side && this.tab(id)) this.activate(id, side);
+  }
   // After a restart VS Code brings the panel back; give it the chat it showed before.
   restoreSplit(panel) {
     const id = (this.splitIds || []).shift();
@@ -702,6 +735,194 @@ class ChatView {
       models: brain.cli[id].models || [], account: brain.cli[id].account || "" }));
   }
 
+  routerModels() {
+    const claude = MODELS.map((m) => ({ ...m, provider: "Claude", providerId: "claude", description: m.hint,
+      ready: isSetUp(), local: false, team: true, device: true, images: true, pdf: true, commands: true, connectors: true }));
+    const clis = this.cliInfo().flatMap((c) => (c.models.length ? c.models : [{ id: "default", label: `${c.short} default` }]).map((m) => ({
+      id: `${c.id}:${m.id}`, label: m.label || m.id, description: m.description || "", provider: c.label, providerId: c.id,
+      ready: c.ready, local: false, team: false, device: c.id === "codex", images: true, pdf: false,
+      commands: c.id === "codex", connectors: false,
+    })));
+    const installed = new Map((this.routerLocalList || []).filter((m) => m.chat && !(m.capabilities || []).includes("cloud") && !/cloud/i.test(m.name)).map((m) => [m.name,m]));
+    const fallback = this.localDefault && this.localDefault();
+    if (fallback && !/cloud/i.test(fallback) && !(this.localReady.get(fallback) || []).includes("cloud") && !installed.has(localName(fallback))) installed.set(localName(fallback), { name: localName(fallback), capabilities: this.localReady.get(fallback) || [] });
+    const local = [...installed.values()].map((m) => ({ id: `ollama:${m.name}`, label: m.name, description: `${m.params || ""} on this computer`,
+      provider: "Ollama", providerId: "ollama", ready: true, local: true, team: false, device: false,
+      images: (m.capabilities || []).includes("vision"), pdf: false, commands: true, connectors: false }));
+    const tabModel = completionModel(cfg().get("tabCompletion.localModel"));
+    const tabInstalled = (this.routerLocalList || []).find((m) => m.name === tabModel || m.name === `${tabModel}:latest`);
+    const completion = tabModel && !local.some((m) => m.id === `ollama:${tabModel}` || m.id === `ollama:${tabModel}:latest`)
+      ? [{ id: `ollama:${tabModel}`,label: `${tabModel} (Tab only)`,provider: "Ollama",providerId: "ollama",local: true,
+        ready: !!tabInstalled && !(tabInstalled.capabilities || []).includes("cloud") && !/cloud/i.test(tabModel),completionOnly: true }] : [];
+    return [...claude,...clis,...local,...completion].filter((model) => !excludedModel(model.id));
+  }
+
+  // ---------- tokens ----------
+  // This chat's tokens (all answers) and how full its context is now ({ used, window } tokens). Shown under the input.
+  countTokens(tab, reply, t, context) {
+    const add = (a, b) => { const o = { ...(a || {}) }; for (const k of ["input", "output", "cacheRead", "cacheWrite"]) o[k] = (o[k] || 0) + (Number(b[k]) || 0); return o; };
+    if (t) { tab.tokens = add(tab.tokens, t); if (reply) reply.tokens = add(reply.tokens, t); }
+    if (context) {
+      const window = context.window || (tab.context && tab.context.window) || null;
+      tab.context = { used: context.used != null ? context.used : (tab.context && tab.context.used) || 0, window };
+    }
+    clearTimeout(this.tokenPost);
+    this.tokenPost = setTimeout(() => this.postTabs(), 150);
+  }
+
+  // ---------- checkpoints: back to before an earlier message ----------
+  // Files the AI changed in answers after message `index` that aren't undone yet: { file, rel, change (the earliest
+  // answer's: its snapshot is the file as it was before), changedSince (you edited it after the AI's last change) }.
+  laterChanges(tab, index) {
+    const byFile = new Map(), last = new Map();
+    tab.messages.slice(index + 1).forEach((m) => {
+      if (m.role !== "assistant") return;
+      for (const c of m.changes || []) {
+        if (c.state === "undone" || !c.file) continue;
+        if (!byFile.has(c.file)) byFile.set(c.file, c);
+        last.set(c.file, c);
+      }
+    });
+    return [...byFile.values()].map((c) => ({ file: c.file, rel: c.rel, change: c,
+      changedSince: !!last.get(c.file).after && !this.changes.unchangedSince(c.file, last.get(c.file).after) }));
+  }
+
+  // Puts each of those files back as it was before message `index`. { restored: [rel], missing: [rel] }
+  async restoreCode(tab, index) {
+    const files = this.laterChanges(tab, index), restored = [], missing = [];
+    for (const f of files) ((await this.changes.undo(f.change.id)) ? restored : missing).push(f.rel);
+    tab.messages.slice(index + 1).forEach((m) => {
+      for (const c of m.changes || []) if (c.state !== "undone" && !missing.includes(c.rel)) { c.state = "undone"; if (this.activity) this.activity.undone(c.rel); }
+    });
+    log(`chat ${tab.id}: code restored to before message ${index}: ${restored.length} file(s)${missing.length ? `, checkpoint missing for ${missing.join(", ")}` : ""}`);
+    return { restored, missing };
+  }
+
+  // "Restore code" on a message: asks first (it overwrites files), then rolls back. The conversation stays.
+  async restoreTo(tab, index) {
+    const m = tab.messages[index];
+    if (!m || m.role !== "user" || tab.status !== "idle") return;
+    const files = this.laterChanges(tab, index);
+    if (!files.length) { this.post({ type: "flash", text: "Nothing to restore: no changes after this message" }); return; }
+    const since = files.filter((f) => f.changedSince).map((f) => f.rel);
+    const go = await vscode.window.showWarningMessage("Put the code back as it was before this message?", { modal: true,
+      detail: `${files.length} file${files.length === 1 ? "" : "s"} the AI changed after it go${files.length === 1 ? "es" : ""} back: ${files.map((f) => f.rel).join(", ")}.` +
+        (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: those edits go too.` : "") +
+        "\n\nWhat commands changed (installs, generated files) isn't undone. The conversation stays." }, "Restore Code");
+    if (go !== "Restore Code") return;
+    const { restored, missing } = await this.restoreCode(tab, index);
+    this.redraw(tab);
+    this.save();
+    this.post({ type: "flash", text: missing.length ? `Restored ${restored.length}; no checkpoint for ${missing.join(", ")}` : `Code restored to before that message (${restored.length} file${restored.length === 1 ? "" : "s"})` });
+  }
+
+  // Editing message `index`: the chat goes back to just before it. Asks whether the code goes back too when answers after
+  // it changed files. The AI starts a new session that gets the conversation up to there (journal.handoff), the same way
+  // a switch to another AI does, so it doesn't remember the replaced part. false = cancelled.
+  async rewindTo(tab, index) {
+    const m = tab.messages[index];
+    if (!m || m.role !== "user") return false;
+    const files = this.laterChanges(tab, index);
+    if (files.length) {
+      const since = files.filter((f) => f.changedSince).map((f) => f.rel);
+      const go = await vscode.window.showWarningMessage("Also put the code back as it was before this message?", { modal: true,
+        detail: `The answers after it changed ${files.length} file${files.length === 1 ? "" : "s"}: ${files.map((f) => f.rel).join(", ")}.` +
+          (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: restoring loses those edits.` : "") }, "Restore Code", "Keep Code");
+      if (!go) return false;
+      if (go === "Restore Code") await this.restoreCode(tab, index);
+    }
+    const old = this.runtime.get(tab.id);
+    if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
+    this.endDevice(old);
+    tab.messages = tab.messages.slice(0, index);
+    tab.sessionId = newSessionId(); tab.started = false; tab.context = null;
+    tab.carryOver = index > 0 ? { model: true, edited: true, text: journal.handoff(tab.messages) } : null;
+    if (!tab.carryOver) delete tab.carryOver;
+    log(`chat ${tab.id}: edited message ${index}: the conversation goes back to before it`);
+    this.redraw(tab);
+    return true;
+  }
+
+  routingRequest(tab, text, attachments = [], contexts = []) {
+    return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
+      historyChars: ChatView.conversationSize(tab), context: ChatView.routingContext(contexts, attachments),
+      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto",
+      team: tab.team > 1, device: !!tab.device, connectors: !!tab.ticket,
+      images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
+  }
+
+  // How long the conversation is (characters): switching models costs more the longer it is (lib/router/policy.js).
+  static conversationSize(tab) {
+    return (tab.messages || []).reduce((n, m) => n + String(m.sentText || ChatView.textOf(m.segments || [])).length +
+      (m.blocks || []).reduce((k, b) => k + String(b.text || "").length, 0), 0);
+  }
+
+  // What came with the message, for Auto (Cursor's "attached context"): files and selections (not the open file, which
+  // always comes), their size (file sizes, not read: routing must stay instant), browser elements, attached text files.
+  static routingContext(contexts = [], attachments = []) {
+    let files = 0, chars = 0, elements = 0;
+    const size = (f) => { try { return fs.statSync(f).size; } catch { return 0; } };
+    for (const c of contexts || []) {
+      if (c.kind === "selection") { files++; chars += String(c.code || "").length; }
+      else if (c.kind === "file") { files++; chars += size(c.path); }
+      else if (c.kind === "element") elements++;
+    }
+    for (const a of attachments || []) if (a && a.path && !["image", "pdf"].includes(a.kind)) { files++; chars += size(a.path); }
+    return { files, chars, elements };
+  }
+
+  // Auto learns from what you do after its answers (lib/router/learn.js): carried on = fine, undid all its changes =
+  // that model didn't manage it, picked another model = that one suits such requests better.
+  // (Undoing later still counts after you carried on: "bad" replaces "good".)
+  routedAnswer(tab, index = tab.messages.length - 1, kind = "good") {
+    for (let i = index; i >= 1; i--) {
+      const a = tab.messages[i];
+      if (a.role !== "assistant") continue;
+      if (!a.routing || !a.routing.model || a.running || (kind === "good" && a.error) ||
+        (a.routingJudged && !(kind === "bad" && a.routingJudged === "good"))) return null;
+      const u = tab.messages[i - 1];
+      return u && u.role === "user" ? { answer: a, prompt: ChatView.textOf(u.segments || []), model: a.routing.model } : null;
+    }
+    return null;
+  }
+  routerFeedback(tab, kind, better, index) {
+    const memory = this.router && this.router.memory, r = this.routedAnswer(tab, index, kind);
+    if (!memory || !r) return;
+    if (memory.record(kind, { prompt: r.prompt, model: r.model, better })) { r.answer.routingJudged = kind; log(`model router: learned "${kind}" for ${r.model}${better ? ` (you picked ${better})` : ""}`); }
+  }
+
+  async routingCheckpoint(tab, r) {
+    if (!tab.autoRoute || !this.router || !this.router.options().checkpoints || !journal.canCheckpoint(r) ||
+      r.turn.switches || !r.turn.journal.tools.some((t) => t.status === "failed" && !/permission|declined|denied|cancelled|not authorized/i.test(t.result || ""))) return;
+    // Claude supports native set_model; Kural's local engine can await this checkpoint. Other adapters switch next turn.
+    const provider = engineOf(tab.model);
+    if (!["claude","ollama"].includes(provider)) return;
+    r.routingCheckpoint = true;
+    const ctl = new AbortController(); r.checkpointAbort = ctl;
+    const reply = r.turn.reply, was = tab.model;
+    try {
+      const result = await this.router.route({ ...this.routingRequest(tab,r.turn.ask, r.turn.attachments || []),
+        recentContext: JSON.stringify({ tools: r.turn.journal.tools.slice(-8) }), provider, checkpoint: true },ctl.signal);
+      r.routingCheckpoint = false;
+      if (!journal.canCheckpoint(r) || ctl.signal.aborted || !tab.autoRoute || tab.model !== was || !result.model || result.model === was || result.error) return;
+      if (provider === "ollama") {
+        const checked = await this.prepareLocal({ ...tab,model: result.model });
+        if (checked.error || ctl.signal.aborted || !tab.autoRoute || tab.model !== was || !journal.canCheckpoint(r)) return;
+        r.proc.setModel(localName(result.model));
+        r.proc.opts.capabilities = this.localReady.get(result.model) || [];
+      } else {
+        const accepted = await r.proc.request({ subtype: "set_model", model: result.model },1500);
+        if (accepted === null || r.stale || !reply.running || ctl.signal.aborted || !tab.autoRoute || tab.model !== was) return;
+      }
+      tab.model = result.model; tab.modelName = null; r.turn.switches = 1;
+      reply.models = [...new Set([...(reply.models || [was]),result.model])];
+      reply.routing = result;
+      this.post({ type: "patch",tabId: tab.id,msg: this.patchOf(reply) });
+      this.remember(tab); this.postTabs(); this.save();
+    } catch (e) { if (!ctl.signal.aborted) log("model router: checkpoint unavailable; current model continues"); }
+    finally { r.routingCheckpoint = false; r.checkpointAbort = null; }
+  }
+
   setupChanged(why) {
     this.setupVersion++;
     log(`chat: Claude Code setup ${why}; Claude reloads in the same conversation when it's not busy`);
@@ -749,6 +970,8 @@ class ChatView {
     const status = await this.ollama.status();
     let models = [];
     if (status.running) { try { models = await this.ollama.models(); } catch (e) { log(`local models: ${e.message}`); } }
+    this.routerLocalList = models;
+    if (this.router) this.router.changed();
     const msg = { type: "localModels", status, models, memory: totalMemoryGB(), pulls: Object.fromEntries(this.pulls), minVersion: MIN_VERSION };
     if (pane) this.postTo(pane, msg); else this.post(msg);
   }
@@ -802,7 +1025,7 @@ class ChatView {
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills.
-    const tools = [...(editing ? AGENT_TOOLS : READ_TOOLS), ...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
+    const tools = [...(editing ? AGENT_TOOLS : [...READ_TOOLS, ...WEB_TOOLS]),...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
     // A Claude model: Claude Code. A model on this computer: Kural's own engine, with the same tools and events.
     // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
     // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
@@ -819,7 +1042,7 @@ class ChatView {
       addDirs: ws.extraDirs(),
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
-      tools, allowedTools: [...(editing ? ["WebSearch"] : []), ...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      tools, allowedTools: [...WEB_TOOLS,...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
       mcpServers: team || dev ? { ...(team ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
         ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
@@ -830,6 +1053,7 @@ class ChatView {
       onMessage: (m) => { if (r.stale) return; r.gotOutput = true; this.onClaude(tab, r, m); },
       onPermission: (req) => r.stale ? { allow: false, message: "Stopped." } : this.onPermission(tab, r, req),
       onExit: (info) => this.onExit(tab, r, info),
+      onCheckpoint: () => this.routingCheckpoint(tab,r),
     });
     r.proc = proc;
     this.runtime.set(tab.id, r);
@@ -899,11 +1123,62 @@ class ChatView {
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
-  async send(tab, segments, contexts, attachIds = []) {
+  async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null) {
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
     if (tab.status !== "idle" || tab.visiting) return;   // (a chat from another workspace: read only)
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
+    // An earlier message edited: the chat goes back to just before it (and the code too, if you say so), then this one is
+    // sent in its place.
+    if (editIndex !== null && !(await this.rewindTo(tab, editIndex))) return;
+    let routed = null;
+    const previousMedia = [...new Map(tab.messages.flatMap((m) => m.attachments || [])
+      .filter((a) => ["image","pdf"].includes(a.kind)).map((a) => [a.path,a])).values()];
+    if (tab.autoRoute && this.router) {
+      this.routerFeedback(tab, "good");   // you carried on after Auto's last answer
+      const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
+      tab.status = "running"; tab.routingState = "Choosing model…"; this.postTabs();
+      const previous = tab.model;
+      try {
+        const attached = attachIds.map((id) => this.attachments.items.get(id)).filter(Boolean);
+        // Attachments from earlier turns must remain usable after a provider handoff too.
+        const historical = tab.messages.flatMap((m) => m.attachments || []);
+        routed = await this.router.route(this.routingRequest(tab,text,[...attached,...historical],contexts),ctl.signal);
+        if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
+        if (routed.error) {
+          // Nothing Auto may pick (no AI with an account set up, or none can do this): keep the chat's model if it works.
+          if (!brain.providerOf(previous).ready()) { this.post({ type: "flash",text: routed.error }); return; }
+          routed = { ...routed, model: previous, reason: `${routed.error} · kept ${previous}` };
+        }
+        // Another AI takes over with a record of the conversation (journal.handoff). When that record is too big for the
+        // handoff budget, or an earlier picture/PDF is gone, Auto picks again within the current AI instead of refusing.
+        const here = tab.engine || engineOf(previous);
+        let changesProvider = engineOf(routed.model) !== here;
+        const tooBig = () => journal.handoff(tab.messages).length > this.router.options().handoffChars;
+        const missing = () => previousMedia.some((a) => !a.path || !fs.existsSync(a.path));
+        if (changesProvider && tab.messages.length && (missing() || tooBig())) {
+          const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over";
+          // (On a model on this computer there's no "same AI" for Auto: that one stays.)
+          const again = here === "ollama" ? { error: "local" }
+            : await this.router.route({ ...this.routingRequest(tab,text,[...attached,...historical],contexts), provider: here }, ctl.signal);
+          if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
+          routed = again.error ? { ...routed, model: previous, reason: `${routed.reason} · kept ${previous}: ${why}` }
+            : { ...again, reason: `${again.reason} · stayed with this AI: ${why}` };
+          changesProvider = false;
+        }
+        tab.model = routed.model;
+        // Auto also sets the intensity, unless you picked one yourself (picking a profile hands it back to Auto).
+        if (routed.effort && !tab.effortPinned && valid(EFFORTS, routed.effort)) tab.effort = routed.effort;
+        if (previous !== tab.model) { tab.modelName = null; tab.pendingModel = isClaude(tab.model); }
+        this.remember(tab);
+      } catch (e) { if (!ctl.signal.aborted) this.post({ type: "flash",text: "Model Router couldn't select a model. Check its panel." }); return; }
+      finally {
+        // Stop may already have begun another request. Only the owning request can reset this state.
+        if (this.routingJobs.get(tab.id) === ctl) {
+          this.routingJobs.delete(tab.id); delete tab.routingState; tab.status = "idle"; this.postTabs();
+        }
+      }
+    }
     if (!brain.providerOf(tab.model).ready()) {   // e.g. a Claude model, but only your own model is set up
       const p = brain.providerOf(tab.model);
       this.post({ type: "flash", text: `${p.label} isn't set up: pick another model, or set it up in Get started` });
@@ -914,19 +1189,20 @@ class ChatView {
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
     const reply = { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, team: this.teamSize(tab), teamStyle: tab.teamStyle,
-      teamLabel: this.teamLabel(tab) };
+      teamLabel: this.teamLabel(tab), model: tab.model, models: [tab.model], routing: routed, journal: { tools: [] } };
     tab.messages.push(user, reply);
     tab.status = "running";
     tab.updatedAt = Date.now();
-    this.post({ type: "append", tabId: tab.id, msgs: [user, reply] });
+    this.post({ type: "append", tabId: tab.id, requestId, msgs: [user, reply] });
     this.postTabs();
 
     // The chat was on the other engine (Claude Code ↔ Kural's own): that one has the conversation, this one doesn't.
     // A new session, and this message carries the conversation so far (everything before it).
     const engine = engineOf(tab.model);
-    if (tab.engine && tab.engine !== engine) {
-      if (tab.messages.length > 2) tab.carryOver = { model: true, text: ChatView.transcript({ ...tab, messages: tab.messages.slice(0, -2) }) };
-      tab.sessionId = newSessionId(); tab.started = false;
+    const changedProvider = tab.engine && tab.engine !== engine;
+    if (changedProvider) {
+      if (tab.messages.length > 2) tab.carryOver = { model: true, text: journal.handoff(tab.messages.slice(0,-2)) };
+      tab.sessionId = newSessionId(); tab.started = false; tab.context = null;
       const old = this.runtime.get(tab.id);
       if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
       this.endDevice(old);
@@ -956,7 +1232,7 @@ class ChatView {
     if (tab.pendingModel && isClaude(tab.model)) { r.proc.setModel(tab.model); tab.pendingModel = false; }
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
-    r.turn = { snaps: {}, reply, ask };
+    r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0 };
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
@@ -967,13 +1243,31 @@ class ChatView {
     if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
     // Continued from another workspace, or switched to a model on another engine (Claude ↔ your computer): the first
     // message carries the conversation so far.
-    const carry = tab.carryOver && !tab.started ? (tab.carryOver.model
+    const carry = tab.carryOver && !tab.started ? (tab.carryOver.edited
+      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far. I've changed my next message: answer it as it is now.\n\n`
+      : tab.carryOver.model
       ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far (with another model). Carry on from it.\n\n`
       : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
         "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
     delete tab.carryOver;
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
-    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + await this.buildPrompt(text, contexts), attachIds);
+    const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
+    let retrieved = "";
+    if (this.router && this.router.options().context && vscode.workspace.isTrusted) {
+      try {
+        const candidates = await retrieve(text,ctl.signal,contexts.map((c) => c.path));
+        const selected = await this.router.selectContext(text,candidates,ctl.signal);
+        if (selected.candidates.length) retrieved = "<retrieved_context>\n" + selected.candidates.map((c) => `${c.file} (from line ${c.startLine}):\n${c.excerpt}`).join("\n\n") + "\n</retrieved_context>\n\n";
+        reply.contextSelection = { count: selected.candidates.length, source: selected.source, ms: selected.ms };
+      } catch { /* Context retrieval is optional; explicit context stays intact. */ }
+    }
+    if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
+    const built = await this.buildPrompt(text,contexts);
+    if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
+    if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
+    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds,changedProvider ? previousMedia : []);
+    user.sentText = journal.textOf(prompt).slice(carry.length);
+    r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
       user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta });
       // What you attached the AI may read without asking, even outside the project (onPermission).
@@ -998,6 +1292,21 @@ class ChatView {
   onClaude(tab, r, m) {
     const turn = r.turn;
     const reply = turn && turn.reply;
+    if (reply && reply.journal) journal.record(reply.journal,m);
+    // Tokens and the context window (Codex, Gemini and Kural's engine say so with their own event; Claude in its messages).
+    if (m.type === "kural_usage") { this.countTokens(tab, reply, m.tokens, m.context); return; }
+    if (!m.parent_tool_use_id && m.type === "assistant" && m.message && m.message.usage && isClaude(tab.model)) {
+      const u = m.message.usage, used = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"].reduce((a, k) => a + (Number(u[k]) || 0), 0);
+      if (used) this.countTokens(tab, null, null, { used });
+    }
+    if (m.type === "result" && isClaude(tab.model)) {
+      const windows = Object.values(m.modelUsage || {}).map((x) => Number(x.contextWindow) || 0).filter(Boolean);
+      this.countTokens(tab, reply, usageHub.fromResult(m), windows.length ? { window: Math.max(...windows) } : null);
+    }
+    if (reply && !m.parent_tool_use_id && m.type === "assistant" && m.message && m.message.model) {
+      tab.modelName = shownModel(tab,m.message.model);
+      this.post({ type: "modelName",tabId: tab.id,name: tab.modelName });
+    }
     if (m.type === "kural_image" && r.turn) {   // (Kural's engine: a picture from the model)
       try {
         const block = { k: "image", path: this.saveImage(m.data, m.mime) };
@@ -1145,6 +1454,7 @@ class ChatView {
         const a = c.type === "tool_result" && c.is_error && r.agents.get(c.tool_use_id);
         if (a && a.state === "running") { a.state = "failed"; this.teamFinished(r, a); this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state }); }
       }
+      if (isClaude(tab.model)) this.routingCheckpoint(tab,r).catch(() => {});
     } else if (m.type === "result") {
       r.pendingSend = null;
       const working = [...r.agents.values()].filter((a) => a.state === "running");
@@ -1288,9 +1598,10 @@ class ChatView {
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
     setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
+    // (A connector that connects is only logged: the "Now connected" pop-ups added nothing, Adithya.)
+    if (added.length) log(`chat ${tab.id}: now connected: ${added.join(", ")}`);
     if (!this.shown(tab.id)) return;
     this.post({ type: "setup", tabId: tab.id, setup });
-    if (added.length) this.post({ type: "flash", text: `Now connected: ${added.join(", ")}` });
   }
 
   // The answer is complete (or stopped): close it and tidy up.
@@ -1302,6 +1613,7 @@ class ChatView {
     r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
+    if (this.router && (reply.models || []).length === 1) this.router.taskDone(reply.model,reply.ms,!m.is_error);
     tab.started = true;
     tab.updatedAt = Date.now();
     r.pendingSend = null;
@@ -1327,7 +1639,10 @@ class ChatView {
 
   // Stop no matter what state Claude is in.
   forceStop(tab, r) {
+    const routing = this.routingJobs.get(tab.id); if (routing) { routing.abort(); this.routingJobs.delete(tab.id); }
+    delete tab.routingState;
     if (r) {
+      if (r.checkpointAbort) r.checkpointAbort.abort();
       clearInterval(r.watchdog); clearInterval(r.busyTimer);
       if (r.teamFile) fs.rm(r.teamFile, { force: true }, () => {});
       r.stale = true;
@@ -1361,7 +1676,7 @@ class ChatView {
     } catch (e) { log(`chat: couldn't list changes: ${e.message}`); }
   }
 
-  patchOf(msg) { return { waitingFor: msg.waitingFor, running: msg.running, error: msg.error, errorWho: msg.errorWho, changes: msg.changes, ms: msg.ms, note: msg.note, blocks: msg.blocks, planReady: msg.planReady, planBuilt: msg.planBuilt }; }
+  patchOf(msg) { return { waitingFor: msg.waitingFor, running: msg.running, error: msg.error, errorWho: msg.errorWho, changes: msg.changes, ms: msg.ms, note: msg.note, blocks: msg.blocks, planReady: msg.planReady, planBuilt: msg.planBuilt, model: msg.model, models: msg.models, routing: msg.routing, contextSelection: msg.contextSelection }; }
 
   // Claude (or a team member) wants to edit a file or run a command.
   async onPermission(tab, r, req) {
@@ -1398,7 +1713,7 @@ class ChatView {
     // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
     const onDevice = req.tool_name === "DeviceCommand" || req.tool_name === "DeviceWrite";
     if (tab.mode === "auto" || (onDevice ? !!tab.device && tab.allowAllDevice === tab.device : tab.allowAll)) return { allow: true };
-    // Agent mode: running commands, fetching web pages ask you first.
+    // Agent mode: running commands asks you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
     const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
@@ -1536,7 +1851,9 @@ class ChatView {
       case "localDelete": await this.deleteLocal(m.name); break;
       case "installOllama": installOllama(); break;
       case "openWorkspace": this.openWorkspaceOf(m.id); break;
-      case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || []); break;
+      case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
+        Number.isInteger(m.editIndex) ? m.editIndex : null); break;
+      case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
@@ -1594,6 +1911,8 @@ class ChatView {
       } break;
       case "finishTeam": if (tab) this.finishTeam(tab); break;
       case "stop": {
+        const routing = this.routingJobs.get(tab.id);
+        if (routing) { this.forceStop(tab,this.runtime.get(tab.id)); break; }
         const r = this.runtime.get(tab.id);
         // Agents working in the background don't stop on an interrupt, and a paused lead has
         // nothing to interrupt: end the whole process. The conversation is saved, so the next
@@ -1608,7 +1927,12 @@ class ChatView {
       }
       case "setModel": {
         if (!validModel(m.model)) return;
+        const choosing = this.routingJobs.get(tab.id); if (choosing) choosing.abort();
+        const checkpoint = this.runtime.get(tab.id); if (checkpoint && checkpoint.checkpointAbort) checkpoint.checkpointAbort.abort();
         const was = tab.model;
+        // Right after an Auto answer, picking another model says Auto chose wrong for this kind of request.
+        if (tab.autoRoute && m.model !== was && tab.status === "idle") this.routerFeedback(tab, "better", m.model);
+        tab.autoRoute = false;
         tab.model = m.model;
         const r = this.runtime.get(tab.id);
         if (engineOf(m.model) !== engineOf(was) || isLocal(m.model)) {
@@ -1624,8 +1948,16 @@ class ChatView {
         this.remember(tab); this.postTabs(); this.save();
         break;
       }
+      case "setRouterProfile": {
+        if (!tab || !["balance","cost","intelligence"].includes(m.profile)) break;
+        tab.autoRoute = true; tab.routingProfile = m.profile; tab.effortPinned = false;
+        this.remember(tab); this.postTabs(); this.save();
+        if (tab.status !== "idle") this.post({ type: "flash",text: "The routing profile applies at the next supported checkpoint or message" });
+        break;
+      }
+      case "routerPanel": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "setEffort": if (valid(EFFORTS, m.effort)) {
-        tab.effort = m.effort; this.remember(tab); this.postTabs(); this.save();
+        tab.effort = m.effort; tab.effortPinned = !!tab.autoRoute; this.remember(tab); this.postTabs(); this.save();
         if (tab.status === "idle") this.warm(tab);
         else this.post({ type: "flash", text: "Intensity applies from your next message" });   // set when Claude starts
       } break;
@@ -1727,6 +2059,8 @@ class ChatView {
       if (m.action === "undo") { if (await this.changes.undo(c.id)) { c.state = "undone"; if (this.activity) this.activity.undone(c.rel); } }
       if (m.action === "keep") { this.changes.keep(c.id); c.state = "kept"; }
     }
+    // Every change of an Auto answer undone: that model didn't manage this kind of request.
+    if (msg.routing && msg.changes.length && msg.changes.every((c) => c.state === "undone")) this.routerFeedback(tab, "bad", null, m.msgIndex);
     this.post({ type: "patch", tabId: tab.id, index: m.msgIndex, msg: this.patchOf(msg) });
     this.save();
   }

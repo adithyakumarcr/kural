@@ -82,8 +82,10 @@ class Attachments {
   }
 
   // The message for Claude: your text, plus each attachment in the best form Claude can take.
-  content(prompt, ids) {
-    const list = (ids || []).map((id) => this.items.get(id)).filter(Boolean);
+  content(prompt, ids, previous = []) {
+    const attached = (ids || []).map((id) => this.items.get(id)).filter(Boolean);
+    const paths = new Set(attached.map((a) => a.path));
+    const list = [...attached, ...previous.filter((a) => { if (paths.has(a.path)) return false; paths.add(a.path); return true; })];
     if (!list.length) return { content: prompt, meta: [] };
     const blocks = [];
     const notes = [];
@@ -106,7 +108,7 @@ class Attachments {
       } catch { notes.push(`${a.path} (couldn't be read)`); }
     }
     const intro = notes.length ? `\n\nI attached: ${notes.join("; ")}.` : "";
-    const meta = list.map((a) => ({ name: a.name, kind: a.kind, path: a.path, ...(a.original ? { original: a.original } : {}) }));
+    const meta = attached.map((a) => ({ name: a.name, kind: a.kind, path: a.path, ...(a.original ? { original: a.original } : {}) }));
     for (const id of ids) this.items.delete(id);
     return { content: blocks.length ? [{ type: "text", text: prompt + intro + text }, ...blocks] : prompt + intro + text, meta };
   }
