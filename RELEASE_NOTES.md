@@ -1,18 +1,19 @@
 ## Not released yet
 
-- **Model Router like Cursor's Auto.** Profiles **Balance**, **Cost** and **Intelligence**, and Auto picks the intensity
-  too. The profile and the size of the task decide together: a quick question goes to a light model even under
-  Intelligence, and complex work gets the most capable model even under Cost. Auto picks from your Claude, Google
-  Gemini and ChatGPT (Codex) models and switches between those AIs with the conversation handed over; models on this
-  computer are only picked by you, and there's no list of models to tick any more. It leans away from an AI past half its
-  usage limit and skips one at 98 %, keeps a long chat on its AI on close calls, reads what you attached (files, error
-  output, a picked element), and learns from what you do after its answers (**Kural: Forget What Model Router Learned**).
-  When a conversation is too big to hand over, it stays with the current AI instead of refusing. Hover over the model on
-  an answer to see why it was chosen.
+- **Model Router like Cursor's Auto.** Pick **Auto → Balance**, **Cost** or **Intelligence** in the chat's model menu (the
+  only place for it), and Auto picks the intensity too. The profile and the size of the task decide together: a quick
+  question goes to a light model even under Intelligence, and complex work gets the most capable model even under Cost.
+  Auto always picks from every cloud model of your Claude, Google Gemini and ChatGPT (Codex), and switches between those
+  AIs with the conversation handed over; models on this computer are only picked by you, and there's no list of models
+  to choose from. It leans away from an AI past half its usage limit and skips one at 98 %, keeps a long chat on its AI
+  on close calls, reads what you attached (files, error output, a picked element), and learns from what you do after its
+  answers (**Kural: Forget What Model Router Learned**). When a conversation is too big to hand over, it stays with the
+  current AI instead of refusing. Hover over the model on an answer to see why it was chosen.
 - **Auto reads requests much better.** Kural's own word classifier (trained on 270 labelled requests) replaces the
   keyword rules: 74 % of task sizes right instead of 53 %, with no download. Helper models through Ollama get more right:
   MiniLM 82 %, Granite 87 % (63 MB), Qwen3 Embedding 90 % (640 MB), all under 50 ms. Choose one in the Model Router panel
-  and click **Download**. Small language models were measured too and were slower than the 200 ms budget.
+  (its info button explains each) and click **Download**. Small language models were measured too and were slower than
+  the 200 ms budget.
 - **The web in every mode.** Claude can now search the web and read pages in Plan and Ask too (before: only Agent and
   Auto), without asking. ChatGPT (Codex) uses live web search instead of its cached copy of the web; the commands it
   runs still have no internet. Google Gemini already searched the web with its own tools.

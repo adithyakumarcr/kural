@@ -2,7 +2,7 @@
 
 Select **Auto → Balance, Cost or Intelligence** in the chat's model menu (Cursor's names for the same three trade-offs). For every message Auto picks the model **and the intensity** from the AIs you set up: **Claude, Google Gemini and ChatGPT (Codex)**. Models on this computer (Ollama) are never picked by Auto; pick them yourself in the menu. Each answer shows the model; hover over that line for the reasons. Selecting a model manually turns Auto off for that chat.
 
-Open **Model Router** from the status bar, the chat model menu, Kural Settings, or the command **Kural: Model Router**. The panel shows what Auto prefers, what reads your requests (**Native**, **MiniLM**, **Granite** or **Qwen3**, with a **Download** button when a helper's model is missing), the models Auto picks from (every model of the AIs you set up, each with its level, and how much of its usage limit is used once past half), and the last choice with its reasons. There's nothing to switch on or off per model.
+Open **Model Router** from the status bar, the chat model menu, Kural Settings, or the command **Kural: Model Router**. The panel shows what reads your requests (**Native**, **MiniLM**, **Granite** or **Qwen3**, with a **Download** button when a helper's model is missing; the info button next to them explains each), which AIs Auto picks from, and the last choice with its reasons. The profile is picked only in the chat's model menu. There's no list of models to choose from: Auto always uses every cloud model of the AIs you set up (hover over that line for their names).
 
 | Profile | What Auto does | Intensity |
 |---|---|---|
@@ -53,7 +53,7 @@ Enable each integration in Settings (`kural.modelRouter.search`, `.context`, `.t
 
 - **Search & Ask ranking:** locally retrieve up to 16 candidate snippets, rank them, and show verified file/line locations. Weak or empty matches fall back to the existing AI search. Results are candidates to inspect; they do not constitute a generated explanation. Retrieval is bounded, honors ignore and exclude settings, uses unsaved editor text, and excludes `.env*`, PEM files, dependencies and paths outside the workspace.
 - **Retrieve useful chat context:** add up to five ranked optional snippets within a character budget. Explicit attachments, selected context and project instructions remain intact. Native ranking uses lexical relevance; MiniLM uses similarity. Ranking scores are heuristics, not calibrated probabilities.
-- **Auto Tab engine selection:** apply native profile and allowlist rules synchronously when Tab's engine is Auto. Speed/Balanced prefer a ready local engine; Quality prefers available Claude unless token efficiency is requested. No classifier or embedding inference runs on the keystroke path. The configured FIM model appears as “Tab only” in the allowlist and is never selected to answer a chat.
+- **Auto Tab engine selection:** when Tab's engine is Auto, the profile setting (`kural.modelRouter.profile`) picks one engine synchronously: Cost and Balance prefer a ready local engine; Intelligence prefers available Claude unless token efficiency is requested. No classifier or embedding inference runs on the keystroke path. Tab's own local model is never selected to answer a chat.
 
 Local assistance and automatic chat retrieval are disabled in Restricted Mode. Native selection still observes capabilities and model restrictions.
 
