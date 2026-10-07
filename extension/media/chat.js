@@ -299,12 +299,15 @@
   const input = el("div", { class: "input", contenteditable: "plaintext-only", role: "textbox", "aria-multiline": "true", "data-placeholder": "" });
   const popupEl = el("div", { class: "popup hidden" });
   const menuEl = el("div", { class: "menu hidden" });
-  const modeBtn = el("button", { class: "pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
+  const modeBtn = el("button", { class: "pick mode-pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
   const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
+  // How full this chat's context window is (a ring + "38k"), and on hover this chat's tokens (read, from cache, written).
+  const ctxEl = el("span", { class: "ctx-meter hidden" });
   const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
-  const composer = el("div", { class: "composer" }, popupEl, chipsEl, input,
-    el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }),
+  const editBar = el("div", { class: "edit-bar hidden" });   // "Editing an earlier message …" (startEdit)
+  const composer = el("div", { class: "composer" }, popupEl, editBar, chipsEl, input,
+    el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }), ctxEl,
       sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
   const visitBar = el("div", { class: "visit hidden" });
@@ -459,6 +462,8 @@
         if (end) body.scrollTop = body.scrollHeight;
       } else body.textContent = b.text;
     } else return rerender(i);
+    const line = listEl.querySelector(`[data-i="${i}"] .steps-line`);
+    if (line) line.textContent = currentStep(msg, layout(msg).group);
     follow();
   }
 
@@ -472,8 +477,8 @@
 
   // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock), and a
   // new block is added without redrawing the others (appendBlock).
-  function blockNode(m, b, k) {
-    const w = el("div", { class: "blk", "data-b": k });
+  function blockNode(m, b, k, inSteps = false) {
+    const w = el("div", { class: `blk${inSteps && b.k === "text" ? " interim" : ""}`, "data-b": k });
     if (b.k === "text") w.append(...markdown(b.text, !m.running));
     else if (b.k === "tool") w.append(toolNode(b));
     else if (b.k === "perm") w.append(permNode(b));
@@ -490,7 +495,9 @@
     const prev = out && (k === 0 ? null : out.querySelector(`[data-b="${k - 1}"]`));
     // (A permission or question card also changes the line under the answer ("Waiting for your OK above"): redraw.)
     if (pending === i) return;   // a redraw of this answer is coming anyway
-    if (!out || (k > 0 && !prev) || pending !== null || msg.blocks[k].k === "perm" || msg.blocks[k].k === "question") return rerender(i);
+    // (An answer with steps is laid out again: a new step pulls the text before it into the dropdown.)
+    if (!out || (k > 0 && !prev) || pending !== null || msg.blocks[k].k === "perm" || msg.blocks[k].k === "question" ||
+      layout(msg).group.length) return rerender(i);
     // A previous live thinking box is finished once something comes after it.
     if (prev && msg.blocks[k - 1].k === "think") prev.replaceWith(blockNode(msg, msg.blocks[k - 1], k - 1));
     const node = blockNode(msg, msg.blocks[k], k);
@@ -499,9 +506,43 @@
     follow();
   }
 
+  // Files the answers after message i changed that aren't undone (what "Restore code" would put back).
+  function laterFiles(i) {
+    const files = new Set();
+    for (const m of S.tab.messages.slice(i + 1)) if (m.role === "assistant") for (const c of m.changes || []) if (c.state !== "undone") files.add(c.rel);
+    return files.size;
+  }
+  // Editing an earlier message: its text (and @ mentions) go into the input box, with a bar saying what sending does.
+  const busyNote = () => { const f = document.querySelector(".flash") || document.body.appendChild(el("div", { class: "flash" }));
+    f.textContent = "Wait for the answer to finish (or stop it) first"; f.classList.add("on"); clearTimeout(S.flashTimer); S.flashTimer = setTimeout(() => f.classList.remove("on"), 1600); };
+  function startEdit(i) {
+    if (S.tab.status !== "idle") return busyNote();
+    const m = S.tab.messages[i];
+    S.editing = { tabId: S.tab.id, index: i, attachments: (m.attachments || []).length };
+    input.replaceChildren(...(m.segments || []).map((x) => x.t === "text" ? document.createTextNode(x.v) : pillNode(x.ctx, false)));
+    renderEditBar(); renderAll();
+    input.focus();
+    const r = document.createRange(); r.selectNodeContents(input); r.collapse(false);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+  function cancelEdit() { if (!S.editing) return; S.editing = null; input.replaceChildren(); renderEditBar(); renderAll(); }
+  function renderEditBar() {
+    const on = S.editing && S.tab && S.editing.tabId === S.tab.id;
+    editBar.classList.toggle("hidden", !on);
+    if (on) editBar.replaceChildren(icon("edit"), el("span", { class: "edit-text" }, "Editing an earlier message: sending replaces it and everything after it." +
+      (S.editing.attachments ? " Add its attachments again with +." : "")), el("button", { class: "cb", onclick: () => cancelEdit() }, "Cancel"));
+  }
+
   function messageNode(m, i) {
     if (m.role === "user") {
-      return el("div", { class: "msg user", "data-i": i },
+      // Hover: Edit (what you send replaces this message and everything after it) and Restore code (the files the AI
+      // changed after this message go back; the conversation stays).
+      const idle = S.tab.status === "idle" && !S.tab.visiting, later = laterFiles(i);
+      const actions = idle ? el("div", { class: "msg-actions" },
+        el("button", { class: "msg-act", title: "Edit this message: what you send replaces it and everything after it", onclick: () => startEdit(i) }, icon("edit")),
+        later ? el("button", { class: "msg-act", title: `Restore the code to before this message (${later} file${later === 1 ? "" : "s"} the AI changed after it)`,
+          onclick: () => S.tab.status !== "idle" ? busyNote() : post({ type: "restore", tabId: S.tab.id, index: i }) }, icon("discard")) : null) : null;
+      return el("div", { class: `msg user${S.editing && S.editing.tabId === S.tab.id && S.editing.index === i ? " editing" : ""}`, "data-i": i }, actions,
         (m.contexts || []).length || (m.mode && m.mode !== "agent") ? el("div", { class: "ctx-line" },
           m.mode && m.mode !== "agent" ? el("span", { class: `mode-tag ${m.mode}` }, modeLabel(m.mode)) : null,
           (m.contexts || []).map((c) => el("span", { class: "ctx" }, icon("file"), " ", c.name || base(c.path)))) : null,
@@ -522,7 +563,9 @@
     if (m.models && m.models.length) out.append(el("div", { class: "model-attribution", ...(m.routing && m.routing.reason ? { title: m.routing.reason } : {}) },m.models.map(modelLabel).join(" → ") +
       (m.routing ? ` · ${m.routing.source || "native"} · ${Number(m.routing.ms).toFixed(1)} ms routing` : "")));
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
-    (m.blocks || []).forEach((b, k) => out.append(blockNode(m, b, k)));
+    const L = layout(m);
+    if (L.group.length) out.append(stepsNode(m, L.group));
+    L.outside.forEach((k) => out.append(blockNode(m, m.blocks[k], k)));
     const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
     const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
     if (m.running && waiting) out.append(el("div", { class: "working" }, el("span", { class: "wait-dot" }), asking ? "Waiting for your answer above" : "Waiting for your OK above"));
@@ -555,6 +598,54 @@
   setInterval(() => {
     for (const e of listEl.querySelectorAll(".elapsed")) e.textContent = workingText(+e.dataset.t0);
   }, 1000);
+
+  // ONE dropdown per answer for how it worked: thoughts, tool steps (reads, searches, commands, edits…), permission cards
+  // you've answered, and the short notes the model writes between them, so the chat shows the answer, not a stack of
+  // "Thought for…" boxes and commands (Adithya). What stays outside: the text after the last step (the answer), anything
+  // waiting for you (a permission or a question), agents' cards, the team's messages and pictures.
+  const isStep = (b) => b.k === "think" || (b.k === "tool" && b.name !== "mcp__team__post") || (b.k === "perm" && b.state !== "pending");
+  function layout(m) {
+    const blocks = m.blocks || [];
+    let last = -1;
+    blocks.forEach((b, k) => { if (isStep(b)) last = k; });
+    const group = [], outside = [];
+    blocks.forEach((b, k) => { if (last >= 0 && k <= last && (isStep(b) || b.k === "text")) group.push(k); else outside.push(k); });
+    return { group, outside };
+  }
+  const STEP_KIND = { Bash: "command", run_command: "command", Read: "read", Grep: "search", Glob: "search", read_file: "read", list_dir: "search",
+    Edit: "edit", Write: "edit", NotebookEdit: "edit", write_file: "edit", WebSearch: "web search", WebFetch: "web page" };
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : w.endsWith("search") ? "es" : "s"}`;
+  function stepsLabel(m, ks) {
+    const count = {};
+    for (const k of ks) {
+      const b = m.blocks[k];
+      const kind = b.k === "think" ? "thought" : b.k === "tool" ? STEP_KIND[(b.name || "").replace(/^mcp__device__/, "")] || "step" : null;
+      if (kind) count[kind] = (count[kind] || 0) + 1;
+    }
+    const order = ["thought", "read", "search", "edit", "command", "web search", "web page", "step"];
+    const parts = order.filter((k) => count[k]).map((k) => plural(count[k], k));
+    const secs = m.ms ? Math.max(1, Math.round(m.ms / 1000)) : 0;
+    return `${m.running ? "Working…" : secs ? `Worked for ${secs} s` : "Worked"}${parts.length ? ` · ${parts.join(", ")}` : ""}`;
+  }
+  // While it works: what it's doing now (its latest thought, or the step).
+  function currentStep(m, ks) {
+    const b = ks.length && m.blocks[ks[ks.length - 1]];
+    if (!b || !m.running) return "";
+    if (b.k === "think") return lastLine(b.text);
+    if (b.k === "tool") return `${TOOL_VERB[b.name] || deviceVerb(b.name) || prettyTool(b.name)} ${b.detail || ""}`;
+    if (b.k === "text") return lastLine(b.text);
+    return "";
+  }
+  function stepsNode(m, ks) {
+    const node = el("div", { class: `steps${m._stepsOpen ? " open" : ""}${m.running ? " live" : ""}` });
+    node.append(
+      el("div", { class: "steps-head", title: m._stepsOpen ? "Hide the steps" : "Show every step", onclick: () => {
+        m._stepsOpen = !node.classList.contains("open"); node.classList.toggle("open", m._stepsOpen); } },
+        el("span", { class: "think-caret" }), el("span", { class: "steps-label" }, stepsLabel(m, ks)),
+        m.running ? el("span", { class: "steps-line" }, currentStep(m, ks)) : null),
+      el("div", { class: "steps-body" }, ks.map((k) => blockNode(m, m.blocks[k], k, true))));
+    return node;
+  }
 
   const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page" };
   // A linked device's tools.
@@ -758,6 +849,26 @@
       remove ? el("button", { class: "chip-x", title: "Remove", onclick: remove }, icon("close")) : null);
   }
 
+  const tok = (x) => { const v = Math.max(0, Math.round(Number(x) || 0)); return v >= 1e6 ? `${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(v >= 1e4 ? 0 : 1)}k` : String(v); };
+  function renderContext(t) {
+    const c = t.context, k = t.tokens;
+    if (!c && !k) { ctxEl.classList.add("hidden"); return; }
+    const used = c ? c.used || 0 : 0, win = c && c.window, share = win ? Math.min(1, used / win) : 0;
+    ctxEl.classList.remove("hidden");
+    ctxEl.classList.toggle("high", share >= .8);
+    // A ring that fills up (SVG would need its own CSS rules; a conic gradient is enough).
+    const ring = el("span", { class: "ctx-ring" }); ring.style.setProperty("--p", `${Math.round(share * 360)}deg`);
+    // (Short: the percentage, or the tokens when the window isn't known; the numbers are in the tooltip.)
+    const label = c ? (win ? `${Math.max(1, Math.round(share * 100))}%` : tok(used)) : `${tok((k.input || 0) + (k.cacheRead || 0) + (k.cacheWrite || 0))} read`;
+    ctxEl.replaceChildren(...(win ? [ring] : []), el("span", { class: win ? "ctx-text" : "" }, label));
+    const read = k ? (k.input || 0) + (k.cacheRead || 0) + (k.cacheWrite || 0) : 0;
+    ctxEl.title = [
+      c ? `Context: ${used.toLocaleString()} tokens${win ? ` of ${win.toLocaleString()} (${Math.round(share * 100)}%)` : ""} in this conversation now` : null,
+      k ? `This chat so far: ${tok(read)} tokens read${k.cacheRead ? ` (${tok(k.cacheRead)} from cache)` : ""}, ${tok(k.output || 0)} written` : null,
+      share >= .8 ? "Nearly full: the AI starts summarising or forgetting the oldest parts. A new chat starts empty." : null,
+      "All your AIs, per day: AI Usage panel"].filter(Boolean).join("\n");
+  }
+
   function renderFoot() {
     const t = S.tab;
     if (!t) return;
@@ -781,6 +892,7 @@
     const mood = t.mood && t.mood !== "default" ? ` · ${moodLabel(t.mood)}` : "";
     const routing = t.autoRoute ? `Auto · ${cap(profileName(t.routingProfile))} · ` : "";
     modelBtn.replaceChildren(`${routing}${t.routingState || t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${team}`, icon("chevron-down", "chev"));
+    renderContext(t);
     sendBtn.replaceChildren(icon(running ? "debug-stop" : "arrow-up"));
     sendBtn.title = running ? "Stop (Esc)" : "Send (Enter)";
     sendBtn.classList.toggle("stop", running);
@@ -821,7 +933,8 @@
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     // Keep the draft until the extension accepts it, including when routing cannot find an eligible model.
     S.pendingSend = { tabId: t.id, requestId, segments: JSON.stringify(segments), attachments: S.attachments.map((a) => a.id) };
-    post({ type: "send", tabId: t.id, requestId, segments, contexts, attachments: S.pendingSend.attachments });
+    const editIndex = S.editing && S.editing.tabId === t.id ? S.editing.index : undefined;
+    post({ type: "send", tabId: t.id, requestId, segments, contexts, attachments: S.pendingSend.attachments, editIndex });
     closePopup(); closeHistory();
   }
 
@@ -929,6 +1042,7 @@
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendOrStop(); }
     else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); requestAnimationFrame(caretIntoView); }
     else if (e.key === "Escape" && S.tab && S.tab.status !== "idle") post({ type: "stop", tabId: S.tab.id });
+    else if (e.key === "Escape" && S.editing) { e.preventDefault(); cancelEdit(); }   // (Escape leaves editing an earlier message)
   });
   // Pasting code copied from the editor turns it into a "main.py (L3-9)" reference.
   let pasteRange = null;
@@ -1401,13 +1515,13 @@ ${d.system}` : ""}`,
         tabBar.classList.toggle("hidden", !!m.single);
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
           mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device,
-          autoRoute: s.autoRoute,routingProfile: s.routingProfile,routingState: s.routingState,modelName: s.modelName }); }
+          autoRoute: s.autoRoute,routingProfile: s.routingProfile,routingState: s.routingState,modelName: s.modelName,tokens: s.tokens,context: s.context }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
         break;
       case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
-      case "full": S.tab = m.tab; renderAll(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
+      case "full": S.tab = m.tab; renderAll(); renderEditBar(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
       case "localModels": S.local = m; renderLocal(); if (S.menu === "model") openMenu.refresh(); break;
       case "localSearch": S.localSearch = m; S.localSearching = false; renderLocal(); break;
@@ -1437,6 +1551,7 @@ ${d.system}` : ""}`,
           if (JSON.stringify(readInput()) === S.pendingSend.segments) input.replaceChildren();
           S.attachments = S.attachments.filter((a) => !S.pendingSend.attachments.includes(a.id));
           S.pendingSend = null; renderChips();
+          if (S.editing && S.editing.tabId === S.tab.id) { S.editing = null; renderEditBar(); }
         }
         for (const x of m.msgs) S.tab.messages.push(x); renderAll();
       } break;

@@ -1,18 +1,43 @@
-// Tracks files an Agent changes, so you can Review, Keep or Undo each one.
-// Before Claude edits a file, Kural saves its current content (a "snapshot").
-// Undo writes the snapshot back; Review opens a diff: snapshot vs. now.
+// Tracks files an Agent changes, so you can Review, Keep or Undo each one, and put the code back as it was before any
+// message of the chat ("Restore code", or editing an earlier message).
+// Before the AI edits a file, Kural saves its current content (a "snapshot", a checkpoint). Undo writes the snapshot
+// back; Review opens a diff: snapshot vs. now. Snapshots are also saved to disk (globalStorage checkpoints/), so a chat
+// can be rolled back after Kural restarts and after you pressed Keep; they're deleted after 30 days.
 
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { diffLines } = require("../edit/diff");
 
 const SCHEME = "kural-before";
+const MAX_DISK = 10 * 1024 * 1024;   // a bigger file's snapshot stays in memory only
+const KEEP_DAYS = 30;
+const hash = (text) => text == null ? null : crypto.createHash("sha1").update(text).digest("hex");
 
 class ChangeTracker {
-  constructor() {
+  constructor(dir = null) {
+    this.dir = dir;
     this.snapshots = new Map(); // id -> { file, content (null = file didn't exist) }
     this.emitter = new vscode.EventEmitter();
+    if (dir) setTimeout(() => this.cleanup(), 30000);
+  }
+
+  diskFile(id) { return this.dir && /^[\w-]+$/.test(id) ? path.join(this.dir, `${id}.json`) : null; }
+  get(id) {
+    if (this.snapshots.has(id)) return this.snapshots.get(id);
+    try { const s = JSON.parse(fs.readFileSync(this.diskFile(id), "utf8")); if (s && s.file) { this.snapshots.set(id, s); return s; } } catch { /* gone */ }
+    return null;
+  }
+  // Old checkpoints go (a chat older than that can't be rolled back any more).
+  cleanup(days = KEEP_DAYS) {
+    try {
+      const cut = Date.now() - days * 86400000;
+      for (const f of fs.readdirSync(this.dir)) {
+        const p = path.join(this.dir, f);
+        try { if (fs.statSync(p).mtimeMs < cut) fs.unlinkSync(p); } catch { /* in use */ }
+      }
+    } catch { /* no folder yet */ }
   }
 
   register(context) {
@@ -33,13 +58,17 @@ class ChangeTracker {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.snapshots.set(id, { file, content });
     turn.snaps[file] = id;
+    if (this.dir && (content == null || content.length <= MAX_DISK)) {
+      try { fs.mkdirSync(this.dir, { recursive: true }); fs.writeFileSync(this.diskFile(id), JSON.stringify({ file, content })); } catch { /* memory only */ }
+    }
   }
 
   // What changed in this turn, for the "Files changed" card.
   summary(turn, root) {
     const out = [];
     for (const [file, id] of Object.entries(turn.snaps)) {
-      const snap = this.snapshots.get(id);
+      const snap = this.get(id);
+      if (!snap) continue;
       let now = null;
       try { now = fs.readFileSync(file, "utf8"); } catch { /* deleted */ }
       if (snap.content === now) continue;
@@ -48,20 +77,21 @@ class ChangeTracker {
         id, file, rel: require("../workspace").label(file),
         added: ops.filter((o) => o.op === "add").length, removed: ops.filter((o) => o.op === "del").length,
         created: snap.content == null, deleted: now == null, state: "pending",
+        after: hash(now),   // the file as the AI left it: a later rollback can tell whether you changed it since
       });
     }
     return out;
   }
 
   async review(id) {
-    const s = this.snapshots.get(id);
+    const s = this.get(id);
     if (!s) return;
     const before = vscode.Uri.from({ scheme: SCHEME, path: s.file, query: `id=${id}` });
     await vscode.commands.executeCommand("vscode.diff", before, vscode.Uri.file(s.file), `${path.basename(s.file)} (before ↔ after)`);
   }
 
   async undo(id) {
-    const s = this.snapshots.get(id);
+    const s = this.get(id);
     if (!s) return false;
     const uri = vscode.Uri.file(s.file);
     if (s.content == null) await vscode.workspace.fs.delete(uri, { useTrash: true }).then(undefined, () => {});
@@ -70,7 +100,15 @@ class ChangeTracker {
     return true;
   }
 
-  keep(id) { this.snapshots.delete(id); }
+  // Keep = done reviewing; the checkpoint stays (Restore code can still go back to before it).
+  keep() {}
+
+  // Whether `file` is still as the AI left it (after = its hash then).
+  unchangedSince(file, after) {
+    let now = null;
+    try { now = fs.readFileSync(file, "utf8"); } catch { /* deleted */ }
+    return hash(now) === after;
+  }
 }
 
-module.exports = { ChangeTracker };
+module.exports = { ChangeTracker, hash };
