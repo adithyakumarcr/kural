@@ -1,5 +1,8 @@
-## Not released yet
+## What's new in 1.1.0-alpha.7
 
+- **What's new after an update.** After Kural updates (Check for Updates, or a new version you installed yourself), the
+  first start opens **What's New in Kural**: these notes for every version since the one you had. Open it again any time
+  with **Kural: What's New**.
 - **Signed releases.** Every release has a checksum list signed with Kural's release key; updates install only files
   that match it. Releases without it are no longer installed automatically (install the next one by hand once).
   "Kural: Verify this installation..." checks the version you run. Releases also carry build provenance and an SBOM.

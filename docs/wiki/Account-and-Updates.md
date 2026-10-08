@@ -87,6 +87,9 @@ Kural checks for a new version once a day by itself and offers it in a small not
 **What's new**, **Later**). It never installs without asking. Turn the daily check off with the setting
 `kural.updates.autoCheck`.
 
+After an update, the first start opens **What's New in Kural**: the release notes of every version since the one you
+had (also when you installed the new version yourself). Open it again any time: Command Palette → **Kural: What's New**.
+
 Check yourself any time: **Help → Check for Updates…**, the Chat panel's **…** menu, or **Check for updates** in Kural
 Settings (with the switch for the daily check). Kural Settings also links to Get started, Tab Completion, all of Kural's
 settings, Kural's log, the guide, and asking for a feature.

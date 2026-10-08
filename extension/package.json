@@ -2,7 +2,7 @@
   "name": "kural",
   "displayName": "Kural",
   "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude, Google Gemini, ChatGPT (Codex), or your own model on this computer (Ollama, offline).",
-  "version": "1.1.0-alpha.6",
+  "version": "1.1.0-alpha.7",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -194,6 +194,11 @@
       {
         "command": "kural.checkForUpdates",
         "title": "Check for Updates...",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.whatsNew",
+        "title": "What's New",
         "category": "Kural"
       },
       {

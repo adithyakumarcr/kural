@@ -184,6 +184,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), puts the old version back if the
   install fails, and says at the next start if it didn't finish. It installs only a release whose checksum list is signed
   by Kural's release key and matches the download; "Kural: Verify this installation..." checks the running version's list.
+  After an update (also one installed by hand), the first start opens "What's New in Kural": the release notes of every
+  version since the one you had. "Kural: What's New" opens it any time.
 - Installing on Windows: Windows says "Windows protected your PC" with only "Don't run", because the installer isn't
   code-signed yet: click the small "More info" link, then "Run anyway" ("Unknown publisher"). Kural's own updates don't
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.
