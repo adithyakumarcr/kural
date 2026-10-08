@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  # Kural has no npm dependencies; this is ready for the day a devDependency appears.
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
