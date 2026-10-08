@@ -175,7 +175,7 @@ function activate(context) {
   router.usageOf = (provider) => usageHub.current(provider);
   router.memory = new RouterMemory(() => context.workspaceState.get("kural.router.memory.v1"), (v) => context.workspaceState.update("kural.router.memory.v1", v));
   chat.router = router;
-  new RouterPanel(context,router,() => chat.postLocal()).register();
+  new RouterPanel(context, router).register();
   chat.postLocal().catch(() => {});
   brain.setModelSource(() => { const t = chat.active(); return t ? t.model : chat.lastChoices().model; }, () => getStarted.localModel);
   // Devices over SSH (+ → Link device in the chat, Kural: Devices): passwords encrypted in SecretStorage.
