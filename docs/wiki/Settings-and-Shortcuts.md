@@ -30,12 +30,16 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.chat.intensity` | medium | intensity for your very first chat |
 | `kural.chat.mode` | agent | mode for your very first chat |
 | `kural.chat.fullClaudeCodeSetup` | on | the chat uses your whole Claude Code setup (connectors, MCP servers, plugins, skills, hooks) |
+| `kural.notifications` | whenAway | a system notification when a chat's answer is done or needs you: `whenAway` (Kural's window isn't in front, or that chat isn't on screen), `always`, `off`. macOS asks once whether Kural may send notifications (if you chose Don't Allow: System Settings → Notifications → Kural) |
+| `kural.chat.didYouKnow` | on | a short "Did you know?" tip under an answer while it's being worked on |
+| `kural.chat.moods` | (none) | your own chat moods (name, hint, instructions); edit them in Kural Settings → Moods |
 | `kural.fontSize` | 0 | text size in the chat and Ask panels (0 = the editor's size) |
 | `kural.tabCompletion.*` | | see [[Tab Completion]] |
 | `kural.localModels.contextLength` | 32768 | how much a model on your computer can look at once |
 | `kural.claudePath` | (empty) | where the `claude` program is, if Kural can't find it |
 | `kural.agyPath`, `kural.codexPath` | (empty) | where the `agy` (Google Gemini) / `codex` programs are, if Kural can't find them |
 | `kural.updates.autoCheck` | on | check for a new Kural version once a day |
+| `kural.showDebugViews` | off | show VS Code's Run and Debug side bar and the Debug Console and Ports panels (hidden to keep Kural simple; while you debug with F5, the debug views show anyway) |
 
 ## Themes
 

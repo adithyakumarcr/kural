@@ -33,5 +33,10 @@ needs to be fast.
 ## Settings
 
 - `kural.localModels.contextLength` (default 32768): how much text the model can look at once (your conversation, the
-  files it read, Kural's instructions). More needs more memory.
+  files it read, Kural's instructions). More needs more memory: a 9B model at 32768 takes about 7.8 GB, and on a 16 GB
+  computer Ollama then unloads Tab Completion's model to make room (measured: docs/benchmarks/memory-2026-10-08.md).
+  16384 roughly halves the part the context takes.
+
+**Tab Completion while this chat answers:** Ollama runs both models on the same graphics chip, so Tab's suggestions
+slow down while the chat answers; if Claude is set up, Claude helps Tab meanwhile (see [[Tab Completion]]).
 - `kural.tabCompletion.ollamaUrl` (default `http://127.0.0.1:11434`): where Ollama runs (also for the chat).

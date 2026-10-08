@@ -22,10 +22,15 @@ function listing(dir) {
   try { return fs.readdirSync(dir).sort().map((n) => `${n}@${stamp(path.join(dir, n))}`).join(","); } catch { return "-"; }
 }
 
-// ~/.claude.json: only the parts that decide which MCP servers you have.
+// ~/.claude.json: only the parts that decide which MCP servers you have. Read again only when the file changed (its
+// size and date): it's checked every few seconds in every window, and Claude Code rewrites it often but not every time.
+const parsed = new Map();   // file -> { stamp, data }
 function mcpPart(file, folders) {
   try {
-    const d = JSON.parse(fs.readFileSync(file, "utf8"));
+    const now = stamp(file);
+    let hit = parsed.get(file);
+    if (!hit || hit.stamp !== now) { hit = { stamp: now, data: JSON.parse(fs.readFileSync(file, "utf8")) }; parsed.set(file, hit); }
+    const d = hit.data;
     const proj = d.projects || {};
     return JSON.stringify([d.mcpServers || {}, folders.map((f) => {
       const p = proj[f] || {};

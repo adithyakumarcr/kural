@@ -4,12 +4,20 @@
 - **"Kural: finish setup" in the status bar:** click it. [[Getting Started|Getting Started]] shows which step is missing
   and how to fix it.
 - **Claude says I'm not logged in:** click the person icon (Account) → **Log in**.
-- **No Tab suggestions:** click **Tab Completion** in the status bar. Is it on? Which engine? "Last suggestion" shows
+- **No Tab suggestions:** click the sparkle icon (Tab Completion) in the status bar. Crossed out = off. Which engine? "Last suggestion" shows
   whether suggestions arrive and how long they take. With **Local model**, the panel says whether Ollama and the model
   are ready.
 - **Terminal suggestions don't show:** they need Kural's terminal with shell integration (bash, zsh, fish, PowerShell)
   and the setting `kural.tabCompletion.terminal` on.
 - **A model on my computer is slow:** pick a smaller one, or lower `kural.localModels.contextLength`.
+- **Kural uses a lot of memory:** each chat keeps a Claude Code process (~120 MB) while it's open: close chats you
+  don't need. A model on your computer takes gigabytes while Ollama keeps it loaded (Tab Completion's model: 1.1 GB, for
+  30 minutes after your last suggestion). Kural's other helpers stop by themselves after a few minutes without use.
+  Measured in detail: `docs/benchmarks/memory-2026-10-08.md` in Kural's repository (`node scripts/bench-memory.js`
+  shows it for your own Kural).
+- **Where are Run and Debug, the Debug Console and Ports?** Hidden to keep Kural simple. Turn on the setting
+  `kural.showDebugViews` (Settings, search "debug views") and they're back at once. While you debug (F5), Run and Debug
+  and the Debug Console show anyway.
 - **Mac says Kural is damaged:** run `xattr -dr com.apple.quarantine /Applications/Kural.app` in Terminal.
 - **Windows says "Windows protected your PC" and only offers Don't run:** that's Microsoft Defender SmartScreen; it warns
   about every program that isn't code-signed and that it doesn't know yet, and Kural's installer isn't signed yet. Click

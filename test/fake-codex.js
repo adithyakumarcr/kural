@@ -18,6 +18,7 @@ let loginTimer = null;
 //   "fail"          an error (usage limit), then a failed turn
 //   "instructions"  says the developer instructions it got
 //   anything else   "You said: …" (and how many pictures came with it)
+// $FAKE_CODEX_INPUT_LOG: each turn's text (and how many pictures) is added to this file, one JSON per line.
 // Use it in Kural: the Codex path setting pointing at this file.
 const fs = require("fs"), os = require("os"), path = require("path");
 const file = process.env.FAKE_CODEX_FILE || path.join(os.tmpdir(), "kural-fake-codex-state");
@@ -138,6 +139,8 @@ async function run(threadId, turnId, th, p) {
   const input = p.input || [];
   const text = input.filter((x) => x.type === "text").map((x) => x.text).join("\n");
   const pics = input.filter((x) => x.type === "localImage" && fs.existsSync(x.path)).length;
+  // (A test can see exactly what a turn was given: $FAKE_CODEX_INPUT_LOG, one JSON per line.)
+  if (process.env.FAKE_CODEX_INPUT_LOG) fs.appendFileSync(process.env.FAKE_CODEX_INPUT_LOG, JSON.stringify({ text, pics }) + "\n");
   await sleep(10);
 
   if (/^hello/i.test(text)) {

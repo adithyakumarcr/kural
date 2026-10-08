@@ -86,11 +86,10 @@ class SearchView {
       cmd("kural.search.copyAll", toPage({ type: "cmd", what: "copyAll" })),
       cmd("kural.search.reveal", (c) => c && vscode.commands.executeCommand("revealInExplorer", vscode.Uri.file(c.path))),
       cmd("kural.search.dismiss", (c) => c && this.post({ type: "cmd", what: "dismiss", row: c })),
-      { dispose: () => { if (this.spare) this.spare.proc.kill(); if (this.current) this.current.proc.kill(); this.text.stop(); } },
+      { dispose: () => { clearTimeout(this.spareTimer); if (this.spare) this.spare.proc.kill(); if (this.current) this.current.proc.kill(); this.text.stop(); } },
       // Folders added or removed: the ready-made Claude has the old list, so start a new one.
       vscode.workspace.onDidChangeWorkspaceFolders(() => {
-        if (this.spare) { const s = this.spare; this.spare = null; s.proc.kill(); }
-        if (this.view) this.prepare();
+        if (this.spare) { const s = this.spare; this.spare = null; s.proc.kill(); this.prepare(); }
       }),
       vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("search")) this.post(this.config()); }),
     );
@@ -139,7 +138,6 @@ class SearchView {
         this.ready = true;
         this.post(this.config());
         if (this.pending) { this.post(this.pending); this.pending = null; }
-        this.prepare();
         break;
       // ---- Search ----
       case "find": this.text.find(m.q, m.id).catch((e) => { log(`search: ${e.stack}`); this.post({ type: "textDone", id: m.id, total: 0, error: e.message }); }); break;
@@ -159,6 +157,8 @@ class SearchView {
       // What the title bar shows (package.json "view/title" when-clauses) and the number on the side bar icon.
       case "ui":
         vscode.commands.executeCommand("setContext", "kural.searchTab", m.tab);
+        // Ask's model starts when you're on the Ask tab, not for text search (~100 MB: docs/benchmarks).
+        if (m.tab === "ask") this.prepare();
         vscode.commands.executeCommand("setContext", "kural.searchHasResults", !!m.results);
         vscode.commands.executeCommand("setContext", "kural.searchTree", !!m.tree);
         vscode.commands.executeCommand("setContext", "kural.searchCollapsed", !!m.collapsed);
@@ -204,9 +204,14 @@ class SearchView {
     }, { tools: ["Read", "Grep", "Glob"], allowedTools: ["Read", "Grep", "Glob"], effort: "low" }, { ...handlers, onPermission });
   }
 
-  // Start the next one now, so the next question doesn't wait for it to start (with the fastest model).
+  // Start the next one now, so the next question doesn't wait for it to start (with the fastest model). Unused for 10
+  // minutes: stopped (the next question starts one again, 1-2 s).
   prepare(model = brain.fastestModel()) {
     if (this.spare && this.spare.model !== model) { const s = this.spare; this.spare = null; s.proc.kill(); }
+    clearTimeout(this.spareTimer);
+    this.spareTimer = setTimeout(() => { if (this.spare) { const s = this.spare; this.spare = null; s.proc.kill(); log("ask: its model stopped after 10 min without questions"); } },
+      Number(process.env.KURAL_IDLE_MS) > 0 ? Number(process.env.KURAL_IDLE_MS) : 10 * 60 * 1000);
+    if (this.spareTimer.unref) this.spareTimer.unref();
     if (this.spare || !this.root() || !brain.usable(model).ok) return;
     const slot = { proc: null, handlers: null, model };
     slot.proc = this.makeProc(model, {

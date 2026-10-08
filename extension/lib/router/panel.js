@@ -1,16 +1,14 @@
 // The Model Router panel at the bottom of the window: how Auto reads the task (a slider from Faster to Quality, four
 // steps: Native, or a helper model through Ollama (MiniLM, Granite, Qwen3), with its download; the info button explains
-// each), which AIs it picks from, and what it picked last. A slider, not the four names (Adithya: simpler to choose).
-// Nothing to choose about profiles or models here (Adithya): the profile (Balance, Cost, Intelligence) is picked in the
-// chat's model menu, and Auto always picks from every cloud model of the AIs you set up (Claude, Google Gemini, ChatGPT
-// (Codex)), never a model on this computer. Kept as small as the Tab Completion panel on purpose (Adithya found the full
-// one unusable).
+// each). A slider, not the four names (Adithya: simpler to choose). Nothing else (Adithya, 8 Oct: "Picks from" and "Last
+// choice" removed): the profile (Balance, Cost, Intelligence) is picked in the chat's model menu, and Auto always picks
+// from every cloud model of the AIs you set up (Claude, Google Gemini, ChatGPT (Codex)), never a model on this computer
+// (the info box says so). Kept as small as the Tab Completion panel on purpose (Adithya found the full one unusable).
 // settings.json only, not shown here: the profile of a new chat before you pick one, model ratings, Search & Ask ranking,
 // chat context, token preference, Auto Tab engine, the helper deadline.
 
 const vscode = require("vscode");
 const { fontScale } = require("../ui");
-const { eligible } = require("./policy");
 const { HELPERS } = require("./client");
 const { ASSISTANTS } = require("./index");
 
@@ -26,8 +24,16 @@ const ABOUT = [
   { id: "qwen3", label: "Qwen3", what: "The embedding model of Alibaba's Qwen3 family: right most often, but a much bigger download and slower." },
 ].map((a) => HELPERS[a.id] ? { ...a, facts: `${HELPERS[a.id].note} · ${HELPERS[a.id].size} download`, model: HELPERS[a.id].model } : a);
 
+// The status bar icon's hover: what it is, which step reads your requests now, what a click does.
+function statusTip(assistant) {
+  const step = ABOUT.find((a) => a.id === assistant) || ABOUT[0];
+  return new vscode.MarkdownString(`**Model Router** · reads your requests with ${step.label}\n\n` +
+    "How Auto picks a model for each message. Click for its panel (the slider from Faster to Quality). " +
+    "Balance, Cost or Intelligence: the chat's model menu.");
+}
+
 class RouterPanel {
-  constructor(context, router, refresh = async () => {}) { this.context = context; this.router = router; this.refresh = refresh; this.view = null; this.revision = 0; }
+  constructor(context, router) { this.context = context; this.router = router; this.view = null; this.revision = 0; }
 
   register() {
     this.context.subscriptions.push(
@@ -41,9 +47,13 @@ class RouterPanel {
         if (e.affectsConfiguration("kural.modelRouter")) this.push().catch(() => {});
       }),
     );
+    // Just its icon in the status bar (Adithya: simple, decluttered); the hover says what it is and which step reads.
     const status = vscode.window.createStatusBarItem("kural.modelRouter", vscode.StatusBarAlignment.Right, 98);
-    status.name = "Model Router"; status.text = "$(git-compare) Model Router"; status.command = "kural.modelRouter";
-    status.tooltip = "How Auto reads your requests and which AIs it picks from (Balance, Cost or Intelligence: the chat's model menu)";
+    status.name = "Model Router"; status.text = "$(git-compare)"; status.command = "kural.modelRouter";
+    status.accessibilityInformation = { label: "Model Router", role: "button" };
+    const draw = () => { status.tooltip = statusTip(this.router.options().assistant); };
+    draw();
+    this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("kural.modelRouter.assistant")) draw(); }));
     status.show(); this.context.subscriptions.push(status);
     // A helper chosen earlier gets ready in the background (its examples' centroids), so routing stays fast from the start.
     setTimeout(() => this.router.prepare(), 8000);
@@ -51,22 +61,13 @@ class RouterPanel {
 
   async push() {
     if (!this.view) return;
-    const revision = ++this.revision, options = this.router.options(), all = await this.router.availableModels();
-    // What Auto picks from, per AI: every cloud model that's set up (policy.js eligible, the list it routes with); an AI
-    // that isn't set up shows with none.
-    const cloud = eligible(all, {});
-    const ais = [...new Set(all.filter((m) => !m.local && !m.completionOnly).map((m) => m.provider))].map((name) => {
-      const models = cloud.filter((m) => m.provider === name);
-      return { name, count: models.length, names: models.map((m) => m.label || m.id) };
-    });
+    const revision = ++this.revision, options = this.router.options();
     const helper = HELPERS[options.assistant] || null;
     const state = helper ? await this.router.client.state(options).catch(() => "offline") : null;
     const ready = helper && state === "ready" ? !!this.router.client.loaded(new URL(options.url).origin, helper.model) : false;
     if (!this.view || revision !== this.revision) return;   // a newer push started while we waited
-    const last = this.router.last, chosen = last && last.model && all.find((m) => m.id === last.model);
     this.view.webview.postMessage({ type: "state", assistant: options.assistant, helper: helper && { ...helper, state, ready },
-      download: this.download && { percent: this.download.percent }, ais,
-      last: last && { ...last, label: chosen ? chosen.label || chosen.id : last.model } });
+      download: this.download && { percent: this.download.percent } });
   }
 
   // One download at a time; the page shows its percent (or the error) next to the helper's name.
@@ -90,8 +91,7 @@ class RouterPanel {
       view.webview.asWebviewUri(vscode.Uri.joinPath(media, "codicons", "codicon.css")));
     view.webview.onDidReceiveMessage(async (m) => {
       const set = (k, v) => cfg().update(`modelRouter.${k}`, v, vscode.ConfigurationTarget.Global);
-      // Opening the panel re-lists the models, so a newly set up AI shows up without a Refresh button.
-      if (m.type === "ready") { await this.refresh(); await this.push(); }
+      if (m.type === "ready") await this.push();
       if (m.type === "assistant" && ASSISTANTS.includes(m.value)) await set("assistant", m.value);
       if (m.type === "download" && !this.download) await this.downloadHelper();
       if (m.type === "stopDownload" && this.download) this.download.abort.abort();
@@ -162,9 +162,8 @@ function page(nonce, csp = "", codicons = "") {
       ${about}
     </div>
     <p class="muted">MiniLM, Granite and Qwen3 run through Ollama on this computer: move the slider to one, then Download (once). Until it's ready, Native decides. Either way, your request is read on this computer. The percentages: how often each guessed the size right in 270 example requests.</p>
+    <p class="muted">Auto picks from every cloud model of the AIs you set up (Claude, Google Gemini, ChatGPT (Codex)); a model on this computer only when you pick it yourself. Balance, Cost or Intelligence: the chat's model menu.</p>
   </div>
-  <div class="row"><span class="label">Picks from</span><span id="ais" class="text muted"></span></div>
-  <div class="row"><span class="label">Last choice</span><span id="last" class="text muted">none yet</span></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const $ = (id) => document.getElementById(id);
@@ -199,14 +198,6 @@ function page(nonce, csp = "", codicons = "") {
     dl.hidden = !(S.download || (h && h.state === "missing"));
     dl.textContent = S.download ? "Stop" : "Download";
     dl.onclick = () => send(S.download ? "stopDownload" : "download");
-    // Every cloud model of the AIs you set up, per AI: nothing to choose (hover for the models' names).
-    const set = S.ais.filter((a) => a.count), missing = S.ais.filter((a) => !a.count).map((a) => a.name);
-    $("ais").className = set.length ? "text muted" : "text warn";
-    $("ais").textContent = !set.length ? "Nothing yet: set up Claude, Google Gemini or ChatGPT (Codex) in Get started, and Auto uses all their models."
-      : "Every cloud model you have: " + set.map((a) => a.count + " from " + a.name).join(", ") + "."
-        + (missing.length ? " Not set up: " + missing.join(", ") + "." : "") + " Models on this computer only when you pick them yourself.";
-    $("ais").title = set.map((a) => a.name + ": " + a.names.join(", ")).join("\\n");
-    $("last").textContent = !S.last ? "none yet" : S.last.model ? S.last.label + " · " + S.last.reason : S.last.error;
   }
   // Moving: the step's name and what it is; letting go: that step is used.
   $("level").oninput = () => { if (S) stepText(+$("level").value); };
@@ -220,4 +211,4 @@ function page(nonce, csp = "", codicons = "") {
 </script></body></html>`;
 }
 
-module.exports = { RouterPanel, _page: page };
+module.exports = { RouterPanel, _page: page, _statusTip: statusTip };

@@ -236,11 +236,14 @@ function terminalTab(context, session, local, activity = null, commitSession = n
       const raw = await local.complete(prefix, "\n", token, true);
       return raw == null ? "" : tidy(typed + raw, typed);
     };
+    // Ollama busy with another model (a chat answering on this computer: lib/tab/local.js busy): Claude helps when it's
+    // set up, also for "Local model", like Tab in the editor.
+    const help = !!(useLocal && local.busy && local.busy() && require("../ai/claude").isSetUp());
     if (!useLocal) return [await viaClaude(), "claude"];
-    if (engineSetting === "local") return [await viaLocal(), "local"];
+    if (engineSetting === "local" && !help) return [await viaLocal(), "local"];
     // Auto, like Tab in the editor: the local model gets a head start; then Claude too; the first real answer wins.
     const fromLocal = viaLocal().catch(() => "");
-    const early = await Promise.race([fromLocal, sleep(350).then(() => undefined)]);
+    const early = await Promise.race([fromLocal, sleep(help ? 200 : 350).then(() => undefined)]);
     if (early) return [early, "local"];
     const fromClaude = viaClaude().catch(() => "");
     return firstAnswer([fromLocal.then((x) => [x, "local"]), fromClaude.then((x) => [x, "claude"])]);

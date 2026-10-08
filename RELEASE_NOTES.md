@@ -31,10 +31,47 @@
   certificate). See [docs/windows-signing.md](docs/windows-signing.md).
 - **Fork a chat.** Hover any message in an idle chat: **Fork from here** opens a new chat with the conversation through
   that message (with its attached context and tool results), the same model, mode and other choices. The original chat
-  and your files stay as they are.
+  stays available; when later answers changed files, Kural asks whether to restore those files too.
 - **Welcome.** Kural opens VS Code's Welcome page (Start, Recent, Walkthroughs) with a **Get started with Kural**
   walkthrough: set up your AI, open a project, make your first change, pick a theme (**Kural: Welcome**).
 - **The terminal's "Show suggestions" hint is hidden** by default; suggestions still work.
+- **Notifications.** When an answer is done or needs you (a command or file to allow, a question, a plan to build, an
+  error), Kural shows a system notification while you're not looking at that chat; click it to get there. Setting
+  `kural.notifications`: when you're away (default), always, or off. On a Mac, macOS asks once whether Kural may send
+  notifications (to change it later: System Settings > Notifications > Kural).
+- **Did you know?** While the AI works, a short Kural tip or programming fact, with **Know more** to read further
+  (setting `kural.chat.didYouKnow`).
+- **Your own moods.** Next to Default, Explorer, Critic and Learn, add your own: **Add your own mood…** in the model
+  menu, or Kural Settings → **Moods**, with tips on what works best and three examples to start from.
+- **Fork from here asks about the code.** When answers after that message changed files, it asks whether the code goes
+  back to how it was at that message too, like editing a message does.
+- **"Files changed" shows only your project's files**, not notes the AI writes elsewhere (in /tmp or ~/.claude).
+- **"Session" instead of "5h".** The 5-hour limit is called the Session everywhere. The status bar shows only the
+  Session limit; hover for every limit of every AI. Weekly numbers stay in the hover even near their limit.
+- **Your Claude Code setup sits next to Claude** in the model menu, without its own heading.
+- **Auto leaves an AI that's near its limit.** From 80 % of a Session or Weekly limit, Auto picks another AI you have
+  (Claude → ChatGPT first), also in long chats. When an answer hits a limit, Auto carries the same request on with
+  another AI.
+- **Switching AI keeps the whole conversation.** Switching the AI, the model or the account in the middle of a chat
+  hands the conversation over with the plan, the to-do list, the changed files, answered questions and attachments,
+  including pictures sent while it answered. A long chat gets an overview that fits the next model and a complete local
+  record it can read to recover the details.
+- **Mood and mode changes reach Claude mid-chat.** Claude ignored a new mood, mode or team after a chat's first
+  message; now it applies from the next message.
+- **Fixed: Kural Settings showed every usage bar as full.**
+- **Tab Completion during local chat answers.** When Ollama is busy answering a chat, Claude helps with suggestions
+  if it's set up, and the slower request stops. The first-chat freeze while checking Claude Code's options is fixed.
+- **Renaming across files.** After you change a name, Kural offers to review or update its remaining uses in the
+  project. **Review** opens Search & Ask with the old and new names; **Change all** is undoable.
+- **Lower idle memory use.** Helpers start when needed and stop after idle minutes; idle chats off screen release
+  their program while preserving the conversation. Running background commands keep their program. The measured test
+  copy dropped from 1,268 MB to 1,078 MB at idle; the benchmark and longer-term plan are in
+  [the memory report](docs/benchmarks/memory-2026-10-08.md).
+- **A simpler window.** Tab Completion and Model Router have icons in the status bar; Tab's icon is crossed out when
+  off. The router panel no longer has **Picks from** or **Last choice**. Run and Debug, Debug Console and Ports are
+  hidden by default; `kural.showDebugViews` brings them back.
+- **Updated README demonstrations.** Refreshed the chat, Tab Completion, inline edit, History, setup, Tab panel and
+  terminal recordings, and added a recording of the rename offer.
 
 ## What's new in 1.1.0-alpha.6
 

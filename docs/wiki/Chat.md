@@ -12,7 +12,8 @@ files, runs commands and answers. With code selected, Ctrl+L adds it to your mes
 | **Plan** | writes a plan and changes nothing; **Build it** carries the plan out (**Ctrl+P** switches Plan on/off) |
 | **Ask** | only answers |
 
-Every file change shows under the answer: open the before/after, **keep** it or **undo** it.
+Every file change shows under the answer: open the before/after, **keep** it or **undo** it. Only your project's files
+are listed: a note the AI writes in the temp folder, or Claude Code's own plans and memory (`~/.claude`), aren't.
 
 **The web, in every mode.** Claude, Google Gemini and ChatGPT (Codex) can search the web and read web pages in all four
 modes, Plan and Ask too (a plan often needs current docs or versions), without asking: it changes nothing on your
@@ -33,7 +34,9 @@ your next message, because which tools the model has is fixed when it starts.
 
 - **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, **Google Gemini** and **ChatGPT (Codex)** models (see
   [[Google Gemini and ChatGPT]]), or a model **on this computer** (see [[Your Own Model]]). You can switch in the middle of a
-  conversation; the new model gets the conversation so far.
+  conversation, also to another AI: the new model gets the conversation so far. Long chats get an overview that fits
+  the next model and a complete local record it can read for earlier details. Switching an AI's account carries that
+  record over too.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
   Medium / High / Max). Google Gemini's models come in thinking levels; the menu lists each model once and the
   intensity picks its level (the nearest one the model has; a line under the buttons says which it has).
@@ -43,6 +46,15 @@ your next message, because which tools the model has is fixed when it starts.
   - **Critic**: questions the request and the code, finds flaws.
   - **Learn**: teaches you. It first asks which of the ideas behind your question you already know, explains only the
     ones you don't, then answers the question, and ends with a short question to check you got it.
+  - **Your own moods**: **Add your own mood…** (at the end of the moods) opens **Kural Settings → Moods**. A mood has a
+    name, a one-line hint (shown when you point at it) and instructions for the AI. What works best: who the AI should
+    be and how it works with you ("Work like a pair programmer sitting next to me"), concrete behaviors (what to do
+    first, what to always or never do), the tone and length you want, when to ask you and when to decide, all in a few
+    sentences. Start from an example (Pair programmer, Strict reviewer, Explain like I'm new) and change it. Edit or
+    delete them there too; a chat whose mood you deleted goes back to Default. They're saved in your settings
+    (`kural.chat.moods`), so **Export settings** takes them along.
+  - Changing the mood (or the mode) in the middle of a chat applies from your next message: Kural tells the AI what
+    changed along with it.
 - **Multiple agents** (Claude models): a team instead of one assistant. See [[Multiple Agents]].
 
 ## Adding things to your message
@@ -78,9 +90,26 @@ your next message, because which tools the model has is fixed when it starts.
   (`devices.test.js`) or a path from inside another folder, Kural finds that file in your project (not in
   `node_modules`); if several files have that name, it asks which one. Web links open in Kural's own [[Browser]] tab
   (so you can pick elements of the page).
+- **Did you know?** While the AI works (from a few seconds in), a short Kural tip or programming fact shows under
+  "Thinking…", a new one every 15 seconds; **Know more** opens its page (the guide, MDN, the official docs, Wikipedia)
+  in Kural's browser tab. It goes away when the answer is done. Turn it off with the setting `kural.chat.didYouKnow`.
 - **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;
   **Latest** brings you back down.
 - **Stop** (the square button, or Esc) stops the answer.
+
+## Notifications
+
+When an answer is done, or it needs you (a command or a file to allow, a question, a plan to build, an error, a
+login), Kural shows a system notification, like any app: "Fix the login is done" with the answer's first sentence, or
+"Fix the login needs your OK: Run this command? npm test". Click it to go to that chat. By default it only does this
+while you're not looking: Kural's window isn't in front, or that chat isn't on screen. An agent team's answer notifies
+once, when the whole team is done; Stop doesn't notify (that was you). Each chat has one notification at a time, and it
+goes away when you answer in Kural or open the chat.
+
+Setting `kural.notifications`: **whenAway** (the default), **always**, or **off**. The first time, macOS asks whether
+Kural may send notifications; if you chose Don't Allow, turn them on in System Settings → Notifications → Kural. (On a
+Kural without its notification support, the system's own way is used: on a Mac that notification shows as Script
+Editor.)
 
 ## Sending while it works (a queue)
 
@@ -120,14 +149,18 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
 
 ## Tabs, history, two chats
 
-- **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close.
+- **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close. A chat
+  you haven't used for 10 minutes and that isn't on screen lets its AI program go (to save memory; at most two idle ones
+  stay ready); it starts again in the same conversation when you open it or send to it, in a second or two.
 - **Fork from here**: hover a message and click the branch icon after the answer finishes (or stop it first).
   A new chat contains the recorded conversation through that message: messages, attached context, and tool results.
   Earlier images and PDFs are sent again with your next message if their files are still available. It keeps your
-  model, intensity, mode, mood and linked context. The original chat stays intact; current project files stay as they
-  are. File-change cards inherited from the original can be reviewed, but **Keep**, **Undo** and **Restore code** in
-  the fork act only on its own changes. Both chats are saved in History. Forking a chat in its own editor opens
-  another editor beside it.
+  model, intensity, mode, mood and linked context. The original chat's conversation stays intact. If answers after
+  that message changed files, Kural first asks whether the code goes back too: **Restore Code** puts those files back
+  as they were at that message (in the original chat those changes then show as Undone), **Keep Code** leaves your
+  files as they are now; closing the question doesn't fork. File-change cards inherited from the original can be
+  reviewed, but **Keep**, **Undo** and **Restore code** in the fork act only on its own changes. Both chats are saved
+  in History. Forking a chat in its own editor opens another editor beside it.
 - **History** (clock button): every chat from every workspace, in full. Search, **pin** chats to the top, delete
   them. A chat from another workspace opens to read; **Open its folder**, or **Continue here** (a new chat here that knows
   the old conversation).
@@ -149,8 +182,10 @@ commits, with the chat's model. Edit it if you like and commit as usual.
 ## Your Claude Code setup
 
 With a Claude model, the chat uses your whole Claude Code setup: MCP servers, connectors, plugins, skills, hooks and
-`CLAUDE.md` files. When you add one, Kural reloads Claude in the same conversation. (Setting
-`kural.chat.fullClaudeCodeSetup`: off = a faster, minimal setup.) The full Claude Code terminal is one shortcut away:
+`CLAUDE.md` files. When you add one, Kural reloads Claude in the same conversation. The model menu shows it on
+Claude's line, next to "Claude": "10 connectors · 30 skills" (click it to see each connector; a warning sign when one
+isn't connected) and a reload button. (Setting `kural.chat.fullClaudeCodeSetup`: off = a faster, minimal setup; that
+line then says "minimal setup", with **use mine** to switch back.) The full Claude Code terminal is one shortcut away:
 **Ctrl+Esc**.
 
 ## Asking about Kural

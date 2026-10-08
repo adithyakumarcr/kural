@@ -1,6 +1,7 @@
 // The Model Router panel (lib/router/panel.js): no profile row (Balance, Cost, Intelligence are picked in the chat's model
-// menu), no list of models to choose from (Auto uses every cloud model of the AIs you set up; the panel only says which),
-// a slider from Faster to Quality (four steps: Native, MiniLM, Granite, Qwen3) and an info button that explains them.
+// menu), no list of models to choose from (Auto uses every cloud model of the AIs you set up), no "Picks from" or "Last
+// choice" rows (Adithya, 8 Oct): only a slider from Faster to Quality (four steps: Native, MiniLM, Granite, Qwen3) and an
+// info button that explains them.
 // The page script runs on a tiny stand-in DOM, so a broken render fails here instead of showing an empty panel.
 const assert = require("assert"), Module = require("module");
 const updates = [];
@@ -8,10 +9,11 @@ const vscode = {
   workspace: { getConfiguration: () => ({ get: (_, d) => d, update: async (...a) => { updates.push(a); } }) },
   ConfigurationTarget: { Global: 1 },
   Uri: { joinPath: (...parts) => parts.join("/") },
+  MarkdownString: class { constructor(v) { this.value = v; } },
 };
 const load = Module._load;
 Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
-const { RouterPanel, _page } = require("../extension/lib/router/panel");
+const { RouterPanel, _page, _statusTip } = require("../extension/lib/router/panel");
 const { HELPERS } = require("../extension/lib/router/client");
 
 // Every element with an id, as a stand-in: text, class, hidden, attributes, click, children; the slider (#level) has a
@@ -58,31 +60,27 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     assert.ok(html.includes("74 % of task sizes right, instant"));
   });
 
-  await check("the page script renders: helper, the AIs Auto picks from, last choice; the info box opens and closes", () => {
+  await check("no \"Picks from\" or \"Last choice\" rows; the info box says what Auto picks from", () => {
+    assert.ok(!/Picks from|Last choice|id="ais"|id="last"/.test(html));
+    assert.ok(html.includes("Auto picks from every cloud model of the AIs you set up"));
+  });
+
+  await check("the page script renders the helper; the info box opens and closes", () => {
     const p = dom(html, "N");
     assert.strictEqual(p.sent[0].type, "ready");
-    p.state({ assistant: "granite", helper: { ...HELPERS.granite, state: "missing", ready: false }, download: null,
-      ais: [{ name: "Claude", count: 3, names: ["Opus", "Sonnet", "Haiku"] }, { name: "Google Gemini", count: 0, names: [] },
-        { name: "ChatGPT (Codex)", count: 2, names: ["GPT-5", "GPT-5 mini"] }],
-      last: { model: "sonnet", label: "Sonnet", reason: "balance profile · standard edit task" } });
-    assert.strictEqual(p.$("ais").textContent, "Every cloud model you have: 3 from Claude, 2 from ChatGPT (Codex). Not set up: Google Gemini. " +
-      "Models on this computer only when you pick them yourself.");
-    assert.ok(p.$("ais").title.includes("Claude: Opus, Sonnet, Haiku"));
+    p.state({ assistant: "granite", helper: { ...HELPERS.granite, state: "missing", ready: false }, download: null });
     // The slider: Granite is the third of four steps (Faster → Quality), its dot lit, its name in the text.
     assert.strictEqual(Number(p.$("level").value), 2);
     assert.deepStrictEqual(p.$("ticks").children.map((t) => t.className), ["", "", "on", ""]);
     assert.ok(p.$("assistantText").textContent.startsWith("Granite · granite-embedding:30m (about 63 MB) isn't on this computer"), p.$("assistantText").textContent);
     assert.strictEqual(p.$("download").hidden, false);   // Granite isn't on this computer yet
-    assert.strictEqual(p.$("last").textContent, "Sonnet · balance profile · standard edit task");
     assert.strictEqual(p.$("about").hidden, true);
     p.$("info").onclick();
     assert.strictEqual(p.$("about").hidden, false);
     assert.strictEqual(p.$("info").getAttribute("aria-expanded"), "true");
     p.$("info").onclick();
     assert.strictEqual(p.$("about").hidden, true);
-    p.state({ assistant: "native", helper: null, download: null, ais: [{ name: "Claude", count: 0, names: [] }], last: null });
-    assert.strictEqual(p.$("ais").className, "text warn");
-    assert.ok(p.$("ais").textContent.startsWith("Nothing yet: set up Claude"));
+    p.state({ assistant: "native", helper: null, download: null });
     assert.strictEqual(p.$("download").hidden, true);
     assert.strictEqual(Number(p.$("level").value), 0);
     assert.ok(p.$("assistantText").textContent.startsWith("Native · Kural's own word classifier"));
@@ -90,7 +88,7 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
 
   await check("the slider: moving it names the step (nothing chosen yet); letting go or a dot chooses it", () => {
     const p = dom(html, "N");
-    p.state({ assistant: "native", helper: null, download: null, ais: [], last: null });
+    p.state({ assistant: "native", helper: null, download: null });
     p.sent.length = 0;
     p.$("level").value = "3"; p.$("level").oninput();
     assert.ok(p.$("assistantText").textContent.startsWith("Qwen3 · "), p.$("assistantText").textContent);
@@ -102,27 +100,16 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     assert.strictEqual(String(p.$("level").value), "1");
   });
 
-  await check("the panel's state: every cloud model per AI (never local or Tab-only), no profile, the last model's name", async () => {
-    const models = [
-      { id: "opus", label: "Opus", provider: "Claude", providerId: "claude", ready: true, local: false },
-      { id: "haiku", label: "Haiku", provider: "Claude", providerId: "claude", ready: true, local: false },
-      { id: "agy:default", label: "Gemini default", provider: "Google Gemini", providerId: "agy", ready: false, local: false },
-      { id: "codex:gpt-5", label: "GPT-5", provider: "ChatGPT (Codex)", providerId: "codex", ready: true, local: false },
-      { id: "ollama:llama3.2", label: "llama3.2", provider: "Ollama", providerId: "ollama", ready: true, local: true },
-      { id: "ollama:qwen2.5-coder:1.5b-base", label: "qwen2.5-coder:1.5b-base (Tab only)", provider: "Ollama", providerId: "ollama",
-        ready: true, local: true, completionOnly: true },
-    ];
+  await check("the panel's state: the helper only (no profile, no models, no AIs, no last choice; the models aren't even listed)", async () => {
     const posted = [];
-    const router = { options: () => ({ assistant: "native", url: "http://127.0.0.1:11434" }), availableModels: async () => models,
+    const router = { options: () => ({ assistant: "native", url: "http://127.0.0.1:11434" }),
+      availableModels: async () => { throw new Error("the panel shouldn't list the models"); },
       last: { model: "codex:gpt-5", reason: "cost profile · simple search task" } };
     const panel = new RouterPanel({}, router);
     panel.view = { webview: { postMessage: (m) => posted.push(m) } };
     await panel.push();
-    const s = posted[0];
-    assert.ok(!("profile" in s) && !("profiles" in s) && !("models" in s));
-    assert.deepStrictEqual(s.ais.map((a) => [a.name, a.count]), [["Claude", 2], ["Google Gemini", 0], ["ChatGPT (Codex)", 1]]);
-    assert.deepStrictEqual(s.ais[0].names, ["Opus", "Haiku"]);
-    assert.strictEqual(s.last.label, "GPT-5");
+    assert.deepStrictEqual(Object.keys(posted[0]).sort(), ["assistant", "download", "helper", "type"]);
+    assert.strictEqual(posted[0].assistant, "native");
   });
 
   await check("the panel sets the helper, never the profile", async () => {
@@ -136,6 +123,13 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     assert.deepStrictEqual(updates, []);
     await handler({ type: "assistant", value: "granite" });
     assert.deepStrictEqual(updates, [["modelRouter.assistant", "granite", 1]]);
+  });
+
+  await check("the status bar shows only the icon; its hover names the step that reads requests", () => {
+    const src = require("fs").readFileSync(require("path").join(__dirname, "..", "extension", "lib", "router", "panel.js"), "utf8");
+    assert.ok(/status\.text = "\$\(git-compare\)";/.test(src));
+    assert.ok(_statusTip("granite").value.startsWith("**Model Router** · reads your requests with Granite"));
+    assert.ok(_statusTip("nonsense").value.includes("with Native"));
   });
 
   console.log(`router-panel: ${passed} passed, ${failed} failed`);

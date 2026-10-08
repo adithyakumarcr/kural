@@ -1,7 +1,8 @@
 // Your accounts, in the status bar:
-//   - the usage meter: for the chat's AI in words, "Claude 5h 45% · resets 42m | Weekly 24% · resets 3d 4h"; the others
-//     short, "Codex 12% · 3%",
-//     "Gemini 13% · 1%" (Antigravity's weekly limits). Orange from 80 %, red from 95 %. It comes from lib/ai/usage.js, which the
+//   - the usage meter: only each AI's Session limit (the 5-hour one), the chat's AI in words ("Claude Session 45% ·
+//     resets 42m"), the others short ("Codex 12%"); a weekly limit only once it's at 80 %+ ("… | Weekly 85% · resets 3d
+//     4h"); Gemini (weekly limits only) when it's the chat's AI or nearly full. The hover: every AI's limits in full.
+//     Orange from 80 %, red from 95 %. It comes from lib/ai/usage.js, which the
 //     programs themselves fill: Claude Code reports its limits after every answer, Codex's app server on request.
 //     Clicking it opens the AI Usage panel at the bottom (lib/usage-panel.js).
 //   - the Account item (person icon): opens the Kural Settings tab (lib/settings-page.js): per AI who's logged in,
@@ -44,6 +45,8 @@ class Account {
 
   register() {
     this.context.subscriptions.push(this.item, vscode.commands.registerCommand("kural.account", () => this.page && this.page.open()),
+      // (The chat's model menu, "Add your own mood…": Kural Settings, at Moods.)
+      vscode.commands.registerCommand("kural.settings.moods", () => this.page && this.page.open("moods")),
       vscode.commands.registerCommand("kural.refreshUsage", () => this.refreshUsage(true)));
     this.gs.onChange(() => {
       // A new login passed its test: Claude's chat processes start again, with it. (Not at log out: a process started
@@ -73,14 +76,27 @@ class Account {
     const bin = this.gs.passed ? findClaude() : null;
     this.auth = bin ? await checks.claudeAuth(bin, cleanEnv({})).catch(() => null) : null;
     if (this.auth && this.auth.loggedIn) this.auth.name = accountName("claude", this.auth.email);
+    this.noticeAccount("claude", this.auth);
     for (const id of CLI_IDS) {
       const c = brain.cli[id];
       this.cliAuth[id] = c.ready && c.bin ? await CLIS[id].auth(c.bin).catch(() => null) : null;
       if (this.cliAuth[id] && this.cliAuth[id].loggedIn) this.cliAuth[id].name = accountName(id, this.cliAuth[id].email);
+      this.noticeAccount(id, this.cliAuth[id]);
     }
     this.draw();
     return this.auth;
   }
+
+  // Another account than before (switched in Kural Settings, or outside Kural, e.g. in a terminal): the chats on that
+  // AI carry their conversations over (lib/chat/index.js accountChanged).
+  noticeAccount(provider, who) {
+    this.emails = this.emails || {};
+    const email = who && who.loggedIn && who.email ? who.email : null;
+    if (!email) return;
+    if (this.emails[provider] && this.emails[provider] !== email) this.accountChanged(provider);
+    this.emails[provider] = email;
+  }
+  accountChanged(provider) { vscode.commands.executeCommand("kural.chat.accountChanged", provider).then(undefined, () => {}); }
 
   // The status item shows whose account the chat's AI uses: the name on it ("Peasant Adithya"), else its email, else
   // the plan. (It showed the plan, "Team", which says little about whose account it is.) The tooltip lists them all.
@@ -120,33 +136,28 @@ class Account {
     this.drawMeters();
   }
 
+  // One item per AI with numbers, showing only its Session limit (Adithya: the weekly ones on hover; "keep it simple and
+  // decluttered"): the chat's AI with when it resets ("Claude Session 50% · resets 42m"), the others short ("Codex 12%").
+  // Weekly limits stay in the hover, including near their limit. Their pressure still colors the item.
   drawMeters() {
+    const chat = engineOf();
+    const all = Object.keys(NAMES).map((id) => ({ id, u: usage.current(id) })).filter((x) => x.u);
     for (const id of Object.keys(NAMES)) {
       const u = usage.current(id);
-      const show = u && ((u.windows || []).length || (u.tokens && u.tokens.input + u.tokens.output));
+      const m = u ? meter(NAMES[id], u, chat === id) : null;
       let item = this.meters[id];
-      if (!show) { if (item) item.hide(); continue; }
+      if (!m) { if (item) item.hide(); continue; }
       if (!item) {
         item = this.meters[id] = vscode.window.createStatusBarItem(`kural.usage.${id}`, vscode.StatusBarAlignment.Right, 102);
         item.name = `${NAMES[id]} usage`;
         item.command = "kural.showUsage";   // the AI Usage panel at the bottom: every limit in words
         this.context.subscriptions.push(item);
       }
-      const windows = u.windows || [];
-      const top = windows.length ? Math.max(...windows.map((w) => w.usedPercent)) : 0;
-      // The chat's AI in words ("Claude 5-hour 50% · resets 42m | Weekly 25% · resets 3d 4h"); the others short
-      // ("Codex 12% · 3%"), so the status bar doesn't fill up.
-      const mine = engineOf() === id;
-      item.text = !windows.length ? `$(dashboard) ${NAMES[id]} ${tokens(u.tokens.input + u.tokens.output)} tok`
-        : mine ? `$(dashboard) ${NAMES[id]} ${windows.slice(0, 2).map((w) => `${shortName(w)} ${Math.round(w.usedPercent)}%${w.resetsAt ? ` · resets ${usage.until(w.resetsAt, Date.now(), true)}` : ""}`).join(" | ")}`
-        : `$(dashboard) ${NAMES[id]} ${windows.slice(0, 2).map((w) => `${Math.round(w.usedPercent)}%`).join(" · ")}`;
-      item.backgroundColor = top >= 95 ? new vscode.ThemeColor("statusBarItem.errorBackground")
-        : top >= 80 ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
-      const md = new vscode.MarkdownString(`**${NAMES[id]} usage**\n\n` +
-        (windows.length ? windows.map((w) => `${usage.limitName(w)}: **${Math.round(w.usedPercent)}%** used${w.resetsAt ? `, resets ${when(w.resetsAt)}` : ""}`).join("  \n")
-          : `Today: ${tokens(u.tokens.input)} tokens in, ${tokens(u.tokens.output)} out`) +
-        `\n\n_Updated ${ago(u.at)}. Click for the AI Usage panel._`);
-      item.tooltip = md;
+      item.text = m.text;
+      // Orange from 80 %, red from 95 %, including a weekly limit described in the hover.
+      item.backgroundColor = m.top >= 95 ? new vscode.ThemeColor("statusBarItem.errorBackground")
+        : m.top >= 80 ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
+      item.tooltip = new vscode.MarkdownString(hoverText([...all.filter((x) => x.id === id), ...all.filter((x) => x.id !== id)], chat));
       item.show();
     }
   }
@@ -167,6 +178,7 @@ class Account {
     this.draw();
     this.relogin = true;
     this.gs.loggedOut();
+    this.accountChanged("claude");   // (its chats go on with what they knew, whoever logs in next)
     return true;
   }
 
@@ -192,6 +204,7 @@ class Account {
     if (r && r.error) { vscode.window.showErrorMessage(`Kural couldn't log out of ${C.short}: ${r.error}`); return false; }
     this.cliAuth[id] = { loggedIn: false };
     await this.gs.forgetCli(id);
+    this.accountChanged(id);   // (its chats go on with what they knew, whoever logs in next)
     this.onSwitched();
     this.draw();
     return true;
@@ -209,25 +222,41 @@ class Account {
 
 // The chat's AI right now: "claude", "codex", "agy" (or "ollama").
 function engineOf() { try { return brain.engineOf(brain.currentModel()); } catch { return "claude"; } }
-// "5-hour" → "5h", "Week" → "Weekly", "Gemini" (a weekly limit) → "Gemini weekly".
-function shortName(w) {
-  const l = String(w.label || "");
-  if (w.period === "week") return `${l} weekly`;
-  const h = /^(\d+)-hour$/.exec(l); if (h) return `${h[1]}h`;
-  return /^week/i.test(l) ? `Weekly${l.slice(4)}` : l;
+// The limit's name in the status bar: "Session" (the 5-hour limit), "Weekly", "Weekly (Opus)", "Weekly (Gemini)".
+const shortName = (w) => usage.limitName(w);
+const pct = (w) => `${Math.round(w.usedPercent)}%`;
+// Only Session usage belongs in the status bar. A provider with weekly limits only gets its name so its hover remains
+// available. top includes every limit for the warning color; it never adds weekly numbers to the label.
+function meter(name, u, mine, now = Date.now()) {
+  const windows = (u && u.windows) || [];
+  if (!windows.length) return null;
+  const session = windows.find(usage.isSession);
+  const resets = (w) => mine && w.resetsAt ? ` · resets ${usage.until(w.resetsAt, now, true)}` : "";
+  const label = session ? ` ${mine ? "Session " : ""}${pct(session)}${resets(session)}` : "";
+  return { text: `$(dashboard) ${name}${label}`, top: Math.max(0, ...windows.map((w) => Number(w.usedPercent) || 0)) };
+}
+// The hover: every AI's limits in full (Session and Weekly, when each resets), the one you point at first.
+function hoverText(entries, chat, now = Date.now()) {
+  const parts = entries.map(({ id, u }) => {
+    const windows = u.windows || [];
+    const lines = windows.length ? windows.map((w) => `${usage.limitName(w)}: **${pct(w)}** used${w.resetsAt ? `, resets ${when(w.resetsAt, now)}` : ""}`)
+      : u.tokens && u.tokens.input + u.tokens.output ? [`Today: ${tokens(u.tokens.input)} tokens in, ${tokens(u.tokens.output)} out`] : [];
+    return lines.length ? `**${NAMES[id]}**${id === chat ? " (the chat's AI)" : ""} · updated ${ago(u.at, now)}  \n${lines.join("  \n")}` : null;
+  }).filter(Boolean);
+  return `${parts.join("\n\n")}\n\n_Click for the AI Usage panel._`;
 }
 const tokens = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n || 0);
-function ago(t) {
-  const s = Math.round((Date.now() - (t || Date.now())) / 1000);
+function ago(t, now = Date.now()) {
+  const s = Math.round((now - (t || now)) / 1000);
   return s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : new Date(t).toLocaleDateString();
 }
 // "in 2 h 10 min", or the day and time when it's further away.
-function when(t) {
-  const m = Math.round((t - Date.now()) / 60000);
+function when(t, now = Date.now()) {
+  const m = Math.round((t - now) / 60000);
   if (m <= 0) return "now";
   if (m < 60) return `in ${m} min`;
   if (m < 24 * 60) return `in ${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
   return new Date(t).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-module.exports = { Account, USAGE, _test: { tokens, when, ago, shortName } };
+module.exports = { Account, USAGE, _test: { tokens, when, ago, shortName, meter, hoverText } };

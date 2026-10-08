@@ -19,6 +19,7 @@ const { SearchView } = require("./lib/search");
 const { TabPanel } = require("./lib/tab/panel");
 const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
+const { RenameOffers } = require("./lib/tab/rename-offer");
 const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
 const { SettingsPage } = require("./lib/settings-page");
@@ -74,6 +75,10 @@ function activate(context) {
   require("./lib/ai/agy").setLog(log);
   getStarted = new GetStarted(context);
   getStarted.register();
+  // Which of Claude Code's newer options this claude knows (thinking summaries, agents' text, messages while answering):
+  // asked once per Claude Code version, in the background now, so the chat's first answer never waits for it.
+  require("./lib/ai/claude").setFlagsStore(context.globalStorageUri.fsPath);
+  if (getStarted.claudeReady) require("./lib/ai/claude").prefetchFlags(findClaude()).catch(() => {});
 
   // ---------- status bar ----------
   const status = vscode.window.createStatusBarItem("kural.status", vscode.StatusBarAlignment.Right, 100);
@@ -88,18 +93,22 @@ function activate(context) {
     md.supportThemeIcons = true;
     return md;
   };
+  // Just an icon (Adithya: a simple, decluttered status bar): the sparkle, crossed out while Tab Completion is off
+  // ($(kural-tab-off): package.json "icons", media/codicons/kural-icons.ttf, made by scripts/make-status-icons.js). The
+  // hover says what it is and what a click does. Something to fix keeps its words, so it's noticed.
   const refresh = () => {
     const on = cfg().get("tabCompletion.enabled");
     const look = {
-      ready:    ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
-      thinking: ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
-      error:    ["$(warning) Tab Completion", "Last suggestion failed; click for Kural's log", "kural.showLog"],
-      login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted"],
-      missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted"],
+      ready:    ["$(sparkle)", tabCard(true), "kural.tabPanel.focus", "Tab Completion: on"],
+      thinking: ["$(sparkle)", tabCard(true), "kural.tabPanel.focus", "Tab Completion: on"],
+      error:    ["$(warning) Tab Completion", "Tab Completion: the last suggestion failed. Click for Kural's log", "kural.showLog", "Tab Completion: the last suggestion failed"],
+      login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted", "Kural: log in"],
+      missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted", "Kural: install Claude Code"],
     }[state];
-    if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, ChatGPT, Gemini, or your own model with Ollama): open Get started", "kural.getStarted"]; return; }
-    [status.text, status.tooltip, status.command] = on || state === "login" || state === "missing"
-      ? look : ["$(circle-slash) Tab Completion", tabCard(false), "kural.tabPanel.focus"];
+    const [text, tooltip, command, label] = !getStarted.ready
+      ? ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, ChatGPT, Gemini, or your own model with Ollama): open Get started", "kural.getStarted", "Kural: finish setup"]
+      : on || state === "login" || state === "missing" ? look : ["$(kural-tab-off)", tabCard(false), "kural.tabPanel.focus", "Tab Completion: off"];
+    Object.assign(status, { text, tooltip, command, accessibilityInformation: { label, role: "button" } });
   };
   const setState = (s) => {
     if (s === "login" || s === "missing") { getStarted.broke(s); return; }   // back to Get started at that step
@@ -109,31 +118,35 @@ function activate(context) {
   status.show();
 
   // ---------- the Claude sessions ----------
+  // Each `claude` process takes ~100 MB (docs/benchmarks/memory-2026-10-08.md): they start when first needed and stop
+  // after some minutes without questions (idleStopMs; the next question starts them again, 1-2 s once).
   // Tab: fastest settings (thinking off). Edits: a bit of thinking for quality.
+  const MIN = 60 * 1000;
   const tabSession = new ClaudeSession({
     name: "tab", model: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
-    systemPrompt: COMPLETION_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true,
+    systemPrompt: COMPLETION_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true, idleStopMs: 15 * MIN,
     pool: 2, earlyStop: "</insert>",   // two warm processes; answer as soon as the suggestion is written
   }, setState);
-  // Tab in the terminal: the same model as Tab, its own helper and instructions (one command line).
+  // Tab in the terminal: the same model as Tab, its own helper and instructions (one command line). One process: it asks
+  // after a pause in your typing, so a second one waiting was rarely used.
   const terminalSession = new ClaudeSession({
-    name: "terminal", model: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
-    systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true, pool: 2, earlyStop: "</cmd>",
+    name: "terminal", model: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true, idleStopMs: 10 * MIN,
+    systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 10000, clearEach: true, pool: 1, earlyStop: "</cmd>",
   }, () => {});
   // Ctrl+K, Apply and commit messages: the chat's model (a Claude model, or one on your computer: lib/brain.js).
   const editSession = new brain.Session({
     name: "edit", fallbackModel: () => "sonnet", effort: "medium", systemPrompt: EDIT_SYSTEM_PROMPT,
-    restartAfter: 10, timeoutMs: 180000, clearEach: true,
+    restartAfter: 10, timeoutMs: 180000, clearEach: true, idleStopMs: 10 * MIN,
   }, (s) => { if (s === "login" || s === "missing") setState(s); });
   // The Source Control panel's commit message (sparkle button): the chat's model, one plain message (lib/scm/commit.js).
   const scmSession = new brain.Session({
     name: "scm-commit", quiet: true, fallbackModel: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
-    systemPrompt: scmCommit.SYSTEM_PROMPT, restartAfter: 20, timeoutMs: 60000, clearEach: true, earlyStop: "</msg>",
+    systemPrompt: scmCommit.SYSTEM_PROMPT, restartAfter: 20, timeoutMs: 60000, clearEach: true, earlyStop: "</msg>", idleStopMs: 5 * MIN,
   }, () => {});
   scmCommit.registerCommitMessages(context, scmSession);
   const commitSession = new brain.Session({
     name: "commit", quiet: true, fallbackModel: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
-    systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 20000, clearEach: true, earlyStop: "</cmd>",
+    systemPrompt: TERMINAL_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 20000, clearEach: true, earlyStop: "</cmd>", idleStopMs: 5 * MIN,
   }, () => {});
 
   // What you've been doing in this workspace: makes Tab's suggestions fit you (lib/activity.js).
@@ -146,13 +159,22 @@ function activate(context) {
   // on this computer" or Download, or your own model set up in Get started.
   local.allowed = () => !!context.globalState.get("kural.tabLocal.v1") || !!getStarted.localModel;
   local.choose = async () => { await context.globalState.update("kural.tabLocal.v1", true); await local.status(true); local.changed(); };
-  local.status(true);
-  const localTimer = setInterval(() => { if (cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status(); }, 15000);
+  // Claude's Tab processes only when Tab may need them now: the engine is Claude, or no model on this computer is ready.
+  // (With a local model, Auto and "Local model" start them at Claude's first turn: a race or Ollama busy.)
+  const warmTab = async () => {
+    if (!getStarted.claudeReady || !cfg().get("tabCompletion.enabled")) return;
+    if (cfg().get("tabCompletion.engine") === "claude" || !(await local.ready())) tabSession.start();
+  };
+  local.status(true).then(() => warmTab());
+  // (Every 15 s while this window is in front: Ollama started or stopped, a model downloaded.)
+  const localTimer = setInterval(() => {
+    if (vscode.window.state.focused && cfg().get("tabCompletion.enabled") && cfg().get("tabCompletion.engine") !== "claude") local.status();
+  }, 15000);
   context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
   // Plain words in the terminal ("push this to main") → a command, by the chat's model.
   const wordsSession = new brain.Session({
     name: "words", quiet: true, fallbackModel: () => "haiku", effort: "low", noThinking: true,
-    systemPrompt: INTENT_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 20000, clearEach: true, earlyStop: "</cmd>",
+    systemPrompt: INTENT_SYSTEM_PROMPT, restartAfter: 40, timeoutMs: 20000, clearEach: true, earlyStop: "</cmd>", idleStopMs: 5 * MIN,
   }, () => {});
   context.subscriptions.push({ dispose: () => wordsSession.stop() });
   terminalTab(context, terminalSession, local, activity, commitSession, wordsSession);   // Tab in the terminal (Tab Completion; commits: the chat's model)
@@ -169,13 +191,16 @@ function activate(context) {
   chat.activity = activity;
   chat.readyCheck = () => getStarted.ready;           // Claude or your own model set up
   chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
+  // A chat answering with a model on this computer keeps Ollama busy: Tab Completion lets Claude help meanwhile
+  // (lib/tab/local.js busy, lib/tab/completion.js).
+  local.chatBusy = () => chat.tabs.some((t) => t.status === "running" && brain.isLocal(t.model));
   const router = new ModelRouter(context,cfg,() => chat.routerModels(),() => vscode.workspace.isTrusted);
   // Auto steers away from an AI close to its usage limit (lib/ai/usage.js) and learns from what you do after its
   // answers, per workspace (lib/router/learn.js).
   router.usageOf = (provider) => usageHub.current(provider);
   router.memory = new RouterMemory(() => context.workspaceState.get("kural.router.memory.v1"), (v) => context.workspaceState.update("kural.router.memory.v1", v));
   chat.router = router;
-  new RouterPanel(context,router,() => chat.postLocal()).register();
+  new RouterPanel(context, router).register();
   chat.postLocal().catch(() => {});
   brain.setModelSource(() => { const t = chat.active(); return t ? t.model : chat.lastChoices().model; }, () => getStarted.localModel);
   // Devices over SSH (+ → Link device in the chat, Kural: Devices): passwords encrypted in SecretStorage.
@@ -194,7 +219,11 @@ function activate(context) {
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
   chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)
-  new SearchView(context,router,() => chat.active()).register();
+  const searchView = new SearchView(context,router,() => chat.active());
+  searchView.register();
+  // You changed a name (typed over it, or a Tab suggestion changed it): offer to change it where else it's used
+  // (lib/tab/rename.js notices, rename-offer.js offers: Review in Search & Ask, or Change all).
+  new RenameOffers(context, searchView).register();
   // Kural Browser: your app on localhost beside the code; "Select element" adds what you click to the chat.
   const browser = new Browser(context, (info) => chat.addElement(info));
   browser.onItems = (items) => chat.addBrowserItems(items);
@@ -203,7 +232,7 @@ function activate(context) {
 
   context.subscriptions.push(
     status,
-    { dispose: () => { tabSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); } },
+    { dispose: () => { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); } },
     vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity,router)),
     vscode.commands.registerCommand("kural.tab.accepted", (a) => { if (a) activity.tabAccepted(a.file, a.lang, a.before, a.text); }),
     vscode.commands.registerCommand("kural.showCrashReports", () => crashLog.show()),
@@ -224,7 +253,7 @@ function activate(context) {
       const on = !cfg().get("tabCompletion.enabled");
       await cfg().update("tabCompletion.enabled", on, vscode.ConfigurationTarget.Global);
       vscode.window.setStatusBarMessage(`Tab Completion ${on ? "on" : "off"}`, 1500);
-      if (on) tabSession.start();
+      if (on) warmTab();
     }),
     vscode.commands.registerCommand("kural.tabSpeedSet", async (ms) => {
       if (typeof ms !== "number") return;
@@ -247,8 +276,8 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.tabCompletion.model")) { tabSession.stop(); terminalSession.stop(); }
       if (e.affectsConfiguration("kural.tabCompletion.localModel") || e.affectsConfiguration("kural.tabCompletion.ollamaUrl")) local.status(true);
-      // Turned on (shortcut or the Tab panel): start Claude now so the first suggestion is quick.
-      if (e.affectsConfiguration("kural.tabCompletion") && cfg().get("tabCompletion.enabled")) tabSession.start();
+      // Turned on, or another engine (shortcut or the Tab panel): start Claude now if it's needed, so the first suggestion is quick.
+      if (e.affectsConfiguration("kural.tabCompletion.enabled") || e.affectsConfiguration("kural.tabCompletion.engine")) warmTab();
       if (e.affectsConfiguration("kural")) refresh();
     }),
   );
@@ -282,13 +311,12 @@ function activate(context) {
   // (Claude's sessions only run once Claude is set up; with only your own model, Tab Completion uses Ollama.)
   getStarted.onChange((ready) => {
     state = "ready"; refresh();
-    if (getStarted.claudeReady && cfg().get("tabCompletion.enabled")) tabSession.start();
+    warmTab();
     if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); wordsSession.stop(); }
     chat.readyChanged(ready);
   });
   getStarted.start();
   chat.readyChanged(getStarted.ready);   // (saved empty chats get a model that's set up)
-  if (getStarted.claudeReady && cfg().get("tabCompletion.enabled")) tabSession.start();
 }
 
 // Which files you edit, and the lines around your last edit in each (for Tab in other files).

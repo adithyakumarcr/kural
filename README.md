@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4" alt="Windows">
 </p>
 
-![Kural: you ask in the chat; Claude adds a method and a test, asks before running the tests, and shows the changes to keep or undo](docs/screenshots/hero.gif)
+![Kural: you ask in the chat; it adds a method and a test, asks before running the tests, and shows the changes to review, keep or undo](docs/screenshots/hero.gif)
 
 ## What is Kural?
 
@@ -27,7 +27,8 @@ On top of that, Kural adds:
 
 - **A chat that edits your code.** Ask for a change; Kural reads your project, edits files, runs your tests, and you
   keep or undo each change.
-- **Tab Completion.** Grey suggestions as you type; **Tab** accepts.
+- **Tab Completion.** Grey suggestions as you type; **Tab** accepts. Change a name, and Kural offers to change it in
+  the other files that use it.
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
 - **Teams of agents.** A project team (Researcher, Architect, Developers, Tester, led by a Project Manager) that
   plans, gets your OK and builds, or agents that discuss a question and agree on an answer.
@@ -112,7 +113,7 @@ The chat unlocks when one way passes. Until then nothing runs in the background,
 Tab Completion model are optional; the page shows whether you have them. If Claude breaks later (removed, logged out),
 Kural notices and opens the page again. Open it any time: **Kural: Get Started**.
 
-<p align="center"><img src="docs/screenshots/get-started.png" width="620" alt="Get started: Claude or your own model; here your own model: Ollama running, a model picked, the test passed"></p>
+<p align="center"><img src="docs/screenshots/get-started.png" width="560" alt="Get started: Claude, your own model, Google Gemini or ChatGPT (Codex); here your own model: Ollama running, a model picked, the test passed"></p>
 
 ### Updates
 
@@ -125,9 +126,9 @@ setup. (Setting `kural.updates.autoCheck` turns the daily check off.)
 ### 3. Optional: a local model for faster Tab Completion
 
 Tab Completion with Claude takes about 0.6–0.9 s. For suggestions in about 150–300 ms, Kural can use a small code model
-on your own computer through [Ollama](https://ollama.com). Click **Tab Completion** in the status bar, then **Install Ollama**
-(on a Mac or Windows this opens the Ollama download page). Then click **Check again** and download a model from the same
-panel (1.5B is a good start).
+on your own computer through [Ollama](https://ollama.com). Click the **sparkle** icon in the status bar (Tab Completion),
+pick **Local model**, then **Set up**: one click installs Ollama if it isn't there (the panel shows the download and
+install progress; on Ubuntu it asks for your password) and downloads the model (1.5B is a good start).
 
 ## Features
 
@@ -164,7 +165,14 @@ Also in the chat:
   computer, and Low → Max. You can switch
   in the middle of a conversation; the new model gets the conversation so far.
 - **Moods.** **Explorer** compares options, **Critic** pushes back, and **Learn** teaches you: it first asks which
-  ideas behind your question you already know, explains the others, answers, then checks you got it.
+  ideas behind your question you already know, explains the others, answers, then checks you got it. **Add your own
+  mood…** makes your own (a name, a hint, instructions for the AI; Kural Settings → Moods).
+- **Edit, restore, fork.** Hover a message you sent: **Edit** it and send again, **Restore code** (the files the AI
+  changed after it go back), or **Fork from here** (a new chat with the conversation up to that point).
+- **Notifications.** When an answer is done or needs you (a command to allow, a question) and you're not looking, a
+  system notification names the chat; click it to go there. macOS asks once whether Kural may send notifications.
+  Setting `kural.notifications`.
+- **Did you know?** While an answer is being worked on, a short Kural tip or programming fact shows under it.
 - **Pictures.** Pictures in answers are shown: from your project, ones the model read, or ones an image model made.
   A picture from the internet waits for a click (loading it would tell that website you read the answer).
 - **Ask about Kural.** "How do I …?", "can Kural …?": the chat knows Kural's features, and if Kural can't do something
@@ -174,7 +182,8 @@ Also in the chat:
 - **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
   need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
   its folder, or **Continue here** (a new chat here that knows the old conversation).
-- **Thinking.** The model's thinking shows as a short summary above the answer. Click "Thought for … s" to read it.
+- **How it worked.** The AI's thoughts, reads, searches, commands and edits fold into one line above its answer
+  ("Worked for 18 s · 7 thoughts, 2 reads, 3 edits"); click it to see each step.
 
 <br clear="right">
 
@@ -221,9 +230,9 @@ If agents take too long, **Finish now** (next to "Waiting for …") stops them a
 has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
 <p align="center">
-  <img src="docs/screenshots/agents-setup.gif" width="300" alt="Turning on Multiple agents: Discuss & decide, with a Developer and a Critic">
+  <img src="docs/screenshots/agents-setup.gif" width="300" alt="Turning on Multiple agents in the model menu: the roles (Researcher, Architect, Developer, Tester), Split the work or Discuss & decide">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/agents-discussion.gif" width="300" alt="Rachel (Developer) and Ross (Critic) discuss and decide (sped up)">
+  <img src="docs/screenshots/agents-discussion.gif" width="300" alt="Two agents discuss and decide (sped up)">
   <br>
   <sub>Pick the roles and how they work &nbsp;·&nbsp; Then they discuss and decide (sped up)</sub>
 </p>
@@ -232,7 +241,9 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
 Choose **Auto → Balance, Cost or Intelligence** in the chat model menu, like Cursor's Auto. For every message Kural picks the model and the intensity from your Claude, Google Gemini and ChatGPT (Codex) models, switching between those AIs with the conversation handed over (models on this computer are only picked by you). It reads how much work the request is (Kural's own word classifier, or a helper model like Granite or Qwen3 Embedding for up to 90 % accuracy at under 50 ms), what you attached, how much of each AI's usage limit is left (**Cost** saves your limits), how long the conversation is, and what you did after its earlier answers. A quick question goes to a light model even under Intelligence, and complex work gets the most capable one even under Cost. Each answer shows the model; hover over it for the reasons.
 
-The **Model Router** panel (status bar) has a slider from **Faster** to **Quality** for what reads your requests (four steps: Native, MiniLM, Granite, Qwen3; its info button explains each). There's no list of models to tick: Auto always uses every cloud model of the AIs you set up. Model ratings, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
+Long chats transfer with an overview sized for the next model and a complete local record it can read to recover earlier details. Answered questions and attachments sent while an answer was running travel too. The same transfer happens when you switch providers or accounts yourself.
+
+From 80 % of an AI's usage limit Auto moves to another AI, and an answer stopped by a limit carries on with another AI. The **Model Router** panel (its icon in the status bar) has only a slider from **Faster** to **Quality** for what reads your requests (four steps: Native, MiniLM, Granite, Qwen3; its info button explains each). There's no list of models to tick: Auto always uses every cloud model of the AIs you set up. Model ratings, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
 
 ### Tab Completion
 
@@ -241,16 +252,23 @@ Enter, and the suggestion implements it. **Tab** accepts.
 
 ![Tab: a method's first line, and a comment, become code; Tab accepts](docs/screenshots/tab-completion.gif)
 
-Click **Tab Completion** in the status bar for its panel. There you can:
+Click the **sparkle** icon in the status bar (crossed out while Tab Completion is off) for its panel. There you can:
 
 - turn suggestions on or off,
 - set how quickly they appear,
 - pick the engine: **Auto**, **Local model** or **Claude**, and its model,
 - see how long the last suggestion took.
 
-In **Auto**, the local model and Claude race, and the first good answer wins. With Model Router’s Auto Tab policy enabled (`kural.modelRouter.tab`), the router picks one engine from the profile setting.
+In **Auto**, the local model and Claude race, and the first good answer wins. With Model Router’s Auto Tab policy enabled (`kural.modelRouter.tab`), the router picks one engine from the profile setting. While a chat answers with a model on your computer, both share one graphics chip and the local suggestions slow down; then Claude helps (if it's set up), so suggestions keep coming.
 
-![The Tab Completion panel: speed, engine and model](docs/screenshots/tab-panel.gif)
+![The Tab Completion panel: the sparkle in the status bar opens it; speed, engine and model](docs/screenshots/tab-panel.gif)
+
+**Change a name, and Kural offers the rest.** Type over a name (or accept a Tab suggestion that changes it), and when
+you move on, Kural looks for the old name in the rest of the project: "`total_value` became `stock_value` here. Also
+change it in 1 other file?" **Review** opens Search & Ask filled in (whole word, same capitals, the new name in Replace);
+**Change all** changes every place at once (Ctrl+Z undoes it). Setting `kural.tabCompletion.renameAcrossFiles`.
+
+![Renaming a method: Kural offers to change it in the other file; Review opens Search & Ask; Replace All](docs/screenshots/rename.gif)
 
 **Tab learns from your work.** The models themselves never change, so Kural tells them, with each suggestion, what
 you've been doing in this workspace:
@@ -283,8 +301,8 @@ added the low stock check`, and Kural suggests the command (`git push origin HEA
 ### Inline edit (Ctrl+K)
 
 Select code, press **Ctrl+K**, and say what to change. Then review the change in place and keep it
-(**Ctrl+Enter**) or reject it (**Ctrl+Shift+Backspace**). With nothing selected, Ctrl+K writes new code at the
-cursor.
+(**Ctrl+Enter**) or reject it (**Ctrl+Shift+Backspace**); on a Mac, Cmd instead of Ctrl. With nothing selected, Ctrl+K
+writes new code at the cursor.
 
 ![Ctrl+K: select code, say what to change, review the green lines, accept](docs/screenshots/inline-edit.gif)
 
@@ -299,10 +317,16 @@ cursor.
   answer opens there). Click the inspect button, click an element, and it's added to the chat with its HTML, CSS and a
   picture; add a comment ("make this bigger") and Kural finds the code behind it and changes it, like Cursor.
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
-- **AI Usage** (bottom panel, next to Terminal). Each limit in words: "5-hour limit 50% used, resets in 42 min",
-  "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex. The status bar shows the chat's AI the
-  same way (`Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h`; orange from 80 %, red from 95 %); click it for
-  the panel.
+- **AI Usage** (bottom panel, next to Terminal). Each limit in words: "Session 50% used, resets in 42 min" (the 5-hour
+  limit), "Weekly 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex, and the tokens each used. The status bar
+  shows the Session limit (`Claude Session 50% · resets 42m`; orange from 80 %, red from 95 %); hover for every limit,
+  click for the panel.
+- **A simpler window.** VS Code's Run and Debug side bar, Debug Console and Ports are hidden (while you debug with F5
+  the debug views show anyway); the setting `kural.showDebugViews` brings them back. Tab Completion and Model Router
+  are just icons in the status bar.
+- **Light on memory.** Kural's Claude helpers start when they're first needed and stop after a few idle minutes, and a
+  chat you haven't looked at for a while stops its Claude Code process until you come back to it
+  ([measurements](docs/benchmarks/memory-2026-10-08.md)).
 - **Asks before leaving your project.** The AI reads and changes your project's files freely; a file anywhere else gets
   a "Read this file?" / "Change this file?" card first. Kural never looks through Desktop, Documents, Downloads, Music
   or Photos by itself, so a Mac doesn't ask you about them.
@@ -414,16 +438,18 @@ extension/            the Kural extension (plain JavaScript, no build step)
                       team.js (agent roles) + team-mcp.js (their message board), guide.js (what Kural can do),
                       archive.js (History), attachments, tickets, changes
   lib/tab/            Tab Completion: completion.js (editor), terminal.js (terminal, plain words), local.js
-                      (Ollama), activity.js (what it learns), panel.js (the Tab Completion panel)
+                      (Ollama), activity.js (what it learns), panel.js (the Tab Completion panel), rename.js +
+                      rename-offer.js (change a name in the other files too)
   lib/edit/           Ctrl+K and Apply (inline.js), red/green review, diff
   lib/getstarted.js   Get started; lib/account.js accounts, lib/settings-page.js Kural Settings; lib/updates.js updates; lib/search/ Search & Ask
   media/              the panels' pages (HTML/CSS/JS) and the Codicons icon font
   themes/             Kural Dark, Kural Light (written by scripts/make-themes.py)
-scripts/              shared rebranding, logo, icons, release notes, push-wiki.sh
+scripts/              shared rebranding (rebrand.py), logo, icons (make-status-icons.js), release notes, push-wiki.sh,
+                      bench-memory.js (what a running Kural uses: memory and CPU per part)
 installer/            the Windows installer (NSIS)
 make-deb.sh           Ubuntu .deb    build-mac.sh  Mac app    build-win.sh  Windows
 test/                 npm test
-docs/                 screenshots for this README; docs/wiki/ the wiki's pages
+docs/                 screenshots for this README; docs/wiki/ the wiki's pages; docs/benchmarks/ measurements
 ```
 
 ## Troubleshooting
@@ -431,8 +457,8 @@ docs/                 screenshots for this README; docs/wiki/ the wiki's pages
 - **Kural: Show Log** (Command Palette, or Kural Settings) shows every request Kural makes, with timings.
 - **"Kural: finish setup" in the status bar:** click it. Get started shows which step is missing (Claude Code, the
   login, or the test request) and how to fix it.
-- **No Tab suggestions:** click **Tab Completion** in the status bar. The panel shows the engine, whether the local
-  model is ready, and how long the last suggestion took.
+- **No Tab suggestions:** click the sparkle icon in the status bar (crossed out = off). The panel shows the engine,
+  whether the local model is ready, and how long the last suggestion took.
 - **More:** the [Kural wiki](https://github.com/adithyakumarcr/kural/wiki) explains every feature.
 - **Mac says the app is damaged:** run the `xattr` command from [Install](#1-download-kural).
 

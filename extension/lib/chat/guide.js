@@ -34,22 +34,35 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
   @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
-  (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku, Google Gemini and
+  (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku (with a Claude model,
+  Claude's line also shows its Claude Code setup: "10 connectors · 30 skills", click for each connector, and a reload
+  button), Google Gemini and
   ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you
-  step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
+  step by step and checks what you know first; and your own: "Add your own mood…" at the end of the moods opens Kural
+  Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
+  there; a changed mood or mode applies from the next message); Multiple agents (Claude only: a project team led by a PM, or a
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
   this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini always does
   that). Stop (the square button, or Esc) stops the answer and puts queued messages back into the box. Each change
-  can be reviewed, kept or undone. How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
+  can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
+  Claude Code's own plans and memory). How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
   answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
-  it. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
+  it. While it works, a "Did you know?" line under "Thinking…" shows a Kural tip or programming fact (a new one every
+  15 s; "Know more" opens its page in Kural's browser tab); setting kural.chat.didYouKnow turns it off.
+  Notifications: when an answer is done or needs you (a command or file to allow, a question, a plan to build, an
+  error, a login), a system notification names the chat ("Fix the login is done"); click it to go there. By default only
+  while you're not looking (Kural's window not in front, or that chat not on screen); setting kural.notifications:
+  whenAway, always, off. A team's answer notifies once, at the end; Stop doesn't. macOS asks once whether Kural may send
+  notifications; if you chose Don't Allow: System Settings > Notifications > Kural. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
   the conversation stays; checkpoints are kept 30 days, also after a restart). Hover any message in an idle chat:
   "Fork from here" opens a new chat with the recorded conversation through that message, including attached context
-  and tool results. It keeps the model, mode and other choices; the original chat and current files stay as they are.
+  and tool results. It keeps the model, mode and other choices; the original chat's conversation stays as it is. When
+  answers after that message changed files, it first asks whether the code goes back too (Restore Code: those files
+  as they were at that message; Keep Code: files stay as they are now).
   Inherited file-change cards can be reviewed; keep/undo belongs to the original chat. Both chats appear in History.
   Next to the send button: how full the
   conversation's context window is (hover: this chat's tokens read, from cache, written). Pictures in answers are shown;
@@ -91,28 +104,52 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
   cheaper model). Per message it picks the model and the intensity, only among Claude, Google Gemini and ChatGPT (Codex)
   models (never a model on this computer: pick those yourself), switching between those AIs with the conversation handed
-  over. It reads how much work the request is (Kural's word classifier, or a helper model through Ollama: MiniLM,
+  over (everything visible: requests, what was sent, answers, steps and results, files changed, plan and to-do list,
+  pictures; a long conversation gets an overview sized for the next model and a complete local history file it can
+  read to recover omitted details). It reads how much work the request is (Kural's word classifier, or a helper model through Ollama: MiniLM,
   Granite or Qwen3, downloaded in the panel), what's attached (files, error output, a picked element), each AI's usage
-  left (avoids one past half, skips one at 98 %), the conversation's length (long chats stay on their AI on close calls)
-  and what you did after earlier answers (learned per workspace; "Kural: Forget What Model Router Learned"). Each answer
-  shows the model; hover: why. The profile is picked only in the model menu. Status bar "Model Router" (a panel): a
-  slider from Faster to Quality for what reads requests (four steps: Native, MiniLM, Granite, Qwen3; the panel names the
-  step, Download when it isn't on this computer yet; the info button explains each), the AIs Auto picks from (always
-  every cloud model of the AIs you set up: nothing to choose), and the last choice.
-- Tab Completion: grey suggestions as you type; Tab accepts. Click "Tab Completion" in the status bar for its panel:
+  left (avoids one past half; from 80 % of a Session or Weekly limit it moves to another AI, Claude to ChatGPT (Codex)
+  first, then Gemini, even in a long chat; skips one at 98 %), the conversation's length (long chats stay on their AI on
+  close calls) and what you did after earlier answers (learned per workspace; "Kural: Forget What Model Router
+  Learned"). When an answer stops because its AI reached its usage limit, Auto carries the same request on with another
+  AI at once (the stopped answer gets a note) and avoids that AI until the limit resets. Switching a chat to another AI
+  yourself (model menu), or switching an AI's account or logging in again, also hands the conversation over. Each answer
+  shows the model; hover: why. The profile is picked only in the model menu. The Model Router icon in the status bar
+  (two arrows in boxes; hover: "Model Router" and the step that reads requests) opens its panel: only a slider from
+  Faster to Quality for what reads requests (four steps: Native, MiniLM, Granite, Qwen3; the panel names the step,
+  Download when it isn't on this computer yet; the info button explains each, and says Auto picks from every cloud model
+  of the AIs you set up).
+- Tab Completion: grey suggestions as you type; Tab accepts. Click the sparkle icon in the status bar (Tab Completion; crossed out while it's off) for its panel:
   on/off (Ctrl+Alt+Space), how fast it suggests, the engine (Auto, a local model for speed, or Claude) and its model.
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
   then downloads the model.
   It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
+  While a chat answers with a model on this computer (Ollama runs both on one GPU, so Tab's local answers slow to 2-3 s),
+  Claude helps Tab if it's set up (also for "Local model"); without Claude, Tab asks a little less often meanwhile.
+- Change a name in your code (type over it, or accept a Tab suggestion that changes it) and Kural looks for the old name
+  in the rest of the project (whole word, same capitals; not node_modules, dist, build, minified/lock files or prose like
+  READMEs) and offers: "count" became "total" here. Also change it in this file (2 places) and 3 other files (7 places)?
+  Review opens Search & Ask filled in (Match Case + Whole Word, the new name in Replace); Change all changes every place
+  in one edit (Ctrl+Z undoes it). Not for new names you're typing, keywords or one-letter names. Off: setting
+  kural.tabCompletion.renameAcrossFiles.
+- Memory: Kural's Claude helpers (Tab Completion's, terminal Tab, Ctrl+K, commit messages, Ask) start when they're first
+  needed and stop after a few idle minutes (the next use starts them again in about a second); each open chat keeps one
+  Claude Code process (~120 MB) while it's on screen or was used in the last 10 minutes (at most two idle ones stay
+  warm; it starts again, same conversation, when you open the chat or send to it). Ollama keeps Tab Completion's model loaded 30 minutes after
+  the last suggestion. A model on this computer takes gigabytes (a 9B model at kural.localModels.contextLength 32768:
+  about 7.8 GB).
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
   The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
-  "5-hour limit 50% used, resets in 42 min", "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex.
-  The status bar shows the chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"), the
-  others short; orange from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
+  "Session 50% used, resets in 42 min" (Session = the 5-hour limit, Claude's and Codex's), "Weekly 25% used, resets in 3
+  days 4 h", for Claude, Gemini and Codex.
+  The status bar shows only each AI's Session limit: the chat's AI with when it resets ("Claude Session 50% · resets
+  42m"), the others short ("Codex 12%"); Gemini, which has only weekly limits, shows its name. Weekly numbers stay in
+  the hover at every usage level; hover for every AI's Session and Weekly limits; orange
+  from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
   the cache) and written, today, 7 days and 30 days (every Kural feature: chat, Tab Completion, Ctrl+K…).
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
   Inside the project it doesn't ask (Agent mode still asks before commands). Kural never looks through Desktop,
@@ -122,7 +159,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
   for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
-  page, switch account, log out, log in, set up; then Kural's version and Check for updates, Get started, Tab Completion,
+  page, switch account, log out, log in, set up; then Moods (your own chat moods: add, edit, delete); then Kural's
+  version and Check for updates, Get started, Tab Completion,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
   editor settings, shortcuts, extensions, chat defaults, devices: no passwords or keys; you pick what to import).
   Kural's log: "Kural: Show Log" (an editor tab; Kural hides VS Code's Output tab).
@@ -137,8 +175,25 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
   buttons and focus.
+- VS Code's Run and Debug side bar, Debug Console and Ports panels are hidden to keep Kural simple; the setting
+  kural.showDebugViews brings them back at once. While you debug (F5), Run and Debug and the Debug Console show anyway.
 - Full guide: ${WIKI}
 If they ask for something Kural doesn't have, say so plainly (don't pretend), suggest the closest thing it has, and
 invite them to ask for it as a feature, with this link: [Ask for this feature](${ISSUES}).`;
 
-module.exports = { GUIDE, ISSUES, WIKI };
+// The short version, for a model on this computer: every token of the instructions costs it time before its first word
+// (Ross measured the whole guide in a 9,600-token first message: 28 s on an M5 before qwen3.5:9b said anything). The
+// essentials and where the full guide is.
+const GUIDE_LOCAL = `
+
+About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
+work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
+that's you). Main features: Get started (set up an AI); the chat (Ctrl+L: modes Agent, Auto, Plan, Ask; @ mentions a
+file; + attaches files; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
+Fork from here; the clock button has every chat); Ctrl+K edits selected code in place; Tab Completion; plain words in
+the terminal ("push this to main", then Tab); Search & Ask; Kural's browser; devices over SSH; the Model Router (Auto);
+Kural Settings (accounts, usage limits, moods, updates). Agent teams, Jira tickets and Claude Code's connectors need a
+Claude model. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
+link [Ask for this feature](${ISSUES}).`;
+
+module.exports = { GUIDE, GUIDE_LOCAL, ISSUES, WIKI };
