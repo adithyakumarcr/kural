@@ -39,6 +39,7 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.claudePath` | (empty) | where the `claude` program is, if Kural can't find it |
 | `kural.agyPath`, `kural.codexPath` | (empty) | where the `agy` (Google Gemini) / `codex` programs are, if Kural can't find them |
 | `kural.updates.autoCheck` | on | check for a new Kural version once a day |
+| `kural.showDebugViews` | off | show VS Code's Run and Debug side bar and the Debug Console and Ports panels (hidden to keep Kural simple; while you debug with F5, the debug views show anyway) |
 
 ## Themes
 

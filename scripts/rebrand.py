@@ -115,6 +115,7 @@ def main(app, platform):
 #   - VSCodium's own content off the Welcome page (see drop_vscodium_welcome).
 #   - the Integrated Browser's "Add to Chat" goes to Kural's chat (route_browser_to_kural).
 #   - notifications from the system for Kural's chat (add_os_toast).
+#   - VS Code's Run and Debug, Debug Console and Ports hidden unless kural.showDebugViews is on (hide_debug_views).
 #   - Help → Check for Updates…: extensions can't add items to the Help menu, so the item goes next to VS Code's
 #     "Ask @vscode" Help item.
 #   - VS Code's Search view and Output view never show: Kural's Search & Ask side bar has text search (find and
@@ -265,6 +266,38 @@ def route_browser_to_kural(text):
     return text
 
 
+# VS Code's Run and Debug side bar, Debug Console panel and Ports panel are hidden unless the setting
+# `kural.showDebugViews` is on (Adithya: off by default, to keep Kural simple). Every view registered in those three
+# containers (VS Code's own and extensions' alike) gets "and the setting is on" added to its condition (`when`), in the
+# views registry's `addViews` (so it doesn't matter how each view is written); the debug ones also show while you debug
+# (`inDebugMode`), so F5 still shows Variables, Call Stack and the Debug Console. A container with no view to show is
+# hidden (`hideIfEmpty`: Debug Console and Ports have it; Run and Debug gets it). Turning the setting on brings them back
+# at once (`config.*` context keys follow the settings). Found by shape; a miss -> ::warning::, and they stay.
+DEBUG_ADD_VIEWS = re.compile(r'addViews\(([\w$]+),([\w$]+)\)\{(?=let [\w$]+=this\._views\.get\(\2\);)')
+DEBUG_RUN_CONTAINER = re.compile(r'registerViewContainer\(\{(?=id:[\w$]+,title:[\w$]+\(\d+,"Run and Debug"\),openCommandActionDescriptor:)')
+DEBUG_IDS = ("workbench.view.debug", "workbench.panel.repl", "~remote.forwardedPortsContainer")
+DEBUG_MARK = '/*kural-debug-views*/'
+
+
+def hide_debug_views(text):
+    if DEBUG_MARK in text:
+        return text
+    never, add, run = NEVER.search(text), list(DEBUG_ADD_VIEWS.finditer(text)), list(DEBUG_RUN_CONTAINER.finditer(text))
+    ids = all(f'"{i}"' in text for i in DEBUG_IDS)
+    if not (never and len(add) == 1 and len(run) == 1 and ids):
+        print("::warning::VS Code's views code not found as expected; Run and Debug, Debug Console and Ports stay "
+              f"(condition class {bool(never)}, addViews {len(add)}, Run and Debug {len(run)}, ids {ids})")
+        return text
+    c, views, container = never.group(1), add[0].group(1), add[0].group(2)
+    code = (f'{DEBUG_MARK}try{{const _kd=globalThis.__kuralDebugViews||(globalThis.__kuralDebugViews=new WeakSet),_kp={container}&&{container}.id;'
+            f'if({"||".join(f"_kp===" + json.dumps(i) for i in DEBUG_IDS)})for(const _kv of {views})try{{if(_kv&&!_kd.has(_kv)){{'
+            f'const _kk={c}.has("config.kural.showDebugViews"),_ks=_kp[0]==="~"?_kk:{c}.or(_kk,{c}.has("inDebugMode"));'
+            f'_kv.when=_kv.when?{c}.and(_kv.when,_ks):_ks;_kd.add(_kv)}}}}catch{{}}}}catch{{}}')
+    text = text[:add[0].end()] + code + text[add[0].end():]
+    run = DEBUG_RUN_CONTAINER.search(text)
+    return text[:run.end()] + "hideIfEmpty:!0," + text[run.end():]
+
+
 # Notifications from the system (a Mac banner, a Windows toast, a Linux notification) that say Kural: VS Code's own
 # `hostService.showToast` (its chat uses it when an answer arrives in a window you aren't looking at) shows an Electron
 # notification from Kural's main process. Extensions can't reach it, so a command is added that does:
@@ -323,7 +356,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))
+    new = hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))
     if new == text:
         return
     data = new.encode("utf-8")
