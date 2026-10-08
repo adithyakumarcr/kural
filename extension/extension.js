@@ -19,6 +19,7 @@ const { SearchView } = require("./lib/search");
 const { TabPanel } = require("./lib/tab/panel");
 const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
+const { RenameOffers } = require("./lib/tab/rename-offer");
 const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
 const { SettingsPage } = require("./lib/settings-page");
@@ -205,7 +206,11 @@ function activate(context) {
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
   chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)
-  new SearchView(context,router,() => chat.active()).register();
+  const searchView = new SearchView(context,router,() => chat.active());
+  searchView.register();
+  // You changed a name (typed over it, or a Tab suggestion changed it): offer to change it where else it's used
+  // (lib/tab/rename.js notices, rename-offer.js offers: Review in Search & Ask, or Change all).
+  new RenameOffers(context, searchView).register();
   // Kural Browser: your app on localhost beside the code; "Select element" adds what you click to the chat.
   const browser = new Browser(context, (info) => chat.addElement(info));
   browser.onItems = (items) => chat.addBrowserItems(items);

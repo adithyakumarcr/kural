@@ -874,6 +874,11 @@
           "default": true,
           "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
         },
+        "kural.tabCompletion.renameAcrossFiles": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When you change a name in your code (type over it, or accept a Tab suggestion that changes it), Kural looks for the old name in the rest of the project and offers to change it there too: **Review** (Search & Ask, filled in) or **Change all**."
+        },
         "kural.updates.autoCheck": {
           "type": "boolean",
           "default": true,

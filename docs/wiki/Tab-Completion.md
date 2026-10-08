@@ -31,6 +31,25 @@ your password, since Ollama installs for the whole computer), then downloads the
 one: **Set up** in the panel (or your own model set up in Get started). A model that's already there from before isn't
 used until then, and the panel says "Not set up".
 
+## When you change a name
+
+Change the name of something in your code (type over it, or accept a Tab suggestion that changes it), and once you're
+done with that word (you move on, or pause for a moment), Kural looks for the old name in the rest of the project:
+
+> "count" became "total" here. Also change it in this file (2 places) and 3 other files (7 places)?
+
+- **Review** opens [[Search & Ask|Search and Ask]] filled in: the old name with Match Case and Match Whole Word, the new
+  one in Replace. You see every place and replace them one by one, per file, or all at once.
+- **Change all** changes every place in one go (Ctrl+Z undoes it). Files you weren't editing are saved; the one you're
+  in stays unsaved.
+- **Not now** leaves everything as it is.
+
+Only whole words with the same capitals count (`countAll` and `Count` aren't `count`). Not searched: `node_modules`,
+`dist`, `build`, minified and lock files, and prose files (`.md`, `.txt`: a README's "the count of items" isn't your
+variable). Not offered: a new name you're typing, keywords (`let` → `const`), one-letter names, edits made with several
+cursors at once (that's already a rename). It searches text, so a different variable with the same name in another file
+shows up too: use **Review** when you're not sure. Off: setting `kural.tabCompletion.renameAcrossFiles`.
+
 ## It learns from your work
 
 The models never change, so with each suggestion Kural tells them what you've been doing in this workspace: what you
@@ -49,3 +68,4 @@ Forget What Tab Completion Learned (This Workspace)**.
 | `kural.tabCompletion.localModel` | qwen2.5-coder:1.5b-base | the Ollama model |
 | `kural.tabCompletion.model` | haiku | the Claude model |
 | `kural.tabCompletion.terminal` | on | Tab in the terminal too (see [[Terminal]]) |
+| `kural.tabCompletion.renameAcrossFiles` | on | after you change a name, offer to change it where else it's used |

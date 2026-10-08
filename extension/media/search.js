@@ -528,6 +528,19 @@
       case "focus": {
         setTab(m.tab || "text");
         if (m.tab === "ask") { if (m.text) input.value = m.text; input.focus(); input.select(); return; }
+        // A search filled in by Kural (Tab Completion's "also change it elsewhere" → Review): its words, options and
+        // replacement, searched at once; the other boxes emptied so nothing else narrows it.
+        if (m.query) {
+          const q = m.query;
+          Object.assign(S.f, { pattern: q.pattern || "", isRegex: !!q.isRegex, matchCase: !!q.matchCase, wholeWord: !!q.wholeWord, preserveCase: false,
+            replace: q.replace || "", showReplace: q.replace !== undefined, include: q.include || "", exclude: q.exclude || "", onlyOpen: false, useIgnore: true });
+          findIn.value = S.f.pattern; replaceIn.value = S.f.replace; includeIn.value = S.f.include; excludeIn.value = S.f.exclude;
+          grow(findIn); grow(replaceIn);
+          post({ type: "replaceText", replace: S.f.replace });
+          keep(); renderFind(); find();
+          (S.f.showReplace ? replaceIn : findIn).focus();
+          return;
+        }
         if (m.replace) { S.f.showReplace = true; }
         if (m.include !== undefined && m.include) { S.f.include = m.include; includeIn.value = m.include; S.f.showDetails = true; }
         if (m.text) { S.f.pattern = m.text; findIn.value = m.text; grow(findIn); }
