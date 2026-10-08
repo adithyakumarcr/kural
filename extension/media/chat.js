@@ -522,7 +522,8 @@
     // A previous live thinking box is finished once something comes after it.
     if (prev && msg.blocks[k - 1].k === "think") prev.replaceWith(blockNode(msg, msg.blocks[k - 1], k - 1));
     const node = blockNode(msg, msg.blocks[k], k);
-    const after = k === 0 ? (out.querySelector(".team-note") || null) : out.querySelector(`[data-b="${k - 1}"]`);
+    // (The first block goes after the lines on top: which model answers, the team's note.)
+    const after = k === 0 ? (out.querySelector(".team-note") || out.querySelector(".model-attribution") || null) : out.querySelector(`[data-b="${k - 1}"]`);
     if (after) after.after(node); else out.prepend(node);
     follow();
   }
@@ -603,6 +604,7 @@
       el("button", { class: "cb", title: "Stop the agents still working and have the lead answer with what it has", onclick: () => post({ type: "finishTeam", tabId: S.tab.id }) }, "Finish now")));
     else if (m.running) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
+    if (m.running && !waiting) out.append(dykNode(m));   // "Did you know?" while it works
     if (m.note) out.append(el("div", { class: "note" }, m.note));
     if (m.error === "stopped") out.append(el("div", { class: "note" }, "Stopped."));
     else if (m.error === "login") out.append(el("div", { class: "note warn" }, `${m.errorWho || "Claude"} isn't logged in. `, el("button", { class: "cb primary", onclick: () => post({ type: "login", tabId: S.tab.id }) }, "Log in")));
@@ -626,7 +628,39 @@
   }
   setInterval(() => {
     for (const e of listEl.querySelectorAll(".elapsed")) e.textContent = workingText(+e.dataset.t0);
+    // A "Did you know?" appearing (after a few seconds) makes the answer taller: keep following it if you were.
+    let grew = false;
+    for (const d of listEl.querySelectorAll(".dyk")) { const was = !!d.firstChild; if (fillDyk(d, true) && !was && d.firstChild) grew = true; }
+    if (grew) follow();
   }, 1000);
+
+  // ---------- "Did you know?" while an answer is worked on ----------
+  // One short Kural tip or programming fact (media/facts.js) under "Thinking…", from a few seconds in (a quick answer
+  // shows none), a new one every 15 s, with a Know more link (opens like any web link in the chat: Kural's browser tab).
+  // Which one shows is worked out from the time (the answer's start picks where the list begins), so redrawing the answer
+  // while it streams keeps the same fact. Fixed height (three lines), so a new fact never moves the answer. Gone when the
+  // answer ends; off with the setting kural.chat.didYouKnow.
+  const FACTS = Array.isArray(window.KURAL_FACTS) ? window.KURAL_FACTS : [];
+  const DYK_AFTER = 4000, DYK_EVERY = 15000;
+  function factIndex(t0, now = Date.now()) {
+    if (S.didYouKnow === false || !FACTS.length || !t0 || now - t0 < DYK_AFTER) return -1;
+    const start = (Math.floor(t0 / 1000) * 7919) % FACTS.length;
+    return (start + Math.floor((now - t0 - DYK_AFTER) / DYK_EVERY)) % FACTS.length;
+  }
+  function dykNode(m) { const node = el("div", { class: "dyk", "data-t0": m.t0 }); fillDyk(node, false); return node; }
+  // Shows the fact for now; true when it changed. fresh: fades in (a new fact, not a redraw of the same one).
+  function fillDyk(node, fresh) {
+    const i = factIndex(+node.dataset.t0);
+    if (String(i) === node.dataset.i) return false;
+    node.dataset.i = String(i);
+    if (i < 0) { node.replaceChildren(); return true; }
+    const f = FACTS[i];
+    node.replaceChildren(
+      el("div", { class: "dyk-head" }, icon("lightbulb"), el("span", { class: "dyk-label" }, "Did you know?"), el("span", { class: "spacer" }),
+        el("a", { class: "dyk-more", title: f.u, onclick: (e) => { e.preventDefault(); post({ type: "openUrl", url: f.u }); } }, "Know more")),
+      el("div", { class: `dyk-text${fresh ? " fresh" : ""}`, title: f.t }, f.t));
+    return true;
+  }
 
   // ONE dropdown per answer for how it worked: thoughts, tool steps (reads, searches, commands, edits…), permission cards
   // you've answered, and the short notes the model writes between them, so the chat shows the answer, not a stack of
@@ -1597,7 +1631,9 @@ ${d.system}` : ""}`,
       case "config":
         S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false; S.clis = m.clis || [];
         S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.pics = m.pics || S.pics;
+        S.didYouKnow = m.didYouKnow !== false;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
+      case "didYouKnow": S.didYouKnow = m.on !== false; for (const d of listEl.querySelectorAll(".dyk")) fillDyk(d, true); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
         // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.

@@ -48,7 +48,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
   Claude Code's own plans and memory). How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
   answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
-  it. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
+  it. While it works, a "Did you know?" line under "Thinking…" shows a Kural tip or programming fact (a new one every
+  15 s; "Know more" opens its page in Kural's browser tab); setting kural.chat.didYouKnow turns it off. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
   the conversation stays; checkpoints are kept 30 days, also after a restart). Hover any message in an idle chat:
   "Fork from here" opens a new chat with the recorded conversation through that message, including attached context

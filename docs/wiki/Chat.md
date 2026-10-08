@@ -79,6 +79,9 @@ your next message, because which tools the model has is fixed when it starts.
   (`devices.test.js`) or a path from inside another folder, Kural finds that file in your project (not in
   `node_modules`); if several files have that name, it asks which one. Web links open in Kural's own [[Browser]] tab
   (so you can pick elements of the page).
+- **Did you know?** While the AI works (from a few seconds in), a short Kural tip or programming fact shows under
+  "Thinking…", a new one every 15 seconds; **Know more** opens its page (the guide, MDN, the official docs, Wikipedia)
+  in Kural's browser tab. It goes away when the answer is done. Turn it off with the setting `kural.chat.didYouKnow`.
 - **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;
   **Latest** brings you back down.
 - **Stop** (the square button, or Esc) stops the answer.
