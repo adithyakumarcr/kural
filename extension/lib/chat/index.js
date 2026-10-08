@@ -25,7 +25,7 @@ const { PROMPTS, MOODS, MOOD_PROMPTS, customMoods, moodPrompt } = require("./pro
 const { GUIDE } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
-const { profileOf } = require("../router/policy");
+const { profileOf, limitUsed } = require("../router/policy");
 const journal = require("../router/journal");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
@@ -193,6 +193,8 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
       vscode.commands.registerCommand("kural.chat.moveToPanel", (uri) => this.moveToPanel(uri)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
+      // (Internal: lib/account.js, when you log out, log in again or switch an AI's account.)
+      vscode.commands.registerCommand("kural.chat.accountChanged", (provider) => this.accountChanged(provider)),
       vscode.commands.registerCommand("kural.chat.localModels", async () => { await this.reveal(); this.post({ type: "showLocal" }); }),
       vscode.commands.registerCommand("kural.chat.attach", async () => { this.reveal(); await this.onMessage({ type: "attachPick" }); }),
       // Keyboard shortcuts while the chat has focus (Ctrl+M/H/O intensity, Ctrl+P plan). "Next model" has no
@@ -1150,13 +1152,20 @@ class ChatView {
     if (r.stale || this.runtime.get(tab.id) !== r) return;
     const last = tab.messages[tab.messages.length - 1];
     // A saved conversation that can't be reopened: start a new one and carry on.
+    // (Its first message is the one that was waiting, now starting with the conversation so far: nothing is lost.)
     if (tab.started && !r.gotOutput && Date.now() - r.started < 15000 && /no conversation|not found|session/i.test(info.stderr)) {
-      log(`chat ${tab.id}: couldn't reopen the saved conversation; starting a fresh one`);
+      log(`chat ${tab.id}: couldn't reopen the saved conversation; starting a fresh one with the conversation handed over`);
       tab.started = false;
       const pending = r.pendingSend;
       this.giveBack(tab, r);
       const nr = this.startProc(tab, true);
-      if (nr && pending) { nr.pendingSend = pending; nr.turn = r.turn; this.sendTo(nr, pending, "turn"); }
+      if (nr && pending) {
+        const reply = r.turn && r.turn.reply, upto = reply && tab.messages.indexOf(reply) > 0 ? tab.messages.indexOf(reply) - 1 : tab.messages.length;
+        const carry = upto > 0 ? this.carryText({ model: true }, journal.handoff(tab.messages.slice(0, upto), this.handoffBudget(tab.model))) : "";
+        const content = !carry ? pending : typeof pending === "string" ? carry + pending
+          : pending.map((b, k) => k === 0 && b.type === "text" ? { ...b, text: carry + b.text } : b);
+        nr.pendingSend = content; nr.turn = r.turn; this.sendTo(nr, content, "turn");
+      }
       return;
     }
     r.proc = null;
@@ -1338,14 +1347,17 @@ class ChatView {
           if (!brain.providerOf(previous).ready()) { this.post({ type: "flash",text: routed.error }); return; }
           routed = { ...routed, model: previous, reason: `${routed.error} · kept ${previous}` };
         }
-        // Another AI takes over with a record of the conversation (journal.handoff). When that record is too big for the
-        // handoff budget, or an earlier picture/PDF is gone, Auto picks again within the current AI instead of refusing.
+        // Another AI takes over with a record of the conversation (journal.handoff: everything visible, compacted to fit
+        // the next model when it's long). Only when that would lose something (the record has to be shortened, or an
+        // earlier picture/PDF is gone) and the chat's AI isn't near its limit, Auto picks again within the current AI,
+        // whose own conversation keeps everything. Near its limit (80 %+) it moves anyway (Adithya: prioritize the other
+        // AI, with the knowledge carried over).
         const here = tab.engine || engineOf(previous);
         let changesProvider = engineOf(routed.model) !== here;
-        const tooBig = () => journal.handoff(tab.messages).length > this.router.options().handoffChars;
+        const tooBig = () => journal.handoff(tab.messages).length > this.handoffBudget(routed.model);
         const missing = () => previousMedia.some((a) => !a.path || !fs.existsSync(a.path));
-        if (changesProvider && tab.messages.length && (missing() || tooBig())) {
-          const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over";
+        if (changesProvider && tab.messages.length && this.limitOf(here, previous) < 80 && (missing() || tooBig())) {
+          const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over whole";
           // (On a model on this computer there's no "same AI" for Auto: that one stays.)
           const again = here === "ollama" ? { error: "local" }
             : await this.router.route({ ...this.routingRequest(tab,text,[...attached,...historical],contexts), provider: here }, ctl.signal);
@@ -1354,6 +1366,7 @@ class ChatView {
             : { ...again, reason: `${again.reason} · stayed with this AI: ${why}` };
           changesProvider = false;
         }
+        log(`chat ${tab.id}: Auto chose ${routed.model} (was ${previous}): ${routed.reason || ""}`);
         tab.model = routed.model;
         // Auto also sets the intensity, unless you picked one yourself (picking a profile hands it back to Auto).
         if (routed.effort && !tab.effortPinned && valid(EFFORTS, routed.effort)) tab.effort = routed.effort;
@@ -1385,16 +1398,19 @@ class ChatView {
 
     // The chat was on the other engine (Claude Code ↔ Kural's own): that one has the conversation, this one doesn't.
     // A new session, and this message carries the conversation so far (everything before it).
+    // The same after you switched that AI's account (Codex, Gemini: their conversations may not open for another
+    // account; tab.freshSession, accountChanged).
     const engine = engineOf(tab.model);
-    const changedProvider = tab.engine && tab.engine !== engine;
+    const changedProvider = (tab.engine && tab.engine !== engine) || (tab.freshSession && tab.started);
     if (changedProvider) {
-      if (tab.messages.length > 2) tab.carryOver = { model: true, text: journal.handoff(tab.messages.slice(0,-2)) };
+      if (tab.messages.length > 2) tab.carryOver = tab.freshSession && tab.engine === engine ? { model: true, account: true } : { model: true };
       tab.sessionId = newSessionId(); tab.started = false; tab.context = null;
       const old = this.runtime.get(tab.id);
       if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
       this.endDevice(old);
     }
     tab.engine = engine;
+    delete tab.freshSession;
     let r = this.runtime.get(tab.id);
     // A model on this computer: check Ollama and prepare the model first (says what's missing if it can't).
     if (isLocal(tab.model) && (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab) || !this.localReady.has(tab.model))) {
@@ -1420,16 +1436,9 @@ class ChatView {
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
     this.beginTurn(tab, r, reply, ask);
-    // Continued from another workspace, or switched to a model on another engine (Claude ↔ your computer): the first
-    // message carries the conversation so far.
-    const carry = tab.carryOver && !tab.started ? (tab.carryOver.fork
-      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThis chat branches from that conversation at the selected message. Continue from it using my next message. The workspace files are still in their current state.\n\n`
-      : tab.carryOver.edited
-      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far. I've changed my next message: answer it as it is now.\n\n`
-      : tab.carryOver.model
-      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far (with another model). Carry on from it.\n\n`
-      : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
-        "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
+    // Continued from another workspace, forked, an earlier message edited, or switched to another AI (or account): the
+    // first message carries the conversation so far, as a record sized for the model that gets it (journal.handoff).
+    const carry = tab.carryOver && !tab.started ? this.carryText(tab.carryOver, journal.handoff(tab.messages.slice(0, -2), this.handoffBudget(tab.model))) : "";
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
     let retrieved = "";
@@ -1483,6 +1492,98 @@ class ChatView {
     if (was.team !== print(now.team)) changed.push(now.team || "No agent team any more: answer by yourself, without starting agents.");
     return changed.length ? "<kural_instructions_update>\nI changed how you should work in this chat. These replace your earlier instructions about the " +
       "same things (mode, mood, team):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
+  }
+
+  // ---------- carrying the conversation over (another AI, a new session) ----------
+  // What the first message of a new session starts with: the record of the conversation (journal.handoff) and why.
+  carryText(c, record) {
+    const wrapped = (attrs, why) => `<earlier_conversation${attrs}>\n${record}\n</earlier_conversation>\n${why}\n\n`;
+    if (c.fork) return wrapped("", "This chat branches from that conversation at the selected message. Continue from it using my next message. The workspace files are still in their current state.");
+    if (c.edited) return wrapped("", "That's our conversation so far. I've changed my next message: answer it as it is now.");
+    if (c.retry) return wrapped("", `That's our conversation so far. ${c.retry} stopped in the middle of my last request (above) because it reached its usage limit: carry that request on from where it got to. Steps marked complete happened already; check the files before you change them.`);
+    if (c.account) return wrapped("", "That's our conversation so far (before I switched accounts). Carry on from it.");
+    if (c.model) return wrapped("", "That's our conversation so far (with another model). Carry on from it.");
+    return wrapped(` workspace="${String(c.from || "").replace(/"/g, "'")}"`, "That's our earlier conversation, from another workspace. Carry on from it here.");
+  }
+
+  // How many characters of conversation record the next model gets: the router's handoff setting (120,000 by default);
+  // a model on this computer only what fits about half its context (setting kural.localModels.contextLength, in tokens).
+  handoffBudget(model) {
+    const set = this.router ? this.router.options().handoffChars : cfg().get("modelRouter.handoffChars", 120000);
+    if (!isLocal(model)) return set;
+    const ctx = Number(cfg().get("localModels.contextLength", 32768)) || 32768;
+    return Math.max(8000, Math.min(set, Math.round(ctx * 1.6)));
+  }
+
+  // How much of an AI's usage limit is used now (0-100; 100 = it refused a request on its limit), from the programs'
+  // own reports (lib/ai/usage.js).
+  limitOf(provider, model) {
+    try { const u = limitUsed({ id: model || "" }, usageHub.current(provider)); return Number.isFinite(u) ? u : 0; } catch { return 0; }
+  }
+
+  // An answer of Auto's failed because its AI reached a usage limit (the error said so): the same request goes on with
+  // another AI right away, with the conversation (and what the stopped answer had done) handed over, instead of just
+  // failing. The stopped answer stays, with a note. false: nothing else can take it (the error stays).
+  async retryElsewhere(tab, failed) {
+    // (Your request: the message before it, or before the answers that already stopped on a limit.)
+    const i = tab.messages.indexOf(failed), user = [...tab.messages.slice(0, Math.max(0, i))].reverse().find((m) => m.role === "user");
+    if (i < 1 || !user || i !== tab.messages.length - 1 || tab.status !== "idle" || !tab.autoRoute || !this.router) return false;
+    const from = engineOf(failed.model || tab.model), who = whoOf(failed.model || tab.model);
+    const ask = ChatView.textOf(user.segments || []).trim() || "Have a look at what I attached.";
+    const media = [...new Map(tab.messages.flatMap((m) => m.attachments || []).filter((a) => ["image", "pdf"].includes(a.kind)).map((a) => [a.path, a])).values()];
+    const ctl = new AbortController(); this.routingJobs.set(tab.id, ctl);
+    tab.status = "running"; tab.routingState = "Choosing another AI…"; this.postTabs();
+    let routed;
+    try { routed = await this.router.route({ ...this.routingRequest(tab, ask, tab.messages.flatMap((m) => m.attachments || []), []), avoid: from }, ctl.signal); }
+    catch { routed = null; }
+    finally { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); delete tab.routingState; tab.status = "idle"; this.postTabs(); }
+    // (Not to an AI that's at its limit too: no going back and forth between two that are both out.)
+    if (ctl.signal.aborted || !routed || routed.error || engineOf(routed.model) === from || !brain.providerOf(routed.model).ready() || !tab.autoRoute || tab.status !== "idle" ||
+      this.limitOf(engineOf(routed.model), routed.model) >= 98) return false;
+    log(`chat ${tab.id}: ${who} reached its limit; Auto carries the request on with ${routed.model}`);
+    failed.note = `${who} reached its usage limit here. Auto carried on with ${whoOf(routed.model)} below.`;
+    failed.limitError = failed.error; delete failed.error;
+    this.post({ type: "patch", tabId: tab.id, index: i, msg: this.patchOf(failed) });
+    tab.model = routed.model; tab.modelName = null; tab.pendingModel = false;
+    if (routed.effort && !tab.effortPinned && valid(EFFORTS, routed.effort)) tab.effort = routed.effort;
+    this.remember(tab);
+    const reply = this.newReply(tab, routed);
+    tab.messages.push(reply);
+    tab.status = "running"; tab.updatedAt = Date.now();
+    this.post({ type: "append", tabId: tab.id, requestId: null, msgs: [reply] });
+    this.postTabs();
+    // A new session with the other AI; its first message: the conversation up to and including the stopped answer.
+    const old = this.runtime.get(tab.id);
+    if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
+    this.endDevice(old);
+    tab.sessionId = newSessionId(); tab.started = false; tab.context = null; tab.engine = engineOf(tab.model);
+    const r = this.startProc(tab);
+    if (!r) { reply.running = false; tab.status = "idle"; reply.error = `${whoOf(tab.model)} didn't start. Check it in Get started.`; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); return false; }
+    this.beginTurn(tab, r, reply, ask);
+    const carry = this.carryText({ retry: who }, journal.handoff(tab.messages.slice(0, -1), this.handoffBudget(tab.model)));
+    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket), [], media);
+    r.turn.attachments = media;
+    r.pendingSend = content; r.turn.dispatched = true;
+    this.sendTo(r, content, "turn");
+    log(`chat ${tab.id}: sent to ${tab.model} (${JSON.stringify(content).length} chars, the conversation handed over)`);
+    this.save();
+    return true;
+  }
+
+  // You logged out of an AI, logged in again, or switched its account (Kural Settings, or outside Kural): its chats go on
+  // with everything they knew. Claude Code keeps its conversations on this computer, so a Claude chat just goes on (if
+  // it can't, onExit starts it again with the conversation). Codex's and Gemini's conversations may belong to the
+  // account: those chats start a new conversation that's handed this one at the next message (tab.freshSession).
+  accountChanged(provider) {
+    if (!provider) return;
+    log(`chat: ${provider} account changed; its chats carry their conversations over`);
+    for (const t of this.tabs) {
+      if ((t.engine || engineOf(t.model)) !== provider || !t.started) continue;
+      if (provider !== "claude") t.freshSession = "account";
+      const r = this.runtime.get(t.id);
+      if (r && r.proc && t.status === "idle") { r.stale = true; r.proc.kill(); r.proc = null; this.endDevice(r); }
+    }
+    this.save();
   }
 
   // "Build it" under a plan: switch to Agent (or Auto, if you last used it) and carry the plan out.
@@ -1850,9 +1951,20 @@ class ChatView {
       }, 30000);
     }
     if (!this.shown(tab.id)) tab.unread = true;
+    // Its AI reached a usage limit: Auto avoids that AI until it resets, and (in Auto) the request goes on with another
+    // AI at once, the conversation handed over (retryElsewhere). Not a second time for the same answer.
+    const limited = journal.limitError(reply.error) && !r.stale;
+    if (limited) usageHub.markLimited(engineOf(reply.model || tab.model));
+    const retry = limited && tab.autoRoute && this.router && !queued && !reply.retried;
+    if (retry) {
+      reply.retried = true;
+      setTimeout(() => this.retryElsewhere(tab, reply).then((moved) => {
+        if (!moved && !reply.notified) { reply.notified = true; this.notify(tab, "error", { error: reply.error }); }
+      }, (e) => log(`chat ${tab.id}: couldn't carry the request on elsewhere: ${e.message}`)), 0);
+    }
     // Done (or it needs you: an error, a login, a plan to build): one notification per answer, while you're not looking.
-    // Not after Stop (that was you), not while a message you queued is answered next.
-    if (!reply.notified && reply.error !== "stopped" && !queued) {
+    // Not after Stop (that was you), not while a message you queued is answered next (or Auto carries it on elsewhere).
+    if (!reply.notified && reply.error !== "stopped" && !queued && !retry) {
       reply.notified = true;
       if (reply.error === "login") this.notify(tab, "login", { who: reply.errorWho });
       else if (reply.error) this.notify(tab, "error", { error: reply.error });

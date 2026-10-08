@@ -61,4 +61,14 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 - Linking Jira tickets
 - [[Devices]] work with Claude and Codex, not with Gemini (it can't ask before running a command there)
 
-Switching a chat between Claude, Gemini, Codex and your own model works: the new model gets the conversation so far.
+## Switching between them
+
+Switching a chat between Claude, Gemini, Codex and your own model works in every direction, in the middle of a
+conversation: the new model gets the conversation so far (what you asked and sent, the answers, the steps and their
+results, the files changed, the plan and to-do list, your pictures and PDFs). A long conversation is compacted to fit
+the next model, never cut off (see [[Model Router]]). The same happens when you switch an AI's account or log in again:
+a Codex or Gemini chat starts a new conversation that gets the old one; a Claude chat simply goes on.
+
+With **Auto**, Kural also moves a chat to another AI when its AI is at 80 % of a usage limit (Claude to ChatGPT (Codex)
+first, then Gemini), and when an answer stops because the limit was reached it carries that request on with another AI
+at once.
