@@ -518,6 +518,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   A quit vetoed by a dialog: a notification after 20 s (the script keeps waiting). The script clears
   `CachedProfilesData/*/extensions.builtin.cache` and drops ELECTRON_*/VSCODE_* env vars. `test/updates-script.test.js`
   runs the real Mac script on a stand-in app (its stand-ins start detached: a zombie child keeps `kill -0` true).
+- **What's new** (`lib/whats-new/`: `notes.js` no vscode, `index.js` the tab): globalState `kural.whatsNew.seen` = the
+  version Kural last started as; a newer one → the "What's New in Kural" tab with every "## What's new in X" block of
+  RELEASE_NOTES.md since then (`decide`, `between`; its own small markdown renderer, everything escaped). Versions
+  before 1.1.0-alpha.7 didn't remember, so without `seen` only `lastUpdate()`'s record of a working update counts (a new
+  install isn't greeted). The notes: `RELEASE_NOTES.md` beside the extension (`rebrand.py` copies it), else the file at
+  the version's tag on GitHub. So the release's "What's new in <version>" block must exist (`test/whats-new.test.js`).
 - **install.sh** (Mac): Kural is found by its path (`pgrep -f /Applications/Kural.app/Contents/`, never `-x Kural`: that
   also hits test copies) and is never force-killed: it waits until Kural has really gone (the 6 Oct crashes were the app
   deleted 1 s after a `pkill` while Kural still showed a dialog). Run from Kural's own terminal (which dies with Kural),

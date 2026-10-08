@@ -12,6 +12,7 @@ const { showLog } = require("./lib/log");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/tab/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edit/inline");
 const { Updater } = require("./lib/updates");
+const { WhatsNew } = require("./lib/whats-new");
 const { terminalTab, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT } = require("./lib/tab/terminal");
 const { ReviewManager } = require("./lib/edit/review");
 const { ChatView } = require("./lib/chat");
@@ -65,7 +66,9 @@ function activate(context) {
   crashLog.start();
   const updater = new Updater(context);   // Help → Check for Updates…, and once a day by itself
   updater.autoCheck();
-  updater.lastUpdate();   // (how the last update went: said when it failed)
+  const whatsNew = new WhatsNew(context);   // the release notes, once after an update; "Kural: What's New"
+  whatsNew.start(updater.lastUpdate());   // (how the last update went: said when it failed)
+  context.subscriptions.push(vscode.commands.registerCommand("kural.whatsNew", () => whatsNew.open()));
   log(`Kural ${require("./lib/version").versionLabel(context.extensionPath, context.extension.packageJSON.version)} starting; claude at ${findClaude() || "(not found)"}`);
   // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
   // AI work without a project open happens in Kural's own folder, never in your home folder (see workspace.js).

@@ -21,31 +21,7 @@ const LAST_CHECK = "kural.update.lastCheck";
 const UPDATE_PENDING = "kural.update.pending";   // an update started: lastUpdate() reports how it went
 const DAY = 24 * 60 * 60 * 1000;
 
-// "1.2.0-beta.2" → { nums: [1,2,0], pre: ["beta", 2] }
-function parseVersion(v) {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(String(v || "").trim());
-  if (!m) return null;
-  return { nums: [+m[1], +m[2], +m[3]], pre: m[4] ? m[4].split(".").map((x) => /^\d+$/.test(x) ? +x : x) : [] };
-}
-
-// <0 if a is older than b, 0 if the same, >0 if newer. A final version is newer than its alpha/beta/rc.
-function compareVersions(a, b) {
-  const x = parseVersion(a), y = parseVersion(b);
-  if (!x || !y) return 0;
-  for (let i = 0; i < 3; i++) if (x.nums[i] !== y.nums[i]) return x.nums[i] - y.nums[i];
-  if (!x.pre.length || !y.pre.length) return (x.pre.length ? -1 : 0) - (y.pre.length ? -1 : 0);
-  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
-    const p = x.pre[i], q = y.pre[i];
-    if (p === undefined) return -1;
-    if (q === undefined) return 1;
-    if (p === q) continue;
-    if (typeof p === "number" && typeof q === "number") return p - q;
-    if (typeof p === "number") return -1;               // numbers sort before words
-    if (typeof q === "number") return 1;
-    return p < q ? -1 : 1;                               // alpha < beta < rc
-  }
-  return 0;
-}
+const { parseVersion, compareVersions } = require("./version-compare");
 
 // Which release file this computer needs.
 function assetFor(assets, platform = process.platform, arch = process.arch) {
@@ -362,6 +338,7 @@ class Updater {
   get updateLog() { return path.join(this.context.globalStorageUri.fsPath, "update.log"); }
 
   // At startup: how the last update went (its script's log). Said only when it failed; logged either way.
+  // Returns { version, failed } when an update had started (What's new uses it), else nothing.
   lastUpdate() {
     const pending = this.context.globalState.get(UPDATE_PENDING);
     if (!pending) return;
@@ -375,6 +352,7 @@ class Updater {
       .then((p) => p && vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${REPO}/releases`)));
     else if (compareVersions(this.version, pending.version) < 0) log(`update: still on ${this.version} after the update to ${pending.version}`);
     try { if (text.length > 64 * 1024) fs.writeFileSync(this.updateLog, lines.join("\n") + "\n"); } catch { /* keep it */ }
+    return { version: pending.version, failed: !!failed };
   }
 }
 
