@@ -879,6 +879,11 @@
           "default": true,
           "description": "Check for a new Kural version once a day (it asks before installing anything)."
         },
+        "kural.showDebugViews": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show VS Code's **Run and Debug** side bar and the **Debug Console** and **Ports** panels. Off by default to keep Kural simple; while you debug (F5), the debug views show anyway."
+        },
         "kural.modelRouter.profile": {
           "type": "string",
           "enum": [
