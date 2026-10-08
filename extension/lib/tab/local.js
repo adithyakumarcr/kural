@@ -16,6 +16,9 @@ const LOCAL_MODELS = [
 ];
 
 const SLOW_MIN_MS = 800, BUSY_FOR_MS = 20000;   // (LocalEngine.noteTime: what counts as "Ollama is busy")
+// How long Ollama keeps Tab's model loaded after the last suggestion (~1.1 GB for the 1.5B model): 30 minutes, then the
+// memory is free again; the next suggestion loads it again (about 1 s, once). It was 2 hours.
+const KEEP_ALIVE = "30m";
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const url = (p) => (cfg().get("tabCompletion.ollamaUrl") || "http://127.0.0.1:11434").replace(/\/$/, "") + p;
@@ -124,7 +127,7 @@ class LocalEngine {
   // Load the model into memory now, so the first suggestion doesn't wait for it.
   warm() {
     if (!this.allowed()) return;
-    http("/api/generate", { model: model(), prompt: "", keep_alive: "2h" }, { timeoutMs: 60000 }).catch(() => {});
+    http("/api/generate", { model: model(), prompt: "", keep_alive: KEEP_ALIVE }, { timeoutMs: 60000 }).catch(() => {});
   }
 
   // One suggestion. prefix/suffix = the file before/after the cursor; oneLine when the cursor is in
@@ -136,7 +139,7 @@ class LocalEngine {
     const t0 = Date.now();
     try {
       const res = await http("/api/generate", {
-        model: model(), raw: true, stream: false, keep_alive: "2h",
+        model: model(), raw: true, stream: false, keep_alive: KEEP_ALIVE,
         prompt: `<|fim_prefix|>${prefix}<|fim_suffix|>${suffix}<|fim_middle|>`,
         options: { temperature: 0, num_predict: oneLine ? 24 : 64,
           stop: ["<|endoftext|>", "<|fim_pad|>", "<|file_sep|>", "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>", oneLine ? "\n" : "\n\n\n"] },
