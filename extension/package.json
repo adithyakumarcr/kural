@@ -735,7 +735,7 @@
           "default": 75,
           "minimum": 0,
           "maximum": 2000,
-          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set from Tab Completion in the status bar."
+          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set in the Tab Completion panel (the sparkle in the status bar)."
         },
         "kural.chat.model": {
           "type": "string",
@@ -800,7 +800,7 @@
             "Always the local model (Claude only if Ollama isn't available)",
             "Always Claude"
           ],
-          "description": "What writes Tab Completion suggestions. Easiest to set in the Tab Completion panel (click Tab Completion in the status bar)."
+          "description": "What writes Tab Completion suggestions. Easiest to set in the Tab Completion panel (the sparkle in the status bar)."
         },
         "kural.tabCompletion.localModel": {
           "type": "string",
@@ -947,6 +947,15 @@
         "path": "./themes/kural-light-color-theme.json"
       }
     ],
+    "icons": {
+      "kural-tab-off": {
+        "description": "Tab Completion is off (its sparkle, crossed out)",
+        "default": {
+          "fontPath": "./media/codicons/kural-icons.ttf",
+          "fontCharacter": "\\E001"
+        }
+      }
+    },
     "walkthroughs": [
       {
         "id": "welcome",

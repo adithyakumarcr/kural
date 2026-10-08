@@ -9,10 +9,11 @@ const vscode = {
   workspace: { getConfiguration: () => ({ get: (_, d) => d, update: async (...a) => { updates.push(a); } }) },
   ConfigurationTarget: { Global: 1 },
   Uri: { joinPath: (...parts) => parts.join("/") },
+  MarkdownString: class { constructor(v) { this.value = v; } },
 };
 const load = Module._load;
 Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
-const { RouterPanel, _page } = require("../extension/lib/router/panel");
+const { RouterPanel, _page, _statusTip } = require("../extension/lib/router/panel");
 const { HELPERS } = require("../extension/lib/router/client");
 
 // Every element with an id, as a stand-in: text, class, hidden, attributes, click, children; the slider (#level) has a
@@ -122,6 +123,13 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     assert.deepStrictEqual(updates, []);
     await handler({ type: "assistant", value: "granite" });
     assert.deepStrictEqual(updates, [["modelRouter.assistant", "granite", 1]]);
+  });
+
+  await check("the status bar shows only the icon; its hover names the step that reads requests", () => {
+    const src = require("fs").readFileSync(require("path").join(__dirname, "..", "extension", "lib", "router", "panel.js"), "utf8");
+    assert.ok(/status\.text = "\$\(git-compare\)";/.test(src));
+    assert.ok(_statusTip("granite").value.startsWith("**Model Router** · reads your requests with Granite"));
+    assert.ok(_statusTip("nonsense").value.includes("with Native"));
   });
 
   console.log(`router-panel: ${passed} passed, ${failed} failed`);

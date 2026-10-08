@@ -5,7 +5,8 @@ typing to ignore it. Write a comment, press Enter, and the suggestion implements
 
 ## The Tab Completion panel
 
-Click **Tab Completion** in the status bar (bottom right). There you can:
+Click the **sparkle** icon in the status bar (bottom right; its hover says Tab Completion, and it's crossed out while
+Tab Completion is off). There you can:
 
 - turn it **on or off** (also **Ctrl+Alt+Space**, Ctrl on a Mac too),
 - set **how fast it suggests**: Instant (as you type) to Slow (waits longer after your last key),

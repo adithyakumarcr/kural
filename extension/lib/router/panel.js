@@ -24,6 +24,14 @@ const ABOUT = [
   { id: "qwen3", label: "Qwen3", what: "The embedding model of Alibaba's Qwen3 family: right most often, but a much bigger download and slower." },
 ].map((a) => HELPERS[a.id] ? { ...a, facts: `${HELPERS[a.id].note} · ${HELPERS[a.id].size} download`, model: HELPERS[a.id].model } : a);
 
+// The status bar icon's hover: what it is, which step reads your requests now, what a click does.
+function statusTip(assistant) {
+  const step = ABOUT.find((a) => a.id === assistant) || ABOUT[0];
+  return new vscode.MarkdownString(`**Model Router** · reads your requests with ${step.label}\n\n` +
+    "How Auto picks a model for each message. Click for its panel (the slider from Faster to Quality). " +
+    "Balance, Cost or Intelligence: the chat's model menu.");
+}
+
 class RouterPanel {
   constructor(context, router) { this.context = context; this.router = router; this.view = null; this.revision = 0; }
 
@@ -39,9 +47,13 @@ class RouterPanel {
         if (e.affectsConfiguration("kural.modelRouter")) this.push().catch(() => {});
       }),
     );
+    // Just its icon in the status bar (Adithya: simple, decluttered); the hover says what it is and which step reads.
     const status = vscode.window.createStatusBarItem("kural.modelRouter", vscode.StatusBarAlignment.Right, 98);
-    status.name = "Model Router"; status.text = "$(git-compare) Model Router"; status.command = "kural.modelRouter";
-    status.tooltip = "How Auto reads your requests and which AIs it picks from (Balance, Cost or Intelligence: the chat's model menu)";
+    status.name = "Model Router"; status.text = "$(git-compare)"; status.command = "kural.modelRouter";
+    status.accessibilityInformation = { label: "Model Router", role: "button" };
+    const draw = () => { status.tooltip = statusTip(this.router.options().assistant); };
+    draw();
+    this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("kural.modelRouter.assistant")) draw(); }));
     status.show(); this.context.subscriptions.push(status);
     // A helper chosen earlier gets ready in the background (its examples' centroids), so routing stays fast from the start.
     setTimeout(() => this.router.prepare(), 8000);
@@ -199,4 +211,4 @@ function page(nonce, csp = "", codicons = "") {
 </script></body></html>`;
 }
 
-module.exports = { RouterPanel, _page: page };
+module.exports = { RouterPanel, _page: page, _statusTip: statusTip };
