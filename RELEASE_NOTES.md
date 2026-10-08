@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.1.0-alpha.8
 
 - **Add text from the chat to your message.** Select part of an answer (or of a message you sent) and click **Add to
   chat** beside it: it goes into your message as a quote, and the AI gets the whole selected text with your message.
