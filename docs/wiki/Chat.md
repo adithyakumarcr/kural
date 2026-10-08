@@ -44,6 +44,15 @@ your next message, because which tools the model has is fixed when it starts.
   - **Critic**: questions the request and the code, finds flaws.
   - **Learn**: teaches you. It first asks which of the ideas behind your question you already know, explains only the
     ones you don't, then answers the question, and ends with a short question to check you got it.
+  - **Your own moods**: **Add your own mood…** (at the end of the moods) opens **Kural Settings → Moods**. A mood has a
+    name, a one-line hint (shown when you point at it) and instructions for the AI. What works best: who the AI should
+    be and how it works with you ("Work like a pair programmer sitting next to me"), concrete behaviors (what to do
+    first, what to always or never do), the tone and length you want, when to ask you and when to decide, all in a few
+    sentences. Start from an example (Pair programmer, Strict reviewer, Explain like I'm new) and change it. Edit or
+    delete them there too; a chat whose mood you deleted goes back to Default. They're saved in your settings
+    (`kural.chat.moods`), so **Export settings** takes them along.
+  - Changing the mood (or the mode) in the middle of a chat applies from your next message: Kural tells the AI what
+    changed along with it.
 - **Multiple agents** (Claude models): a team instead of one assistant. See [[Multiple Agents]].
 
 ## Adding things to your message

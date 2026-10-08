@@ -51,4 +51,47 @@ const MOOD_PROMPTS = {
     "clearly. Keep every part short.",
 };
 
-module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS };
+// Your own moods (Kural Settings → Moods; setting kural.chat.moods, user level only: a project's settings can't add one,
+// since its instructions go into the AI's prompt): [{ id, name, hint, instructions }]. Cleaned up here: a name and
+// instructions are needed, each kept short; an id is made from the name when there's none. They show after the four
+// built-in ones ({ id, label, hint, custom: true }).
+const MOOD_LIMITS = { name: 30, hint: 80, instructions: 2000 };
+const clip = (s, n) => String(s == null ? "" : s).replace(/\s+/g, " ").trim().slice(0, n);
+const moodId = (name) => `custom-${clip(name, 30).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "mood"}`;
+function customMoods(list) {
+  const out = [], seen = new Set(MOODS.map((m) => m.id));
+  for (const m of Array.isArray(list) ? list : []) {
+    if (!m || typeof m !== "object") continue;
+    const label = clip(m.name, MOOD_LIMITS.name), instructions = String(m.instructions == null ? "" : m.instructions).trim().slice(0, MOOD_LIMITS.instructions);
+    if (!label || !instructions || MOODS.some((b) => b.label.toLowerCase() === label.toLowerCase())) continue;
+    let id = /^custom-[a-z0-9-]{1,60}$/.test(m.id || "") ? m.id : moodId(label);
+    for (let n = 2; seen.has(id); n++) id = `${id.replace(/-\d+$/, "")}-${n}`;
+    seen.add(id);
+    out.push({ id, label, hint: clip(m.hint, MOOD_LIMITS.hint), instructions, custom: true });
+  }
+  return out;
+}
+// What the chat (or the team's lead) is told for a mood: a built-in one's text, or yours like them.
+function moodPrompt(id, custom = []) {
+  if (MOOD_PROMPTS[id]) return MOOD_PROMPTS[id];
+  const m = (custom || []).find((x) => x.id === id);
+  return m ? `\n\nMood: ${m.label}. ${m.instructions}` : "";
+}
+// Examples to start from in Kural Settings → Moods (what works best: who the AI should be, concrete behaviors, tone and
+// length, when to ask and when to decide, a few sentences).
+const MOOD_EXAMPLES = [
+  { name: "Pair programmer", hint: "thinks aloud, small steps, asks before big changes",
+    instructions: "Work like a pair programmer sitting next to me. Before changing code, say in one or two sentences what " +
+      "you're about to do and why. Make small changes, one step at a time, and run the tests after each one. Ask me " +
+      "before a big change (a new library, a new structure, deleting code); decide small things yourself. Keep answers short." },
+  { name: "Strict reviewer", hint: "reviews like a senior engineer: bugs first",
+    instructions: "Review like a strict senior engineer. List problems first, most serious first: bugs, security issues, " +
+      "missing error handling, unclear names, missing tests. Point to the exact line and say how to fix each one. " +
+      "Don't praise and don't rewrite everything: only what's needed. If something is fine, say so in one line." },
+  { name: "Explain like I'm new", hint: "plain words, no jargon, a tiny example",
+    instructions: "I'm new to programming. Use plain words and explain every technical term the first time you use it. " +
+      "Explain the why before the how, with one tiny example. Keep each answer short, and end by asking if I want more " +
+      "detail. When you change code, add a short comment on each part you changed." },
+];
+
+module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS, MOOD_LIMITS, MOOD_EXAMPLES, customMoods, moodPrompt, moodId };

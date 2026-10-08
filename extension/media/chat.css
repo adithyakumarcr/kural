@@ -395,6 +395,13 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .srv { padding: 0 7px; border-radius: 10px; font-size: calc(11.5px * var(--fs, 1)); border: 1px solid var(--border); }
 .srv.ok::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--green); }
 .srv.bad::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--yellow); }
+/* Moods in the model menu: the built-in ones, yours, and "Add your own mood…" (chips that wrap). */
+.moods { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 6px; }
+.mood-chip { background: none; border: 1px solid var(--border); border-radius: 12px; padding: 1px 9px; font-size: calc(11.5px * var(--fs, 1)); color: var(--vscode-foreground); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mood-chip:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.mood-chip.on { background: color-mix(in srgb, var(--accent) 25%, transparent); border-color: var(--accent); font-weight: 600; }
+.mood-chip.add { border-style: dashed; color: var(--muted); }
+.mood-chip.add:hover { color: var(--vscode-foreground); }
 /* roles and moods */
 .roles { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 6px; align-items: center; }
 .roles-h { font-size: calc(10.5px * var(--fs, 1)); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 2px; }

@@ -52,6 +52,9 @@ ChatGPT (Codex) and your own model:
 - **Log in** (when you're logged out), or **Set up** (when you haven't yet).
 - **Your own model**: which model on this computer is set up, or set one up.
 - **Get started**, **Check for updates**, **Kural guide** (this wiki), **Ask for a feature**.
+- **Moods**: the chat's moods. The four built-in ones, and your own: **Add a mood** (name, a one-line hint,
+  instructions for the AI), with tips on what works best and examples to start from; **Edit** and delete them. See
+  [[Chat]].
 - **Export settings / Import settings**: your Kural preferences to a file and back (another computer, a fresh
   install). You choose what goes in: Kural's settings (not program paths: they differ per computer), your editor settings
   and keyboard shortcuts, the extensions you installed (installed again on import), chat defaults, saved devices (names
