@@ -6,7 +6,7 @@ On a Mac, use **Cmd** where it says Ctrl, except where it says *(Ctrl on Mac too
 
 | Shortcut | What it does |
 |---|---|
-| **Ctrl+L** | open the chat; with code selected, adds it to the message |
+| **Ctrl+L** | show or hide the chat; with code selected in the editor, adds it to the message |
 | **Ctrl+Alt+N** | new chat tab |
 | **Ctrl+PageDown / Ctrl+PageUp** | next / previous chat tab (Mac: Cmd+Alt+Right / Left) |
 | **Ctrl+W** (in the chat) | close the chat tab |
@@ -33,6 +33,7 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.notifications` | whenAway | a system notification when a chat's answer is done or needs you: `whenAway` (Kural's window isn't in front, or that chat isn't on screen), `always`, `off`. macOS asks once whether Kural may send notifications (if you chose Don't Allow: System Settings → Notifications → Kural) |
 | `kural.chat.didYouKnow` | on | a short "Did you know?" tip under an answer while it's being worked on |
 | `kural.chat.moods` | (none) | your own chat moods (name, hint, instructions); edit them in Kural Settings → Moods |
+| `kural.chat.hiddenMoods` | (none) | built-in moods (Default, Explorer, Critic, Learn) removed from the chat's model menu; remove or restore them in Kural Settings → Moods |
 | `kural.usageSwitch.enabled` | off | automatically move the same chat to another available AI when its reported usage reaches your threshold; edit in Kural Settings → AI Usage |
 | `kural.usageSwitch.threshold` | 70 | percentage used that triggers switching (1–99); applies to Session and relevant Weekly limits |
 | `kural.fontSize` | 0 | text size in the chat and Ask panels (0 = the editor's size) |

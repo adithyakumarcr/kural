@@ -30,20 +30,24 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Gemini (Antigravity) can't ask before acting: in Agent mode it edits files but runs no commands (the answer says which it
   didn't run); in Auto it runs commands; Plan and Ask change nothing. A mode change applies from the next message.
   Multiple agents work with Gemini; devices do not.
-- Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking, except
+- Chat (panel on the right; Ctrl+L shows or hides it; with code selected in the editor, Ctrl+L adds that code to your
+  message instead, also while the chat is open): tabs; modes Agent (edits files, asks before commands), Auto (no asking, except
   dangerous commands: sudo, deleting outside the project, curl | sh, a forced push to main, git reset --hard…; the
   first switch to Auto explains this once; Gemini can't ask, so not for Gemini), Plan
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
-  (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku (with a Claude model,
+  (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
+  beside it: it goes into your message as a quote, and the AI gets the whole selected text. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku (with a Claude model,
   Claude's line also shows its Claude Code setup: "10 connectors · 30 skills", click for each connector, and a reload
   button), Google Gemini and
   ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first; and your own: "Add your own mood…" at the end of the moods opens Kural
   Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
-  there; a changed mood or mode applies from the next message); Multiple agents (Claude, ChatGPT and Gemini: a project
+  there; built-in moods you don't use (Default too) can be removed there with their ×, and Restore brings one back; the
+  menu keeps at least one, and a new chat starts with the first mood left; a changed mood or mode applies from the next
+  message); Multiple agents (Claude, ChatGPT and Gemini: a project
   team led by a PM, or a discussion; Kural shares Codex/Gemini agents' reports between phases). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
@@ -172,11 +176,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
   for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
   page, switch account, log out, log in, set up; then AI Usage (automatic switching and its threshold), Moods
-  (your own chat moods: add, edit, delete); then Kural's
+  (your own chat moods: add, edit, delete; remove or restore the built-in ones); then Kural's
   version and Check for updates, Get started, Tab Completion,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
   editor settings, shortcuts, extensions, chat defaults, devices: no passwords or keys; you pick what to import).
-  Kural's log: "Kural: Show Log" (an editor tab; Kural hides VS Code's Output tab).
+  Kural's log: "Kural: Show Log" (Command Palette) or Kural Settings → the log (an editor tab; Kural hides VS Code's
+  Output tab; the Kural panel's title bar has no log button).
 - Crash reports: when Kural closed unexpectedly, the next start saves a report (macOS's crash reports, VS Code's logs, which
   windows ended) on this computer and offers Show report / Report a bug (copies it; you paste it into the bug form).
   "Kural: Show Crash Reports" lists them.
@@ -204,8 +209,8 @@ const GUIDE_LOCAL = `
 
 About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
 work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
-that's you). Main features: Get started (set up an AI); the chat (Ctrl+L: modes Agent, Auto, Plan, Ask; @ mentions a
-file; + attaches files; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
+that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
+Ask; @ mentions a file; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
 Fork from here; the clock button has every chat); Ctrl+K edits selected code in place; Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Kural's browser; devices over SSH; the Model Router (Auto);
 Kural Settings (accounts, usage switching, moods, updates). Agent teams work with Claude, ChatGPT and Gemini; Jira

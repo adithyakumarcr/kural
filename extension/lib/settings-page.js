@@ -19,6 +19,11 @@ const usageSwitch = require("./ai/usage-switch");
 const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
 const saveMoods = (list) => vscode.workspace.getConfiguration("kural").update("chat.moods",
   list.map((m) => ({ id: m.id, name: m.label, hint: m.hint, instructions: m.instructions })), vscode.ConfigurationTarget.Global);
+// Built-in moods removed from the chat's menu (kural.chat.hiddenMoods): their ids, in the built-in order.
+const hiddenMoods = () => {
+  const i = vscode.workspace.getConfiguration("kural").inspect("chat.hiddenMoods"), v = i && Array.isArray(i.globalValue) ? i.globalValue : [];
+  return MOODS.map((m) => m.id).filter((id) => v.includes(id));
+};
 
 class SettingsPage {
   constructor(context, account, getStarted) {
@@ -34,7 +39,9 @@ class SettingsPage {
     this.account.onChange(() => this.push());
     this.gs.onChange(() => this.push());
     this.context.subscriptions.push(usage.onChange(() => this.push()),
-      vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("kural.chat.moods") || e.affectsConfiguration("kural.usageSwitch")) this.push(); }));
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.usageSwitch"].some((k) => e.affectsConfiguration(k))) this.push();
+      }));
   }
 
   // section: Moods from the chat's model menu; usage controls from the AI Usage panel.
@@ -101,7 +108,7 @@ class SettingsPage {
       version: versionLabel(this.context.extensionPath, this.context.extension.packageJSON.version),
       autoUpdates: vscode.workspace.getConfiguration("kural").get("updates.autoCheck") !== false,
       usageSwitch: usageSwitch.options(vscode.workspace.getConfiguration("kural")),
-      moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
+      moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), hidden: hiddenMoods(), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
       section: this.section || null };
   }
 
@@ -124,6 +131,15 @@ class SettingsPage {
     const next = list.some((x) => x.id === mood.id) ? list.map((x) => x.id === mood.id ? mood : x) : [...list, mood];
     await saveMoods(next);
     return "";
+  }
+
+  // Remove a built-in mood from the chat's menu, or bring it back. The last mood left can't be removed.
+  async hideMood(id, hidden) {
+    if (!MOODS.some((x) => x.id === id)) return;
+    const now = new Set(hiddenMoods());
+    if (hidden) now.add(id); else now.delete(id);
+    if (now.size === MOODS.length && !userMoods().length) return;
+    await vscode.workspace.getConfiguration("kural").update("chat.hiddenMoods", MOODS.map((x) => x.id).filter((x) => now.has(x)), vscode.ConfigurationTarget.Global);
   }
 
   push() { if (this.panel) this.panel.webview.postMessage(this.state()); }
@@ -173,6 +189,7 @@ class SettingsPage {
         break;
       }
       case "deleteMood": await saveMoods(userMoods().filter((x) => x.id !== m.id)); this.push(); break;
+      case "hideMood": await this.hideMood(m.id, !!m.hidden); this.push(); break;
       case "shown": this.section = null; break;   // (the page scrolled to the section it was asked to show)
     }
   }

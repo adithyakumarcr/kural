@@ -27,7 +27,8 @@ function canCheckpoint(runtime) {
 }
 
 // What you wrote, from the chat's pieces (text and @ mentions).
-const segmentsText = (segs) => (segs || []).map((s) => s.t === "text" ? s.v : s.ctx ? `@${s.ctx.path || s.ctx.label || ""}` : "").join("").trim();
+const segmentsText = (segs) => (segs || []).map((s) => s.t === "text" ? s.v : !s.ctx ? "" : s.ctx.kind === "quote" ? `"${s.ctx.label || ""}"`
+  : `@${s.ctx.path || s.ctx.label || ""}`).join("").trim();
 
 // ---------- the handoff: the conversation for another AI (or a new session of the same one) ----------
 // Everything visible: what you wrote and what was sent with it (files, selections, attachments), every answer's text,

@@ -71,6 +71,13 @@ function customMoods(list) {
   }
   return out;
 }
+// The built-in moods you haven't removed (setting kural.chat.hiddenMoods, Kural Settings → Moods), in their order. The
+// menu always keeps one mood: with all four removed and none of your own, Default comes back.
+function shownMoods(hidden, custom = []) {
+  const out = new Set(Array.isArray(hidden) ? hidden : []);
+  const built = MOODS.filter((m) => !out.has(m.id));
+  return built.length || (custom || []).length ? built : MOODS.filter((m) => m.id === "default");
+}
 // What the chat (or the team's lead) is told for a mood: a built-in one's text, or yours like them.
 function moodPrompt(id, custom = []) {
   if (MOOD_PROMPTS[id]) return MOOD_PROMPTS[id];
@@ -94,4 +101,4 @@ const MOOD_EXAMPLES = [
       "detail. When you change code, add a short comment on each part you changed." },
 ];
 
-module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS, MOOD_LIMITS, MOOD_EXAMPLES, customMoods, moodPrompt, moodId };
+module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS, MOOD_LIMITS, MOOD_EXAMPLES, customMoods, shownMoods, moodPrompt, moodId };

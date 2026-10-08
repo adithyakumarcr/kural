@@ -54,6 +54,10 @@
         "icon": "$(comment-discussion)"
       },
       {
+        "command": "kural.chat.toggle",
+        "title": "Kural: Show or Hide the Chat"
+      },
+      {
         "command": "kural.chat.newTab",
         "title": "Kural: New Chat Tab",
         "icon": "$(add)"
@@ -151,8 +155,7 @@
       },
       {
         "command": "kural.showLog",
-        "title": "Kural: Show Log",
-        "icon": "$(output)"
+        "title": "Kural: Show Log"
       },
       {
         "command": "kural.chat.history",
@@ -393,11 +396,6 @@
           "group": "navigation@1"
         },
         {
-          "command": "kural.showLog",
-          "when": "view == kural.chat",
-          "group": "navigation@4"
-        },
-        {
           "command": "kural.account",
           "when": "view == kural.chat",
           "group": "9_kural@1"
@@ -598,7 +596,7 @@
     },
     "keybindings": [
       {
-        "command": "kural.chat.open",
+        "command": "kural.chat.toggle",
         "key": "ctrl+l",
         "mac": "cmd+l",
         "when": "!terminalFocus"
@@ -839,6 +837,22 @@
             ]
           },
           "markdownDescription": "Your own moods for the chat, next to Default, Explorer, Critic and Learn: a name, a one-line hint, and instructions for the AI. Edit them in **Kural Settings → Moods**."
+        },
+        "kural.chat.hiddenMoods": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "default",
+              "explorer",
+              "critic",
+              "learn"
+            ]
+          },
+          "markdownDescription": "Built-in moods removed from the chat's model menu. New chats start with the first mood left. Remove or restore them in **Kural Settings → Moods**."
         },
         "kural.fontSize": {
           "type": "number",
