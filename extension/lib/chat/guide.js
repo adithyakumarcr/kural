@@ -135,7 +135,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   kural.tabCompletion.renameAcrossFiles.
 - Memory: Kural's Claude helpers (Tab Completion's, terminal Tab, Ctrl+K, commit messages, Ask) start when they're first
   needed and stop after a few idle minutes (the next use starts them again in about a second); each open chat keeps one
-  Claude Code process (~120 MB): close chats you don't need. Ollama keeps Tab Completion's model loaded 30 minutes after
+  Claude Code process (~120 MB) while it's on screen or was used in the last 10 minutes (at most two idle ones stay
+  warm; it starts again, same conversation, when you open the chat or send to it). Ollama keeps Tab Completion's model loaded 30 minutes after
   the last suggestion. A model on this computer takes gigabytes (a 9B model at kural.localModels.contextLength 32768:
   about 7.8 GB).
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
