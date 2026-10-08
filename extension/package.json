@@ -994,6 +994,7 @@
       "workbench.preferredLightColorTheme": "Kural Light",
       "workbench.secondarySideBar.defaultVisibility": "visible",
       "workbench.startupEditor": "welcomePage",
+      "workbench.welcomePage.extraAnnouncements": false,
       "workbench.welcomePage.walkthroughs.openOnInstall": false,
       "workbench.tips.enabled": false,
       "workbench.browser.openLocalhostLinks": true,

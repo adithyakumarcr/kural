@@ -1,5 +1,10 @@
 ## Not released yet
 
+- **No more VSCodium on the Welcome page.** It listed VSCodium's own **Get started with VSCodium** walkthrough and
+  **VSCodium Announcements** (news about the VSCodium project, fetched from VSCodium's GitHub every time Welcome opened).
+  Both are gone, and nothing is fetched from VSCodium any more; **Get started with Kural** is the first walkthrough.
+  About a hundred of the editor's own texts that said VSCodium (menus, settings, "Please restart VSCodium…") say Kural,
+  and **Help → Report Issue** and **View License** open Kural's GitHub instead of VSCodium's.
 - **Send while it works.** Pressing Enter while an answer runs used to stop it. Now your message is queued (shown above
   the box) and the AI takes it in at its next step, after the command or edit it's doing, inside the same answer
   ("You added this while it worked", with what it did after that below it). If the answer ends first, your message is

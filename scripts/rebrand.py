@@ -8,6 +8,7 @@ import base64, hashlib, json, os, re, shutil, sys, uuid
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NAME, TITLE, LONG = "kural", "Kural", "Kural Code Editor"
+REPO = "https://github.com/adithyakumarcr/kural"
 
 
 def load(p):
@@ -35,6 +36,9 @@ def main(app, platform):
     # VSCodium's auto-updater would replace Kural with plain VSCodium. Turn it off.
     for k in ("updateUrl", "downloadUrl", "releaseNotesUrl"):
         d.pop(k, None)
+    # Help → Report Issue and View License opened VSCodium's GitHub: Kural's bugs go to Kural's repository.
+    d["reportIssueUrl"] = f"{REPO}/issues/new"
+    d["licenseUrl"] = f"{REPO}/blob/main/LICENSE"
     # The login pages Kural opens for you (Get started: Gemini, Codex) open without VS Code's "open the external
     # website?" question first: you just clicked Log in.
     trusted = d.get("linkProtectionTrustedDomains", [])
@@ -98,13 +102,17 @@ def main(app, platform):
                     Image.open(icon).resize((size, size), Image.LANCZOS).save(tile)
         except ImportError:
             pass
-    # 6. VS Code's own code: Help → Check for Updates… (Kural's updater), and VS Code's Search and Output views hidden
-    #    (Kural's Search & Ask side bar does text search; Kural's log opens with "Kural: Show Log").
+    # 6. VS Code's own code: Help → Check for Updates… (Kural's updater), VS Code's Search and Output views hidden
+    #    (Kural's Search & Ask side bar does text search; Kural's log opens with "Kural: Show Log"), and VSCodium's own
+    #    content off the Welcome page.
     patch_workbench(app)
+    # 7. The editor's own texts (menus, settings, messages) say "VSCodium": they say Kural.
+    rebrand_messages(app)
     print(f"rebranded {app} for {platform}")
 
 
-# Kural changes two things in VS Code's own code (workbench.desktop.main.js):
+# Kural changes three things in VS Code's own code (workbench.desktop.main.js):
+#   - VSCodium's own content off the Welcome page (see drop_vscodium_welcome).
 #   - Help → Check for Updates…: extensions can't add items to the Help menu, so the item goes next to VS Code's
 #     "Ask @vscode" Help item.
 #   - VS Code's Search view and Output view never show: Kural's Search & Ask side bar has text search (find and
@@ -136,6 +144,40 @@ def add_update_menu(text):
     item = (f'{registry}.appendMenuItem({ids}.MenubarHelpMenu,{{command:{{id:"kural.checkForUpdates",'
             f'title:"Check for Updates..."}},group:"7_update",order:1}}),')
     return text[:m.start()] + item + text[m.start():]
+
+
+# VSCodium's own content on the Welcome page, which is about VSCodium, not Kural:
+#   - "VSCodium Announcements": VSCodium fetches its project's news from its GitHub (`announcements-extra.json`, when the
+#     setting `workbench.welcomePage.extraAnnouncements` is on, as it is by default: "Securing VSCodium", "Use
+#     minReleaseAge with auto-update"). The section isn't built or drawn at all, so nothing is fetched from VSCodium either.
+#   - the "Get started with VSCodium" walkthrough (one step, a video link): its `when` condition becomes "false", so it
+#     isn't listed. Kural's own "Get started with Kural" walkthrough (package.json "walkthroughs") is the one to follow.
+# Each part is found by shape; if the code differs (another VSCodium), that part stays and a ::warning:: says so. Applying
+# it again changes nothing.
+ANNOUNCE_BUILD = re.compile(r',([\w$]+)=await this\.buildAnnouncementList\(\)')
+SETUP_WALKTHROUGH = re.compile(r'(\{id:"Setup",title:[\w$]+\(\d+,null\),description:[\w$]+\(\d+,null\),isFeatured:!0,icon:[\w$]+,when:)"!isWeb"')
+SETUP_HIDDEN = re.compile(r'\{id:"Setup",title:[\w$]+\(\d+,null\),description:[\w$]+\(\d+,null\),isFeatured:!0,icon:[\w$]+,when:"false"')
+
+
+def drop_vscodium_welcome(text):
+    build = ANNOUNCE_BUILD.search(text)
+    if build:
+        u = re.escape(build.group(1))
+        with_walkthroughs = re.compile(r'(\.getDomElement\(\)),' + u + r'\.getDomElement\(\)\)')
+        only_announcements = re.compile(r'(?<![\w$.])([\w$]+)\(([\w$]+),' + u + r'\.getDomElement\(\)\)')
+        if len(with_walkthroughs.findall(text)) == 1 and len(only_announcements.findall(text)) == 1 and len(ANNOUNCE_BUILD.findall(text)) == 1:
+            text = ANNOUNCE_BUILD.sub("", text, count=1)
+            text = with_walkthroughs.sub(lambda m: m.group(1) + ")", text, count=1)
+            text = only_announcements.sub(lambda m: f"{m.group(1)}({m.group(2)})", text, count=1)
+        else:
+            print("::warning::VSCodium's Welcome announcements not found as expected; \"VSCodium Announcements\" stays")
+    elif "buildAnnouncementList" not in text:
+        print("::warning::VSCodium's Welcome announcements code not found; nothing to remove (or it changed)")
+    if SETUP_WALKTHROUGH.search(text):
+        text = SETUP_WALKTHROUGH.sub(lambda m: m.group(1) + '"false"', text, count=1)
+    elif not SETUP_HIDDEN.search(text):
+        print("::warning::VSCodium's \"Get started with VSCodium\" walkthrough not found as expected; it stays")
+    return text
 
 
 def hide_builtin_views(text):
@@ -232,7 +274,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = route_browser_to_kural(hide_builtin_views(add_update_menu(text)))
+    new = route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))
     if new == text:
         return
     data = new.encode("utf-8")
@@ -240,6 +282,37 @@ def patch_workbench(app):
         f.write(data)
     sums[rel] = fingerprint(data)
     save(pj_path, product)
+
+
+# The editor's own texts (command and menu names, settings descriptions, messages like "Please restart VSCodium before
+# reinstalling…") are in out/nls.messages.json, and VSCodium's build put its name in about a hundred of them: they say Kural.
+# Only the word on its own, never inside a web address (github.com/VSCodium/vscodium stays as it is, or the link would
+# break); the issue reporter's "review the guidance we provide" links go to Kural's contributing guide instead of VSCodium's
+# and Microsoft's wikis. The file isn't in product.json's "checksums", so VS Code doesn't mind. Applying it again changes nothing.
+VSCODIUM_WORD = re.compile(r'(?<![/\w])VSCodium(?![\w/])')
+# (The issue reporter has the guidance link twice: as HTML, to VSCodium's wiki, and as markdown, to Microsoft's.)
+GUIDANCE_WIKIS = ("https://github.com/VSCodium/vscodium/wiki/Submitting-Bugs-and-Suggestions",
+                  "https://github.com/microsoft/vscode/wiki/Submitting-Bugs-and-Suggestions")
+
+
+def rebrand_messages(app):
+    p = os.path.join(app, "out", "nls.messages.json")
+    if not os.path.exists(p):
+        print("::warning::out/nls.messages.json not found; the editor's texts keep saying VSCodium")
+        return
+    messages = load(p)
+    if not isinstance(messages, list):
+        print("::warning::out/nls.messages.json looks different; the editor's texts keep saying VSCodium")
+        return
+    def kural(m):
+        for wiki in GUIDANCE_WIKIS:
+            m = m.replace(wiki, f"{REPO}/blob/main/CONTRIBUTING.md")
+        return VSCODIUM_WORD.sub(TITLE, m)
+    new = [kural(m) if isinstance(m, str) else m for m in messages]
+    if new == messages:
+        return
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(new, f, ensure_ascii=False, separators=(",", ":"))
 
 
 if __name__ == "__main__":
