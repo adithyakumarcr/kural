@@ -21,7 +21,7 @@ const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
-const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
+const { PROMPTS, MOODS, MOOD_PROMPTS, customMoods, moodPrompt } = require("./prompts");
 const { GUIDE } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
@@ -137,6 +137,7 @@ class ChatView {
     // "Did you know?" under a working answer turned on or off (setting kural.chat.didYouKnow).
     c.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.chat.didYouKnow")) this.post({ type: "didYouKnow", on: didYouKnow() });
+      if (e.affectsConfiguration("kural.chat.moods")) this.moodsChanged();
     }));
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
     watcher.onDidCreate(refreshFiles); watcher.onDidDelete(refreshFiles);
@@ -211,10 +212,20 @@ class ChatView {
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
-      mood: valid(MOODS, last.mood) ? last.mood : "default",
+      mood: valid(allMoods(), last.mood) ? last.mood : "default",
       roles: Array.isArray(last.roles) ? last.roles.filter((r) => valid(ROLES, r)) : [],
       teamStyle: valid(TEAM_STYLES, last.teamStyle) ? last.teamStyle : "split",
     };
+  }
+
+  // You added, changed or deleted one of your moods (Kural Settings → Moods): the menus show the new list; a chat whose
+  // mood was deleted goes back to Default; an idle chat with a changed mood gets its new instructions now (procKey).
+  moodsChanged() {
+    const ids = new Set(allMoods().map((m) => m.id));
+    for (const t of this.tabs) if (!ids.has(t.mood)) t.mood = "default";
+    this.post({ type: "moods", moods: allMoods() });
+    this.postTabs(); this.save();
+    for (const t of this.tabs) { const r = this.runtime.get(t.id); if (r && r.proc && t.status === "idle") this.warm(t); }
   }
 
   // Set by extension.js from Get started: is anything set up, and the model on this computer that passed its test.
@@ -250,7 +261,8 @@ class ChatView {
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
     if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)
-    if (!valid(MOODS, tab.mood)) tab.mood = d.mood;
+    // (A mood of yours that you deleted: Default.)
+    if (!valid(allMoods(), tab.mood)) tab.mood = /^custom-/.test(tab.mood || "") ? "default" : d.mood;
     if (!Array.isArray(tab.roles)) tab.roles = d.roles;
     tab.roles = tab.roles.filter((r) => valid(ROLES, r));
     if (!valid(TEAM_STYLES, tab.teamStyle)) tab.teamStyle = d.teamStyle;
@@ -758,7 +770,9 @@ class ChatView {
   // (Claude Code's setup and its reloads only matter to Claude: other programs don't restart for them.)
   procKey(tab) {
     const claude = isClaude(tab.model);
-    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
+    // (The mood's text too: editing one of your moods restarts its chats with the new instructions.)
+    const mood = `${tab.mood}:${require("crypto").createHash("sha1").update(moodPrompt(tab.mood, customMoods(userMoods()))).digest("hex").slice(0, 8)}`;
+    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
       (claude ? `|${fullSetup()}|${this.setupVersion}` : "");
   }
 
@@ -1092,7 +1106,7 @@ class ChatView {
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
       name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode,
-      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
+      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + moodPrompt(tab.mood, customMoods(userMoods())) +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
@@ -1417,7 +1431,7 @@ class ChatView {
     const built = await this.buildPrompt(text,contexts);
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
     if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
+    const { content: prompt, meta } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
     user.sentText = journal.textOf(prompt).slice(carry.length);
     r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
@@ -1431,6 +1445,30 @@ class ChatView {
     delete tab.carryOver;
     log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
     this.save();
+  }
+
+  // What the AI is told for this chat's mode, mood and team (the parts of its instructions you can change mid-chat).
+  instructionsOf(tab) {
+    const team = this.teamSize(tab);
+    return { mode: PROMPTS[tab.mode] || "", mood: moodPrompt(tab.mood, customMoods(userMoods())).trim(),
+      team: team ? teamPrompt(team, tab.roles || [], tab.teamStyle).trim() : "" };
+  }
+  // Claude Code keeps a resumed conversation's first instructions: on --resume it ignores a new --append-system-prompt
+  // (checked with Claude Code 2.1.289). So a mood, mode or team you change after the first message would never reach
+  // it; instead your next message starts with what changed. (The other programs get it the same way: harmless.)
+  // tab.sessionInstructions: what this conversation was given so far.
+  // (Kept as short fingerprints, saved with the chat.)
+  instructionsNote(tab) {
+    const now = this.instructionsOf(tab), was = tab.sessionInstructions;
+    const print = (t) => require("crypto").createHash("sha1").update(t).digest("hex").slice(0, 12);
+    tab.sessionInstructions = { mode: print(now.mode), mood: print(now.mood), team: print(now.team) };
+    if (!tab.started || !was) return "";
+    const changed = [];
+    if (was.mode !== print(now.mode)) changed.push(now.mode);
+    if (was.mood !== print(now.mood)) changed.push(now.mood || "Mood: Default. Drop the earlier mood's instructions and work in your normal, balanced way.");
+    if (was.team !== print(now.team)) changed.push(now.team || "No agent team any more: answer by yourself, without starting agents.");
+    return changed.length ? "<kural_instructions_update>\nI changed how you should work in this chat. These replace your earlier instructions about the " +
+      "same things (mode, mood, team):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
   }
 
   // "Build it" under a plan: switch to Agent (or Auto, if you last used it) and carry the plan out.
@@ -1992,7 +2030,7 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w),
+          moods: allMoods(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w),
           didYouKnow: didYouKnow() });
         w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
         w.postMessage({ type: "full", tab: this.viewTab(t) });
@@ -2147,7 +2185,9 @@ class ChatView {
         if (tab.status !== "idle") this.modeChangedMidAnswer(tab, was);
         this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab);
       } break;
-      case "setMood": if (valid(MOODS, m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
+      case "setMood": if (valid(allMoods(), m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
+      // "Add your own mood…" in the model menu: Kural Settings, at Moods (lib/settings-page.js).
+      case "editMoods": vscode.commands.executeCommand("kural.settings.moods"); break;
       case "toggleRole": if (valid(ROLES, m.role)) {
         const roles = tab.roles || [];
         tab.roles = roles.includes(m.role) ? roles.filter((r) => r !== m.role) : [...roles, m.role].slice(0, FRIENDS.length);
@@ -2384,6 +2424,10 @@ function permDetail(tool, input) {
 // Your full Claude Code setup (your MCP servers, hooks, skills, and the project's .claude settings) only in a folder
 // you trust: a project's own .claude/settings.json can run commands (hooks), and Kural starts Claude early.
 function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
+// Your own moods, from your user settings only (never a project's: their instructions go into the AI's prompt).
+function userMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.moods") : null; return i ? i.globalValue : undefined; }
+// The moods in the model menu: the four built-in ones, then yours (prompts.js customMoods).
+function allMoods() { return [...MOODS, ...customMoods(userMoods()).map(({ id, label, hint, custom }) => ({ id, label, hint, custom }))]; }
 // While an answer is worked on, a "Did you know?" tip or fact under it (media/facts.js). On unless you turned it off.
 function didYouKnow() { return cfg().get("chat.didYouKnow", true) !== false; }
 

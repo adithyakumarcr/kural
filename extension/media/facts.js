@@ -31,6 +31,7 @@
     { t: "The clock button has every chat from every workspace: search, pin or delete them.", u: WIKI + "Chat" },
     { t: "Moods change how the AI works with you: Explorer compares options, Critic looks for flaws.", u: WIKI + "Chat" },
     { t: "The Learn mood first checks what you already know, then teaches you step by step.", u: WIKI + "Chat" },
+    { t: "You can make your own moods (Add your own mood… in the model menu): a name and a few sentences for the AI.", u: WIKI + "Chat" },
     { t: "Intensity, from Low to Max, sets how much the model thinks before it answers.", u: WIKI + "Chat" },
     { t: "Every file the AI changes shows under its answer: Review, Keep or Undo each one.", u: WIKI + "Chat" },
     { t: "Outside your project, Kural asks before the AI reads or changes a file (except in Auto mode).", u: WIKI + "Chat" },

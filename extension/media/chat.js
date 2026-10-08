@@ -25,6 +25,9 @@
     for (const [k, v] of Object.entries(props || {})) {
       if (v === undefined || v === null || v === false) continue;
       if (k === "class") n.className = v;
+      // (Through the style object: the page's rules (CSP) block a style="…" attribute, so a bar's width set that way was
+      // ignored and every bar showed full.)
+      else if (k === "style") n.style.cssText = v;
       else if (k === "html") n.innerHTML = v;
       else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
       else n.setAttribute(k, v === true ? "" : v);
@@ -1258,8 +1261,12 @@
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         levelNote(t),
+        // Moods: the four built-in ones, then yours (Kural Settings → Moods), then a way to add one.
         el("div", { class: "mh" }, "Mood"),
-        el("div", { class: "seg mood" }, S.moods.map((md) => el("button", { class: t.mood === md.id ? "on" : "", title: md.hint, onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label))),
+        el("div", { class: "moods" }, S.moods.map((md) => el("button", { class: `mood-chip${t.mood === md.id ? " on" : ""}`, title: md.hint || "",
+          "aria-pressed": String(t.mood === md.id), onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label)),
+          el("button", { class: "mood-chip add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
+            onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own mood…")),
         el("div", { class: "sep" }),
         // (Agent teams run on Claude Code: not with a model on this computer.)
         el("div", { class: `mi toggle-row ${local ? "dim off" : ""}`, onclick: () => { if (!local) post({ type: "setTeam", tabId: t.id, team: teamOn ? 0 : (S.teamSizes[1] || 3) }); } },
@@ -1634,6 +1641,7 @@ ${d.system}` : ""}`,
         S.didYouKnow = m.didYouKnow !== false;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "didYouKnow": S.didYouKnow = m.on !== false; for (const d of listEl.querySelectorAll(".dyk")) fillDyk(d, true); break;
+      case "moods": S.moods = m.moods || S.moods; renderFoot(); if (S.menu === "model") openMenu.refresh(); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
         // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.

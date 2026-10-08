@@ -11,6 +11,9 @@
     for (const [k, v] of Object.entries(props || {})) {
       if (v === undefined || v === null || v === false) continue;
       if (k === "class") n.className = v;
+      // (Through the style object: the page's rules (CSP) block a style="…" attribute, so a bar's width set that way was
+      // ignored and every bar showed full.)
+      else if (k === "style") n.style.cssText = v;
       else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
       else n.setAttribute(k, v === true ? "" : v);
     }
@@ -75,22 +78,108 @@
     return el("button", { class: "link", onclick: () => post({ type }) }, icon(iconName), el("span", { class: "lt" }, el("span", {}, label), hint ? el("span", { class: "muted small" }, hint) : null));
   }
 
+  // ---------- Moods ----------
+  // The chat's moods: the four built-in ones, and yours (add, edit, delete), with what works best and examples to start
+  // from. Drawn on its own (renderMoods), not with the rest of the page every 30 s: a redraw would take the form you're
+  // typing in away from under your fingers. The form's fields are made once per edit and kept.
+  const moodsBox = el("section", { class: "moods-sec", id: "moods" });
+  let M = { form: null, confirm: null, drawn: "" };   // form: { id, fields: { name, hint, instructions }, error, busy, reqId }
+  const TIPS = [
+    ["Who the AI should be, and how it works with you.", "\"Work like a pair programmer sitting next to me.\""],
+    ["Concrete behaviors: what to do first, what to always or never do.", "\"Run the tests after every change.\" \"Never add a library without asking.\""],
+    ["Tone and length.", "\"Keep answers short.\" \"Explain every technical term.\""],
+    ["When to ask you and when to decide.", "\"Ask before a big change; decide small things yourself.\""],
+    ["A few sentences.", "Long instructions are followed less closely, and they go with every message."],
+  ];
+  function openMoodForm(mood) {
+    const f = (tag, props) => el(tag, { class: "in", spellcheck: tag === "textarea" ? "true" : "false", ...props });
+    const fields = { name: f("input", { maxlength: S.moods.limits.name, placeholder: "e.g. Pair programmer" }),
+      hint: f("input", { maxlength: S.moods.limits.hint, placeholder: "e.g. small steps, asks before big changes" }),
+      instructions: f("textarea", { rows: "7", maxlength: S.moods.limits.instructions, placeholder: "e.g. Work like a pair programmer sitting next to me. Before changing code, say in a sentence what you're about to do…" }) };
+    fields.name.value = mood ? mood.label : ""; fields.hint.value = mood ? mood.hint : ""; fields.instructions.value = mood ? mood.instructions : "";
+    const count = el("span", { class: "muted small count" });
+    const counted = () => { count.textContent = `${fields.instructions.value.length} / ${S.moods.limits.instructions}`; };
+    fields.instructions.addEventListener("input", counted); counted();
+    M.form = { id: mood ? mood.id : null, fields, count, error: "", busy: false };
+    renderMoods(true);
+    fields.name.focus();
+  }
+  function useExample(x) {
+    const F = M.form && M.form.fields; if (!F) return;
+    F.name.value = x.name; F.hint.value = x.hint; F.instructions.value = x.instructions;
+    F.instructions.dispatchEvent(new Event("input"));
+    F.instructions.focus();
+  }
+  function saveMood() {
+    const F = M.form; if (!F || F.busy) return;
+    F.busy = true; F.error = ""; F.reqId = Date.now();
+    post({ type: "saveMood", reqId: F.reqId, mood: { id: F.id, name: F.fields.name.value, hint: F.fields.hint.value, instructions: F.fields.instructions.value } });
+    renderMoods(true);
+  }
+  function moodForm() {
+    const F = M.form, X = F.fields;
+    const row = (label, input, note) => el("label", { class: "field" }, el("span", { class: "flabel" }, label, note ? el("span", { class: "muted small" }, " ", note) : null), input);
+    return el("div", { class: "mood-form" },
+      el("div", { class: "mood-form-main" },
+        el("h3", {}, F.id ? "Change this mood" : "Add a mood"),
+        row("Name", X.name, "(shown in the model menu)"),
+        row("One-line hint", X.hint, "(shown when you point at it)"),
+        row("Instructions for the AI", X.instructions),
+        el("div", { class: "row" }, F.count, el("span", { class: "grow" }),
+          F.error ? el("span", { class: "err" }, icon("warning"), " ", F.error) : null),
+        el("div", { class: "row" },
+          el("button", { class: "btn primary", disabled: F.busy, onclick: saveMood }, F.busy ? "Saving…" : "Save"),
+          el("button", { class: "btn", onclick: () => { M.form = null; renderMoods(true); } }, "Cancel"))),
+      el("aside", { class: "mood-tips" },
+        el("h4", {}, icon("lightbulb"), " What works best"),
+        el("ul", {}, TIPS.map(([what, eg]) => el("li", {}, el("strong", {}, what), " ", el("span", { class: "muted" }, eg)))),
+        el("h4", {}, "Start from an example"),
+        el("div", { class: "examples" }, S.moods.examples.map((x) => el("button", { class: "btn", title: x.hint, onclick: () => useExample(x) }, x.name)))));
+  }
+  // force: redraw even if the moods haven't changed (the form opened, closed, or says something new).
+  function renderMoods(force) {
+    const D = S.moods;
+    const key = JSON.stringify(D.mine) + (M.confirm || "");
+    if (!force && key === M.drawn) return;
+    M.drawn = key;
+    const mine = D.mine.map((m) => el("div", { class: "mood-item" },
+      el("div", { class: "row" }, el("strong", {}, m.label), m.hint ? el("span", { class: "muted" }, m.hint) : null, el("span", { class: "grow" }),
+        el("button", { class: "btn", onclick: () => openMoodForm(m) }, icon("edit"), " Edit"),
+        M.confirm === m.id
+          ? el("button", { class: "btn danger", onclick: () => { M.confirm = null; post({ type: "deleteMood", id: m.id }); } }, "Delete it?")
+          : el("button", { class: "btn quiet", title: "Delete this mood (chats using it go back to Default)", onclick: () => { M.confirm = m.id; renderMoods(true); } }, icon("trash"))),
+      el("div", { class: "muted small clamp2" }, m.instructions)));
+    moodsBox.replaceChildren(...[   // (replaceChildren writes a null as the word "null": left out)
+      el("div", { class: "sechead" }, el("h2", {}, "Moods"), el("span", { class: "grow" }),
+        M.form ? null : el("button", { class: "btn", onclick: () => openMoodForm(null) }, icon("add"), " Add a mood")),
+      el("p", { class: "muted" }, "How the chat's AI works with you. Pick one in the chat's model menu, under Mood. Your own moods show there next to the four built-in ones."),
+      el("div", { class: "builtin" }, D.builtIn.map((m) => el("span", { class: "pill", title: m.hint }, m.label, el("span", { class: "muted" }, ` · ${m.hint}`)))),
+      D.mine.length ? el("div", { class: "mood-list" }, mine) : (M.form ? null : el("p", { class: "muted small" }, "No moods of your own yet.")),
+      M.form ? moodForm() : null].filter(Boolean));
+  }
+  window.addEventListener("message", (e) => {
+    const m = e.data;
+    if (m.type === "moodSaved" && M.form && M.form.reqId === m.reqId) {
+      M.form.busy = false;
+      if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
+    }
+    if (m.type === "show" && m.section === "moods") showMoods();
+  });
+  // From the chat's "Add your own mood…": the Moods section, with a new mood's form open.
+  function showMoods() {
+    if (!S) return;
+    if (!M.form) openMoodForm(null);
+    moodsBox.scrollIntoView({ block: "start" });
+    post({ type: "shown" });
+  }
+
   // Layout: the page's header carries the version and updates (one line, always in sight); then your AIs, two cards
-  // to a row; then the rest of Kural as a compact grid of links.
+  // to a row; then the moods; then the rest of Kural as a compact grid of links.
+  const top = el("div"), more = el("div");
+  app.replaceChildren(top, moodsBox, more);
   function render() {
-    app.replaceChildren(
-      el("header", {},
-        el("div", { class: "title" }, el("h1", {}, "Kural Settings"),
-          el("div", { class: "muted" }, S.loading ? [icon("loading", "spin"), " checking who's logged in…"] : "Your AI accounts, their usage, and Kural itself.")),
-        el("span", { class: "grow" }),
-        el("div", { class: "update" },
-          el("div", { class: "row" }, el("span", { class: "muted" }, S.version),
-            el("button", { class: "btn primary", disabled: S.checking, onclick: () => post({ type: "updates" }) }, icon(S.checking ? "loading" : "sync", S.checking ? "spin" : ""), " Check for updates")),
-          el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.autoUpdates, onchange: (e) => post({ type: "autoUpdates", value: e.target.checked }) }), "Look for updates once a day"))),
-      el("div", { class: "sechead" }, el("h2", {}, "Your AI"), el("span", { class: "grow" }),
-        el("button", { class: "btn", disabled: S.refreshing, title: "Ask each AI for its usage now (Claude: one tiny request)", onclick: () => post({ type: "refresh" }) },
-          icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage")),
-      el("div", { class: "cards" }, S.cards.map(card)),
+    renderMoods(false);
+    more.replaceChildren(
       el("div", { class: "sechead" }, el("h2", {}, "More")),
       el("div", { class: "links" },
         link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
@@ -104,9 +193,26 @@
         link("bug", "Crash reports", "what went wrong when Kural closed unexpectedly", "crashes"),
         link("book", "Kural guide", "what every feature does", "guide"),
         link("lightbulb", "Ask for a feature", "on GitHub", "feature")));
+    top.replaceChildren(
+      el("header", {},
+        el("div", { class: "title" }, el("h1", {}, "Kural Settings"),
+          el("div", { class: "muted" }, S.loading ? [icon("loading", "spin"), " checking who's logged in…"] : "Your AI accounts, their usage, and Kural itself.")),
+        el("span", { class: "grow" }),
+        el("div", { class: "update" },
+          el("div", { class: "row" }, el("span", { class: "muted" }, S.version),
+            el("button", { class: "btn primary", disabled: S.checking, onclick: () => post({ type: "updates" }) }, icon(S.checking ? "loading" : "sync", S.checking ? "spin" : ""), " Check for updates")),
+          el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.autoUpdates, onchange: (e) => post({ type: "autoUpdates", value: e.target.checked }) }), "Look for updates once a day"))),
+      el("div", { class: "sechead" }, el("h2", {}, "Your AI"), el("span", { class: "grow" }),
+        el("button", { class: "btn", disabled: S.refreshing, title: "Ask each AI for its usage now (Claude: one tiny request)", onclick: () => post({ type: "refresh" }) },
+          icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage")),
+      el("div", { class: "cards" }, S.cards.map(card)));
   }
 
-  window.addEventListener("message", (e) => { if (e.data.type === "state") { S = e.data; render(); } });
+  window.addEventListener("message", (e) => {
+    if (e.data.type !== "state") return;
+    S = e.data; render();
+    if (S.section === "moods") showMoods();   // (opened by "Add your own mood…" before the page was ready)
+  });
   setInterval(() => { if (S) render(); }, 30000);   // ("resets in", "updated … ago")
   post({ type: "ready" });
 })();

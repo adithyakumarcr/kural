@@ -39,7 +39,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   button), Google Gemini and
   ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you
-  step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
+  step by step and checks what you know first; and your own: "Add your own mood…" at the end of the moods opens Kural
+  Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
+  there; a changed mood or mode applies from the next message); Multiple agents (Claude only: a project team led by a PM, or a
   discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
@@ -132,7 +134,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
   for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
-  page, switch account, log out, log in, set up; then Kural's version and Check for updates, Get started, Tab Completion,
+  page, switch account, log out, log in, set up; then Moods (your own chat moods: add, edit, delete); then Kural's
+  version and Check for updates, Get started, Tab Completion,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
   editor settings, shortcuts, extensions, chat defaults, devices: no passwords or keys; you pick what to import).
   Kural's log: "Kural: Show Log" (an editor tab; Kural hides VS Code's Output tab).

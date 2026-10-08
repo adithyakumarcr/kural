@@ -49,6 +49,29 @@ h3 { font-size: 1em; font-weight: 600; margin: 0; }
 .lt { display: flex; flex-direction: column; gap: 1px; }
 .codicon { vertical-align: -3px; }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+/* Moods: the built-in ones, yours, and the form to add or change one (with tips and examples beside it). */
+.moods-sec > p { margin: 0 0 10px; line-height: 1.45; }
+.builtin { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.builtin .pill { color: var(--vscode-foreground); }
+.mood-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.mood-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.mood-item .row { flex-wrap: wrap; }
+.clamp2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.45; }
+.mood-form { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; background: var(--card); border: 1px solid var(--accent); border-radius: 8px; padding: 14px 16px; }
+@media (max-width: 760px) { .mood-form { grid-template-columns: 1fr; } }
+.mood-form-main { display: flex; flex-direction: column; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.flabel { font-weight: 600; }
+.in { font: inherit; color: var(--vscode-input-foreground, var(--vscode-foreground)); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 5px; padding: 5px 8px; outline: none; }
+.in:focus { border-color: var(--accent); }
+textarea.in { resize: vertical; min-height: 110px; line-height: 1.45; }
+.err { color: var(--warn); }
+.mood-tips { font-size: .95em; }
+.mood-tips h4 { margin: 0 0 6px; font-size: 1em; }
+.mood-tips h4 + ul { margin-top: 0; }
+.mood-tips ul { padding-left: 18px; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; line-height: 1.4; }
+.examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
 /* Narrow tabs: buttons and tags stay on one line; the version and its button wrap as a whole. */
 .btn, .tag, .pill { white-space: nowrap; }
 header .title { flex: 1 1 260px; }

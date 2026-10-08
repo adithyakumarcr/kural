@@ -45,6 +45,8 @@ class Account {
 
   register() {
     this.context.subscriptions.push(this.item, vscode.commands.registerCommand("kural.account", () => this.page && this.page.open()),
+      // (The chat's model menu, "Add your own mood…": Kural Settings, at Moods.)
+      vscode.commands.registerCommand("kural.settings.moods", () => this.page && this.page.open("moods")),
       vscode.commands.registerCommand("kural.refreshUsage", () => this.refreshUsage(true)));
     this.gs.onChange(() => {
       // A new login passed its test: Claude's chat processes start again, with it. (Not at log out: a process started
