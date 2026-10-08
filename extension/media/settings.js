@@ -163,7 +163,10 @@
       M.form.busy = false;
       if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
     }
-    if (m.type === "show" && m.section === "moods") showMoods();
+    if (m.type === "show") {
+      if (m.section === "moods") showMoods();
+      else if (m.section === "usage") showUsage();
+    }
   });
   // From the chat's "Add your own mood…": the Moods section, with a new mood's form open.
   function showMoods() {
@@ -175,10 +178,21 @@
 
   // Layout: the page's header carries the version and updates (one line, always in sight); then your AIs, two cards
   // to a row; then the moods; then the rest of Kural as a compact grid of links.
-  const top = el("div"), more = el("div");
-  app.replaceChildren(top, moodsBox, more);
+  const top = el("div"), more = el("div"), usageBox = el("section", { class: "usage-settings", id: "usage" });
+  const switchOn = el("input", { type: "checkbox", onchange: () => post({ type: "usageSwitch", enabled: switchOn.checked }) });
+  const threshold = el("input", { class: "in threshold", type: "number", min: "1", max: "99", step: "1", "aria-label": "Usage percentage to switch at",
+    onchange: () => { if (threshold.reportValidity() && threshold.value !== "") post({ type: "usageSwitch", threshold: Number(threshold.value) }); } });
+  usageBox.append(el("div", { class: "sechead" }, el("h2", {}, "AI Usage")),
+    el("div", { class: "usage-controls" }, el("label", { class: "check" }, switchOn, "Automatically switch AI"),
+      el("label", { class: "row" }, "Switch at", threshold, "% used")),
+    el("p", { class: "muted small" }, "Keep the same chat and its context. Kural moves to an available AI below this percentage when a Session or Weekly limit reaches it. Active tools and agents finish before switching."));
+  app.replaceChildren(top, usageBox, moodsBox, more);
+  function showUsage() { usageBox.scrollIntoView({ behavior: "smooth", block: "start" }); switchOn.focus({ preventScroll: true }); post({ type: "shown" }); }
   function render() {
     renderMoods(false);
+    const guard = S.usageSwitch || { enabled: false, threshold: 70 };
+    switchOn.checked = guard.enabled;
+    if (document.activeElement !== threshold) threshold.value = guard.threshold;
     more.replaceChildren(
       el("div", { class: "sechead" }, el("h2", {}, "More")),
       el("div", { class: "links" },
@@ -212,6 +226,7 @@
     if (e.data.type !== "state") return;
     S = e.data; render();
     if (S.section === "moods") showMoods();   // (opened by "Add your own mood…" before the page was ready)
+    else if (S.section === "usage") showUsage();
   });
   setInterval(() => { if (S) render(); }, 30000);   // ("resets in", "updated … ago")
   post({ type: "ready" });

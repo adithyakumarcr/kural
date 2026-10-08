@@ -61,6 +61,13 @@ Local assistance and automatic chat retrieval are disabled in Restricted Mode. N
 
 ## Model changes and conversation transfer
 
+**Your usage threshold.** Kural Settings → **AI Usage** has **Automatically switch AI** (off initially) and **Switch
+at** (70% initially, editable from 1–99). When enabled, Auto excludes models over that threshold while a suitable
+model is available below it. Manually selected models also transfer the same chat to another available service when
+their relevant Session or Weekly limit reaches it. A running request can continue after a pause between tools;
+active commands, approvals, background tasks and teams finish before switching. The visible conversation, completed
+work and attachments go along. See [[Account and Updates]] for usage-report timing and when no service can take over.
+
 Claude can acknowledge a native model change; Kural's local engine can change models before its next inference. Auto reassesses at completed tool boundaries after a tool failure, once per answer, with no pending tools, permissions or live agents. Permission denials and cancellations do not trigger escalation. These changes preserve the provider's existing conversation and completed tool results.
 
 Cross-provider changes (Claude ↔ Gemini ↔ Codex ↔ your own model) happen **between messages**, by Auto or when you pick a model of another AI yourself. The new AI gets a record of the conversation: your instructions, the context you sent, the answers' text, messages you added while it worked, questions you answered, tool calls and their results, the files changed and how, errors, the plan it's working from and its to-do list; pictures and PDFs are attached again, including those sent while it answered. Completed operations are marked so they aren't repeated blindly. Checked with a real Claude taking over a conversation another model started: it knew the earlier facts, the file the other model had created, and the rule you had given; and in every direction with stand-ins for each program (`test/handoff-fakes.test.js`).

@@ -204,8 +204,9 @@ something like `qwen3:8b`; `qwen3-coder:30b` or `gpt-oss:20b` need about 20 GB. 
 
 ### Multiple agents
 
-Turn on **Multiple agents** in the model menu. The lead agent gets a team named after Friends (Rachel, Ross,
-Monica…), each with a role you pick. They message each other on a shared board. The roles:
+Turn on **Multiple agents** in the model menu with **Claude, ChatGPT (Codex) or Google Gemini**. The lead agent gets a
+team named after Friends (Rachel, Ross, Monica…), each with a role you pick. Claude agents use a shared board;
+Kural forwards Codex and Gemini agents' reports between phases. The roles:
 
 | Role | Does |
 |---|---|
@@ -252,7 +253,8 @@ Enter, and the suggestion implements it. **Tab** accepts.
 
 ![Tab: a method's first line, and a comment, become code; Tab accepts](docs/screenshots/tab-completion.gif)
 
-Click the **sparkle** icon in the status bar (crossed out while Tab Completion is off) for its panel. There you can:
+Click the **sparkle** icon in the status bar to turn suggestions on or off (crossed out while off). Open its panel
+from **Tab Completion settings** in the icon's hover or **Kural Settings → Tab Completion**. There you can:
 
 - turn suggestions on or off,
 - set how quickly they appear,
@@ -261,7 +263,7 @@ Click the **sparkle** icon in the status bar (crossed out while Tab Completion i
 
 In **Auto**, the local model and Claude race, and the first good answer wins. With Model Router’s Auto Tab policy enabled (`kural.modelRouter.tab`), the router picks one engine from the profile setting. While a chat answers with a model on your computer, both share one graphics chip and the local suggestions slow down; then Claude helps (if it's set up), so suggestions keep coming.
 
-![The Tab Completion panel: the sparkle in the status bar opens it; speed, engine and model](docs/screenshots/tab-panel.gif)
+![The Tab Completion panel: on/off, speed, engine and model](docs/screenshots/tab-panel.gif)
 
 **Change a name, and Kural offers the rest.** Type over a name (or accept a Tab suggestion that changes it), and when
 you move on, Kural looks for the old name in the rest of the project: "`total_value` became `stock_value` here. Also
@@ -317,8 +319,11 @@ writes new code at the cursor.
   answer opens there). Click the inspect button, click an element, and it's added to the chat with its HTML, CSS and a
   picture; add a comment ("make this bigger") and Kural finds the code behind it and changes it, like Cursor.
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
-- **AI Usage** (bottom panel, next to Terminal). Each limit in words: "Session 50% used, resets in 42 min" (the 5-hour
-  limit), "Weekly 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex, and the tokens each used. The status bar
+- **AI Usage** (bottom panel, next to Terminal). One compact summary per AI, showing its most used limit and reset
+  time. **Details** expands other limits and token history. Click the chat's context ring to open it; hover the ring
+  for tokens consumed and tokens in context. **Kural Settings → AI Usage** adds optional automatic switching at an
+  editable percentage (70% initially): the same chat and its context continue with another available service below
+  the threshold, after active work finishes. This works with manual models and Auto. The status bar
   shows the Session limit (`Claude Session 50% · resets 42m`; orange from 80 %, red from 95 %); hover for every limit,
   click for the panel.
 - **A simpler window.** VS Code's Run and Debug side bar, Debug Console and Ports are hidden (while you debug with F5

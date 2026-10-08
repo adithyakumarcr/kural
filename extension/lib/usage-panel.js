@@ -69,7 +69,7 @@ class UsagePanel {
       if (m.type === "ready") this.push();
       if (m.type === "refresh") this.refresh();
       if (m.type === "page") { const p = this.state().list.find((x) => x.id === m.id); if (p && /^https:\/\//.test(p.page)) vscode.env.openExternal(vscode.Uri.parse(p.page)); }
-      if (m.type === "accounts") vscode.commands.executeCommand("kural.account");
+      if (m.type === "accounts") vscode.commands.executeCommand("kural.account", "usage");
       if (m.type === "setUp") vscode.commands.executeCommand("kural.getStarted", m.id);
     });
     view.onDidChangeVisibility(() => { if (view.visible) this.push(); });
@@ -89,7 +89,7 @@ function page(nonce, csp, codicons) {
   .top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
   .top .muted { flex: 1; }
   .muted { color: var(--muted); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px 28px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 24px; }
   .prov h3 { font-size: 1em; margin: 6px 0 4px; display: flex; align-items: baseline; gap: 8px; }
   .prov h3 .muted { font-weight: normal; font-size: .92em; }
   .lim { margin: 6px 0 8px; }
@@ -99,6 +99,8 @@ function page(nonce, csp, codicons) {
   .bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
   .bar.warn span { background: var(--warn); } .bar.bad span { background: var(--bad); }
   .pct.warn { color: var(--warn); } .pct.bad { color: var(--bad); }
+  details { margin-top: 8px; } summary { color: var(--muted); cursor: pointer; font-size: .92em; }
+  .prov .text { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .btn { background: none; border: 1px solid var(--border); color: var(--vscode-foreground); border-radius: 5px; padding: 2px 9px; cursor: pointer; font: inherit; }
   .btn:hover { border-color: var(--accent); }
   .btn[disabled] { opacity: .5; cursor: default; }
@@ -113,7 +115,7 @@ function page(nonce, csp, codicons) {
 </style></head><body>
 <div class="top"><span class="muted" id="sum"></span>
   <button class="btn" id="refresh" title="Ask each program for its numbers now (Claude: one tiny request)"><i class="codicon codicon-refresh" id="rico"></i> Refresh</button>
-  <button class="btn" id="acc" title="Who's logged in, switch account, log out"><i class="codicon codicon-account"></i> Accounts</button></div>
+  <button class="btn" id="acc" title="AI accounts and automatic usage switching"><i class="codicon codicon-settings-gear"></i> Settings</button></div>
 <div class="grid" id="list"></div>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
@@ -122,6 +124,7 @@ function page(nonce, csp, codicons) {
   const el = (tag, cls, ...kids) => { const n = document.createElement(tag); if (cls) n.className = cls; for (const k of kids.flat()) if (k != null) n.append(k.nodeType ? k : document.createTextNode(String(k))); return n; };
   const icon = (name) => { const i = document.createElement("i"); i.className = "codicon codicon-" + name; i.setAttribute("aria-hidden", "true"); return i; };
   let S = null;
+  const expanded = new Set();
   // "42 min", "2 h 10 min", "3 days 4 h"
   function until(t) {
     const m = Math.max(0, Math.round((t - Date.now()) / 60000));
@@ -130,7 +133,6 @@ function page(nonce, csp, codicons) {
     const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
     return d + " day" + (d > 1 ? "s" : "") + (h ? " " + h + " h" : "");
   }
-  const at = (t) => new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
   function ago(t) {
     if (!t) return "";
     const s = Math.round((Date.now() - t) / 1000);
@@ -141,28 +143,34 @@ function page(nonce, csp, codicons) {
     $("rico").className = "codicon codicon-refresh" + (S.refreshing ? " spin" : "");
     $("refresh").disabled = S.refreshing;
     if (!S.list.length) { $("sum").textContent = "No AI set up yet."; $("list").replaceChildren(); return; }
-    $("sum").textContent = "How much of each plan's limits you've used, when each starts again, and how many tokens each AI read and wrote.";
+    $("sum").textContent = "AI Usage";
     $("list").replaceChildren(...S.list.map((p) => {
-      const box = el("div", "prov", el("h3", "", p.name, p.plan ? el("span", "muted", p.plan) : null));
+      const box = el("div", "prov", el("h3", "", p.name));
+      const main = [...p.windows].sort((a, b) => b.used - a.used)[0];
+      const details = el("details", ""); details.open = expanded.has(p.id);
+      details.append(el("summary", "", "Details"));
+      details.addEventListener("toggle", () => details.open ? expanded.add(p.id) : expanded.delete(p.id));
       for (const w of p.windows) {
         const lvl = w.used >= 95 ? "bad" : w.used >= 80 ? "warn" : "";
-        const reset = w.reset ? "started again" : w.resetsAt ? "resets in " + until(w.resetsAt) + " (" + at(w.resetsAt) + ")" : "";
+        const reset = w.reset ? "reset" : w.resetsAt ? "resets in " + until(w.resetsAt) : "";
         const bar = el("div", "bar " + lvl); const fill = document.createElement("span"); fill.style.width = Math.min(100, w.used) + "%"; bar.append(fill);
-        box.append(el("div", "lim",
+        (w === main ? box : details).append(el("div", "lim",
           el("div", "text", el("span", "", el("span", "name", w.name), " ", el("span", "pct " + lvl, w.used + "% used")), el("span", "muted", reset)), bar));
       }
       const [d1, d7, d30] = p.usage;
       if (d30.read || d30.written) {
         // Tokens: what the AI read (your messages, files, the conversation; most of it from the cache) and wrote.
         const row = (label, t) => el("tr", "", el("td", "muted", label), el("td", "num", tok(t.read)), el("td", "num muted", t.read ? Math.round(100 * t.cacheRead / t.read) + "%" : "–"), el("td", "num", tok(t.written)));
-        box.append(el("table", "toks", el("tr", "", el("th", ""), el("th", "num", "read"), el("th", "num", "from cache"), el("th", "num", "written")),
+        details.append(el("table", "toks", el("tr", "", el("th", ""), el("th", "num", "read"), el("th", "num", "from cache"), el("th", "num", "written")),
           row("Today", d1), row("7 days", d7), row("30 days", d30)));
       } else if (!p.windows.length && p.tokens) box.append(el("div", "lim muted", "Today: " + tok(p.tokens.input) + " tokens in, " + tok(p.tokens.output) + " out"));
-      if (!p.windows.length && !p.tokens && !d30.read) box.append(el("div", "lim muted", p.id === "claude" ? "No numbers yet. Claude sends them with each answer; Refresh asks now." : "No numbers yet. Refresh asks now."));
+      if (!p.windows.length && !p.tokens && !d30.read) box.append(el("div", "lim muted", p.id === "ollama" ? "No plan limits" : "No usage reported yet"));
       const links = el("div", "links muted");
       if (p.at) links.append("Updated " + ago(p.at));
       if (p.page) { const a = el("a", "", "usage page"); a.onclick = () => vscode.postMessage({ type: "page", id: p.id }); if (p.at) links.append(" · "); links.append(a); }
-      box.append(links);
+      if (p.plan) details.append(el("div", "muted", p.plan));
+      details.append(links);
+      box.append(details);
       return box;
     }));
   }

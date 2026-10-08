@@ -148,7 +148,6 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chips:empty { display: none; }
 .chip { display: inline-flex; align-items: center; font-size: calc(11.5px * var(--fs, 1)); padding: 0 3px 0 6px; border-radius: 5px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; background: none; margin-bottom: 4px; }
-.chip.ghost { border-style: dashed; padding-right: 6px; }
 .chip-dim { opacity: .7; }
 .chip-x { background: none; border: 0; padding: 0 3px; opacity: .6; font-size: calc(13px * var(--fs, 1)); line-height: 1; }
 .chip-x:hover { opacity: 1; }
@@ -501,7 +500,9 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 /* Attribution stays visible when Auto changes models within one answer. */
 .model-attribution { color: var(--vscode-descriptionForeground); font-size: .85em; margin: 0 0 8px; overflow-wrap: anywhere; }
 /* How full the chat's context window is (next to the send button). */
-.ctx-meter { display: inline-flex; align-items: center; gap: 5px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); margin-right: 6px; cursor: default; white-space: nowrap; }
+.ctx-meter { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: calc(11px * var(--fs, 1)); color: var(--muted); margin-right: 6px; cursor: pointer; white-space: nowrap; background: none; border: 0; padding: 3px; border-radius: 4px; }
+.ctx-meter:hover { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
+.ctx-meter:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
 .ctx-meter.hidden { display: none; }
 /* A narrow panel: the mode ("Agent") keeps its name, the model's name shrinks; the ring keeps only its ring. */
 .pick.mode-pick { flex-shrink: 0; }
