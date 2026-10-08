@@ -12,7 +12,8 @@ files, runs commands and answers. With code selected, Ctrl+L adds it to your mes
 | **Plan** | writes a plan and changes nothing; **Build it** carries the plan out (**Ctrl+P** switches Plan on/off) |
 | **Ask** | only answers |
 
-Every file change shows under the answer: open the before/after, **keep** it or **undo** it.
+Every file change shows under the answer: open the before/after, **keep** it or **undo** it. Only your project's files
+are listed: a note the AI writes in the temp folder, or Claude Code's own plans and memory (`~/.claude`), aren't.
 
 **The web, in every mode.** Claude, Google Gemini and ChatGPT (Codex) can search the web and read web pages in all four
 modes, Plan and Ask too (a plan often needs current docs or versions), without asking: it changes nothing on your

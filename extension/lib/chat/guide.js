@@ -45,7 +45,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
   this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini always does
   that). Stop (the square button, or Esc) stops the answer and puts queued messages back into the box. Each change
-  can be reviewed, kept or undone. How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
+  can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
+  Claude Code's own plans and memory). How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
   answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
   it. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;

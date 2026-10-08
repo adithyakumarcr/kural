@@ -1,19 +1,33 @@
-// Tracks files an Agent changes, so you can Review, Keep or Undo each one, and put the code back as it was before any
-// message of the chat ("Restore code", or editing an earlier message).
+// Tracks files an Agent changes in your project, so you can Review, Keep or Undo each one, and put the code back as it
+// was before any message of the chat ("Restore code", or editing an earlier message). (Files outside the project
+// aren't tracked: inProject.)
 // Before the AI edits a file, Kural saves its current content (a "snapshot", a checkpoint). Undo writes the snapshot
 // back; Review opens a diff: snapshot vs. now. Snapshots are also saved to disk (globalStorage checkpoints/), so a chat
 // can be rolled back after Kural restarts and after you pressed Keep; they're deleted after 30 days.
 
 const vscode = require("vscode");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { diffLines } = require("../edit/diff");
+const { within } = require("../paths");
 
 const SCHEME = "kural-before";
 const MAX_DISK = 10 * 1024 * 1024;   // a bigger file's snapshot stays in memory only
 const KEEP_DAYS = 30;
 const hash = (text) => text == null ? null : crypto.createHash("sha1").update(text).digest("hex");
+
+// Only files in the chat's project are its changes (the Files changed card, Review / Undo / Keep, Restore code, what Tab
+// and Auto learn from them): not a note the AI writes in the temp folder, not Claude Code's own files (~/.claude: plans,
+// memory), not anywhere else (Adithya: "only the files that have been changed inside the repo"). roots: the project's
+// folders (with none open, Kural's work folder). A project that is itself in one of those places (a folder in /tmp)
+// still counts.
+function inProject(file, roots) {
+  if (!file || !path.isAbsolute(String(file))) return false;
+  const away = [path.join(os.homedir(), ".claude"), os.tmpdir(), ...(process.platform === "win32" ? [] : ["/tmp"])];
+  return (roots || []).filter(Boolean).some((r) => within(file, [r]) && !away.some((a) => within(file, [a]) && !within(r, [a])));
+}
 
 class ChangeTracker {
   constructor(dir = null) {
@@ -111,4 +125,4 @@ class ChangeTracker {
   }
 }
 
-module.exports = { ChangeTracker, hash };
+module.exports = { ChangeTracker, hash, inProject };
