@@ -1,0 +1,11 @@
+const assert = require("assert");
+const { build } = require("../scripts/sbom");
+const { bom, ver } = build();
+assert.strictEqual(bom.bomFormat, "CycloneDX");
+assert.strictEqual(bom.specVersion, "1.5");
+assert.strictEqual(bom.metadata.component.version, ver);
+const names = bom.components.map((c) => c.name);
+assert(names.includes("VSCodium") && names.includes("Codicons"));
+assert(bom.components.find((c) => c.name === "VSCodium").version.match(/^\d+(\.\d+)+$/));
+JSON.parse(JSON.stringify(bom));
+console.log("sbom ok");

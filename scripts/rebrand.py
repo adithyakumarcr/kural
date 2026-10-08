@@ -73,6 +73,8 @@ def main(app, platform):
     shutil.copytree(os.path.join(ROOT, "extension"), target)
     # Kural's license (MIT + Commons Clause) travels with every copy of the app, as the license requires.
     shutil.copy(os.path.join(ROOT, "LICENSE"), os.path.join(ext, NAME, "LICENSE"))
+    # ...and the notices for the parts made by others (VSCodium, Electron, Codicons), beside it.
+    shutil.copy(os.path.join(ROOT, "THIRD_PARTY_NOTICES.md"), os.path.join(ext, NAME, "THIRD_PARTY_NOTICES.md"))
 
     # 4. Ctrl+K / Cmd+K opens Kural's inline edit. Git's own Ctrl+K shortcuts would win,
     #    so move them to Ctrl+Alt+K (Cmd+Alt+K on a Mac).
