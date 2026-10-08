@@ -1619,14 +1619,20 @@ ${d.system}` : ""}`,
   const lastAssistant = () => { const m = S.tab && S.tab.messages; return m && m.length && m[m.length - 1].role === "assistant" ? m.length - 1 : -1; };
   let pending = null;
   const scheduleRerender = (i) => { if (pending === null) { pending = i; requestAnimationFrame(() => { const k = pending; pending = null; patches.clear(); if (S.tab && S.tab.messages[k]) rerender(k); }); } };
-  // Streaming: patch one block, at most once per frame (several deltas in one frame → one redraw).
+  // Streaming: the growing blocks are redrawn about 15 times a second (all deltas since the last redraw at once). Every
+  // frame was 60 a second: Ross measured the page using 15 % of a core while an answer streamed.
   const patches = new Set();
+  const PATCH_MS = 66;
+  let patchTimer = null, lastPatch = 0;
   const schedulePatch = (i, k) => {
     if (pending !== null) return;   // a full redraw is coming anyway
-    const key = `${i}:${k}`;
-    if (patches.has(key)) return;
-    patches.add(key);
-    requestAnimationFrame(() => { if (!patches.delete(key)) return; if (S.tab && S.tab.messages[i]) patchBlock(i, k); });
+    patches.add(`${i}:${k}`);
+    if (patchTimer) return;
+    patchTimer = setTimeout(() => requestAnimationFrame(() => {
+      patchTimer = null; lastPatch = Date.now();
+      const keys = [...patches]; patches.clear();
+      for (const key of keys) { const [a, b] = key.split(":").map(Number); if (S.tab && S.tab.messages[a]) patchBlock(a, b); }
+    }), Math.max(0, PATCH_MS - (Date.now() - lastPatch)));
   };
   const findAgent = (id) => { const i = lastAssistant(); return i >= 0 ? [i, S.tab.messages[i].blocks.find((b) => b.k === "agent" && b.id === id)] : [i, null]; };
 
