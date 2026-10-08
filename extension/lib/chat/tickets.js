@@ -6,13 +6,7 @@
 
 const { ClaudeProcess, findClaude, log } = require("../ai/claude");
 
-// Is a connector / MCP server Atlassian's? ("claude.ai Atlassian Rovo", "atlassian", "jira", …)
-const IS_ATLASSIAN = /atlassian|jira/i;
-// A read-only Atlassian tool: mcp__<atlassian…>__getJiraIssue, …__searchJiraIssuesUsingJql, …__lookupJiraAccountId
-function isAtlassianRead(tool) {
-  const m = /^mcp__(.+)__(.+)$/.exec(tool || "");
-  return !!m && IS_ATLASSIAN.test(m[1]) && /^(get|search|lookup|fetch|list|read|atlassianUserInfo)([A-Z_]|$)/.test(m[2]);
-}
+const { IS_ATLASSIAN, isAtlassianRead } = require("./atlassian");
 
 // What the + menu shows for "Link ticket": ok, or a warning and why.
 function atlassianState(setup) {
