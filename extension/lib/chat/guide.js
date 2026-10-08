@@ -15,8 +15,10 @@ stopped personal accounts there on 26 Sept 2026), ChatGPT (OpenAI's Codex CLI wi
 model on their computer (Ollama, offline, no account). Features and how to use them:
 - Welcome (Command Palette: "Kural: Welcome", also Help → Welcome): opens by default when there are no editors to
   restore. Start has New File, Open File, Open Folder and Clone Git Repository; Recent reopens projects;
-  Walkthroughs includes "Get started with Kural" (AI setup, a project, chat, theme) and installed extensions' guides.
-  "Show welcome page on startup" at the bottom turns it on/off.
+  Walkthroughs includes "Get started with Kural" (AI setup, a project, chat, theme), "Learn the Fundamentals" and
+  installed extensions' guides. "Show welcome page on startup" at the bottom turns it on/off. It doesn't open by itself
+  when Kural restores files from last time: use Help → Welcome. Kural has no VSCodium walkthrough or announcements,
+  and Help → Report Issue goes to Kural's GitHub issues.
 - Get started (Command Palette: "Kural: Get Started"): pick Claude, Google Gemini, ChatGPT (Codex) or your own model;
   Kural checks each step (install, log in or download a model, a test request). Any one is enough; all can be set up.
   "Install for me" installs in the background (Gemini: Google's Antigravity installer; Codex: Homebrew or npm,

@@ -427,6 +427,16 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   certificate, a tiny NSIS installer through the same sign.nsh, both files must be signed). makensis reads from the
   script's folder: `!include "sign.nsh"`, not `${__FILEDIR__}/…`. Kural's own updates (Node fetch, no
   Mark-of-the-Web) aren't checked by SmartScreen.
+- **VSCodium's own content** (`rebrand.py` `drop_vscodium_welcome`, `rebrand_messages`, product.json): the Welcome page's
+  "VSCodium Announcements" (VSCodium fetches `announcements-extra.json` from its GitHub when
+  `workbench.welcomePage.extraAnnouncements` is on, which was the default; `BGe` is empty) isn't built or placed
+  (`buildAnnouncementList()` call and its two `getDomElement()` uses removed; the package.json default is also false) and
+  the built-in "Setup" walkthrough ("Get started with VSCodium", `when:"!isWeb"`) gets `when:"false"`. Both are found by
+  shape; a miss → `::warning::`, and applying twice changes nothing. `out/nls.messages.json` (not in `checksums`): the word
+  VSCodium on its own → Kural in ~100 strings, never inside a URL; the issue reporter's guidance links → CONTRIBUTING.md.
+  product.json `reportIssueUrl`/`licenseUrl` → Kural's repository. Other VSCodium links (`serverDownloadUrlTemplate`,
+  tunnel mutex names) are internal and stay. Test: `test/rebrand-welcome.test.js` (a stand-in app folder, and a real
+  workbench file when one is around).
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
   renames the program, the 4 helpers and `bin/kural` together; a mismatch crashes the app at launch. CI opens the real
   app on all three systems (not just `--version`, which never starts the helpers).
