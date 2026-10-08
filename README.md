@@ -368,6 +368,10 @@ moved to Ctrl+Alt+K. Use Ctrl+/ to comment code.
 Every release has a signed checksum list (`SHA256SUMS` and `SHA256SUMS.sig`), and Kural's updater checks it before
 installing anything. You can check a download yourself too: see [docs/release-signing.md](docs/release-signing.md).
 
+## Security
+
+Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md).
+
 ## Build it yourself
 
 No GitHub needed: one command builds Kural from the code in this folder and installs it on your computer
