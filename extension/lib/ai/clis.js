@@ -17,7 +17,7 @@ const CLIS = {
     short: "Codex",                // status bar, model names
     program: "Codex CLI",
     what: "OpenAI's models through Codex, with your ChatGPT plan.",
-    facts: ["Needs a ChatGPT Plus, Pro, Business or Enterprise plan (or an OpenAI API key) and internet"],
+    facts: ["Needs a ChatGPT Plus, Pro, Business or Enterprise plan (or an OpenAI API key) and internet", "Project teams and discussions"],
     // Official installs: npm everywhere (needs Node.js), Homebrew on a Mac.
     install: IS_MAC ? "brew install codex" : "npm install -g @openai/codex",
     installAlt: IS_MAC ? "npm install -g @openai/codex" : "",
@@ -44,7 +44,7 @@ CLIS.agy = {
   short: "Gemini",
   program: "Antigravity CLI",
   what: "Google's Gemini models (and others) with your Google account, through Google's Antigravity CLI.",
-  facts: ["Free with a Google account; more with Google AI Pro or Ultra", "Can't ask before a command: Agent mode edits files only, Auto runs commands"],
+  facts: ["Free with a Google account; more with Google AI Pro or Ultra", "Can't ask before a command: Agent mode edits files only, Auto runs commands", "Project teams and discussions"],
   // Google's own installer (a single program, no Node.js needed): ~/.local/bin/agy, or %LOCALAPPDATA%\agy\bin on Windows.
   install: IS_WIN ? "irm https://antigravity.google/cli/install.ps1 | iex" : "curl -fsSL https://antigravity.google/cli/install.sh | bash",
   installAlt: IS_WIN ? "winget install Google.AntigravityCLI" : "",

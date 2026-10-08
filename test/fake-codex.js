@@ -128,7 +128,13 @@ async function run(threadId, turnId, th, p) {
   const ids = { threadId, turnId };
   const started = (item) => note("item/started", { item, ...ids, startedAtMs: Date.now() });
   const completed = (item) => note("item/completed", { item, ...ids, completedAtMs: Date.now() });
-  const end = (status, error = null) => { turns.get(turnId).done = true; note("turn/completed", { threadId, turn: { id: turnId, items: [], status, error, durationMs: 5 } }); };
+  const end = (status, error = null) => {
+    if (process.env.FAKE_CODEX_USAGE) {
+      const tokens = { inputTokens: 100, cachedInputTokens: 30, outputTokens: 20, totalTokens: 120 };
+      note("thread/tokenUsage/updated", { threadId, tokenUsage: { total: tokens, last: tokens, modelContextWindow: 200000 } });
+    }
+    turns.get(turnId).done = true; note("turn/completed", { threadId, turn: { id: turnId, items: [], status, error, durationMs: 5 } });
+  };
   const steered = () => turns.get(turnId).steered.length ? ` Also: ${turns.get(turnId).steered.join("; ")}.` : "";
   const say = async (text, pieces = [text]) => {
     const item = { type: "agentMessage", id: `msg_${turnId}_${Math.random().toString(36).slice(2, 6)}`, text: "", phase: null };

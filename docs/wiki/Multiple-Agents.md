@@ -1,6 +1,6 @@
 # Multiple Agents
 
-Turn on **Multiple agents** in the chat's model menu (Claude models). Instead of one assistant, a team works on your
+Turn on **Multiple agents** in the chat's model menu (Claude, ChatGPT or Google Gemini). Instead of one assistant, a team works on your
 request. The lead is always the **Project Manager**; you pick the other roles:
 
 | Role | Name | Does |
@@ -19,11 +19,17 @@ Any combination works. Then pick how they work:
 - **Discuss & decide**: each agent forms its own view first, then they argue it out and agree. The answer shows
   everyone's final position and any disagreement left.
 
-You see the discussion live: the agents' messages to each other appear in the answer as they're sent. Each agent has a
-card with what it's doing now, its thinking and its notes.
+You see reports in the answer as agents finish each phase, with an activity card for each agent. Claude agents can
+also post to each other while they work. Codex and Gemini agents receive their teammates' reports between phases.
 
 **Finish now** (next to "Waiting for …") stops the agents and the lead answers with what it has. An agent that shows
 no sign of life for 6 minutes is stopped by itself.
 
-Agent teams need Claude: they use Claude Code's background agents. With [[Your Own Model]], the chat works with one
-assistant.
+For Codex and Gemini, Kural runs separate sessions with the same account and selected model. Developers build
+concurrently only when the plan assigns separate files; an overlapping plan uses one developer. **Plan** and **Ask**
+produce a plan or discussion without building. In **Agent** or **Auto**, building waits for your **Go ahead**.
+The Tester can review and request one fix round, then reviews again. **Stop** cancels the whole team; queued messages
+are answered after the current team finishes. Reports and conversation history survive a restart.
+
+Gemini keeps its normal mode restrictions: in **Agent**, it edits files but runs no commands; **Auto** allows commands.
+All sessions count toward the provider's usage. With [[Your Own Model]], the chat works with one assistant.

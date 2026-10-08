@@ -33,6 +33,8 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.notifications` | whenAway | a system notification when a chat's answer is done or needs you: `whenAway` (Kural's window isn't in front, or that chat isn't on screen), `always`, `off`. macOS asks once whether Kural may send notifications (if you chose Don't Allow: System Settings → Notifications → Kural) |
 | `kural.chat.didYouKnow` | on | a short "Did you know?" tip under an answer while it's being worked on |
 | `kural.chat.moods` | (none) | your own chat moods (name, hint, instructions); edit them in Kural Settings → Moods |
+| `kural.usageSwitch.enabled` | off | automatically move the same chat to another available AI when its reported usage reaches your threshold; edit in Kural Settings → AI Usage |
+| `kural.usageSwitch.threshold` | 70 | percentage used that triggers switching (1–99); applies to Session and relevant Weekly limits |
 | `kural.fontSize` | 0 | text size in the chat and Ask panels (0 = the editor's size) |
 | `kural.tabCompletion.*` | | see [[Tab Completion]] |
 | `kural.localModels.contextLength` | 32768 | how much a model on your computer can look at once |

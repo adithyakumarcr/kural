@@ -14,7 +14,7 @@
   const S = {
     tabs: [], activeId: null, tab: null,
     models: [], efforts: [], modes: [], teamSizes: [2, 3, 4, 5], version: "",
-    activeFile: null, includeActive: true, attachments: [], setups: {},
+    attachments: [], setups: {},
     files: [], popup: null, menu: null,
     history: [], showHistory: false, historyQuery: "", historyScope: "all", hereName: "", confirmDelete: null, renaming: null,
   };
@@ -311,7 +311,7 @@
   // Messages you sent while it answered that it hasn't taken in yet.
   const queueEl = el("div", { class: "queue hidden" });
   // How full this chat's context window is (a ring + "38k"), and on hover this chat's tokens (read, from cache, written).
-  const ctxEl = el("span", { class: "ctx-meter hidden" });
+  const ctxEl = el("button", { class: "ctx-meter hidden", "aria-label": "Open AI Usage", onclick: () => post({ type: "showUsage" }) });
   const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const editBar = el("div", { class: "edit-bar hidden" });   // "Editing an earlier message …" (startEdit)
   const composer = el("div", { class: "composer" }, popupEl, queueEl, editBar, chipsEl, input,
@@ -912,11 +912,6 @@
       onclick: () => tk.url && post({ type: "openUrl", url: tk.url }) },
       icon("issues"), " ", el("b", {}, tk.key), el("span", { class: "chip-dim ticket-chip-sum" }, ` · ${tk.summary}`),
       el("button", { class: "chip-x", title: "Unlink this ticket", onclick: (e) => { e.stopPropagation(); post({ type: "linkTicket", tabId: S.tab.id, ticket: null }); } }, icon("close"))));
-    if (S.activeFile && S.includeActive)
-      chipsEl.append(el("span", { class: "chip", title: `${S.activeFile.path} is sent with your message` }, icon("file"), " ", S.activeFile.name, el("span", { class: "chip-dim" }, " · current file"),
-        el("button", { class: "chip-x", title: "Don't send this file", onclick: () => { S.includeActive = false; renderChips(); } }, icon("close"))));
-    else if (S.activeFile)
-      chipsEl.append(el("button", { class: "chip ghost", onclick: () => { S.includeActive = true; renderChips(); } }, "+ ", S.activeFile.name));
     for (const a of S.attachments) chipsEl.append(attachChip(a, () => { S.attachments = S.attachments.filter((x) => x.id !== a.id); renderChips(); }));
     renderQueueBtn();
   }
@@ -943,10 +938,10 @@
     ctxEl.replaceChildren(...(win ? [ring] : []), el("span", { class: win ? "ctx-text" : "" }, label));
     const read = k ? (k.input || 0) + (k.cacheRead || 0) + (k.cacheWrite || 0) : 0;
     ctxEl.title = [
-      c ? `Context: ${used.toLocaleString()} tokens${win ? ` of ${win.toLocaleString()} (${Math.round(share * 100)}%)` : ""} in this conversation now` : null,
-      k ? `This chat so far: ${tok(read)} tokens read${k.cacheRead ? ` (${tok(k.cacheRead)} from cache)` : ""}, ${tok(k.output || 0)} written` : null,
+      c ? `In context: ${used.toLocaleString()} / ${win ? win.toLocaleString() : "unknown"} tokens` : null,
+      k ? `Tokens consumed: ${(read + (k.output || 0)).toLocaleString()} (${read.toLocaleString()} read, ${(k.output || 0).toLocaleString()} written)` : null,
       share >= .8 ? "Nearly full: the AI starts summarising or forgetting the oldest parts. A new chat starts empty." : null,
-      "All your AIs, per day: AI Usage panel"].filter(Boolean).join("\n");
+      "Click to open AI Usage"].filter(Boolean).join("\n");
   }
 
   function renderFoot() {
@@ -1035,7 +1030,6 @@
     if (t.status !== "idle" && S.editing && S.editing.tabId === t.id) return busyNote();   // (an edit waits for the answer)
     const segments = readInput();
     const contexts = segments.filter((s) => s.t === "pill").map((s) => s.ctx);
-    if (S.activeFile && S.includeActive) contexts.unshift({ kind: "current", path: S.activeFile.path, name: S.activeFile.name });
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     // Keep the draft until the extension accepts it, including when routing cannot find an eligible model.
     S.pendingSend = { tabId: t.id, requestId, segments: JSON.stringify(segments), attachments: S.attachments.map((a) => a.id) };
@@ -1241,7 +1235,7 @@
     } else {
       const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
-      const local = /^[a-z]+:/.test(t.model || "");   // (not Claude: no agent teams, no Claude Code setup)
+      const local = /^ollama:/.test(t.model || "");
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
       items = [el("div", { class: "mh" }, "Auto · Kural Model Router"),
         ...["balance","cost","intelligence"].map((profile) => el("div", { class: `mi ${t.autoRoute && profileName(t.routingProfile) === profile ? "on" : ""}`,onclick: () => { post({ type: "setRouterProfile",tabId: t.id,profile }); closeMenu(); } },
@@ -1249,7 +1243,7 @@
           el("span", { class: "mi-hint" }, { balance: "quality, then speed",cost: "saves your usage limits",intelligence: "most capable" }[profile]))),
         el("div", { class: "mi",onclick: () => { post({ type: "routerPanel" }); closeMenu(); } },el("span", { class: "mi-icon" },icon("settings-gear")),el("span", { class: "mi-label" },"Configure Model Router…")),
         el("div", { class: "sep" }),
-        ...claudeHead(t, local), ...S.models.map((m) =>
+        ...claudeHead(t, /^[a-z]+:/.test(t.model || "")), ...S.models.map((m) =>
         el("div", { class: `mi ${!t.autoRoute && t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
           if (S.claudeReady) post({ type: "setModel", tabId: t.id, model: m.id }); else post({ type: "getStarted", path: "claude" });
           closeMenu(); } },
@@ -1268,11 +1262,11 @@
           el("button", { class: "mood-chip add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
             onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own mood…")),
         el("div", { class: "sep" }),
-        // (Agent teams run on Claude Code: not with a model on this computer.)
+        // Claude Code teams, or Kural's team runner for Codex and Gemini.
         el("div", { class: `mi toggle-row ${local ? "dim off" : ""}`, onclick: () => { if (!local) post({ type: "setTeam", tabId: t.id, team: teamOn ? 0 : (S.teamSizes[1] || 3) }); } },
           el("div", { class: "tr-text" },
             el("div", { class: "mi-label" }, "Multiple agents"),
-            el("div", { class: "tr-hint" }, local ? "Needs a Claude model" : teamOn ? teamHint(t) : "Split a task across agents, or let them discuss and decide")),
+            el("div", { class: "tr-hint" }, local ? "Choose Claude, ChatGPT or Gemini" : teamOn ? teamHint(t) : "Split a task across agents, or let them discuss and decide")),
           el("span", { class: `switch ${teamOn && !local ? "on" : ""}` }, el("span"))),
         teamOn && !local ? el("div", { class: "seg team" }, S.teamStyles.map((st) => el("button", { class: t.teamStyle === st.id ? "on" : "", title: st.hint, onclick: () => post({ type: "setTeamStyle", tabId: t.id, style: st.id }) }, st.label))) : null,
         teamOn && !local ? el("div", { class: "roles" }, el("span", { class: "roles-h" }, "Roles"),
@@ -1729,7 +1723,6 @@ ${d.system}` : ""}`,
       case "permState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) b.state = m.state; scheduleRerender(i); } } break;
       case "patch": if (mine) { const i = m.index != null ? m.index : lastAssistant(); if (i >= 0) { Object.assign(S.tab.messages[i], m.msg); rerender(i); } renderFoot(); } break;
       case "allowAll": break;
-      case "activeFile": S.activeFile = m.file; S.includeActive = true; renderChips(); break;
       case "files": S.files = m.files; if (S.popup) renderPopup(); break;
       case "pics": S.pics = m.pics; break;
       case "insertPill":
