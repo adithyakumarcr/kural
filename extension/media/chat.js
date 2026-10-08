@@ -557,7 +557,7 @@
 
   function forkButton(i) {
     return el("button", { class: "msg-act", "aria-label": "Fork from here",
-      title: "Fork from here\nStart a new chat with the conversation through this message. This chat and your files stay as they are.",
+      title: "Fork from here\nStart a new chat with the conversation through this message. This chat stays as it is. If later answers changed files, Kural asks whether the code goes back too.",
       onclick: () => S.tab.status !== "idle" ? busyNote() : post({ type: "fork", tabId: S.tab.id, index: i }) }, icon("git-branch"));
   }
 
