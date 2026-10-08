@@ -55,7 +55,12 @@ h3 { font-size: 1em; font-weight: 600; margin: 0; }
 /* Moods: the built-in ones, yours, and the form to add or change one (with tips and examples beside it). */
 .moods-sec > p { margin: 0 0 10px; line-height: 1.45; }
 .builtin { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.builtin .pill { color: var(--vscode-foreground); }
+.builtin .pill { color: var(--vscode-foreground); display: inline-flex; align-items: center; gap: 2px; }
+.builtin .pill.off { color: var(--muted); border-style: dashed; }
+.pill-btn { background: none; border: 0; padding: 0 2px; margin-left: 4px; font: inherit; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 3px; border-radius: 4px; }
+.pill-btn:hover:not([disabled]) { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.18)); }
+.pill-btn[disabled] { opacity: .4; cursor: default; }
+.pill-btn .codicon { vertical-align: 0; font-size: 1em; }
 .mood-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .mood-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
 .mood-item .row { flex-wrap: wrap; }
