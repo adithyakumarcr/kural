@@ -32,7 +32,10 @@ into planting one, so writing one gets a card ("This file can make your computer
 isn't writable without asking either.
 
 You can change the mode while an answer is running. Agent → Auto: the commands waiting for your OK run at once, and
-later ones don't ask. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
+later ones don't ask. Dangerous commands still ask in Auto (and after "Allow all"): `sudo`, deleting outside the project
+or the whole project, `curl … | sh`, a forced push to main, `git reset --hard`, `git clean -f`, writing into `/etc`,
+`/usr` or `~/.ssh`, formatting a disk, shutting down. It's a best-effort check of the command's text, not a sandbox.
+Gemini (Antigravity) can't ask, so in Auto it doesn't get this check. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.
 
 ## The model menu (bottom of the chat)
