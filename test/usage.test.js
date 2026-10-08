@@ -7,7 +7,7 @@ Module._load = function (req, ...a) {
   return load.call(this, req, ...a);
 };
 const usage = require("../extension/lib/ai/usage");
-const { _test: { shortName } } = require("../extension/lib/account");
+const { _test: { shortName, meter, hoverText } } = require("../extension/lib/account");
 const { _page } = require("../extension/lib/usage-panel");
 
 let fail = 0;
@@ -44,6 +44,34 @@ check("other names: Codex's windows, Gemini's weekly limits, Opus's own week, nu
   assert.strictEqual(shortName({ label: "Gemini", period: "week" }), "Weekly (Gemini)");
   assert.ok(usage.isWeekly({ label: "Gemini", period: "week" }) && !usage.isSession({ label: "Gemini", period: "week" }));
   assert.strictEqual(usage.inWords({ label: "Week", usedPercent: 12.4, resetsAt: null }, now), "Weekly 12% used");
+});
+check("status bar: only the Session limit (the chat's AI with its reset); a weekly one only from 80 %", () => {
+  const S = (p, reset = 42) => ({ id: "five_hour", label: "Session", usedPercent: p, resetsAt: now + reset * min });
+  const W = (p) => ({ id: "seven_day", label: "Week", usedPercent: p, resetsAt: now + (3 * 1440 + 4 * 60) * min });
+  assert.deepStrictEqual(meter("Claude", { windows: [S(50), W(25)] }, true, now), { text: "$(dashboard) Claude Session 50% · resets 42m", top: 50 });
+  assert.deepStrictEqual(meter("Codex", { windows: [S(12), W(3)] }, false, now), { text: "$(dashboard) Codex 12%", top: 12 });
+  // A nearly full week isn't hidden (orange from 80, red from 95: top).
+  assert.deepStrictEqual(meter("Claude", { windows: [S(10), W(85)] }, true, now), { text: "$(dashboard) Claude Session 10% · resets 42m | Weekly 85% · resets 3d 4h", top: 85 });
+  assert.deepStrictEqual(meter("Codex", { windows: [S(10), W(96)] }, false, now), { text: "$(dashboard) Codex 10% · Weekly 96%", top: 96 });
+  // Saved before the rename ("5-hour") still counts as the session.
+  assert.strictEqual(meter("Claude", { windows: [{ id: "five_hour", label: "5-hour", usedPercent: 30 }, W(5)] }, false, now).text, "$(dashboard) Claude 30%");
+  // Gemini (weekly limits only): as the chat's AI its fullest one; otherwise only when nearly full.
+  const G = (p, label = "Gemini") => ({ id: label.toLowerCase(), label, usedPercent: p, resetsAt: null, period: "week" });
+  assert.strictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, true, now).text, "$(dashboard) Gemini Weekly 13%");
+  assert.strictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, false, now), null);
+  assert.strictEqual(meter("Gemini", { windows: [G(13), G(82, "Claude")] }, false, now).text, "$(dashboard) Gemini Weekly (Claude) 82%");
+  // No limits yet, only tokens: the chat's AI shows them; the others nothing.
+  assert.strictEqual(meter("Gemini", { windows: [], tokens: { input: 1200000, output: 34000 } }, true, now).text, "$(dashboard) Gemini 1.2M tok");
+  assert.strictEqual(meter("Gemini", { windows: [], tokens: { input: 1200000, output: 34000 } }, false, now), null);
+  assert.strictEqual(meter("Codex", { windows: [] }, true, now), null);
+});
+check("the hover has every AI's limits in full, the one you point at first", () => {
+  const md = hoverText([
+    { id: "codex", u: { at: now, windows: [{ id: "primary", label: "Session", usedPercent: 12, resetsAt: now + 130 * min }, { id: "secondary", label: "Week", usedPercent: 3, resetsAt: null }] } },
+    { id: "claude", u: { at: now - 5 * min, windows: [{ id: "five_hour", label: "Session", usedPercent: 50, resetsAt: now + 42 * min }, { id: "seven_day", label: "Week", usedPercent: 25, resetsAt: null }] } },
+    { id: "agy", u: { at: now, windows: [], tokens: { input: 0, output: 0 } } }], "claude", now);
+  assert.strictEqual(md, "**Codex** · updated just now  \nSession: **12%** used, resets in 2 h 10 min  \nWeekly: **3%** used\n\n" +
+    "**Claude** (the chat's AI) · updated 5 min ago  \nSession: **50%** used, resets in 42 min  \nWeekly: **25%** used\n\n_Click for the AI Usage panel._");
 });
 check("the AI Usage page: its rules allow no outside scripts or styles", () => {
   const html = _page("abc", "vscode-resource:", "codicons.css");
