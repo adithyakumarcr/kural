@@ -4,7 +4,7 @@
 - **"Kural: finish setup" in the status bar:** click it. [[Getting Started|Getting Started]] shows which step is missing
   and how to fix it.
 - **Claude says I'm not logged in:** click the person icon (Account) → **Log in**.
-- **No Tab suggestions:** click **Tab Completion** in the status bar. Is it on? Which engine? "Last suggestion" shows
+- **No Tab suggestions:** click the sparkle icon (Tab Completion) in the status bar. Crossed out = off. Which engine? "Last suggestion" shows
   whether suggestions arrive and how long they take. With **Local model**, the panel says whether Ollama and the model
   are ready.
 - **Terminal suggestions don't show:** they need Kural's terminal with shell integration (bash, zsh, fish, PowerShell)

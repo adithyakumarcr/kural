@@ -88,18 +88,22 @@ function activate(context) {
     md.supportThemeIcons = true;
     return md;
   };
+  // Just an icon (Adithya: a simple, decluttered status bar): the sparkle, crossed out while Tab Completion is off
+  // ($(kural-tab-off): package.json "icons", media/codicons/kural-icons.ttf, made by scripts/make-status-icons.js). The
+  // hover says what it is and what a click does. Something to fix keeps its words, so it's noticed.
   const refresh = () => {
     const on = cfg().get("tabCompletion.enabled");
     const look = {
-      ready:    ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
-      thinking: ["$(sparkle) Tab Completion", tabCard(true), "kural.tabPanel.focus"],
-      error:    ["$(warning) Tab Completion", "Last suggestion failed; click for Kural's log", "kural.showLog"],
-      login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted"],
-      missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted"],
+      ready:    ["$(sparkle)", tabCard(true), "kural.tabPanel.focus", "Tab Completion: on"],
+      thinking: ["$(sparkle)", tabCard(true), "kural.tabPanel.focus", "Tab Completion: on"],
+      error:    ["$(warning) Tab Completion", "Tab Completion: the last suggestion failed. Click for Kural's log", "kural.showLog", "Tab Completion: the last suggestion failed"],
+      login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted", "Kural: log in"],
+      missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted", "Kural: install Claude Code"],
     }[state];
-    if (!getStarted.ready) { [status.text, status.tooltip, status.command] = ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, ChatGPT, Gemini, or your own model with Ollama): open Get started", "kural.getStarted"]; return; }
-    [status.text, status.tooltip, status.command] = on || state === "login" || state === "missing"
-      ? look : ["$(circle-slash) Tab Completion", tabCard(false), "kural.tabPanel.focus"];
+    const [text, tooltip, command, label] = !getStarted.ready
+      ? ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, ChatGPT, Gemini, or your own model with Ollama): open Get started", "kural.getStarted", "Kural: finish setup"]
+      : on || state === "login" || state === "missing" ? look : ["$(kural-tab-off)", tabCard(false), "kural.tabPanel.focus", "Tab Completion: off"];
+    Object.assign(status, { text, tooltip, command, accessibilityInformation: { label, role: "button" } });
   };
   const setState = (s) => {
     if (s === "login" || s === "missing") { getStarted.broke(s); return; }   // back to Get started at that step
