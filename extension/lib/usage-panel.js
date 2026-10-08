@@ -1,5 +1,5 @@
 // The AI Usage panel at the bottom of the window (next to Terminal and Tab Completion): for Claude, Gemini and Codex,
-// each limit in words ("5-hour limit 50% used, resets in 42 min"), with a bar and the time it resets. Clicking a usage
+// each limit in words ("Session 50% used, resets in 42 min"; Session = the 5-hour limit), with a bar and the time it resets. Clicking a usage
 // item in the status bar opens it. The numbers come from lib/ai/usage.js (the programs report them; Kural reads no
 // login or key itself).
 

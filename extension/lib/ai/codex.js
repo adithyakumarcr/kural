@@ -333,10 +333,12 @@ async function codexAuth(bin) {
 }
 
 // Codex's limits are windows of time (5 hours, a week) with a percentage used. Updates come sparse (only the
-// window that changed), so Kural keeps the last full picture and fills in what changed.
+// window that changed), so Kural keeps the last full picture and fills in what changed. The short one (under a day) is
+// the "Session", like Claude's.
 const limits = { primary: null, secondary: null, plan: "" };
 function windowLabel(mins) {
   if (!mins) return "Limit";
+  if (mins < 1440) return "Session";
   if (mins === 10080) return "Week";
   if (mins % 1440 === 0) return `${mins / 1440}-day`;
   if (mins % 60 === 0) return `${mins / 60}-hour`;

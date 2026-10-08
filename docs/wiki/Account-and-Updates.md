@@ -7,19 +7,20 @@ Usage*) shows each of your plan's limits in words, with a bar and the time it st
 
 ```
 Claude   Claude Pro
-5-hour limit 50% used          resets in 42 min (Sun 9:24 PM)
-Weekly limit 25% used          resets in 3 days 4 h (Thu 12:42 AM)
+Session 50% used          resets in 42 min (Sun 9:24 PM)
+Weekly 25% used           resets in 3 days 4 h (Thu 12:42 AM)
 ```
 
-Google Gemini (its weekly limits) and ChatGPT (Codex) (5-hour and weekly) are shown the same way. **Refresh** asks
-each program now (for Claude, one tiny request); **usage page** opens the provider's own page.
+**Session** is the short limit, 5 hours long (Claude's and Codex's); **Weekly** is the week's. Google Gemini (its
+weekly limits, one per model family: "Weekly (Gemini)") and ChatGPT (Codex) (Session and Weekly) are shown the same
+way. **Refresh** asks each program now (for Claude, one tiny request); **usage page** opens the provider's own page.
 
 **The status bar** (bottom right) shows the AI your chat is using in words, the others short:
 
 | Shows | Means |
 |---|---|
-| `Claude 5h 50% · resets 42m \| Weekly 25% · resets 3d 4h` | the chat's AI: each limit used, and when it resets |
-| `Codex 12% · 3%` | another AI you use: its 5-hour and weekly limits used |
+| `Claude Session 50% · resets 42m \| Weekly 25% · resets 3d 4h` | the chat's AI: each limit used, and when it resets |
+| `Codex 12% · 3%` | another AI you use: its Session and Weekly limits used |
 | `Gemini 13% · 1%` | Google Gemini: its weekly limits used (Gemini models, other models…) |
 
 **Tokens.** Below each AI's limits, how many tokens it read and wrote today, in the last 7 days and the last 30 days.
