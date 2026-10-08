@@ -10,7 +10,7 @@ const fs = require("fs");
 const os = require("os");
 const { ClaudeProcess, log, newSessionId, LOGIN_RE, findClaude, isSetUp } = require("../ai/claude");
 const { projectInstructions } = require("./project");
-const { ChangeTracker } = require("./changes");
+const { ChangeTracker, inProject } = require("./changes");
 const ws = require("../workspace");
 const { Attachments } = require("./attachments");
 const { within, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
@@ -477,14 +477,24 @@ class ChatView {
   clean(t) {
     this.fix(t);
     t.status = "idle"; t.pendingModel = false; delete t.worktree; delete t.closedAt;
+    const roots = this.projectRoots(t);
     for (const m of t.messages) if (m.role === "assistant") {
       if (m.running) { m.running = false; m.error = m.error || "stopped"; }
       for (const b of m.blocks || []) {
         if (b.k === "perm" && b.state === "pending") b.state = "denied";
         if (b.k === "question" && b.state === "pending") b.state = "skipped";
       }
+      // Older chats also listed files outside the project (a note in /tmp, Claude Code's plans): left out (inProject).
+      if (Array.isArray(m.changes)) { m.changes = m.changes.filter((c) => !c.file || inProject(c.file, roots)); if (!m.changes.length) delete m.changes; }
     }
     return t;
+  }
+
+  // The chat's project: its workspace's folders (and this window's), or Kural's work folder when no folder was open.
+  // Only files in there count as the chat's changes (changes.js inProject).
+  projectRoots(tab) {
+    const own = tab && tab.workspace && tab.workspace.key ? String(tab.workspace.key).split("|") : [];
+    return [...new Set([...ws.folders().map((f) => f.path), ...own, ws.workDir()])];
   }
 
   load() {
@@ -1806,7 +1816,8 @@ class ChatView {
     const reply = r.turn.reply;
     if (reply.mode !== "agent" && reply.mode !== "auto") return;
     try {
-      const files = this.changes.summary(r.turn, this.root());
+      const roots = this.projectRoots(tab);
+      const files = this.changes.summary(r.turn, this.root()).filter((c) => inProject(c.file, roots));
       if (files.length) reply.changes = files;
     } catch (e) { log(`chat: couldn't list changes: ${e.message}`); }
   }
@@ -1824,7 +1835,10 @@ class ChatView {
         const same = (a, b) => process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
         const open = vscode.workspace.textDocuments.find((d) => same(d.uri.fsPath, file));
         if (open && open.isDirty) await open.save();
-        this.changes.snapshot(turn, file);
+        // A checkpoint (for Undo, Restore code and the Files changed card) only for a file in the project: not a note in
+        // the temp folder, not Claude Code's own plans or memory (~/.claude).
+        const abs = path.resolve(this.root() || ws.workDir(), String(file));
+        if (inProject(abs, this.projectRoots(tab))) this.changes.snapshot(turn, abs);
       }
       // Inside your project (or Kural's own work folder, the temp folder): no asking, that's what Agent mode is for.
       // Anywhere else (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks) a write can make the
