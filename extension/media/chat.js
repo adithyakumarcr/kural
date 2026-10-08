@@ -1212,7 +1212,7 @@
           el("span", { class: "mi-hint" }, { balance: "quality, then speed",cost: "saves your usage limits",intelligence: "most capable" }[profile]))),
         el("div", { class: "mi",onclick: () => { post({ type: "routerPanel" }); closeMenu(); } },el("span", { class: "mi-icon" },icon("settings-gear")),el("span", { class: "mi-label" },"Configure Model Router…")),
         el("div", { class: "sep" }),
-        el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
+        ...claudeHead(t, local), ...S.models.map((m) =>
         el("div", { class: `mi ${!t.autoRoute && t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
           if (S.claudeReady) post({ type: "setModel", tabId: t.id, model: m.id }); else post({ type: "getStarted", path: "claude" });
           closeMenu(); } },
@@ -1236,8 +1236,7 @@
         teamOn && !local ? el("div", { class: "seg team" }, S.teamStyles.map((st) => el("button", { class: t.teamStyle === st.id ? "on" : "", title: st.hint, onclick: () => post({ type: "setTeamStyle", tabId: t.id, style: st.id }) }, st.label))) : null,
         teamOn && !local ? el("div", { class: "roles" }, el("span", { class: "roles-h" }, "Roles"),
           S.roles.map((r) => el("button", { class: `role ${(t.roles || []).includes(r.id) ? "on" : ""}`, title: r.desc, onclick: () => post({ type: "toggleRole", tabId: t.id, role: r.id }) }, r.label))) : null,
-        teamOn && !local && !(t.roles || []).length ? el("div", { class: "seg team" }, S.teamSizes.map((n) => el("button", { class: t.team === n ? "on" : "", onclick: () => post({ type: "setTeam", tabId: t.id, team: n }) }, `${n} agents`))) : null,
-        ...(local ? [] : setupItems(t))];   // (your Claude Code setup: connectors, skills — Claude only)
+        teamOn && !local && !(t.roles || []).length ? el("div", { class: "seg team" }, S.teamSizes.map((n) => el("button", { class: t.team === n ? "on" : "", onclick: () => post({ type: "setTeam", tabId: t.id, team: n }) }, `${n} agents`))) : null];
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");
@@ -1504,26 +1503,34 @@ ${d.system}` : ""}`,
     if (S.menu === "ticket") openMenu.refresh();
   }
 
-  // What this chat's Claude has from your Claude Code setup (connectors, plugins, skills), with Reload.
-  function setupItems(t) {
+  // Claude's heading in the model menu. On a Claude model its right side is what this chat's Claude has from your Claude
+  // Code setup ("10 connectors · 30 skills": click for each connector) and Reload. (It was a section at the bottom of the
+  // menu with its own "Your Claude Code setup" title; Adithya: beside Claude, no title.) Claude models only: Codex, Gemini
+  // and your own model don't use it.
+  function claudeHead(t, local) {
+    if (!S.claudeReady || local) return [el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up"))];
     const st = S.setups[t.id];
-    const head = el("div", { class: "mh" }, "Your Claude Code setup",
-      el("button", { class: "mh-btn", title: "Reload connectors, MCP servers, plugins and skills (same conversation)", onclick: (e) => { e.stopPropagation(); post({ type: "reloadSetup", tabId: t.id }); } }, icon("refresh"), " Reload"));
-    if (st && !st.full) return [el("div", { class: "sep" }), head,
-      el("div", { class: "setup-row" }, "Fast minimal setup: no connectors or plugins. ",
-        el("button", { class: "cb primary", onclick: () => post({ type: "useFullSetup", on: true }) }, "Use my full setup"))];
-    if (!st) return [el("div", { class: "sep" }), head, el("div", { class: "setup-row q-muted" }, "Loads with your first message.")];
-    // One short line ("10 connectors · 3 need attention · 30 skills"); click it to see each connector.
-    const n = st.servers.length, bad = st.servers.filter((x) => x.status !== "connected").length;
-    const plural = (k, w) => `${k} ${w}${k === 1 ? "" : "s"}`;
-    const summary = [n ? plural(n, "connector") : "no connectors", bad ? `${bad} need${bad === 1 ? "s" : ""} attention` : "",
-      st.plugins.length ? plural(st.plugins.length, "plugin") : "", st.skills ? plural(st.skills, "skill") : ""].filter(Boolean).join(" · ");
-    const line = el("div", { class: `setup-row setup-sum${S.setupOpen ? " open" : ""}`, title: n ? "Show connectors" : "",
-      onclick: (e) => { e.stopPropagation(); if (!n) return; S.setupOpen = !S.setupOpen; openMenu.refresh(); } },
-      n ? el("span", { class: "think-caret" }) : null, bad ? el("span", { class: "warn-tri", title: "Some connectors aren't connected" }, icon("warning")) : null, summary);
-    const servers = S.setupOpen && n ? el("div", { class: "setup-row" }, ...st.servers.map((x) =>
-      el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name))) : null;
-    return [el("div", { class: "sep" }), head, line, servers];
+    const reload = el("button", { class: "mh-btn", title: "Reload your Claude Code setup: connectors, MCP servers, plugins, skills (same conversation)",
+      "aria-label": "Reload your Claude Code setup", onclick: (e) => { e.stopPropagation(); post({ type: "reloadSetup", tabId: t.id }); } }, icon("refresh"));
+    let info = [], list = null;
+    if (st && !st.full) info = [el("span", { class: "setup-sum", title: "Fast minimal setup: no connectors, plugins or skills" }, "minimal setup"),
+      el("button", { class: "mh-btn", title: "Use your full Claude Code setup: your connectors, MCP servers, plugins and skills",
+        onclick: (e) => { e.stopPropagation(); post({ type: "useFullSetup", on: true }); } }, "use mine")];
+    else if (!st) info = [el("span", { class: "setup-sum", title: "Your Claude Code setup (connectors, plugins, skills) loads when Claude starts" }, "setup loads…")];
+    else {
+      // One short summary ("10 connectors · 30 skills"); a warning sign when some connector isn't connected.
+      const n = st.servers.length, bad = st.servers.filter((x) => x.status !== "connected").length;
+      const plural = (k, w) => `${k} ${w}${k === 1 ? "" : "s"}`;
+      const summary = [n ? plural(n, "connector") : "no connectors", st.plugins.length ? plural(st.plugins.length, "plugin") : "",
+        st.skills ? plural(st.skills, "skill") : ""].filter(Boolean).join(" · ");
+      info = [el("span", { class: `setup-sum${S.setupOpen ? " open" : ""}`, title: (n ? (S.setupOpen ? "Hide the connectors" : "Show each connector") : "Your Claude Code setup") +
+          (bad ? `\n${bad} connector${bad === 1 ? " isn't" : "s aren't"} connected` : ""),
+        onclick: (e) => { e.stopPropagation(); if (!n) return; S.setupOpen = !S.setupOpen; openMenu.refresh(); } },
+        bad ? el("span", { class: "warn-tri" }, icon("warning")) : null, el("span", { class: "setup-text" }, summary), n ? el("span", { class: "think-caret" }) : null)];
+      if (S.setupOpen && n) list = el("div", { class: "setup-row" }, ...st.servers.map((x) =>
+        el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name)));
+    }
+    return [el("div", { class: "mh claude-h" }, el("span", {}, "Claude"), el("span", { class: "spacer" }), ...info, reload), list];
   }
   openMenu.refresh = () => { const k = S.menu; S.menu = null; if (k) openMenu(k, openMenu.anchor); };
   function closeMenu() { S.menu = null; menuEl.classList.add("hidden"); }

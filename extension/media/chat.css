@@ -365,10 +365,17 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .att-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .chip.att.sent { cursor: pointer; background: color-mix(in srgb, var(--vscode-foreground) 8%, transparent); }
 .composer.drop { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
-/* Claude Code setup in the model menu */
+/* Claude Code setup in the model menu: on Claude's heading line ("CLAUDE … 10 connectors · 30 skills ⟳") */
 .mh-btn { float: right; background: none; border: 0; color: var(--accent-hi); font-size: calc(10.5px * var(--fs, 1)); text-transform: none; letter-spacing: 0; padding: 0 2px; cursor: pointer; }
 .mh-btn:hover { text-decoration: underline; }
+.mh.claude-h { display: flex; align-items: center; gap: 4px; }
+.claude-h .mh-btn { float: none; flex: none; display: inline-flex; align-items: center; border-radius: 4px; }
+.claude-h .mh-btn:hover { background: var(--hover); text-decoration: none; }
 .setup-sum { cursor: pointer; color: var(--muted); gap: 5px; }
+/* (A block, not a flex box: as a flex box with text in it Chromium made it three lines tall.) */
+.claude-h .setup-sum { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; font-size: calc(11px * var(--fs, 1)); }
+.claude-h .warn-tri { margin-right: 3px; }
+.claude-h .setup-sum .think-caret { margin-left: 2px; }
 .setup-sum:hover { color: var(--vscode-foreground); }
 .setup-sum.open .think-caret::before { content: "\eab4"; }
 .warn-tri { color: var(--yellow); }

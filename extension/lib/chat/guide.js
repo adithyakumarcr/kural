@@ -34,7 +34,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
   @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
-  (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku, Google Gemini and
+  (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku (with a Claude model,
+  Claude's line also shows its Claude Code setup: "10 connectors · 30 skills", click for each connector, and a reload
+  button), Google Gemini and
   ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
