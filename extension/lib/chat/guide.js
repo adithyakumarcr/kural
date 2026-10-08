@@ -100,11 +100,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Granite or Qwen3, downloaded in the panel), what's attached (files, error output, a picked element), each AI's usage
   left (avoids one past half, skips one at 98 %), the conversation's length (long chats stay on their AI on close calls)
   and what you did after earlier answers (learned per workspace; "Kural: Forget What Model Router Learned"). Each answer
-  shows the model; hover: why. The profile is picked only in the model menu. Status bar "Model Router" (a panel): a
-  slider from Faster to Quality for what reads requests (four steps: Native, MiniLM, Granite, Qwen3; the panel names the
-  step, Download when it isn't on this computer yet; the info button explains each), the AIs Auto picks from (always
-  every cloud model of the AIs you set up: nothing to choose), and the last choice.
-- Tab Completion: grey suggestions as you type; Tab accepts. Click "Tab Completion" in the status bar for its panel:
+  shows the model; hover: why. The profile is picked only in the model menu. The Model Router icon in the status bar
+  (two arrows in boxes; hover: "Model Router" and the step that reads requests) opens its panel: only a slider from
+  Faster to Quality for what reads requests (four steps: Native, MiniLM, Granite, Qwen3; the panel names the step,
+  Download when it isn't on this computer yet; the info button explains each, and says Auto picks from every cloud model
+  of the AIs you set up).
+- Tab Completion: grey suggestions as you type; Tab accepts. Click the sparkle icon in the status bar (Tab Completion; crossed out while it's off) for its panel:
   on/off (Ctrl+Alt+Space), how fast it suggests, the engine (Auto, a local model for speed, or Claude) and its model.
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
