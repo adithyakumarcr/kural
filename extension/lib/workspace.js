@@ -31,7 +31,8 @@ function aiRoots(write = false) {
   const store = scratch ? path.dirname(scratch) : null;
   // Reading also: Claude Code's own files (long tool output it saved, its plans) and the system temp folder, where
   // Claude Code's background agents write (on a Mac that's /tmp, not the per-user temp folder).
-  return [...folders().map((f) => f.path), workDir(), os.tmpdir(),
+  // Writing: not the temp folder (anyone's files can be there; a write there asks). Reading: yes (attachments).
+  return [...folders().map((f) => f.path), workDir(), ...(write ? [] : [os.tmpdir()]),
     ...(write ? [path.join(os.homedir(), ".claude", "plans")]
       : [store, path.join(os.homedir(), ".claude", "projects"), path.join(os.homedir(), ".claude", "plans"), process.platform === "win32" ? null : "/tmp"])].filter(Boolean);
 }
