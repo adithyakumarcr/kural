@@ -85,30 +85,26 @@ function activate(context) {
   status.name = "Tab Completion";
   let state = "ready";
   const toggleKey = process.platform === "darwin" ? "⌃⌥Space" : "Ctrl+Alt+Space";
-  // Hover on "Tab": what it does; click opens the Tab panel (switch, speed slider, model).
+  // A click toggles Tab Completion; the hover and Kural Settings open its full panel.
   const tabCard = (on) => {
     const sp = SPEEDS.reduce((a, b) => Math.abs(b.ms - cfg().get("tabCompletion.debounceMs")) < Math.abs(a.ms - cfg().get("tabCompletion.debounceMs")) ? b : a);
     const md = new vscode.MarkdownString(`**Tab Completion** · ${on ? "On" : "Off"} · speed: ${sp.label}\n\n` +
-      `Click for the Tab Completion panel (on/off, speed slider, model). \`${toggleKey}\` turns it ${on ? "off" : "on"}.`);
+      `Click to turn it ${on ? "off" : "on"}. \`${toggleKey}\` does the same.\n\n` +
+      `[Tab Completion settings](command:kural.tabPanel.focus)`);
     md.supportThemeIcons = true;
+    md.isTrusted = { enabledCommands: ["kural.tabPanel.focus"] };
     return md;
   };
   // Just an icon (Adithya: a simple, decluttered status bar): the sparkle, crossed out while Tab Completion is off
   // ($(kural-tab-off): package.json "icons", media/codicons/kural-icons.ttf, made by scripts/make-status-icons.js). The
-  // hover says what it is and what a click does. Something to fix keeps its words, so it's noticed.
+  // hover says what it is and what a click does. Errors and setup hints also stay in the hover.
   const refresh = () => {
     const on = cfg().get("tabCompletion.enabled");
-    const look = {
-      ready:    ["$(sparkle)", tabCard(true), "kural.tabPanel.focus", "Tab Completion: on"],
-      thinking: ["$(sparkle)", tabCard(true), "kural.tabPanel.focus", "Tab Completion: on"],
-      error:    ["$(warning) Tab Completion", "Tab Completion: the last suggestion failed. Click for Kural's log", "kural.showLog", "Tab Completion: the last suggestion failed"],
-      login:    ["$(account) Kural: log in", "Click to log in to Claude", "kural.getStarted", "Kural: log in"],
-      missing:  ["$(cloud-download) Kural: install Claude Code", "Click to install Claude Code", "kural.getStarted", "Kural: install Claude Code"],
-    }[state];
-    const [text, tooltip, command, label] = !getStarted.ready
-      ? ["$(rocket) Kural: finish setup", "Pick Kural's AI (Claude, ChatGPT, Gemini, or your own model with Ollama): open Get started", "kural.getStarted", "Kural: finish setup"]
-      : on || state === "login" || state === "missing" ? look : ["$(kural-tab-off)", tabCard(false), "kural.tabPanel.focus", "Tab Completion: off"];
-    Object.assign(status, { text, tooltip, command, accessibilityInformation: { label, role: "button" } });
+    const tooltip = tabCard(on);
+    if (!getStarted.ready) tooltip.appendMarkdown("\n\nSet up an AI in Kural Settings → Get started for suggestions.");
+    else if (state === "error") tooltip.appendMarkdown("\n\nThe last suggestion failed. See Kural's log for details.");
+    Object.assign(status, { text: on ? "$(sparkle)" : "$(kural-tab-off)", tooltip, command: "kural.toggleTab",
+      accessibilityInformation: { label: `Tab Completion: ${on ? "on; click to disable" : "off; click to enable"}`, role: "button" } });
   };
   const setState = (s) => {
     if (s === "login" || s === "missing") { getStarted.broke(s); return; }   // back to Get started at that step

@@ -23,6 +23,7 @@ class ModelRouter {
     // (No list of allowed models any more: Auto uses every model of the AIs you set up, never a model on this computer.)
     const assistant=c.get("modelRouter.assistant","native");
     return { profile:profileOf(c.get("modelRouter.profile","balance")),saveTokens:!!c.get("modelRouter.saveTokens",false),
+      usageSwitch:require("../ai/usage-switch").options(c),
       assistant:ASSISTANTS.includes(assistant)?assistant:"native",
       url:c.get("tabCompletion.ollamaUrl","http://127.0.0.1:11434"),timeoutMs:number("modelRouter.timeoutMs",1500,100,10000),
       modelPreferences:c.get("modelRouter.modelPreferences",{})||{},search:!!c.get("modelRouter.search",false),context:!!c.get("modelRouter.context",false),

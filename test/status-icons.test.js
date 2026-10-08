@@ -60,12 +60,13 @@ check("package.json declares $(kural-tab-off) with this font and character", () 
   assert.ok(icon.description);
 });
 
-check("the status bar: Tab Completion is an icon (the sparkle, crossed out when off); problems keep their words", () => {
+check("Tab Completion stays an icon in every state and clicking it toggles suggestions", () => {
   const src = fs.readFileSync(path.join(root, "extension", "extension.js"), "utf8");
-  assert.ok(/ready: +\["\$\(sparkle\)",/.test(src) && /\["\$\(kural-tab-off\)", tabCard\(false\)/.test(src));
+  assert.ok(/text: on \? "\$\(sparkle\)" : "\$\(kural-tab-off\)"/.test(src));
   assert.ok(!/"\$\(sparkle\) Tab Completion"/.test(src) && !/circle-slash\) Tab Completion/.test(src));
-  assert.ok(/"\$\(warning\) Tab Completion"/.test(src) && /"\$\(rocket\) Kural: finish setup"/.test(src));
-  assert.ok(/accessibilityInformation: \{ label, role: "button" \}/.test(src));
+  assert.ok(!/"\$\(warning\) Tab Completion"/.test(src) && !/"\$\(rocket\) Kural: finish setup"/.test(src));
+  assert.ok(/command: "kural.toggleTab"/.test(src) && /Tab Completion settings\]\(command:kural.tabPanel.focus\)/.test(src));
+  assert.ok(/accessibilityInformation: \{ label: `Tab Completion:/.test(src));
 });
 
 console.log(fail ? `status-icons: ${fail} FAILED` : "status-icons: ALL PASS");

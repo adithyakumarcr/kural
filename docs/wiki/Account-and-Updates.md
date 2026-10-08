@@ -3,17 +3,18 @@
 ## AI Usage
 
 **The AI Usage panel** (at the bottom, next to Terminal and Tab Completion; or Command Palette → *Kural: Show AI
-Usage*) shows each of your plan's limits in words, with a bar and the time it starts again:
+Usage*) shows a compact summary for each AI: its most used limit, a bar and when it resets:
 
 ```
-Claude   Claude Pro
-Session 50% used          resets in 42 min (Sun 9:24 PM)
-Weekly 25% used           resets in 3 days 4 h (Thu 12:42 AM)
+Claude
+Session 50% used          resets in 42 min
+Details
 ```
 
 **Session** is the short limit, 5 hours long (Claude's and Codex's); **Weekly** is the week's. Google Gemini (its
 weekly limits, one per model family: "Weekly (Gemini)") and ChatGPT (Codex) (Session and Weekly) are shown the same
-way. **Refresh** asks each program now (for Claude, one tiny request); **usage page** opens the provider's own page.
+way. **Details** expands its other limits, plan, usage page and token history. **Refresh** asks each program now
+(for Claude, one tiny request); **Settings** opens the automatic switching controls.
 
 **The status bar** (bottom right) shows only each AI's **Session** limit: the AI your chat is using in words, the
 others short. Hover it for everything: every AI's Session and Weekly limits and when each resets.
@@ -25,7 +26,7 @@ others short. Hover it for everything: every AI's Session and Weekly limits and 
 | `Claude Session 10% · resets 42m` with a warning color | a Weekly limit is near its limit; hover for its percentage and reset time |
 | `Gemini` | Google Gemini has only weekly limits: hover for its usage |
 
-**Tokens.** Below each AI's limits, how many tokens it read and wrote today, in the last 7 days and the last 30 days.
+**Tokens.** Under **Details**, how many tokens it read and wrote today, in the last 7 days and the last 30 days.
 "Read" is everything sent to the model (your messages, files, the conversation so far), with how much of it came from
 the cache (re-sent text the provider keeps for a few minutes: much cheaper); "written" is what the model produced. It
 counts every Kural feature (chat, Tab Completion, Ctrl+K, commit messages), kept for 35 days. A model on your computer shows
@@ -34,6 +35,21 @@ its tokens too. Each chat's own tokens and context are next to its send button (
 It turns orange from 80 % and red from 95 %. Click it for the AI Usage panel. The numbers come from the programs
 themselves: Claude Code sends them with every answer (so they update while you work), Codex when Kural asks (every 10
 minutes), Gemini from its `/usage`.
+
+### Automatic usage switching
+
+In **Kural Settings → AI Usage**, turn on **Automatically switch AI** and set **Switch at**. It is off by default;
+the initial threshold is **70%**, editable from **1% to 99%**.
+
+When a reported Session or Weekly limit for the current model reaches your threshold, Kural moves the **same chat**
+to another service you have set up that is below it. This works with a model picked by hand and with **Auto**.
+Messages, attached context, tool results, changes, answered questions and the plan go along. A paused request continues
+on the next service; a completed answer switches before the next message. Active tools, approvals, background tasks
+and agents finish before the handoff. The new service must support the chat's attachments, team or linked device.
+
+If none can take over, the chat stays with its current service. Providers may report usage only after a request, so
+the threshold is a switching trigger and cannot guarantee that usage stops at exactly that percentage. Turning it
+off keeps your current model choice; **Auto** retains its existing routing and usage-limit recovery.
 
 ## Account
 

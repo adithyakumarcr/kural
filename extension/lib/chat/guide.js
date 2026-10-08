@@ -29,11 +29,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   when you're logged in.
 - Gemini (Antigravity) can't ask before acting: in Agent mode it edits files but runs no commands (the answer says which it
   didn't run); in Auto it runs commands; Plan and Ask change nothing. A mode change applies from the next message.
-  No agent teams, no devices with Gemini.
+  Multiple agents work with Gemini; devices do not.
 - Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking), Plan
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
-  @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
+  Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku (with a Claude model,
   Claude's line also shows its Claude Code setup: "10 connectors · 30 skills", click for each connector, and a reload
   button), Google Gemini and
@@ -41,11 +41,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first; and your own: "Add your own mood…" at the end of the moods opens Kural
   Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
-  there; a changed mood or mode applies from the next message); Multiple agents (Claude only: a project team led by a PM, or a
-  discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
+  there; a changed mood or mode applies from the next message); Multiple agents (Claude, ChatGPT and Gemini: a project
+  team led by a PM, or a discussion; Kural shares Codex/Gemini agents' reports between phases). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
-  this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini always does
+  this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and Kural-managed teams always do
   that). Stop (the square button, or Esc) stops the answer and puts queued messages back into the box. Each change
   can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
   Claude Code's own plans and memory). How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
@@ -65,7 +65,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   as they were at that message; Keep Code: files stay as they are now).
   Inherited file-change cards can be reviewed; keep/undo belongs to the original chat. Both chats appear in History.
   Next to the send button: how full the
-  conversation's context window is (hover: this chat's tokens read, from cache, written). Pictures in answers are shown;
+  conversation's context window is (click: AI Usage; hover: tokens in context / context capacity, and total tokens consumed,
+  read and written). Pictures in answers are shown;
   click one to see it full size in its own tab. Links to
   files in an answer (and file names in \`code\`) open the file (at the line), also when the answer gives only its name
   or a path from another folder: Kural finds it in the project (several with that name: you pick one); web links open
@@ -119,8 +120,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Faster to Quality for what reads requests (four steps: Native, MiniLM, Granite, Qwen3; the panel names the step,
   Download when it isn't on this computer yet; the info button explains each, and says Auto picks from every cloud model
   of the AIs you set up).
-- Tab Completion: grey suggestions as you type; Tab accepts. Click the sparkle icon in the status bar (Tab Completion; crossed out while it's off) for its panel:
-  on/off (Ctrl+Alt+Space), how fast it suggests, the engine (Auto, a local model for speed, or Claude) and its model.
+- Tab Completion: grey suggestions as you type; Tab accepts. Click the icon in the status bar to enable or disable
+  suggestions (sparkle while on, crossed out while off; Ctrl+Alt+Space also toggles). Its hover has a Tab Completion
+  settings link, or Kural Settings → Tab Completion opens its panel: on/off, speed, engine (Auto, local or Claude) and model.
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
   then downloads the model.
@@ -143,14 +145,20 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
   The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
-- AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
-  "Session 50% used, resets in 42 min" (Session = the 5-hour limit, Claude's and Codex's), "Weekly 25% used, resets in 3
-  days 4 h", for Claude, Gemini and Codex.
+- AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): one compact summary per AI, its
+  most used limit and reset time. Details expands the other limits and tokens. Session = the 5-hour limit (Claude and
+  Codex); Gemini has weekly limits.
   The status bar shows only each AI's Session limit: the chat's AI with when it resets ("Claude Session 50% · resets
   42m"), the others short ("Codex 12%"); Gemini, which has only weekly limits, shows its name. Weekly numbers stay in
   the hover at every usage level; hover for every AI's Session and Weekly limits; orange
   from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
   the cache) and written, today, 7 days and 30 days (every Kural feature: chat, Tab Completion, Ctrl+K…).
+- Kural Settings → AI Usage: "Automatically switch AI" (off by default) and "Switch at" (70% by default, editable
+  from 1 to 99). When a reported Session or Weekly limit for the chat's model reaches it, Kural transfers the same chat
+  with its visible context to another available cloud service below the threshold. It waits for commands, edits,
+  approvals, background work and agents to finish. A paused request continues there; a completed answer switches for
+  the next message. This works with a model you picked yourself and with Auto. Without a suitable service it stays put;
+  usage reports can arrive after an answer, so the percentage is a switching trigger, not a hard quota cap.
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
   Inside the project it doesn't ask (Agent mode still asks before commands). Kural never looks through Desktop,
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
@@ -159,7 +167,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
   for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
-  page, switch account, log out, log in, set up; then Moods (your own chat moods: add, edit, delete); then Kural's
+  page, switch account, log out, log in, set up; then AI Usage (automatic switching and its threshold), Moods
+  (your own chat moods: add, edit, delete); then Kural's
   version and Check for updates, Get started, Tab Completion,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
   editor settings, shortcuts, extensions, chat defaults, devices: no passwords or keys; you pick what to import).
@@ -192,8 +201,8 @@ that's you). Main features: Get started (set up an AI); the chat (Ctrl+L: modes 
 file; + attaches files; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
 Fork from here; the clock button has every chat); Ctrl+K edits selected code in place; Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Kural's browser; devices over SSH; the Model Router (Auto);
-Kural Settings (accounts, usage limits, moods, updates). Agent teams, Jira tickets and Claude Code's connectors need a
-Claude model. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
+Kural Settings (accounts, usage switching, moods, updates). Agent teams work with Claude, ChatGPT and Gemini; Jira
+tickets and Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
 link [Ask for this feature](${ISSUES}).`;
 
 module.exports = { GUIDE, GUIDE_LOCAL, ISSUES, WIKI };
