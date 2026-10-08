@@ -75,6 +75,10 @@ const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 const BUILD_TEXT = "Go ahead and implement the plan above.";
 const MAX_NUDGES = 4;   // how often Kural may wake a paused lead for one question (a project team has phases)
 const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
+// Memory: a chat's program (Claude Code ~120 MB, Ross measured) stops when that chat isn't on screen and has been idle
+// this long; at most this many such idle ones stay warm. It starts again with the same conversation when needed.
+const IDLE_STOP_MS = 10 * 60 * 1000;
+const MAX_IDLE_WARM = 2;
 
 const MAX_INLINE = 60000;       // files bigger than this are read by Claude instead of pasted in
 const STORE_KEY = "kural.chat.v4";
@@ -136,6 +140,9 @@ class ChatView {
     registerTabEditor(c, this);   // a chat tab dragged into the editor area opens there (tab-editor.js)
     watchFontScale(c, (m) => this.post(m));
     watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (fullSetup()) this.setupChanged("changed"); });
+    // Idle chats' programs stop after a while (stopIdle), checked every minute.
+    const sweep = setInterval(() => this.stopIdle(), 60 * 1000);
+    c.subscriptions.push({ dispose: () => clearInterval(sweep) });
     let lastFocusReload = Date.now();
     c.subscriptions.push(vscode.window.onDidChangeWindowState((st) => {
       if (!st.focused || !fullSetup() || Date.now() - lastFocusReload < 60000) return;
@@ -596,8 +603,10 @@ class ChatView {
     const old = this.side();
     if (old) this.panes.splice(this.panes.indexOf(old), 1);
     const pane = this.attach(view.webview, "side", null, old ? old.activeId : this._activeId);
-    pane.view = view;   // (is the side panel on screen: notifications)
+    pane.view = view;   // (is the side panel on screen: notifications, stopIdle)
     view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
+    // The panel shown again: its chat's program back, ready for your next message (it may have stopped while idle).
+    if (view.onDidChangeVisibility) view.onDidChangeVisibility(() => { const t = view.visible && this.tab(pane.activeId); if (t && t.status === "idle") this.warm(t); });
   }
 
   // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (pictures a
@@ -1309,6 +1318,7 @@ class ChatView {
   // The program starts answering `reply`: what the turn tracks (changes, agents, the team's board).
   beginTurn(tab, r, reply, ask, attachments = null) {
     r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0, dispatched: !!attachments, ...(attachments ? { attachments } : {}) };
+    r.lastUsed = Date.now();
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
@@ -1925,6 +1935,7 @@ class ChatView {
     r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
+    r.lastUsed = Date.now();
     if (this.router && (reply.models || []).length === 1) this.router.taskDone(reply.model,reply.ms,!m.is_error);
     // Stop can happen while context is still being prepared, before the provider receives anything.
     if (r.turn.dispatched !== false) tab.started = true;
@@ -2150,6 +2161,29 @@ class ChatView {
     await this.onMessage({ ...msg, tabId: tab.id });
     const t = this.active();
     this.post({ type: "flash", text: flash || `${MODES.find((x) => x.id === t.mode).label} mode` });
+  }
+
+  // ---------- memory: idle chats' programs ----------
+  // A chat that isn't on screen and has had no answer, agent, queued message or question for IDLE_STOP_MS: its program
+  // stops (Claude Code, Codex, Gemini or Kural's engine). Of the idle ones off screen, at most MAX_IDLE_WARM stay warm
+  // (the most recently used). It starts again, in the same conversation, when you open the chat or send to it (1-2 s).
+  stopIdle(now = Date.now()) {
+    const idle = [];
+    for (const t of this.tabs) {
+      const r = this.runtime.get(t.id);
+      if (!r || !r.proc || r.proc.exited || r.stale) continue;
+      const busy = t.status !== "idle" || (r.turn && r.turn.reply && r.turn.reply.running) || (r.steers || []).length || (r.perms && r.perms.size) ||
+        [...(r.agents || new Map()).values()].some((a) => a.state === "running") || this.routingJobs.has(t.id);
+      if (busy || this.onScreen(t.id)) continue;
+      idle.push({ t, r, at: r.lastUsed || r.started || 0 });
+    }
+    idle.sort((a, b) => b.at - a.at);
+    idle.forEach(({ t, r, at }, i) => {
+      if (now - at < IDLE_STOP_MS && i < MAX_IDLE_WARM) return;
+      log(`chat ${t.id}: its ${engineOf(t.model)} program stops while the chat is idle and off screen (it starts again when needed)`);
+      r.stale = true; r.proc.kill(); r.proc = null;
+      this.endDevice(r);
+    });
   }
 
   // ---------- system notifications ----------
