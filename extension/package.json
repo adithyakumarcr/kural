@@ -884,6 +884,12 @@
           "default": true,
           "markdownDescription": "When you change a name in your code (type over it, or accept a Tab suggestion that changes it), Kural looks for the old name in the rest of the project and offers to change it there too: **Review** (Search & Ask, filled in) or **Change all**."
         },
+        "kural.browser.allowRemoteSites": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "Let Kural's own proxy browser open websites on the internet, not only local pages (localhost, your LAN). The proxy removes a page's security headers, so don't log in to anything there."
+        },
         "kural.updates.autoCheck": {
           "type": "boolean",
           "default": true,

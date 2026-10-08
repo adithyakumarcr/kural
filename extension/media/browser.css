@@ -16,6 +16,7 @@ body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 
   background: none; color: inherit; font: inherit; cursor: pointer; flex-shrink: 0; }
 .pick:hover { border-color: var(--accent); }
 .pick.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.note.warn { background: #6b5a0f; color: #fff7d1; }
 .note { padding: 4px 10px; font-size: .92em; background: color-mix(in srgb, var(--accent) 16%, transparent); border-bottom: 1px solid var(--border); }
 .hidden { display: none !important; }
 .page { flex: 1; width: 100%; border: 0; background: #fff; }

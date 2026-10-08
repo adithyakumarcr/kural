@@ -4,12 +4,30 @@
 // the page. What it changes: HTML gets one <script> at the top; headers that forbid showing the page in a frame or
 // running an added script (X-Frame-Options, Content-Security-Policy) are dropped; redirects and cookies are pointed at
 // the proxy. Everything else (scripts, pictures, the dev server's live-reload websocket) passes through unchanged.
-// Only this computer can reach it (127.0.0.1). No vscode inside (test/browser-proxy.test.js).
+// Only this computer can reach it (127.0.0.1), and by default only local pages go through it (isLocalTarget): it
+// removes a page's security headers and doesn't check https certificates of local dev servers. A remote site is only
+// allowed when the setting kural.browser.allowRemoteSites is on, and then with certificates checked.
+// No vscode inside (test/browser-proxy.test.js).
 
 const http = require("http"), https = require("https"), net = require("net"), tls = require("tls"), zlib = require("zlib");
 
 const PICKER_PATH = "/__kural/picker.js";
 const TAG = `<script src="${PICKER_PATH}"></script>`;
+
+// localhost, *.localhost, 127.0.0.0/8, ::1 and the private ranges (10/8, 172.16/12, 192.168/16): a dev server.
+function isLocalTarget(url) {
+  let h;
+  try { h = new URL(url).hostname.toLowerCase(); } catch { return false; }
+  h = h.replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost") || h === "::1") return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (!m) return false;
+  const [a, b] = [+m[1], +m[2]];
+  if ([a, b, +m[3], +m[4]].some((n) => n > 255)) return false;
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
+const REFUSED = "the Kural Browser only opens local development pages (localhost, 127.0.0.1, your LAN). Open other sites in your normal browser.";
 
 // The page with the picker's <script> first in <head> (or at the very start).
 function inject(html) {
@@ -28,13 +46,25 @@ function decode(buf, enc) {
 }
 
 // picker(): the picker script's text (read fresh, so a changed file needs no restart).
-function startProxy({ picker, log = () => {} }) {
+function startProxy({ picker, log = () => {}, allowRemote = () => false }) {
   let target = null;   // a URL: where the page really is
   let origin = "";     // http://127.0.0.1:<port>
   const fix = (s) => (target && s ? String(s).split(target.origin).join(origin) : s);
   const back = (s) => (target && s ? String(s).split(origin).join(target.origin) : s);
 
+  // Who may use the proxy: a web page on another site must not be able to fetch through it (it would reach your dev
+  // server with your cookies). Host must be the proxy's own address (DNS rebinding); a browser request from another
+  // site is only fine as the frame/document of the Kural Browser itself. (No token in the path: pages use addresses
+  // like "/app.js", which a path prefix would break.)
+  const allowed = (req) => {
+    if (!origin) return true;
+    if (req.headers.host !== origin.replace(/^http:\/\//, "")) return false;
+    const site = req.headers["sec-fetch-site"], dest = req.headers["sec-fetch-dest"];
+    return !site || site === "same-origin" || site === "none" || dest === "iframe" || dest === "document";
+  };
+
   const server = http.createServer((req, res) => {
+    if (!allowed(req)) { res.writeHead(403, { "content-type": "text/plain" }); res.end("Kural Browser: not for this page."); return; }
     if (req.url.startsWith(PICKER_PATH)) {
       res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
       res.end(picker());
@@ -46,7 +76,7 @@ function startProxy({ picker, log = () => {} }) {
     if (headers.origin) headers.origin = back(headers.origin);
     if (headers.referer) headers.referer = back(headers.referer);
     const up = lib.request({ protocol: target.protocol, hostname: target.hostname, port: target.port || undefined, method: req.method, path: req.url, headers,
-      rejectUnauthorized: false }, (r) => {
+      rejectUnauthorized: !isLocalTarget(target.href) }, (r) => {   // (self-signed certificates only for local dev servers)
       const h = { ...r.headers };
       for (const k of ["content-security-policy", "content-security-policy-report-only", "x-frame-options", "cross-origin-opener-policy", "cross-origin-embedder-policy"]) delete h[k];
       if (h.location) h.location = fix(h.location);
@@ -78,9 +108,9 @@ function startProxy({ picker, log = () => {} }) {
   // so closing the proxy ends them: a server waits for open websockets forever.)
   const open = new Set();
   server.on("upgrade", (req, socket, head) => {
-    if (!target) { socket.destroy(); return; }
+    if (!target || !allowed(req)) { socket.destroy(); return; }
     const port = Number(target.port) || (target.protocol === "https:" ? 443 : 80);
-    const s = target.protocol === "https:" ? tls.connect({ host: target.hostname, port, servername: target.hostname, rejectUnauthorized: false }) : net.connect(port, target.hostname);
+    const s = target.protocol === "https:" ? tls.connect({ host: target.hostname, port, servername: target.hostname, rejectUnauthorized: !isLocalTarget(target.href) }) : net.connect(port, target.hostname);
     const start = () => {
       const lines = [`${req.method} ${req.url} HTTP/${req.httpVersion}`];
       for (let i = 0; i < req.rawHeaders.length; i += 2) {
@@ -111,16 +141,19 @@ function startProxy({ picker, log = () => {} }) {
     open(url) {
       const u = new URL(url);
       if (!/^https?:$/.test(u.protocol)) throw new Error("only http and https addresses");
+      if (!isLocalTarget(u.href) && !allowRemote()) throw new Error(REFUSED);
       target = new URL(u.origin);
       return origin + u.pathname + u.search + u.hash;
     },
     // The proxy's address of a page → the page's real address (for the address bar).
     real: (u) => back(u),
     get target() { return target ? target.origin : null; },
+    // A remote site is shown (setting on): the page says so.
+    get remote() { return !!target && !isLocalTarget(target.href); },
     close: () => new Promise((r) => { server.close(() => r()); if (server.closeAllConnections) server.closeAllConnections(); for (const x of open) x.destroy(); }),
   };
 }
 
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-module.exports = { startProxy, inject, PICKER_PATH };
+module.exports = { startProxy, inject, isLocalTarget, PICKER_PATH };
