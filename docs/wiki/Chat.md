@@ -34,8 +34,9 @@ your next message, because which tools the model has is fixed when it starts.
 
 - **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, **Google Gemini** and **ChatGPT (Codex)** models (see
   [[Google Gemini and ChatGPT]]), or a model **on this computer** (see [[Your Own Model]]). You can switch in the middle of a
-  conversation, also to another AI: the new model gets the conversation so far (compacted to fit it when it's long:
-  the newest turns whole, every request kept). Switching an AI's account doesn't lose it either.
+  conversation, also to another AI: the new model gets the conversation so far. Long chats get an overview that fits
+  the next model and a complete local record it can read for earlier details. Switching an AI's account carries that
+  record over too.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
   Medium / High / Max). Google Gemini's models come in thinking levels; the menu lists each model once and the
   intensity picks its level (the nearest one the model has; a line under the buttons says which it has).

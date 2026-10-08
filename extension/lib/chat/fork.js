@@ -1,6 +1,6 @@
 // A fork gets its own provider session. Only the recorded conversation up to the
 // selected message and the chat's choices travel with it; runtime state never does.
-const { handoff } = require("../router/journal");
+const { handoff, attachmentsOf } = require("../router/journal");
 
 function forkConversation(source, index, { id, sessionId, now = Date.now() }) {
   if (!source || source.visiting || source.status !== "idle" || !Number.isInteger(index) || index < 0 || index >= source.messages.length) return null;
@@ -25,7 +25,7 @@ function forkConversation(source, index, { id, sessionId, now = Date.now() }) {
     createdAt: now, updatedAt: now, forkedFrom: { id: source.id, title: source.title, index },
     carryOver: { fork: true, text: handoff(messages) },
     // Attachments in the retained messages remain accessible; later grants and "Allow all" do not carry over.
-    granted: [...new Set(messages.flatMap((m) => (m.attachments || []).flatMap((a) => [a.path, a.original]).filter(Boolean)))],
+    granted: [...new Set(attachmentsOf(messages).flatMap((a) => [a.path, a.original]).filter(Boolean))],
   };
 }
 

@@ -27,6 +27,7 @@ const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor")
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
 const { profileOf, limitUsed } = require("../router/policy");
 const journal = require("../router/journal");
+const handoffStore = require("./handoff-store");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
@@ -471,6 +472,7 @@ class ChatView {
   deleteChat(id) {
     if (this.tab(id)) this.closeTab(id, false);
     this.archive.remove(id);
+    try { fs.rmSync(this.handoffDir({ id }), { recursive: true, force: true }); } catch { /* best effort, like History */ }
     this.postHistory();
   }
 
@@ -1133,7 +1135,7 @@ class ChatView {
       // (A model on this computer gets the short guide: each word of the instructions costs it time before it answers.)
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + moodPrompt(tab.mood, customMoods(userMoods())) +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
-      addDirs: ws.extraDirs(),
+      addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
       tools, allowedTools: [...WEB_TOOLS,...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
@@ -1167,11 +1169,16 @@ class ChatView {
       log(`chat ${tab.id}: couldn't reopen the saved conversation; starting a fresh one with the conversation handed over`);
       tab.started = false;
       const pending = r.pendingSend;
+      const reply = r.turn && r.turn.reply, upto = reply && tab.messages.indexOf(reply) > 0 ? tab.messages.indexOf(reply) - 1 : tab.messages.length;
+      let carry = "";
+      try { if (upto > 0) carry = this.carryText({ model: true }, this.handoffRecord(tab, tab.messages.slice(0, upto))); }
+      catch (e) {
+        if (reply && reply.running) this.finishReply(tab, r, { type: "result", is_error: true, result: `Kural couldn't preserve the complete conversation: ${e.message}` });
+        return;
+      }
       this.giveBack(tab, r);
       const nr = this.startProc(tab, true);
       if (nr && pending) {
-        const reply = r.turn && r.turn.reply, upto = reply && tab.messages.indexOf(reply) > 0 ? tab.messages.indexOf(reply) - 1 : tab.messages.length;
-        const carry = upto > 0 ? this.carryText({ model: true }, journal.handoff(tab.messages.slice(0, upto), this.handoffBudget(tab.model))) : "";
         const content = !carry ? pending : typeof pending === "string" ? carry + pending
           : pending.map((b, k) => k === 0 && b.type === "text" ? { ...b, text: carry + b.text } : b);
         nr.pendingSend = content; nr.turn = r.turn; this.sendTo(nr, content, "turn");
@@ -1340,7 +1347,7 @@ class ChatView {
     // sent in its place.
     if (editIndex !== null && !(await this.rewindTo(tab, editIndex))) return;
     let routed = null;
-    const previousMedia = [...new Map(tab.messages.flatMap((m) => m.attachments || [])
+    const previousMedia = [...new Map(journal.attachmentsOf(tab.messages)
       .filter((a) => ["image","pdf"].includes(a.kind)).map((a) => [a.path,a])).values()];
     if (tab.autoRoute && this.router) {
       this.routerFeedback(tab, "good");   // you carried on after Auto's last answer
@@ -1350,7 +1357,7 @@ class ChatView {
       try {
         const attached = attachIds.map((id) => this.attachments.items.get(id)).filter(Boolean);
         // Attachments from earlier turns must remain usable after a provider handoff too.
-        const historical = tab.messages.flatMap((m) => m.attachments || []);
+        const historical = journal.attachmentsOf(tab.messages);
         routed = await this.router.route(this.routingRequest(tab,text,[...attached,...historical],contexts),ctl.signal);
         if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
         if (routed.error) {
@@ -1422,6 +1429,15 @@ class ChatView {
     }
     tab.engine = engine;
     delete tab.freshSession;
+    // Prepare the complete record before starting the provider, so its read directory is available from launch.
+    let carry = "";
+    try { if (tab.carryOver && !tab.started) carry = this.carryText(tab.carryOver, this.handoffRecord(tab, tab.messages.slice(0, -2))); }
+    catch (e) {
+      reply.running = false; reply.error = `Kural couldn't preserve the complete conversation: ${e.message}`; tab.status = "idle";
+      this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); this.save();
+      this.notify(tab, "error", { error: reply.error });
+      return;
+    }
     let r = this.runtime.get(tab.id);
     // A model on this computer: check Ollama and prepare the model first (says what's missing if it can't).
     if (isLocal(tab.model) && (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab) || !this.localReady.has(tab.model))) {
@@ -1447,9 +1463,6 @@ class ChatView {
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
     this.beginTurn(tab, r, reply, ask);
-    // Continued from another workspace, forked, an earlier message edited, or switched to another AI (or account): the
-    // first message carries the conversation so far, as a record sized for the model that gets it (journal.handoff).
-    const carry = tab.carryOver && !tab.started ? this.carryText(tab.carryOver, journal.handoff(tab.messages.slice(0, -2), this.handoffBudget(tab.model))) : "";
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
     let retrieved = "";
@@ -1506,6 +1519,25 @@ class ChatView {
   }
 
   // ---------- carrying the conversation over (another AI, a new session) ----------
+  handoffDir(tab) {
+    const storage = this.context && this.context.globalStorageUri && this.context.globalStorageUri.fsPath;
+    return handoffStore.directory(storage ? path.join(storage, "handoffs") : privateTmp("handoffs"), tab.id);
+  }
+
+  // The inline overview fits the receiving model. Omitted details remain in a private, readable local file, which is
+  // replaced on the next handoff and deleted with the chat. A failed save stops the handoff instead of losing details.
+  handoffRecord(tab, messages, model = tab.model) {
+    const budget = this.handoffBudget(model), whole = journal.handoff(messages);
+    if (whole.length <= budget) {
+      // An edit/fork can shorten a previously large chat. Its old record must not expose the discarded future turns.
+      if (fs.existsSync(path.join(this.handoffDir(tab), "history.json"))) handoffStore.save(messages, this.handoffDir(tab));
+      return whole;
+    }
+    const archive = handoffStore.save(messages, this.handoffDir(tab));
+    tab.handoffFile = archive.path;
+    return journal.handoff(messages, budget, archive);
+  }
+
   // What the first message of a new session starts with: the record of the conversation (journal.handoff) and why.
   carryText(c, record) {
     const wrapped = (attrs, why) => `<earlier_conversation${attrs}>\n${record}\n</earlier_conversation>\n${why}\n\n`;
@@ -1541,16 +1573,20 @@ class ChatView {
     if (i < 1 || !user || i !== tab.messages.length - 1 || tab.status !== "idle" || !tab.autoRoute || !this.router) return false;
     const from = engineOf(failed.model || tab.model), who = whoOf(failed.model || tab.model);
     const ask = ChatView.textOf(user.segments || []).trim() || "Have a look at what I attached.";
-    const media = [...new Map(tab.messages.flatMap((m) => m.attachments || []).filter((a) => ["image", "pdf"].includes(a.kind)).map((a) => [a.path, a])).values()];
+    const historical = journal.attachmentsOf(tab.messages);
+    const media = [...new Map(historical.filter((a) => ["image", "pdf"].includes(a.kind)).map((a) => [a.path, a])).values()];
     const ctl = new AbortController(); this.routingJobs.set(tab.id, ctl);
     tab.status = "running"; tab.routingState = "Choosing another AI…"; this.postTabs();
     let routed;
-    try { routed = await this.router.route({ ...this.routingRequest(tab, ask, tab.messages.flatMap((m) => m.attachments || []), []), avoid: from }, ctl.signal); }
+    try { routed = await this.router.route({ ...this.routingRequest(tab, ask, historical, []), avoid: from }, ctl.signal); }
     catch { routed = null; }
     finally { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); delete tab.routingState; tab.status = "idle"; this.postTabs(); }
     // (Not to an AI that's at its limit too: no going back and forth between two that are both out.)
     if (ctl.signal.aborted || !routed || routed.error || engineOf(routed.model) === from || !brain.providerOf(routed.model).ready() || !tab.autoRoute || tab.status !== "idle" ||
       this.limitOf(engineOf(routed.model), routed.model) >= 98) return false;
+    let record;
+    try { record = this.handoffRecord(tab, tab.messages, routed.model); }
+    catch (e) { log(`chat ${tab.id}: couldn't preserve its complete conversation for a handoff: ${e.message}`); return false; }
     log(`chat ${tab.id}: ${who} reached its limit; Auto carries the request on with ${routed.model}`);
     failed.note = `${who} reached its usage limit here. Auto carried on with ${whoOf(routed.model)} below.`;
     failed.limitError = failed.error; delete failed.error;
@@ -1571,7 +1607,7 @@ class ChatView {
     const r = this.startProc(tab);
     if (!r) { reply.running = false; tab.status = "idle"; reply.error = `${whoOf(tab.model)} didn't start. Check it in Get started.`; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); return false; }
     this.beginTurn(tab, r, reply, ask);
-    const carry = this.carryText({ retry: who }, journal.handoff(tab.messages.slice(0, -1), this.handoffBudget(tab.model)));
+    const carry = this.carryText({ retry: who }, record);
     const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket), [], media);
     r.turn.attachments = media;
     r.pendingSend = content; r.turn.dispatched = true;
@@ -2070,7 +2106,7 @@ class ChatView {
     // reading there also makes macOS ask about Kural.
     if (READ_TOOLS.includes(req.tool_name)) {
       const where = input.file_path || input.path;
-      if (!where || ws.mayUse(where) || within(where, tab.granted || [])) return { allow: true };
+      if (!where || ws.mayUse(where) || within(where, [...(tab.granted || []), tab.handoffFile].filter(Boolean))) return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
     // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.

@@ -58,6 +58,18 @@ function fixture(model='haiku') {
   assert.ok(Array.isArray(f.sent[0]));assert.strictEqual(f.sent[0].find(b=>b.type==='image').source.data,Buffer.from('image bytes').toString('base64'));
   assert.strictEqual(f.tab.messages.at(-2).attachments,undefined);
  });
+ await check('provider switches retain questions answered and pictures sent during a running answer',async()=>{
+  const f=fixture(),file=path.join(dir,'queued.png');fs.writeFileSync(file,'queued image bytes');
+  f.tab.messages=[{role:'user',segments:[{t:'text',v:'make a plan'}]},{role:'assistant',blocks:[
+   {k:'text',text:'Here is the plan'},
+   {k:'steer',segments:[{t:'text',v:'use this screenshot'}],attachments:[{name:'queued.png',path:file,kind:'image'}]},
+   {k:'question',questions:[{question:'Deploy?'}],answers:{'Deploy?':'Keep it local'},state:'answered'}]}];
+  await f.chat.send(f.tab,[{t:'text',v:'Continue on another AI'}],[]);
+  assert.ok(Array.isArray(f.sent[0]));
+  assert.strictEqual(f.sent[0].find(b=>b.type==='image').source.data,Buffer.from('queued image bytes').toString('base64'));
+  const text=f.sent[0].find(b=>b.type==='text').text;
+  for(const s of ['Keep it local','use this screenshot','queued.png'])assert.ok(text.includes(s),s);
+ });
  await check('a handoff that is too big (or lost an attachment) stays with the current AI instead of refusing',async()=>{
   for(const missing of [false,true]){
    const f=fixture(),asked=[];f.tab.messages=[{role:'user',segments:[{t:'text',v:'old context'}],attachments:missing?[{kind:'image',path:path.join(dir,'gone.png')}]:[]}];
