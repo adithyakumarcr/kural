@@ -149,8 +149,10 @@ commits, with the chat's model. Edit it if you like and commit as usual.
 ## Your Claude Code setup
 
 With a Claude model, the chat uses your whole Claude Code setup: MCP servers, connectors, plugins, skills, hooks and
-`CLAUDE.md` files. When you add one, Kural reloads Claude in the same conversation. (Setting
-`kural.chat.fullClaudeCodeSetup`: off = a faster, minimal setup.) The full Claude Code terminal is one shortcut away:
+`CLAUDE.md` files. When you add one, Kural reloads Claude in the same conversation. The model menu shows it on
+Claude's line, next to "Claude": "10 connectors · 30 skills" (click it to see each connector; a warning sign when one
+isn't connected) and a reload button. (Setting `kural.chat.fullClaudeCodeSetup`: off = a faster, minimal setup; that
+line then says "minimal setup", with **use mine** to switch back.) The full Claude Code terminal is one shortcut away:
 **Ctrl+Esc**.
 
 ## Asking about Kural
