@@ -1,5 +1,18 @@
 ## Not released yet
 
+- **Signed releases.** Every release has a checksum list signed with Kural's release key; updates install only files
+  that match it. Releases without it are no longer installed automatically (install the next one by hand once).
+  "Kural: Verify this installation..." checks the version you run. Releases also carry build provenance and an SBOM.
+- **Files that run code later ask first.** Even inside your project, writing a git hook, `.vscode/tasks.json`,
+  `package.json`, `.env`, a Makefile, a Dockerfile, a workflow or a shell profile shows a card in Agent mode. Writing to
+  the temp folder asks too.
+- **Dangerous commands ask even in Auto.** `sudo`, deleting outside the project, `curl | sh`, a forced push to main,
+  `git reset --hard` and more still ask; the first switch to Auto says so.
+- **Tab Completion learns only if you turn it on** (Settings: Tab Completion: Learn From Activity), with a stronger
+  filter for passwords and keys. Data from earlier versions: Kural offers to delete it.
+- **The fallback browser opens local pages only** unless `kural.browser.allowRemoteSites` is on.
+- **Security policy.** Report vulnerabilities privately: see SECURITY.md.
+
 - **Choose the files you attach.** Removed automatic current-file attachments and suggested file chips from the chat box.
 - **Set your usage threshold.** Kural Settings → AI Usage has optional automatic service switching and an editable
   percentage (70% initially). It preserves the same chat, recorded context and completed work, and continues a paused

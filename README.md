@@ -57,12 +57,16 @@ Get the file for your computer from [Releases](https://github.com/adithyakumarcr
 | **Ubuntu 22.04 / 24.04** (x64) | `kural_…_amd64.deb` |
 | **Windows 10 / 11** (x64) | `Kural-…-windows-x64-setup.exe` (or the portable `.zip`) |
 
-**Mac.** Open the `.dmg` and drag **Kural** into **Applications**. Kural isn't signed with a paid Apple developer ID,
-so macOS blocks it the first time. Allow it once in Terminal:
+**Mac.** First [verify your download](#verify-your-download) (it's the check macOS can't do for Kural). Then open the
+`.dmg` and drag **Kural** into **Applications**. Kural isn't signed with a paid Apple developer ID, so macOS blocks it
+the first time: open it once, then **System Settings → Privacy & Security**, scroll down, **Open Anyway**. Only if macOS
+says the app "is damaged" (and you verified the download), allow it in Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Kural.app
 ```
+
+That turns off macOS's check for this one app; don't make it a habit for other downloads.
 
 **Ubuntu.**
 
@@ -481,7 +485,7 @@ docs/                 screenshots for this README; docs/wiki/ the wiki's pages; 
 - **No Tab suggestions:** click the sparkle icon in the status bar (crossed out = off). The panel shows the engine,
   whether the local model is ready, and how long the last suggestion took.
 - **More:** the [Kural wiki](https://github.com/adithyakumarcr/kural/wiki) explains every feature.
-- **Mac says the app is damaged:** run the `xattr` command from [Install](#1-download-kural).
+- **Mac says the app is damaged:** verify the download, then run the `xattr` command from [Install](#1-download-kural).
 
 ## Credits
 
