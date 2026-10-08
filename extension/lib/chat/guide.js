@@ -114,6 +114,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
   then downloads the model.
   It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
+  While a chat answers with a model on this computer (Ollama runs both on one GPU, so Tab's local answers slow to 2-3 s),
+  Claude helps Tab if it's set up (also for "Local model"); without Claude, Tab asks a little less often meanwhile.
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
