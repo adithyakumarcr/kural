@@ -1,0 +1,21 @@
+# Manual check (Actions → verify-signing-key → Run workflow): does the secret KURAL_RELEASE_PRIVATE_KEY really sign
+# for the public key inside Kural (extension/lib/release-keys.js)? Signs a sample file and verifies it. Never prints the key.
+name: verify-signing-key
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 22 }
+      - name: Sign a sample and verify it with the public key in the app
+        env:
+          KURAL_RELEASE_PRIVATE_KEY: ${{ secrets.KURAL_RELEASE_PRIVATE_KEY }}
+        run: |
+          echo "sample $(date -u +%s)" > sample.txt
+          node scripts/release-key.js sign sample.txt
+          node scripts/release-key.js verify sample.txt sample.txt.sig
+          echo "The secret signs for the key in release-keys.js."
