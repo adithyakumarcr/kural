@@ -147,7 +147,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   nothing to choose but the helper (Adithya, 7 Oct 2026): no profile (the chat's model menu is the only place,
   `setRouterProfile`; `kural.modelRouter.profile` is just a new chat's first default and Tab's Auto engine), no model
   chips (one plain line per AI, counted with `eligible`), and an info button explaining the helpers (`ABOUT`; numbers
-  from the `HELPERS` notes, so they stay in step). Profiles **cost /
+  from the `HELPERS` notes, so they stay in step). The helper is a slider Faster → Quality (Adithya, 7 Oct: simpler than
+  four names): its steps are `ABOUT`'s order (`STEPS`), `input` only names the step, `change` (or a dot) sets it. Profiles **cost /
   balance / intelligence** (old ids speed / balanced / quality map via `ALIASES`; keep accepting them). `select()`:
   `needTier(profile, task)` (complex = 3 in every profile; Intelligence simple = 2, standard = 3; Cost standard = 1 for
   search/explain, 2 for edit/review) → the lightest model with that tier (`traits`: tier from name + the program's
@@ -225,7 +226,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   card is done (`task_started` / `task_notification` events, keyed by `tool_use_id`), and a late lead turn
   reopens the answer. Only Stop ends a team answer early; `warm()` never restarts Claude while an agent works
   (that would kill background agents). If Claude doesn't wake the lead after the last report, `conclude()`
-  asks it for the final answer (up to `MAX_NUDGES`, since a project has several phases). Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
+  asks it for the final answer (up to `MAX_NUDGES`, since a project has several phases). Claude Code reports a long
+  Bash command as a background task too (`task_started`/`task_notification` with the Bash call's id): only a
+  notification whose owner is an agent card sets `lastNotifyAt`, or every long command got the "All the agents you
+  started have reported back…" nudge (test/queue.test.js). Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
   **Roles** (Adithya's design): the lead is the Project Manager; Researcher (Rachel), Architect (Ross), Developer
   (`DEVELOPERS`: Monica, Chandler, Joey; the PM starts 1–3), Tester (Phoebe); any combination. Split the work with
   roles = `projectPrompt()`: requirements (PM asks you) → plan (Researcher/Architect, "PLAN:" to the lead) → your OK
@@ -280,7 +284,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `shown(id)` for "is this tab on screen", never `tab.id === this.activeId`.
 - **Links and pictures in answers** (`media/chat.js` `fileLink`, `openPath`/`openImage` in the chat): a markdown link
   that isn't http(s) is a file (`#L12`, `#L12-L20`, `:12` = the line); a folder → Explorer, pictures/binaries →
-  `vscode.open`, missing → a message. Pictures (`img.md-img[data-path|data-url]`, attachments, tool/generated ones) open
+  `vscode.open`, missing → a message. `ws.find` (lib/workspace.js) turns what the AI wrote into the file: as written,
+  else any project file whose path ends with it (`findFiles("**/<path>")`, not node_modules/.git; dist/build last), so
+  "devices.test.js" opens test/devices.test.js; several → a QuickPick. A leading "/" not on this computer = the
+  project's (test/links-fastest.test.js). Pictures (`img.md-img[data-path|data-url]`, attachments, tool/generated ones) open
   full size in a tab: local → VS Code's image viewer, web → a tiny WebviewPanel. web links → Kural's browser tab.
 - **Browser / Design Mode** (`lib/browser/index.js`): it's VS Code's own Integrated Browser (a real WebContentsView tab:
   any site, the element picker, screenshots, console logs). Kural's pieces: `kural.browser.open` (any web link in the chat,
@@ -396,7 +403,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   icon and the panel tab go away. Same fingerprint rule as the Help menu patch (`patch_workbench`); a VSCodium whose code
   doesn't match keeps both views with a `::warning::`. Checked by launching the patched app (both gone, "Search & Ask"
   there). Edit → Find in Files still runs VS Code's command (it opens nothing now): Kural binds Ctrl/Cmd+Shift+F/H itself.
-- **Search & Ask** (`lib/search/`: `index.js` the view and Ask, `find.js` text search in the editor, `text.js` no
+- **Search & Ask** (`lib/search/`: `index.js` the view and Ask (always `brain.fastestModel()`: Haiku, or the lightest
+  Codex/Gemini model by router `traits`, the chat's AI first; a local model only with no cloud AI; Adithya: Ask should
+  be fast; no Auto routing there), `find.js` text search in the editor, `text.js` no
   vscode: ripgrep args/parsing, include/exclude globs as VS Code reads them, in-memory search; `media/search-replace.js`
   the regex and replace rules, loaded by both the extension and the page so the results' preview equals what Replace
   does). ripgrep is VS Code's own (`rgPath`: `node_modules.asar.unpacked/@vscode/ripgrep-universal/bin/<os>-<arch>`),
@@ -410,6 +419,14 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `kural.searchTab` / `searchHasResults` / `searchTree` / `searchCollapsed` that the page reports (`ui`). Right-click =
   package.json `webview/context` with each row's `data-vscode-context`. Tests: `test/search-text.test.js` (real
   ripgrep when one is found: the built app's, or `rg` on PATH, or `KURAL_RG`).
+- **Windows signing** (`scripts/sign-win.sh` with jsign, `installer/sign.nsh` `!finalize`/`!uninstfinalize`,
+  `build-win.sh`): unsigned → SmartScreen's "Windows protected your PC" (user steps in README/Troubleshooting). Does
+  nothing until the repo has a certificate in secrets (`WINDOWS_SIGN_*`, Azure's `AZURE_*`: docs/windows-signing.md);
+  then Kural.exe, kural-tunnel.exe, the installer and the uninstaller are signed and time-stamped, and windows-check
+  fails unless `Get-AuthenticodeSignature` says Valid. Every CI build runs `scripts/sign-win-check.sh` (a throwaway
+  certificate, a tiny NSIS installer through the same sign.nsh, both files must be signed). makensis reads from the
+  script's folder: `!include "sign.nsh"`, not `${__FILEDIR__}/…`. Kural's own updates (Node fetch, no
+  Mark-of-the-Web) aren't checked by SmartScreen.
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
   renames the program, the 4 helpers and `bin/kural` together; a mismatch crashes the app at launch. CI opens the real
   app on all three systems (not just `--version`, which never starts the helpers).
@@ -450,8 +467,22 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   "undone". Edit = optional restore (modal), messages cut at the index, a new session with `carryOver {edited}` (the
   handoff record), like a provider switch. Page: `.msg-actions` on user messages, `S.editing` + `.edit-bar`, `editIndex`
   in the send message.
-- **Steps dropdown** (`media/chat.js` `layout`/`stepsNode`): thinking, tools (not team posts), answered permissions and
-  the text before the last step go into ONE `.steps` group per answer; pending permissions/questions, agent cards, team
+- **Messages sent while it answers (the queue)** (`queueSend`/`onEcho`/`giveBack` in `lib/chat/index.js`): Enter never
+  stops an answer (Adithya: it did); only Stop/Esc does. The message goes to the program at once (`sendTo`), and every
+  program echoes each message when it takes it in (`{type: "user", isReplay: true}`): Claude Code with
+  `--replay-user-messages` (an `OPTIONAL_FLAGS` probe; `ClaudeProcess.echoes`; it adds a mid-answer message at the next
+  tool step, or runs it as the next turn), Codex with `turn/steer` {threadId, expectedTurnId, input} then an echo (an
+  error → its queue, next turn), agy when `next()` starts one (no steering), Kural's engine before its next model request
+  (after the tools) or next turn. The chat keeps `r.expect` (everything sent, in order: turn / steer / nudge; matched by
+  text, then order) and `r.steers` (not taken in yet: the queue above the box). Echo while the reply runs → a `steer`
+  block; after it ended → a new user message + reply (`beginTurn`). `finishReply` keeps the tab "running" while steers
+  wait (30 s → `giveBack`); `warm()` never restarts then. Stop with steers → `forceStop` (an interrupt would make Claude
+  answer them next) and `giveBack` (page `unqueue`: back into the box). Old Claude Code without the flag: a flash to
+  update, the draft stays. Live-checked with Claude Code 2.1.289 (one answer with both; the poem case: next turn).
+  Tests: test/queue.test.js, the engine/codex/agy tests (fake-codex has `turn/steer`, FAKE_CODEX_NO_STEER).
+- **Steps dropdown** (`media/chat.js` `parts`/`layout`/`stepsNode`): thinking, tools (not team posts), answered permissions and
+  the text before the last step go into ONE `.steps` group per part of an answer (a `steer` block, a message you
+  added while it worked, splits it into parts; only the last part's dropdown is live); pending permissions/questions, agent cards, team
   posts, pictures and the text after the last step stay outside. An answer with steps is redrawn on each new block
   (`appendBlock` → `rerender`); `patchBlock` still patches inside the group and refreshes `.steps-line`.
 - **Tokens** (`lib/ai/usage.js` `addTokens`/`tokenTotals`, per provider per day, 35 days, saved with the rest): Claude's

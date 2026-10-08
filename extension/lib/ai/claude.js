@@ -112,7 +112,11 @@ const newSessionId = () => crypto.randomUUID();
 // and pass on what agents write and think (--forward-subagent-text). Older versions refuse to start with
 // "unknown option" when given a flag they don't know, so ask once (about half a second, no Claude request:
 // with no input, Claude stops right after checking its options) and only use the ones it knows.
-const OPTIONAL_FLAGS = { thinkingDisplay: ["--thinking-display", "summarized"], forwardSubagentText: ["--forward-subagent-text"] };
+// --replay-user-messages: Claude Code says when it takes in each message you sent (an echo with "isReplay"), also one
+// sent while it's answering: that's how the chat knows a queued message went into the running answer or became the
+// next one. (Probing it without --input-format stream-json fails with "requires both…", not "unknown option": known.)
+const OPTIONAL_FLAGS = { thinkingDisplay: ["--thinking-display", "summarized"], forwardSubagentText: ["--forward-subagent-text"],
+  replayUserMessages: ["--replay-user-messages"] };
 let flagCache = null;
 function supportedFlags(bin) {
   if (flagCache && flagCache.bin === bin) return flagCache;
@@ -128,7 +132,8 @@ function supportedFlags(bin) {
     if (!k) break;
     left.splice(left.indexOf(k), 1);
   }
-  log(`claude options: thinking summaries ${known.thinkingDisplay ? "on" : "not supported"}, agents' text ${known.forwardSubagentText ? "on" : "not supported"}`);
+  log(`claude options: thinking summaries ${known.thinkingDisplay ? "on" : "not supported"}, agents' text ${known.forwardSubagentText ? "on" : "not supported"}, ` +
+    `messages while answering ${known.replayUserMessages ? "on" : "not supported (update Claude Code)"}`);
   flagCache = known;
   return known;
 }
@@ -151,6 +156,9 @@ class ClaudeProcess {
     this.stderr = "";
     this.exited = false;
     this.pending = new Map();   // our control requests waiting for an answer
+    // Does it echo each message when it takes it in ({type: "user", isReplay: true})? Then a message sent while it
+    // answers can go to it at once: Claude Code adds it to the running answer at its next step, or answers it next.
+    this.echoes = false;
   }
 
   start() {
@@ -162,9 +170,12 @@ class ClaudeProcess {
       "--model", o.model, ...(o.strictMcp === false ? [] : ["--strict-mcp-config"])];   // strict: no MCP servers but ours
     if (o.effort) args.push("--effort", o.effort);
     if (o.partial) args.push("--include-partial-messages");
-    if (o.showThinking) {   // the chat: show Claude's thinking and what its agents write
+    if (o.showThinking || o.replay) {
       const f = supportedFlags(bin);
-      for (const k of Object.keys(OPTIONAL_FLAGS)) if (f[k]) args.push(...OPTIONAL_FLAGS[k]);
+      // The chat: show Claude's thinking and what its agents write.
+      if (o.showThinking) for (const k of ["thinkingDisplay", "forwardSubagentText"]) if (f[k]) args.push(...OPTIONAL_FLAGS[k]);
+      // … and hear when Claude takes in each message (queued ones too: see `echoes`).
+      if (o.replay && f.replayUserMessages) { args.push(...OPTIONAL_FLAGS.replayUserMessages); this.echoes = true; }
     }
     // Safe mode skips your hooks, plugins, skills and MCP servers (faster, predictable), but it
     // also skips the MCP servers we pass ourselves. So when we need one (the agent team's message

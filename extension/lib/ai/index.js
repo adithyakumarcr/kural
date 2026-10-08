@@ -52,6 +52,25 @@ function fallbackModel() {
 }
 const setModelSource = (f, fallback) => { modelSource = f; if (fallback) localFallback = fallback; };
 
+// The fastest model you can use right now (Search & Ask: finding places in the code needs speed, not the most capable
+// model). The cloud AIs first, the chat's own first among them (the account you're using): Claude's Haiku, or the
+// lightest Codex / Gemini model by the Model Router's tiers ("mini", "flash", "fast and affordable"…: router/policy.js).
+// None set up: your model on this computer.
+function fastestModel(prefer = currentModel()) {
+  const { traits } = require("../router/policy");
+  const lightest = (id) => {
+    const list = (cli[id].models || []).map((m, i) => ({ m, i, t: traits(m) }));
+    list.sort((a, b) => a.t.quality - b.t.quality || a.t.legacy - b.t.legacy || !!b.m.isDefault - !!a.m.isDefault || a.i - b.i);
+    return list.length ? list[0].m.id : "default";
+  };
+  const first = prefer ? engineOf(prefer) : null;
+  for (const id of [...new Set([first, "claude", ...CLI_IDS])]) {
+    if (id === "claude" && isSetUp()) return "haiku";
+    if (cli[id] && cli[id].ready && cli[id].bin) return `${id}:${lightest(id)}`;
+  }
+  return isLocal(prefer) ? prefer : localFallback() || prefer || null;
+}
+
 // Can this model be used right now? { ok } or { why } (for a model whose program isn't set up yet).
 function usable(model = currentModel()) {
   const p = providerOf(model);
@@ -149,5 +168,5 @@ const localStore = (context) => path.join(context.globalStorageUri.fsPath, "loca
 // "claude" | "ollama" | "codex" | "agy": which program has a chat's conversation.
 const engineOf = (model) => providerOf(model).id;
 
-module.exports = { PROVIDERS, providerOf, engineOf, isLocal, localName, currentModel, fallbackModel, setModelSource, usable, makeAgent, Session, askLocal,
+module.exports = { PROVIDERS, providerOf, engineOf, isLocal, localName, currentModel, fallbackModel, fastestModel, setModelSource, usable, makeAgent, Session, askLocal,
   ollamaUrl, contextLength, localStore, systemPrompt, setCli, cli, setStore, cliOf };

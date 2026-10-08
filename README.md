@@ -71,13 +71,22 @@ sudo apt install ./kural_*_amd64.deb
 
 Open **Kural Code Editor** from your apps, or type `kural` in a terminal (`kural .` opens the current folder).
 
-**Windows.** Run the setup. If Windows says "Windows protected your PC", click **More info → Run anyway** (Kural isn't
-code-signed). It installs for your user only, so you don't need admin rights.
+**Windows.** Run the setup. It installs for your user only, so you don't need admin rights. Windows will probably say
+**"Windows protected your PC"** (Microsoft Defender SmartScreen) with only a **Don't run** button: Kural's installer
+isn't code-signed yet, and Windows warns about every unsigned program it doesn't know. To install it anyway:
+1. Click **More info** (the small underlined link under the text).
+2. The window now shows the file's name and "Publisher: Unknown publisher". Click **Run anyway**.
+
+Kural's own updates don't show this again (Kural downloads them itself). With the portable `.zip`, Windows would ask
+on every start: before unzipping, right-click the `.zip` → **Properties** → tick **Unblock** → **OK**. If there's no
+**Run anyway** at all, Windows 11's Smart App Control or your company's policy blocks unsigned programs: that needs a
+signed release ([how releases get signed](docs/windows-signing.md)).
 
 ### 2. Get started (Kural walks you through it)
 
-The first time you open Kural, **Get started** asks where its AI should come from, then checks each step and helps
-with it. Either way is enough; you can add the other later.
+Kural opens a **Welcome** page with **Start**, **Recent**, and **Walkthroughs**. Choose **Get started with Kural → Set up
+your AI** (or **Kural: Get Started** in the Command Palette). The setup page asks where its AI should come from, then
+checks each step and helps with it. Any one is enough; you can add others later.
 
 **Claude**
 1. **Claude Code installed.** **Install for me** runs Anthropic's official installer in a terminal (or copy the command).
@@ -148,6 +157,9 @@ Also in the chat:
 - **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.
+- **Send while it works.** Enter while an answer runs doesn't stop it: your message is queued and the AI takes it in
+  at its next step, inside the same answer ("You added this while it worked"), or answers it right after. **Stop** (or
+  Esc) stops the answer and puts a queued message back into the box.
 - **Model and intensity.** Claude's Opus / Sonnet / Haiku, Google Gemini and ChatGPT (Codex) models, or a model on your
   computer, and Low → Max. You can switch
   in the middle of a conversation; the new model gets the conversation so far.
@@ -170,8 +182,9 @@ Also in the chat:
 
 Besides Claude's models, Kural can use a model that runs on your own computer through [Ollama](https://ollama.com):
 private, free, and it works without internet or any account. Kural runs it with its own engine (no Claude Code): it
-reads and edits files, searches your project, and asks before running commands, like with Claude. **Ask**, **Ctrl+K**,
-**Apply** and commit messages use the chat's model too. (Agent teams and Claude Code connectors need a Claude model.)
+reads and edits files, searches your project, and asks before running commands, like with Claude. **Ctrl+K**,
+**Apply** and commit messages use the chat's model too (**Ask** uses the fastest model you have: your own only when
+there's no cloud AI). (Agent teams and Claude Code connectors need a Claude model.)
 
 In the model menu, **On this computer** lists your models; **Find & download models…** searches Ollama's library
 (models that can use tools, which the chat needs), shows how much memory each size needs compared to your computer,
@@ -219,7 +232,7 @@ has. An agent that shows no sign of life for 6 minutes is stopped by itself.
 
 Choose **Auto → Balance, Cost or Intelligence** in the chat model menu, like Cursor's Auto. For every message Kural picks the model and the intensity from your Claude, Google Gemini and ChatGPT (Codex) models, switching between those AIs with the conversation handed over (models on this computer are only picked by you). It reads how much work the request is (Kural's own word classifier, or a helper model like Granite or Qwen3 Embedding for up to 90 % accuracy at under 50 ms), what you attached, how much of each AI's usage limit is left (**Cost** saves your limits), how long the conversation is, and what you did after its earlier answers. A quick question goes to a light model even under Intelligence, and complex work gets the most capable one even under Cost. Each answer shows the model; hover over it for the reasons.
 
-The **Model Router** panel (status bar) shows what reads your requests, with an info button that explains Native, MiniLM, Granite and Qwen3. There's no list of models to tick: Auto always uses every cloud model of the AIs you set up. Model ratings, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
+The **Model Router** panel (status bar) has a slider from **Faster** to **Quality** for what reads your requests (four steps: Native, MiniLM, Granite, Qwen3; its info button explains each). There's no list of models to tick: Auto always uses every cloud model of the AIs you set up. Model ratings, Search & Ask ranking, chat context and Auto Tab engine selection are settings (`kural.modelRouter.*`). Claude and local models can change within their provider after completed tool failures; cross-provider handoffs occur between messages. See the [Model Router guide](docs/wiki/Model-Router.md) for setup, limits, privacy and measured routing overhead.
 
 ### Tab Completion
 
@@ -279,7 +292,7 @@ cursor.
 
 - **Search & Ask** (magnifier icon). **Search** (Ctrl+Shift+F): find and replace in your files, with everything VS
   Code's own Search had (Kural hides that one). **Ask** (Ctrl+Alt+A): ask "where is the retry limit set?" and get the
-  exact `file:line` places.
+  exact `file:line` places, from the fastest model you have (Claude's Haiku, or Gemini's or Codex's lightest).
 - **Kural Settings** (person icon in the status bar, which shows your account's name): your accounts and usage,
   updates, the guide, in one tab.
 - **Browser with Design Mode.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
@@ -345,7 +358,7 @@ The separate build scripts, if you only want the files in `dist/`:
 |---|---|---|
 | Ubuntu (x64) | `./make-deb.sh` | `dist/kural_*_amd64.deb` |
 | Mac, Apple Silicon | `./build-mac.sh` | `dist/Kural-*-macos-arm64.zip` and `.dmg` (needs Pillow: `python3 -m pip install Pillow`) |
-| Windows (built on Linux) | `./build-win.sh` | `dist/Kural-*-windows-x64-setup.exe` + portable `.zip` (needs `nsis`, `node`) |
+| Windows (built on Linux) | `./build-win.sh` | `dist/Kural-*-windows-x64-setup.exe` + portable `.zip` (needs `nsis`, `node`; signed when a code signing certificate is set up: [docs/windows-signing.md](docs/windows-signing.md)) |
 
 To run the tests (no Claude needed), use `npm test`.
 

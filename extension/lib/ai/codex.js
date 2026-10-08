@@ -610,12 +610,32 @@ class CodexAgent {
     if (this.h.onExit) this.h.onExit({ code, login: !this.loggedIn || /not logged in|unauthori[sz]ed|\b401\b/i.test(stderr), stderr: stderr || "" });
   }
 
-  // Your message: a string, or Claude-style blocks (text and images).
+  // Your message: a string, or Claude-style blocks (text and images). Sent while Codex answers: added to that answer
+  // (turn/steer: Codex reads it at its next step); if it can't be (the turn just ended, an older Codex), the next turn.
+  // Either way it's echoed when Codex takes it, like Claude Code's --replay-user-messages, so the chat knows where it went.
   send(content) {
     if (this.exited) return;
+    const t = this.turn;
+    if (t && t.id && !t.finished && !t.stopped && this.threadId && this.steers !== false) {
+      const { items, temp } = this.input(content);
+      this.server.request("turn/steer", { threadId: this.threadId, expectedTurnId: t.id, input: items }).then(() => {
+        (t.temp = t.temp || []).push(...temp);
+        if (t.finished) for (const f of temp) fs.rm(f, { force: true }, () => {});
+        this.echo(content);
+      }).catch((e) => {
+        for (const f of temp) fs.rm(f, { force: true }, () => {});
+        if (/method|unknown|not (?:found|supported)|unsupported/i.test(e.message)) this.steers = false;   // an older Codex
+        log(`${this.opts.name}: couldn't add to the answer (${e.message}); it goes next`);
+        this.queue.push(content);
+        if (this.ready && !this.busy) this.next();
+      });
+      return;
+    }
     this.queue.push(content);
     if (this.ready && !this.busy) this.next();
   }
+  echo(content) { this.emit({ type: "user", isReplay: true, message: { role: "user", content } }); }
+  get echoes() { return true; }
 
   setModel(m) { this.model = m || ""; }
   request(req) { return Promise.resolve(req && req.subtype === "mcp_status" ? { mcpServers: [] } : {}); }
@@ -658,6 +678,7 @@ class CodexAgent {
     this.busy = true;
     const t = { id: null, t0: Date.now(), text: "", error: null, stopped: false, files: new Map(), shown: new Set(), deltas: new Set(), block: null, last: null };
     this.turn = t;
+    this.echo(content);
     const { items, temp } = this.input(content);
     t.temp = temp;
     try {

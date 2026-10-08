@@ -77,6 +77,38 @@ function resolve(p) {
   return vscode.Uri.file(path.join(list[0].path, clean));
 }
 
+// A file the AI named in a link or `code` ("devices.test.js", "lib/chat/index.js:12", "/test/a.js") -> the files it may
+// mean: [{ uri, label }], most likely first. As written first (resolve); not there, then any project file whose path
+// ends with it: the AI often writes just a file's name, or a path from inside another folder (it said
+// "devices.test.js" for test/devices.test.js, and Kural answered "can't find"). A leading "/" that isn't on this
+// computer counts as the project's own. Not in node_modules or .git; build output (dist, build, out) last.
+async function find(p) {
+  let clean = String(p || "").trim().replace(/^file:\/\//i, "").replace(/\\/g, "/");
+  if (!clean) return [];
+  if (/^~\//.test(clean)) clean = path.join(require("os").homedir(), clean.slice(2));
+  const direct = resolve(clean);
+  if (direct && fs.existsSync(direct.fsPath)) return [{ uri: direct, label: label(direct.fsPath) }];
+  const rel = clean.replace(/^[A-Za-z]:(?=\/)/, "").replace(/^\/+/, "").replace(/^(\.\/)+/, "");
+  if (!rel || rel.split("/").includes("..")) return [];
+  if (!folders().length) {   // (no folder open: the AI worked in Kural's work folder)
+    const w = path.join(workDir(), rel);
+    return fs.existsSync(w) ? [{ uri: vscode.Uri.file(w), label: w }] : [];
+  }
+  // (Glob characters in a name, like Next.js's [id].tsx, match any one character here; the exact check below.)
+  const glob = `**/${rel.replace(/[[\]{}*?!]/g, "?")}`;
+  const found = new Map();
+  for (const f of folders()) {
+    let uris = [];
+    try { uris = await vscode.workspace.findFiles(new vscode.RelativePattern(vscode.Uri.file(f.path), glob), "**/{node_modules,.git}/**", 50); } catch { /* not searchable */ }
+    for (const u of uris) {
+      const p = u.fsPath.split(path.sep).join("/");
+      if (p === rel || p.endsWith(`/${rel}`)) found.set(u.fsPath, { uri: u, label: label(u.fsPath) });
+    }
+  }
+  const built = (l) => /(^|\/)(dist|build|out|\.next|coverage|target)\//.test(l) ? 1 : 0;
+  return [...found.values()].sort((a, b) => built(a.label) - built(b.label) || a.label.length - b.label.length || a.label.localeCompare(b.label));
+}
+
 // Told to Claude when there's more than one folder.
 function promptNote() {
   const list = folders();
@@ -86,4 +118,4 @@ function promptNote() {
     `. Your working directory is the first one. A path written as <folder name>/... is inside that folder.`;
 }
 
-module.exports = { workDir, setWorkDir, aiRoots, mayUse, folders, root, extraDirs, key, label, resolve, promptNote };
+module.exports = { workDir, setWorkDir, aiRoots, mayUse, folders, root, extraDirs, key, label, resolve, find, promptNote };

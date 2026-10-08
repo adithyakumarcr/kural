@@ -13,6 +13,10 @@ with an AI assistant built in. Its AI comes from Claude (Claude Code with the us
 (Google's Antigravity CLI with a Google account: free, AI Pro, Ultra; Google's Gemini CLI is no longer used: Google
 stopped personal accounts there on 26 Sept 2026), ChatGPT (OpenAI's Codex CLI with a ChatGPT plan), or the user's own
 model on their computer (Ollama, offline, no account). Features and how to use them:
+- Welcome (Command Palette: "Kural: Welcome", also Help → Welcome): opens by default when there are no editors to
+  restore. Start has New File, Open File, Open Folder and Clone Git Repository; Recent reopens projects;
+  Walkthroughs includes "Get started with Kural" (AI setup, a project, chat, theme) and installed extensions' guides.
+  "Show welcome page on startup" at the bottom turns it on/off.
 - Get started (Command Palette: "Kural: Get Started"): pick Claude, Google Gemini, ChatGPT (Codex) or your own model;
   Kural checks each step (install, log in or download a model, a test request). Any one is enough; all can be set up.
   "Install for me" installs in the background (Gemini: Google's Antigravity installer; Codex: Homebrew or npm,
@@ -32,15 +36,25 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first); Multiple agents (Claude only: a project team led by a PM, or a
-  discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Each change
+  discussion). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
+  an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
+  AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
+  this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini always does
+  that). Stop (the square button, or Esc) stops the answer and puts queued messages back into the box. Each change
   can be reviewed, kept or undone. How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
   answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
   it. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
-  the conversation stays; checkpoints are kept 30 days, also after a restart). Next to the send button: how full the
+  the conversation stays; checkpoints are kept 30 days, also after a restart). Hover any message in an idle chat:
+  "Fork from here" opens a new chat with the recorded conversation through that message, including attached context
+  and tool results. It keeps the model, mode and other choices; the original chat and current files stay as they are.
+  Inherited file-change cards can be reviewed; keep/undo belongs to the original chat. Both chats appear in History.
+  Next to the send button: how full the
   conversation's context window is (hover: this chat's tokens read, from cache, written). Pictures in answers are shown;
   click one to see it full size in its own tab. Links to
-  files in an answer open the file (at the line); web links open in Kural's browser tab. The clock
+  files in an answer (and file names in \`code\`) open the file (at the line), also when the answer gives only its name
+  or a path from another folder: Kural finds it in the project (several with that name: you pick one); web links open
+  in Kural's browser tab. The clock
   button: every chat from every workspace (search, pin, delete). Drag a chat tab into the editor area to open it there,
   split like VS Code's editors (drop on a side: beside, above or below); it then shows only that chat, and leaves the
   side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code"). To bring it back: the button in
@@ -67,7 +81,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Regular Expression, Preserve Case, files to include/exclude (the ... under the box), open editors only, as you type,
   history (Up/Down), tree or list, Replace Preview (click a result while Replace is open), Replace All, dismiss,
   right-click Copy, F4 for the next result, Open in Search Editor; Explorer: right-click a folder, Find in Folder.
-  Ask (Ctrl+Alt+A): describe what you're looking for in plain words; Kural lists the exact places.
+  Ask (Ctrl+Alt+A): describe what you're looking for in plain words; Kural lists the exact places. Ask always uses the
+  fastest model you have (Claude's Haiku, or the lightest Gemini or Codex model; your own model if that's all), not the
+  chat's model; each result list shows which. An empty box shows no results (in both tabs).
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review red/green, Accept or Reject.
 - Model Router (Auto in the model menu, like Cursor's): Balance, Cost (saves your usage limits: lightest model that can
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
@@ -77,9 +93,10 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Granite or Qwen3, downloaded in the panel), what's attached (files, error output, a picked element), each AI's usage
   left (avoids one past half, skips one at 98 %), the conversation's length (long chats stay on their AI on close calls)
   and what you did after earlier answers (learned per workspace; "Kural: Forget What Model Router Learned"). Each answer
-  shows the model; hover: why. The profile is picked only in the model menu. Status bar "Model Router" (a panel): what
-  reads requests (Native, MiniLM, Granite or Qwen3, with Download; its info button explains each), the AIs Auto picks
-  from (always every cloud model of the AIs you set up: nothing to choose), and the last choice.
+  shows the model; hover: why. The profile is picked only in the model menu. Status bar "Model Router" (a panel): a
+  slider from Faster to Quality for what reads requests (four steps: Native, MiniLM, Granite, Qwen3; the panel names the
+  step, Download when it isn't on this computer yet; the info button explains each), the AIs Auto picks from (always
+  every cloud model of the AIs you set up: nothing to choose), and the last choice.
 - Tab Completion: grey suggestions as you type; Tab accepts. Click "Tab Completion" in the status bar for its panel:
   on/off (Ctrl+Alt+Space), how fast it suggests, the engine (Auto, a local model for speed, or Claude) and its model.
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
@@ -89,6 +106,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
+  The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
   "5-hour limit 50% used, resets in 42 min", "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex.
   The status bar shows the chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"), the
@@ -112,6 +130,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings. It
   installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), puts the old version back if the
   install fails, and says at the next start if it didn't finish.
+- Installing on Windows: Windows says "Windows protected your PC" with only "Don't run", because the installer isn't
+  code-signed yet: click the small "More info" link, then "Run anyway" ("Unknown publisher"). Kural's own updates don't
+  ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
   buttons and focus.
 - Full guide: ${WIKI}

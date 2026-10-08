@@ -11,6 +11,13 @@
   and the setting `kural.tabCompletion.terminal` on.
 - **A model on my computer is slow:** pick a smaller one, or lower `kural.localModels.contextLength`.
 - **Mac says Kural is damaged:** run `xattr -dr com.apple.quarantine /Applications/Kural.app` in Terminal.
+- **Windows says "Windows protected your PC" and only offers Don't run:** that's Microsoft Defender SmartScreen; it warns
+  about every program that isn't code-signed and that it doesn't know yet, and Kural's installer isn't signed yet. Click
+  the small underlined **More info** link: the window then shows the file's name, "Publisher: Unknown publisher" and a
+  **Run anyway** button. Updates from inside Kural (Help → Check for Updates) don't show this again. With the portable
+  `.zip` it would ask on every start: before unzipping, right-click the `.zip` → **Properties** → tick **Unblock**. No
+  **Run anyway** at all: Windows 11's Smart App Control or a company policy blocks unsigned programs; that needs a
+  signed release.
 - **Kural closed unexpectedly / "Kural quit unexpectedly":** the next start saves a crash report and offers **Show
   report** and **Report a bug** (also **Kural: Show Crash Reports**). A common cause: Kural's app was replaced while it
   was still running (an install while Kural was open). `./install.sh` and Kural's own updates now wait until Kural has

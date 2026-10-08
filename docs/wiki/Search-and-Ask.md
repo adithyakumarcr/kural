@@ -32,5 +32,9 @@ VS Code's search settings still apply (`search.searchOnType`, `search.smartCase`
 ## Ask (Ctrl+Alt+A)
 
 Ask finds code by describing it: "where is the retry limit set?", "what sends the welcome email?". Kural searches your
-project and lists the exact places (`file:line`); click one to open it. It uses the chat's model (Claude, Gemini,
-ChatGPT or [[Your Own Model]]).
+project and lists the exact places (`file:line`); click one to open it. Finding places needs speed more than the most
+capable model, so Ask always uses the **fastest model you have**, whatever the chat uses: Claude's **Haiku**, or the
+lightest Google Gemini (Flash) or ChatGPT (Codex "mini") model, the chat's own AI first; only with none of those, your
+own model ([[Your Own Model]]). Under the results it says which model answered and how long it took.
+
+An empty box shows no results: empty the question (or the Search box) and the old results go away.

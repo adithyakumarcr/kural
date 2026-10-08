@@ -103,6 +103,12 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "kural.welcome",
+        "title": "Welcome",
+        "icon": "$(home)",
+        "category": "Kural"
+      },
+      {
         "command": "kural.getStarted",
         "title": "Get Started",
         "icon": "$(rocket)",
@@ -941,6 +947,44 @@
         "path": "./themes/kural-light-color-theme.json"
       }
     ],
+    "walkthroughs": [
+      {
+        "id": "welcome",
+        "title": "Get started with Kural",
+        "description": "Set up your AI, open a project, and make your first change.",
+        "icon": "media/chat-icon.svg",
+        "steps": [
+          {
+            "id": "setup",
+            "title": "Choose your AI",
+            "description": "Use Claude, Google Gemini, ChatGPT (Codex), or a model on your computer. Kural helps you install it, log in, and check that it works.\n[Set up your AI](command:kural.getStarted)",
+            "completionEvents": ["onContext:kural.aiReady"],
+            "media": { "markdown": "media/welcome-setup.md" }
+          },
+          {
+            "id": "project",
+            "title": "Open a project",
+            "description": "Open a folder to work with its files, or clone a Git repository.\n[Open Folder](command:workbench.action.files.openFolder)\n[Clone Git Repository](command:git.clone)",
+            "completionEvents": ["onContext:workspaceFolderCount != 0"],
+            "media": { "markdown": "media/welcome-project.md" }
+          },
+          {
+            "id": "chat",
+            "title": "Make your first change",
+            "description": "Tell Kural what you want to change. Review each edit, then keep it or undo it.\n[Open Chat](command:kural.chat.open)",
+            "completionEvents": ["onCommand:kural.chat.open"],
+            "media": { "markdown": "media/welcome-chat.md" }
+          },
+          {
+            "id": "theme",
+            "title": "Make the editor yours",
+            "description": "Choose Kural Dark, Kural Light, or another installed theme.\n[Choose a Color Theme](command:workbench.action.selectTheme)",
+            "completionEvents": ["onCommand:workbench.action.selectTheme"],
+            "media": { "markdown": "media/welcome-theme.md" }
+          }
+        ]
+      }
+    ],
     "configurationDefaults": {
       "workbench.colorTheme": "Kural Dark",
       "github.branchProtection": false,
@@ -949,7 +993,8 @@
       "workbench.preferredDarkColorTheme": "Kural Dark",
       "workbench.preferredLightColorTheme": "Kural Light",
       "workbench.secondarySideBar.defaultVisibility": "visible",
-      "workbench.startupEditor": "none",
+      "workbench.startupEditor": "welcomePage",
+      "workbench.welcomePage.walkthroughs.openOnInstall": false,
       "workbench.tips.enabled": false,
       "workbench.browser.openLocalhostLinks": true,
       "chat.commandCenter.enabled": false,
@@ -965,6 +1010,7 @@
       "editor.guides.bracketPairs": "active",
       "workbench.list.smoothScrolling": true,
       "terminal.integrated.fontSize": 14,
+      "terminal.integrated.initialHint": false,
       "workbench.activityBar.location": "default",
       "workbench.sideBar.location": "left",
       "workbench.experimental.fontSize": 14,

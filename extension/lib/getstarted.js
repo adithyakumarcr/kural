@@ -84,22 +84,25 @@ class GetStarted {
   get localModel() { return this.rec.local ? `ollama:${this.rec.local.model}` : null; }
 
   onChange(f) { this.listeners.push(f); }
-  changed() { for (const f of this.listeners) { try { f(this.ready); } catch (e) { log(`get started: ${e.stack}`); } } this.post(); }
+  changed() { vscode.commands.executeCommand("setContext", "kural.aiReady", this.ready); for (const f of this.listeners) { try { f(this.ready); } catch (e) { log(`get started: ${e.stack}`); } } this.post(); }
   async save() { await this.context.globalState.update(KEY, this.rec); }
 
   register() {
+    vscode.commands.executeCommand("setContext", "kural.aiReady", this.ready);
     this.context.subscriptions.push(
+      vscode.commands.registerCommand("kural.welcome", () => vscode.commands.executeCommand("workbench.action.openWalkthrough")),
       vscode.commands.registerCommand("kural.getStarted", (p) => this.open(p === "claude" || p === "local" || CLI_IDS.includes(p) ? p : undefined)),
       { dispose: () => clearInterval(this.poll) },
     );
   }
 
-  // At startup: never set up → open the page. Claude set up → check it quietly (a moment later, not to slow the start).
+  // The native Welcome page opens at startup; its Kural walkthrough links to the AI setup page.
+  // Previously configured providers are checked quietly, without replacing Welcome or restored editors.
   start() {
     // Only when claude isn't where Kural looks anyway: your shell's startup files run each time it's asked, and anything
     // they touch (a folder in Documents, say) macOS would put down to Kural.
-    const shell = findClaude() ? Promise.resolve(null) : findClaude.lookInShell();   // in the background: where your terminal finds claude
-    if (!this.ready) { shell.then(() => this.open()); return; }
+    if (!findClaude()) findClaude.lookInShell();   // in the background: where your terminal finds claude
+    if (!this.ready) return;
     if (this.rec.claude) setTimeout(() => this.quickCheck(), 2500);
     // Codex / Gemini: is the program still where it was (or where the setting now says)? Updates the saved path.
     setTimeout(async () => {
