@@ -22,7 +22,7 @@ const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
 const { PROMPTS, MOODS, MOOD_PROMPTS, customMoods, moodPrompt } = require("./prompts");
-const { GUIDE } = require("./guide");
+const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
 const { profileOf, limitUsed } = require("../router/policy");
@@ -1121,7 +1121,8 @@ class ChatView {
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
       name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode,
-      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + moodPrompt(tab.mood, customMoods(userMoods())) +
+      // (A model on this computer gets the short guide: each word of the instructions costs it time before it answers.)
+      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + moodPrompt(tab.mood, customMoods(userMoods())) +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       addDirs: ws.extraDirs(),
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere

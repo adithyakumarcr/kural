@@ -180,4 +180,19 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 If they ask for something Kural doesn't have, say so plainly (don't pretend), suggest the closest thing it has, and
 invite them to ask for it as a feature, with this link: [Ask for this feature](${ISSUES}).`;
 
-module.exports = { GUIDE, ISSUES, WIKI };
+// The short version, for a model on this computer: every token of the instructions costs it time before its first word
+// (Ross measured the whole guide in a 9,600-token first message: 28 s on an M5 before qwen3.5:9b said anything). The
+// essentials and where the full guide is.
+const GUIDE_LOCAL = `
+
+About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
+work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
+that's you). Main features: Get started (set up an AI); the chat (Ctrl+L: modes Agent, Auto, Plan, Ask; @ mentions a
+file; + attaches files; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
+Fork from here; the clock button has every chat); Ctrl+K edits selected code in place; Tab Completion; plain words in
+the terminal ("push this to main", then Tab); Search & Ask; Kural's browser; devices over SSH; the Model Router (Auto);
+Kural Settings (accounts, usage limits, moods, updates). Agent teams, Jira tickets and Claude Code's connectors need a
+Claude model. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
+link [Ask for this feature](${ISSUES}).`;
+
+module.exports = { GUIDE, GUIDE_LOCAL, ISSUES, WIKI };
