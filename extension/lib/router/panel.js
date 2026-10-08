@@ -1,5 +1,6 @@
-// The Model Router panel at the bottom of the window: how Auto reads the task (Native, or a helper model through Ollama,
-// with its download; the info button explains each), which AIs it picks from, and what it picked last.
+// The Model Router panel at the bottom of the window: how Auto reads the task (a slider from Faster to Quality, four
+// steps: Native, or a helper model through Ollama (MiniLM, Granite, Qwen3), with its download; the info button explains
+// each), which AIs it picks from, and what it picked last. A slider, not the four names (Adithya: simpler to choose).
 // Nothing to choose about profiles or models here (Adithya): the profile (Balance, Cost, Intelligence) is picked in the
 // chat's model menu, and Auto always picks from every cloud model of the AIs you set up (Claude, Google Gemini, ChatGPT
 // (Codex)), never a model on this computer. Kept as small as the Tab Completion panel on purpose (Adithya found the full
@@ -103,7 +104,9 @@ function page(nonce, csp = "", codicons = "") {
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const about = ABOUT.map((a) => `<b>${esc(a.label)}</b><div>${esc(a.what)}<div class="muted">${esc(a.facts)}` +
     `${a.model ? ` <span class="id">(${esc(a.model)})</span>` : ""}</div></div>`).join("\n      ");
-  const ask = "What are Native, MiniLM, Granite and Qwen3?";
+  const ask = "What's behind each step? (Native, MiniLM, Granite, Qwen3)";
+  // The slider's steps, Faster → Quality (the same order as ABOUT and the info box).
+  const steps = JSON.stringify(ABOUT.map((a) => ({ id: a.id, label: a.label })));
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}' ${csp}; font-src ${csp}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${codicons}">
@@ -129,18 +132,36 @@ function page(nonce, csp = "", codicons = "") {
   .about .grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 14px; margin: 10px 0; }
   .about .id { white-space: nowrap; }   /* a model's name, like granite-embedding:30m, on one line */
   @media (max-width: 560px) { .about { margin-left: 0; } }
+  /* Faster ---o--- Quality: four steps, a dot under each (click one to jump there); what the step is, under it. */
+  .row.top { align-items: flex-start; }
+  .row.top > .label { padding-top: 2px; }
+  .col { display: flex; flex-direction: column; gap: 6px; flex: 1 1 320px; min-width: 0; }
+  .col > .text { flex: none; }   /* (.text's 320px basis is a width in a row; in this column it would be a height) */
+  .level-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .level { display: inline-flex; align-items: center; gap: 10px; }
+  .level .end { color: var(--muted); font-size: .92em; white-space: nowrap; }
+  .slider { width: 220px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; margin: 0; }
+  .ticks { display: flex; justify-content: space-between; padding: 0 5px; }
+  .ticks span { width: 5px; height: 5px; border-radius: 50%; background: var(--border); cursor: pointer; }
+  .ticks span.on { background: var(--accent); }
+  .step { font-weight: 600; color: var(--vscode-foreground); }
 </style></head><body>
-  <div class="row"><span class="label">Reads your request with</span>
-    <div class="seg" id="assistant"><button data-v="native">Native</button><button data-v="minilm">MiniLM</button><button data-v="granite">Granite</button><button data-v="qwen3">Qwen3</button></div>
-    <button id="info" class="icon" title="${ask}" aria-label="${ask}" aria-expanded="false" aria-controls="about"><i class="codicon codicon-info" aria-hidden="true"></i></button>
-    <button id="download" class="chip" hidden>Download</button>
-    <span id="assistantText" class="text muted"></span></div>
+  <div class="row top"><span class="label">Reads your request</span>
+    <div class="col">
+      <div class="level-row"><div class="level"><span class="end">Faster</span>
+          <div class="slider"><input id="level" type="range" min="0" max="3" step="1" aria-label="How Auto reads your request: faster or better" aria-valuetext="">
+            <div class="ticks" id="ticks"></div></div>
+          <span class="end">Quality</span></div>
+        <button id="info" class="icon" title="${ask}" aria-label="${ask}" aria-expanded="false" aria-controls="about"><i class="codicon codicon-info" aria-hidden="true"></i></button>
+        <button id="download" class="chip" hidden>Download</button></div>
+      <span id="assistantText" class="text muted"></span></div></div>
   <div id="about" class="about" hidden>
-    <p>Before each message, Auto guesses how much work it is (simple, standard or complex) to pick a model that fits: a light one for a quick question, the most capable one for a big job. One of these makes the guess:</p>
+    <p>Before each message, Auto guesses how much work it is (simple, standard or complex) to pick a model that fits: a light one for a quick question, the most capable one for a big job. The slider picks what makes the guess, from the fastest (left) to the best (right):</p>
     <div class="grid">
       ${about}
     </div>
-    <p class="muted">MiniLM, Granite and Qwen3 run through Ollama on this computer: choose one, then Download (once). Until it's ready, Native decides. Either way, your request is read on this computer. The percentages: how often each guessed the size right in 270 example requests.</p>
+    <p class="muted">MiniLM, Granite and Qwen3 run through Ollama on this computer: move the slider to one, then Download (once). Until it's ready, Native decides. Either way, your request is read on this computer. The percentages: how often each guessed the size right in 270 example requests.</p>
   </div>
   <div class="row"><span class="label">Picks from</span><span id="ais" class="text muted"></span></div>
   <div class="row"><span class="label">Last choice</span><span id="last" class="text muted">none yet</span></div>
@@ -148,18 +169,33 @@ function page(nonce, csp = "", codicons = "") {
   const vscode = acquireVsCodeApi();
   const $ = (id) => document.getElementById(id);
   const send = (type, value) => vscode.postMessage({ type, value });
+  const STEPS = ${steps};
   let S = null;
+  const at = (id) => Math.max(0, STEPS.findIndex((s) => s.id === id));
+  // The slider's step: its name (bold) and what it does now.
+  function stepText(i) {
+    const step = STEPS[i], h = S.assistant === step.id ? S.helper : null;
+    const name = document.createElement("span"); name.className = "step"; name.textContent = step.label;
+    const what = step.id === "native" ? "Kural's own word classifier: built in, instant (74 % of sizes right; the steps to the right get more right)."
+      : !h ? "Release the slider here to use it."
+      : S.download ? "Downloading " + h.model + " (about " + h.size + ")... " + S.download.percent + "%"
+      : h.state === "offline" ? "Ollama isn't running, so " + h.label + " can't help. Start Ollama or set it up in Tab Completion; Native is used meanwhile."
+      : h.state === "missing" ? h.model + " (about " + h.size + ") isn't on this computer; Native is used until it's downloaded."
+      : !h.ready ? "Getting " + h.label + " ready (a few seconds, once)..."
+      : "reads your requests together with Native: " + h.note + ".";
+    $("assistantText").replaceChildren(name, " · " + what);
+    $("level").setAttribute("aria-valuetext", step.label);
+    for (const [k, t] of [...$("ticks").children].entries()) t.className = k === i ? "on" : "";
+  }
+  $("ticks").replaceChildren(...STEPS.map((s, k) => { const t = document.createElement("span"); t.title = s.label;
+    t.onclick = () => { $("level").value = k; send("assistant", s.id); }; return t; }));
   function render() {
-    for (const b of $("assistant").children) b.classList.toggle("on", b.dataset.v === S.assistant);
+    const i = at(S.assistant);
+    if (document.activeElement !== $("level")) $("level").value = i;
     const h = S.helper, dl = $("download");
     const warn = h && !S.download && (h.state !== "ready" || !h.ready);
     $("assistantText").className = warn ? "text warn" : "text muted";
-    $("assistantText").textContent = !h ? "Kural's own word classifier: built in, instant (74 % of sizes right; a helper model gets more right)."
-      : S.download ? "Downloading " + h.model + " (about " + h.size + ")... " + S.download.percent + "%"
-      : h.state === "offline" ? "Ollama isn't running, so " + h.label + " can't help. Start Ollama or set it up in Tab Completion; Native is used meanwhile."
-      : h.state === "missing" ? h.label + " (" + h.model + ", about " + h.size + ") isn't on this computer; Native is used until it's downloaded."
-      : !h.ready ? "Getting " + h.label + " ready (a few seconds, once)..."
-      : h.label + " reads your requests together with Native: " + h.note + ".";
+    stepText(i);
     dl.hidden = !(S.download || (h && h.state === "missing"));
     dl.textContent = S.download ? "Stop" : "Download";
     dl.onclick = () => send(S.download ? "stopDownload" : "download");
@@ -172,7 +208,9 @@ function page(nonce, csp = "", codicons = "") {
     $("ais").title = set.map((a) => a.name + ": " + a.names.join(", ")).join("\\n");
     $("last").textContent = !S.last ? "none yet" : S.last.model ? S.last.label + " · " + S.last.reason : S.last.error;
   }
-  for (const b of $("assistant").children) b.onclick = () => send("assistant", b.dataset.v);
+  // Moving: the step's name and what it is; letting go: that step is used.
+  $("level").oninput = () => { if (S) stepText(+$("level").value); };
+  $("level").onchange = () => send("assistant", STEPS[+$("level").value].id);
   $("info").onclick = () => {
     const open = $("about").hidden;
     $("about").hidden = !open; $("info").classList.toggle("open", open); $("info").setAttribute("aria-expanded", String(open));

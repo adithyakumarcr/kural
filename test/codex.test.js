@@ -37,7 +37,8 @@ function ask(opts, content, onPermission, during) {
 const snapshot = () => Object.fromEntries(fs.readdirSync(proj).map((f) => [f, fs.readFileSync(path.join(proj, f), "utf8")]));
 const deltas = (ev, type) => ev.filter((m) => m.type === "stream_event" && m.event.delta && m.event.delta.type === type).map((m) => m.event.delta.text || m.event.delta.thinking).join("");
 const tools = (ev) => ev.filter((m) => m.type === "assistant").flatMap((m) => m.message.content);
-const results = (ev) => ev.filter((m) => m.type === "user").flatMap((m) => m.message.content);
+// (Tool results: the "user" events that aren't echoes of your own messages, isReplay.)
+const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatMap((m) => m.message.content);
 
 (async () => {
   setState("ok");
@@ -95,6 +96,37 @@ const results = (ev) => ev.filter((m) => m.type === "user").flatMap((m) => m.mes
     const r = results(events)[0];
     assert.deepStrictEqual([r.content, r.is_error], ["Not now.", true]);
     assert.strictEqual(result.result, "Okay, I won't run them.");
+  });
+
+  // Enter while Codex works queues the message (lib/chat queueSend): turn/steer adds it to the running answer.
+  const echoed = (ev) => ev.filter((m) => m.type === "user" && m.isReplay).map((m) => m.message.content);
+  await check("a message sent while Codex works joins its turn (turn/steer) and is echoed at once", async () => {
+    let agent = null;
+    const { events, result } = await ask({}, "run tests", async () => {
+      agent.send("and the linter too");   // (while Codex waits for this OK: its turn is running)
+      await new Promise((r) => setTimeout(r, 200));
+      return { allow: true };
+    }, (a) => { agent = a; });
+    assert.deepStrictEqual(echoed(events), ["run tests", "and the linter too"]);
+    assert.strictEqual(result.result, "Tests pass. Also: and the linter too.");
+  });
+  await check("an older Codex without turn/steer: the message is answered next, as its own turn", async () => {
+    process.env.FAKE_CODEX_NO_STEER = "1";
+    try {
+      const events = [];
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("no second result within 10 s")), 10000);
+        let a = null;
+        a = new codex.CodexAgent({ name: "test", bin: BIN, cwd: proj, mode: "agent", store }, {
+          onMessage: (m) => { events.push(m); if (events.filter((x) => x.type === "result").length === 2) { clearTimeout(timer); a.kill(); resolve(); } },
+          onPermission: async () => { a.send("then hello"); await new Promise((r) => setTimeout(r, 150)); return { allow: true }; }, onExit: () => {},
+        });
+        a.start(); a.send("run tests");
+      });
+      const results = events.filter((m) => m.type === "result").map((m) => m.result);
+      assert.deepStrictEqual(results, ["Tests pass.", "You said: then hello"]);
+      assert.deepStrictEqual(echoed(events), ["run tests", "then hello"]);
+    } finally { delete process.env.FAKE_CODEX_NO_STEER; }
   });
 
   await check("file changes: Kural is asked per file (Edit / Write) before anything is written", async () => {

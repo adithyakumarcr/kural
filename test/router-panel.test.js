@@ -1,7 +1,7 @@
 // The Model Router panel (lib/router/panel.js): no profile row (Balance, Cost, Intelligence are picked in the chat's model
 // menu), no list of models to choose from (Auto uses every cloud model of the AIs you set up; the panel only says which),
-// and an info button that explains Native, MiniLM, Granite and Qwen3. The page script runs on a tiny stand-in DOM, so a
-// broken render fails here instead of showing an empty panel.
+// a slider from Faster to Quality (four steps: Native, MiniLM, Granite, Qwen3) and an info button that explains them.
+// The page script runs on a tiny stand-in DOM, so a broken render fails here instead of showing an empty panel.
 const assert = require("assert"), Module = require("module");
 const updates = [];
 const vscode = {
@@ -14,28 +14,30 @@ Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(t
 const { RouterPanel, _page } = require("../extension/lib/router/panel");
 const { HELPERS } = require("../extension/lib/router/client");
 
-// Every element with an id, as a stand-in: text, class, hidden, attributes, click; #assistant gets its buttons.
+// Every element with an id, as a stand-in: text, class, hidden, attributes, click, children; the slider (#level) has a
+// value and input/change events.
 function dom(html, nonce) {
   const node = (props = {}) => {
     const cls = new Set(), attrs = {};
-    return Object.assign({
-      textContent: "", title: "", onclick: null,
+    const n = Object.assign({
+      textContent: "", title: "", onclick: null, children: [], value: "",
       get className() { return [...cls].join(" "); },
       set className(v) { cls.clear(); for (const c of String(v).split(/\s+/)) if (c) cls.add(c); },
       classList: { toggle: (c, on = !cls.has(c)) => { if (on) cls.add(c); else cls.delete(c); return on; }, contains: (c) => cls.has(c) },
       setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: (k) => attrs[k],
+      replaceChildren: (...kids) => { n.children = kids; n.textContent = kids.map((k) => typeof k === "string" ? k : k.textContent).join(""); },
     }, props);
+    return n;
   };
   const els = new Map();
   for (const m of html.matchAll(/<\w+[^>]*\bid="(\w+)"[^>]*>/g)) els.set(m[1], node({ hidden: /\bhidden\b/.test(m[0].replace(/"[^"]*"/g, "")) }));
-  const seg = /id="assistant">([\s\S]*?)<\/div>/.exec(html)[1];
-  els.get("assistant").children = [...seg.matchAll(/data-v="(\w+)"/g)].map((m) => node({ dataset: { v: m[1] } }));
   const sent = [], listeners = {};
+  const doc = { getElementById: (id) => els.get(id), createElement: () => node(), activeElement: null };
   const js = html.split(`<script nonce="${nonce}">`)[1].split("</script>")[0];
   new Function("acquireVsCodeApi", "document", "window", js)(
-    () => ({ postMessage: (m) => sent.push(m) }), { getElementById: (id) => els.get(id) },
+    () => ({ postMessage: (m) => sent.push(m) }), doc,
     { addEventListener: (type, f) => { listeners[type] = f; } });
-  return { $: (id) => els.get(id), sent, state: (s) => listeners.message({ data: { type: "state", ...s } }) };
+  return { $: (id) => els.get(id), sent, doc, state: (s) => listeners.message({ data: { type: "state", ...s } }) };
 }
 
 let passed = 0, failed = 0;
@@ -66,7 +68,10 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     assert.strictEqual(p.$("ais").textContent, "Every cloud model you have: 3 from Claude, 2 from ChatGPT (Codex). Not set up: Google Gemini. " +
       "Models on this computer only when you pick them yourself.");
     assert.ok(p.$("ais").title.includes("Claude: Opus, Sonnet, Haiku"));
-    assert.ok(p.$("assistant").children.find((b) => b.dataset.v === "granite").classList.contains("on"));
+    // The slider: Granite is the third of four steps (Faster → Quality), its dot lit, its name in the text.
+    assert.strictEqual(Number(p.$("level").value), 2);
+    assert.deepStrictEqual(p.$("ticks").children.map((t) => t.className), ["", "", "on", ""]);
+    assert.ok(p.$("assistantText").textContent.startsWith("Granite · granite-embedding:30m (about 63 MB) isn't on this computer"), p.$("assistantText").textContent);
     assert.strictEqual(p.$("download").hidden, false);   // Granite isn't on this computer yet
     assert.strictEqual(p.$("last").textContent, "Sonnet · balance profile · standard edit task");
     assert.strictEqual(p.$("about").hidden, true);
@@ -79,6 +84,22 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     assert.strictEqual(p.$("ais").className, "text warn");
     assert.ok(p.$("ais").textContent.startsWith("Nothing yet: set up Claude"));
     assert.strictEqual(p.$("download").hidden, true);
+    assert.strictEqual(Number(p.$("level").value), 0);
+    assert.ok(p.$("assistantText").textContent.startsWith("Native · Kural's own word classifier"));
+  });
+
+  await check("the slider: moving it names the step (nothing chosen yet); letting go or a dot chooses it", () => {
+    const p = dom(html, "N");
+    p.state({ assistant: "native", helper: null, download: null, ais: [], last: null });
+    p.sent.length = 0;
+    p.$("level").value = "3"; p.$("level").oninput();
+    assert.ok(p.$("assistantText").textContent.startsWith("Qwen3 · "), p.$("assistantText").textContent);
+    assert.deepStrictEqual(p.sent, []);
+    p.$("level").onchange();
+    assert.deepStrictEqual(p.sent, [{ type: "assistant", value: "qwen3" }]);
+    p.$("ticks").children[1].onclick();
+    assert.deepStrictEqual(p.sent[1], { type: "assistant", value: "minilm" });
+    assert.strictEqual(String(p.$("level").value), "1");
   });
 
   await check("the panel's state: every cloud model per AI (never local or Tab-only), no profile, the last model's name", async () => {

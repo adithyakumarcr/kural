@@ -192,6 +192,21 @@ function chat(opts = {}) {
     c.a.kill();
   });
 
+  await check("a message sent while it answers waits for the next turn, and is echoed only when agy takes it", async () => {
+    const c = chat();
+    c.a.start();
+    const p1 = c.ask("slow one");
+    const p2 = c.ask("queued one");
+    const echoes = () => c.events.filter((m) => m.type === "user" && m.isReplay).map((m) => m.message.content);
+    await new Promise((res) => setTimeout(res, 300));
+    assert.deepStrictEqual(echoes(), ["slow one"]);   // the queued one isn't taken yet
+    await p1; await p2;
+    assert.deepStrictEqual(echoes(), ["slow one", "queued one"]);
+    const firstResult = c.events.findIndex((m) => m.type === "result");
+    assert.ok(c.events.findIndex((m) => m.isReplay && m.message.content === "queued one") > firstResult);
+    c.a.kill();
+  });
+
   await check("switching mode sends that mode's instructions again", async () => {
     const c = chat({ mode: "ask" });
     c.a.start();

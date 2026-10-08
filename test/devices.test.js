@@ -78,7 +78,11 @@ const dev = { host: "rpi.local", port: 22, user: "pi" };
   });
   await check("the device's own time limit stops a command that never ends", async () => {
     const r = await ssh.runLimited(dev, null, "echo started; sleep 30", 1);
-    assert.match(r.stdout, /started/); assert.strictEqual(r.code, 124);
+    assert.match(r.stdout, /started/);
+    // (The pretend device is this computer. Linux has `timeout`: the device ends it (124). A Mac doesn't: the command
+    // runs without the device's limit, as runLimited says, and Kural's own limit ends it.)
+    const hasTimeout = require("child_process").spawnSync("sh", ["-c", "command -v timeout"]).status === 0;
+    if (hasTimeout) assert.strictEqual(r.code, 124); else assert.strictEqual(r.timedOut, true);
   });
   await check("~/ paths mean the home folder (not a folder named ~)", async () => {
     assert.strictEqual((await ssh.writeFile(dev, null, "~/tilde/a.txt", "hi")).code, 0);
