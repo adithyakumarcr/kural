@@ -255,7 +255,8 @@ jobs:
           KURAL_RELEASE_PRIVATE_KEY: ${{ secrets.KURAL_RELEASE_PRIVATE_KEY }}
         run: |
           # The updater installs nothing that isn't in this list (see docs/release-signing.md)
-          (cd dist && sha256sum Kural-* kural_* > SHA256SUMS)
+          node scripts/sbom.js "dist/kural-${GITHUB_REF_NAME#v}.cdx.json"   # (before the list, so the SBOM is in it)
+          (cd dist && sha256sum Kural-* kural_* kural-*.cdx.json > SHA256SUMS)
           node scripts/release-key.js sign dist/SHA256SUMS
           node scripts/release-key.js verify dist/SHA256SUMS dist/SHA256SUMS.sig
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
