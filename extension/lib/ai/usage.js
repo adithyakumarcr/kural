@@ -1,4 +1,4 @@
-// How much of each AI plan you've used: Claude's 5-hour and weekly limits, Codex's and Gemini's (agy) limits. No vscode
+// How much of each AI plan you've used: Claude's session (5-hour) and weekly limits, Codex's and Gemini's (agy) limits. No vscode
 // here: the providers report into it (Claude Code sends `rate_limit_event` with every answer; Codex's app server sends
 // `account/rateLimits/updated`; agy's /usage and token counts). lib/account.js shows it in the status bar and
 // lib/usage-panel.js in the AI Usage panel at the bottom.
@@ -82,7 +82,7 @@ function tokenWords(x) {
 
 // Claude Code's rate_limit_event → a report. { rate_limit_info: { unifiedWindows: { five_hour: { utilization 0–1,
 // resetsAt (s) }, seven_day: {…} }, status, rateLimitType, resetsAt } }
-const CLAUDE_WINDOWS = { five_hour: "5-hour", seven_day: "Week", seven_day_opus: "Week (Opus)", seven_day_sonnet: "Week (Sonnet)" };
+const CLAUDE_WINDOWS = { five_hour: "Session", seven_day: "Week", seven_day_opus: "Week (Opus)", seven_day_sonnet: "Week (Sonnet)" };
 function fromClaude(msg) {
   const info = msg && msg.rate_limit_info;
   if (!info) return null;
@@ -110,13 +110,17 @@ function current(provider) {
 }
 
 // ---------- in words ----------
-// "5-hour limit", "Weekly limit", "Weekly limit (Opus)", "Gemini: weekly limit".
+// The short limit, a few hours long (Claude's and Codex's 5 hours), is the "Session" in everything Kural shows (Adithya);
+// the long one is "Weekly". (Saved numbers from before were labelled "5-hour": still a session.)
+const isSession = (w) => !!w && w.period !== "week" && (w.id === "five_hour" || /^session$/i.test(String(w.label || "")) || /^\d+-(hour|minute)$/.test(String(w.label || "")));
+const isWeekly = (w) => !!w && !isSession(w) && (w.period === "week" || /^week/i.test(String(w.label || "")) || /^seven_day/.test(String(w.id || "")));
+// "Session", "Weekly", "Weekly (Opus)", "Weekly (Gemini)" (Gemini's limits are per model family, each weekly), "3-day".
 function limitName(w) {
   const l = String(w.label || w.id || "Limit");
-  if (w.period === "week") return `${l}: weekly limit`;
-  if (/^week\b/i.test(l)) return `Weekly limit${l.slice(4)}`;
-  if (/^\d+-(hour|day|minute)$/.test(l)) return `${l} limit`;
-  return /limit/i.test(l) ? l : `${l} limit`;
+  if (isSession(w)) return "Session";
+  if (w.period === "week") return `Weekly (${l})`;
+  if (/^week\b/i.test(l)) return `Weekly${l.slice(4)}`;
+  return l;
 }
 // How long until `t` (ms): "42 min", "2 h 10 min", "3 days 4 h". short: "42m", "2h 10m", "3d 4h".
 function until(t, now = Date.now(), short = false) {
@@ -128,7 +132,7 @@ function until(t, now = Date.now(), short = false) {
   const dd = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60);
   return short ? `${dd}d${hh ? ` ${hh}h` : ""}` : `${dd} day${dd > 1 ? "s" : ""}${hh ? ` ${hh} h` : ""}`;
 }
-// One window in words: "5-hour limit 50% used, resets in 42 min".
+// One window in words: "Session 50% used, resets in 42 min".
 function inWords(w, now = Date.now()) {
   const pct = `${Math.round(w.usedPercent)}%`;
   const reset = w.resetsAt ? (w.resetsAt <= now ? ", resets now" : `, resets in ${until(w.resetsAt, now)}`) : "";
@@ -141,5 +145,5 @@ const providers = () => [...state.keys()];
 const snapshot = () => Object.fromEntries(state);
 function restore(saved) { for (const [k, v] of Object.entries(saved || {})) if (!state.has(k) && v) state.set(k, v); }
 
-module.exports = { report, fromClaude, current, limitName, until, inWords, onChange, providers, snapshot, restore,
+module.exports = { report, fromClaude, current, limitName, isSession, isWeekly, until, inWords, onChange, providers, snapshot, restore,
   addTokens, tokenTotals, fromUsage, fromResult, tokenWords, dayKey, _reset: () => state.clear() };

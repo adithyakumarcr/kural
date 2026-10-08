@@ -64,7 +64,7 @@ const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatM
     assert.ok(u, "codex reported");
     assert.strictEqual(u.plan, "Plus");
     const w = Object.fromEntries(u.windows.map((x) => [x.label, x.usedPercent]));
-    assert.deepStrictEqual(w, { "5-hour": 50, Week: 12.5 });   // primary updated to 50, the week kept from the read
+    assert.deepStrictEqual(w, { Session: 50, Week: 12.5 });   // primary updated to 50, the week kept from the read
     assert.ok(u.windows[0].resetsAt > Date.now() && u.windows[0].resetsAt < Date.now() + 2 * 86400000);
   });
 
@@ -193,7 +193,7 @@ const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatM
     assert.deepStrictEqual(models.map((m) => [m.id, m.label, m.isDefault]), [["gpt-fake", "GPT-Fake", true], ["gpt-fake-mini", "GPT-Fake Mini", false]]);
     assert.deepStrictEqual(models[0].efforts, ["low", "max"]);
     const lim = await codex.codexRateLimits(BIN);
-    assert.deepStrictEqual(lim.windows.map((w) => [w.label, w.usedPercent]), [["5-hour", 42], ["Week", 12.5]]);
+    assert.deepStrictEqual(lim.windows.map((w) => [w.label, w.usedPercent]), [["Session", 42], ["Week", 12.5]]);
     assert.deepStrictEqual(await codex.codexLogout(BIN), { ok: true });
     assert.deepStrictEqual(await codex.codexAuth(BIN), { loggedIn: false, method: "", email: "", plan: "" });
     assert.strictEqual(await codex.codexRateLimits(BIN), null);
@@ -224,7 +224,7 @@ const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatM
     assert.strictEqual(unwrapShell("bash -lc 'echo '\\''hi'\\'''"), "echo 'hi'");
     assert.strictEqual(unwrapShell(["/bin/zsh", "-lc", "ls -la"]), "ls -la");
     assert.strictEqual(unwrapShell("ls"), "ls");
-    assert.deepStrictEqual([300, 10080, 60, 1440, 45].map(windowLabel), ["5-hour", "Week", "1-hour", "1-day", "45-minute"]);
+    assert.deepStrictEqual([300, 10080, 60, 1440, 45].map(windowLabel), ["Session", "Week", "Session", "1-day", "Session"]);
     assert.strictEqual(friendlyError({ message: "x", codexErrorInfo: "unauthorized" }), codex.NOT_LOGGED_IN);
     assert.match(friendlyError({ message: "boom", codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: null } } }), /can't reach Codex/);
   });

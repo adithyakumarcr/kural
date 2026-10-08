@@ -115,8 +115,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
   The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): each limit in words, e.g.
-  "5-hour limit 50% used, resets in 42 min", "Weekly limit 25% used, resets in 3 days 4 h", for Claude, Gemini and Codex.
-  The status bar shows the chat's AI the same way ("Claude 5h 50% · resets 42m | Weekly 25% · resets 3d 4h"), the
+  "Session 50% used, resets in 42 min" (Session = the 5-hour limit, Claude's and Codex's), "Weekly 25% used, resets in 3
+  days 4 h", for Claude, Gemini and Codex.
+  The status bar shows the chat's AI the same way ("Claude Session 50% · resets 42m | Weekly 25% · resets 3d 4h"), the
   others short; orange from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
   the cache) and written, today, 7 days and 30 days (every Kural feature: chat, Tab Completion, Ctrl+K…).
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.

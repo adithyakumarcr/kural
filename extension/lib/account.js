@@ -1,5 +1,5 @@
 // Your accounts, in the status bar:
-//   - the usage meter: for the chat's AI in words, "Claude 5h 45% · resets 42m | Weekly 24% · resets 3d 4h"; the others
+//   - the usage meter: for the chat's AI in words, "Claude Session 45% · resets 42m | Weekly 24% · resets 3d 4h"; the others
 //     short, "Codex 12% · 3%",
 //     "Gemini 13% · 1%" (Antigravity's weekly limits). Orange from 80 %, red from 95 %. It comes from lib/ai/usage.js, which the
 //     programs themselves fill: Claude Code reports its limits after every answer, Codex's app server on request.
@@ -134,7 +134,7 @@ class Account {
       }
       const windows = u.windows || [];
       const top = windows.length ? Math.max(...windows.map((w) => w.usedPercent)) : 0;
-      // The chat's AI in words ("Claude 5-hour 50% · resets 42m | Weekly 25% · resets 3d 4h"); the others short
+      // The chat's AI in words ("Claude Session 50% · resets 42m | Weekly 25% · resets 3d 4h"); the others short
       // ("Codex 12% · 3%"), so the status bar doesn't fill up.
       const mine = engineOf() === id;
       item.text = !windows.length ? `$(dashboard) ${NAMES[id]} ${tokens(u.tokens.input + u.tokens.output)} tok`
@@ -209,13 +209,8 @@ class Account {
 
 // The chat's AI right now: "claude", "codex", "agy" (or "ollama").
 function engineOf() { try { return brain.engineOf(brain.currentModel()); } catch { return "claude"; } }
-// "5-hour" → "5h", "Week" → "Weekly", "Gemini" (a weekly limit) → "Gemini weekly".
-function shortName(w) {
-  const l = String(w.label || "");
-  if (w.period === "week") return `${l} weekly`;
-  const h = /^(\d+)-hour$/.exec(l); if (h) return `${h[1]}h`;
-  return /^week/i.test(l) ? `Weekly${l.slice(4)}` : l;
-}
+// The limit's name in the status bar: "Session" (the 5-hour limit), "Weekly", "Weekly (Opus)", "Weekly (Gemini)".
+const shortName = (w) => usage.limitName(w);
 const tokens = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n || 0);
 function ago(t) {
   const s = Math.round((Date.now() - (t || Date.now())) / 1000);
