@@ -847,7 +847,7 @@
           ],
           "enumDescriptions": [
             "The local model when Ollama has it (fastest), otherwise Claude",
-            "Always the local model (Claude only if Ollama isn't available)",
+            "The local model (Claude helps if Ollama isn't available, or while a chat keeps it busy)",
             "Always Claude"
           ],
           "description": "What writes Tab Completion suggestions. Easiest to set in the Tab Completion panel (the sparkle in the status bar)."

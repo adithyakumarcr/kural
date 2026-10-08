@@ -12,10 +12,17 @@ Tab Completion is off). There you can:
 - set **how fast it suggests**: Instant (as you type) to Slow (waits longer after your last key),
 - pick the **engine**:
   - **Auto**: the model on your computer gets a head start, Claude races it, the first good answer wins;
-  - **Local model**: always the model on your computer (fastest: about 150–300 ms, offline);
+  - **Local model**: the model on your computer (fastest: about 150–300 ms, offline);
   - **Claude**: always Claude (Haiku is fastest, about 0.6–0.9 s),
 - pick the **model** for that engine (the panel shows only the choices for the engine you picked),
 - see how long the **last suggestion** took, and which engine made it.
+
+**While a chat answers with a model on your computer**, Ollama runs both models on the same graphics chip, and Tab's
+local answers get several times slower (2–3 s instead of 0.3 s; up to 6 s while Ollama loads the chat's model). So
+then, if Claude is set up, Claude helps: the local model still gets a short head start, and the first good answer wins
+(the slower request is stopped, so it doesn't slow the chat down). Kural also notices when the local answers are much
+slower than usual for other reasons (a chat in another window, another app) and does the same for 20 seconds. Without
+Claude, Tab waits a little longer between your keys while Ollama is busy, so fewer requests compete with the chat.
 
 The local model is a small fill-in-the-middle code model through Ollama (`qwen2.5-coder` 0.5B, 1.5B or 3B; 1.5B is a
 good start). **Set up** in the panel does it all in one click: without Ollama, Kural downloads and installs Ollama first

@@ -152,7 +152,8 @@ function page(nonce, csp, codicons) {
     }
     const L = S.local || { running: false, hasModel: false, allowed: false };
     const useLocal = S.engine !== "claude" && L.allowed && L.running && L.hasModel;
-    $("engineText").textContent = S.engine === "local" ? (useLocal ? "suggestions come from the model on this computer" : "no model on this computer set up yet: Claude meanwhile")
+    $("engineText").textContent = S.engine === "local" ? (useLocal ? (S.claudeReady ? "the model on this computer (Claude helps while a chat keeps it busy)" : "suggestions come from the model on this computer")
+        : "no model on this computer set up yet: Claude meanwhile")
       : S.engine === "claude" ? "suggestions come from Claude"
       : useLocal ? "the local model, with Claude racing it" : !L.allowed ? (S.claudeReady ? "Claude (no model on this computer set up)" : "a model on this computer, once you set one up")
       : S.claudeReady ? "Claude, until the local model is ready" : "the local model, once it's ready";
