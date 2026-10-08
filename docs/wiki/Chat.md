@@ -148,7 +148,9 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
 
 ## Tabs, history, two chats
 
-- **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close.
+- **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close. A chat
+  you haven't used for 10 minutes and that isn't on screen lets its AI program go (to save memory; at most two idle ones
+  stay ready); it starts again in the same conversation when you open it or send to it, in a second or two.
 - **Fork from here**: hover a message and click the branch icon after the answer finishes (or stop it first).
   A new chat contains the recorded conversation through that message: messages, attached context, and tool results.
   Earlier images and PDFs are sent again with your next message if their files are still available. It keeps your
