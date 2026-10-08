@@ -18,7 +18,8 @@
 - **Where are Run and Debug, the Debug Console and Ports?** Hidden to keep Kural simple. Turn on the setting
   `kural.showDebugViews` (Settings, search "debug views") and they're back at once. While you debug (F5), Run and Debug
   and the Debug Console show anyway.
-- **Mac says Kural is damaged:** run `xattr -dr com.apple.quarantine /Applications/Kural.app` in Terminal.
+- **Mac says Kural is damaged:** verify the download first (`docs/release-signing.md`), then run
+  `xattr -dr com.apple.quarantine /Applications/Kural.app` in Terminal. It turns off macOS's check for this app only.
 - **Windows says "Windows protected your PC" and only offers Don't run:** that's Microsoft Defender SmartScreen; it warns
   about every program that isn't code-signed and that it doesn't know yet, and Kural's installer isn't signed yet. Click
   the small underlined **More info** link: the window then shows the file's name, "Publisher: Unknown publisher" and a
