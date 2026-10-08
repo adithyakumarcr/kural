@@ -30,7 +30,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Gemini (Antigravity) can't ask before acting: in Agent mode it edits files but runs no commands (the answer says which it
   didn't run); in Auto it runs commands; Plan and Ask change nothing. A mode change applies from the next message.
   Multiple agents work with Gemini; devices do not.
-- Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking), Plan
+- Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking, except
+  dangerous commands: sudo, deleting outside the project, curl | sh, a forced push to main, git reset --hard…; the
+  first switch to Auto explains this once; Gemini can't ask, so not for Gemini), Plan
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket

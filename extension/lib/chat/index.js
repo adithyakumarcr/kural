@@ -13,6 +13,7 @@ const { projectInstructions } = require("./project");
 const { ChangeTracker, inProject } = require("./changes");
 const ws = require("../workspace");
 const { Attachments } = require("./attachments");
+const { dangerous } = require("../ai/danger");
 const { within, runsLater, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
 const { forkConversation } = require("./fork");
@@ -66,6 +67,7 @@ const READ_TOOLS = ["Read", "Grep", "Glob"];
 // Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
 const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
+const AUTO_WARNED = "kural.auto.warned";   // the first switch to Auto explained what it means
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
 const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
@@ -2214,11 +2216,17 @@ class ChatView {
     if (req.tool_name === "AskUserQuestion") return this.askUser(tab, r, req);
     // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
     const onDevice = req.tool_name === "DeviceCommand" || req.tool_name === "DeviceWrite";
-    if (tab.mode === "auto" || (onDevice ? !!tab.device && tab.allowAllDevice === tab.device : tab.allowAll)) return { allow: true };
+    // A command that's hard to undo (sudo, rm -rf outside the project, curl | sh, a forced push to main…) asks even in
+    // Auto and after "Allow all" (lib/ai/danger.js; best effort, not a sandbox). On a device "outside" can't be known,
+    // so only the other rules count there.
+    const risky = req.tool_name === "Bash" || req.tool_name === "DeviceCommand"
+      ? dangerous(input.command, onDevice ? "/" : this.root() || ws.workDir()) : null;
+    if (!risky && (tab.mode === "auto" || (onDevice ? !!tab.device && tab.allowAllDevice === tab.device : tab.allowAll))) return { allow: true };
     // Agent mode: running commands asks you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
-    const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
+    const detail = permDetail(req.tool_name, input) + (risky ? `\n\nAsks even in Auto: ${risky.why}` : "");
+    const block = { k: "perm", pid, tool: req.tool_name, detail, risky: !!risky || undefined, state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
       where: input.device || undefined };   // (a linked device's name, for its commands and writes)
     if (turn) turn.reply.blocks.push(block);
     tab.status = "waiting";
@@ -2252,7 +2260,7 @@ class ChatView {
     if (tab.mode === "auto" && r) {
       const turn = r.turn;
       for (const b of (turn && turn.reply.blocks) || []) {
-        if (b.k !== "perm" || b.state !== "pending") continue;
+        if (b.k !== "perm" || b.state !== "pending" || b.risky) continue;   // (a risky command still waits for you)
         const resolve = r.perms.get(b.pid);
         if (resolve) { r.perms.delete(b.pid); resolve(true); }
       }
@@ -2522,6 +2530,13 @@ class ChatView {
         else this.post({ type: "flash", text: "Intensity applies from your next message" });   // set when Claude starts
       } break;
       case "setMode": if (valid(MODES, m.mode)) {
+        // The first switch to Auto ever: say what it means, once.
+        if (m.mode === "auto" && tab.mode !== "auto" && !this.context.globalState.get(AUTO_WARNED)) {
+          const pick = await vscode.window.showWarningMessage("Auto mode runs commands and edits files without asking. Dangerous commands (sudo, deleting outside the project, a forced push to main…) still ask.",
+            { modal: true }, "Use Auto");
+          if (pick !== "Use Auto") { this.postTabs(); break; }   // (the page goes back to the mode the tab has)
+          await this.context.globalState.update(AUTO_WARNED, true);
+        }
         const was = tab.mode;
         tab.mode = m.mode; this.remember(tab);
         if (m.mode === "agent" || m.mode === "auto") this.context.globalState.update(LAST_KEY, { ...this.context.globalState.get(LAST_KEY), buildMode: m.mode });
