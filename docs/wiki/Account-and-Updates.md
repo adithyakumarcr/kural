@@ -22,8 +22,8 @@ others short. Hover it for everything: every AI's Session and Weekly limits and 
 |---|---|
 | `Claude Session 50% · resets 42m` | the chat's AI: its Session limit used, and when it resets |
 | `Codex 12%` | another AI you use: its Session limit used |
-| `Claude Session 10% · resets 42m \| Weekly 86% · resets 3d 4h` | a Weekly limit shows too once it's at 80 % or more, so a nearly full one isn't hidden |
-| `Gemini Weekly 13%` | Google Gemini has only weekly limits: its fullest one, when Gemini is the chat's AI (otherwise only from 80 %) |
+| `Claude Session 10% · resets 42m` with a warning color | a Weekly limit is near its limit; hover for its percentage and reset time |
+| `Gemini` | Google Gemini has only weekly limits: hover for its usage |
 
 **Tokens.** Below each AI's limits, how many tokens it read and wrote today, in the last 7 days and the last 30 days.
 "Read" is everything sent to the model (your messages, files, the conversation so far), with how much of it came from

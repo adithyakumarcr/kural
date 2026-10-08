@@ -45,23 +45,23 @@ check("other names: Codex's windows, Gemini's weekly limits, Opus's own week, nu
   assert.ok(usage.isWeekly({ label: "Gemini", period: "week" }) && !usage.isSession({ label: "Gemini", period: "week" }));
   assert.strictEqual(usage.inWords({ label: "Week", usedPercent: 12.4, resetsAt: null }, now), "Weekly 12% used");
 });
-check("status bar: only the Session limit (the chat's AI with its reset); a weekly one only from 80 %", () => {
+check("status bar: only Session usage; weekly limits stay on hover even at 100 %", () => {
   const S = (p, reset = 42) => ({ id: "five_hour", label: "Session", usedPercent: p, resetsAt: now + reset * min });
   const W = (p) => ({ id: "seven_day", label: "Week", usedPercent: p, resetsAt: now + (3 * 1440 + 4 * 60) * min });
   assert.deepStrictEqual(meter("Claude", { windows: [S(50), W(25)] }, true, now), { text: "$(dashboard) Claude Session 50% · resets 42m", top: 50 });
   assert.deepStrictEqual(meter("Codex", { windows: [S(12), W(3)] }, false, now), { text: "$(dashboard) Codex 12%", top: 12 });
-  // A nearly full week isn't hidden (orange from 80, red from 95: top).
-  assert.deepStrictEqual(meter("Claude", { windows: [S(10), W(85)] }, true, now), { text: "$(dashboard) Claude Session 10% · resets 42m | Weekly 85% · resets 3d 4h", top: 85 });
-  assert.deepStrictEqual(meter("Codex", { windows: [S(10), W(96)] }, false, now), { text: "$(dashboard) Codex 10% · Weekly 96%", top: 96 });
+  // Weekly pressure still colors the item without adding weekly numbers to its label.
+  assert.deepStrictEqual(meter("Claude", { windows: [S(10), W(85)] }, true, now), { text: "$(dashboard) Claude Session 10% · resets 42m", top: 85 });
+  assert.deepStrictEqual(meter("Codex", { windows: [S(10), W(100)] }, false, now), { text: "$(dashboard) Codex 10%", top: 100 });
   // Saved before the rename ("5-hour") still counts as the session.
   assert.strictEqual(meter("Claude", { windows: [{ id: "five_hour", label: "5-hour", usedPercent: 30 }, W(5)] }, false, now).text, "$(dashboard) Claude 30%");
-  // Gemini (weekly limits only): as the chat's AI its fullest one; otherwise only when nearly full.
+  // Gemini (weekly limits only): just its name, with a hover and warning color.
   const G = (p, label = "Gemini") => ({ id: label.toLowerCase(), label, usedPercent: p, resetsAt: null, period: "week" });
-  assert.strictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, true, now).text, "$(dashboard) Gemini Weekly 13%");
-  assert.strictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, false, now), null);
-  assert.strictEqual(meter("Gemini", { windows: [G(13), G(82, "Claude")] }, false, now).text, "$(dashboard) Gemini Weekly (Claude) 82%");
-  // No limits yet, only tokens: the chat's AI shows them; the others nothing.
-  assert.strictEqual(meter("Gemini", { windows: [], tokens: { input: 1200000, output: 34000 } }, true, now).text, "$(dashboard) Gemini 1.2M tok");
+  assert.deepStrictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, true, now), { text: "$(dashboard) Gemini", top: 13 });
+  assert.deepStrictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, false, now), { text: "$(dashboard) Gemini", top: 13 });
+  assert.deepStrictEqual(meter("Gemini", { windows: [G(13), G(82, "Claude")] }, false, now), { text: "$(dashboard) Gemini", top: 82 });
+  // Token counts are available in AI Usage, with no extra status bar label.
+  assert.strictEqual(meter("Gemini", { windows: [], tokens: { input: 1200000, output: 34000 } }, true, now), null);
   assert.strictEqual(meter("Gemini", { windows: [], tokens: { input: 1200000, output: 34000 } }, false, now), null);
   assert.strictEqual(meter("Codex", { windows: [] }, true, now), null);
 });

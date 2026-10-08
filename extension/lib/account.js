@@ -138,7 +138,7 @@ class Account {
 
   // One item per AI with numbers, showing only its Session limit (Adithya: the weekly ones on hover; "keep it simple and
   // decluttered"): the chat's AI with when it resets ("Claude Session 50% · resets 42m"), the others short ("Codex 12%").
-  // A weekly limit at 80 % or more shows too, so a nearly full one isn't hidden. The hover has every AI's limits in full.
+  // Weekly limits stay in the hover, including near their limit. Their pressure still colors the item.
   drawMeters() {
     const chat = engineOf();
     const all = Object.keys(NAMES).map((id) => ({ id, u: usage.current(id) })).filter((x) => x.u);
@@ -154,7 +154,7 @@ class Account {
         this.context.subscriptions.push(item);
       }
       item.text = m.text;
-      // Orange from 80 %, red from 95 %, for what the item shows.
+      // Orange from 80 %, red from 95 %, including a weekly limit described in the hover.
       item.backgroundColor = m.top >= 95 ? new vscode.ThemeColor("statusBarItem.errorBackground")
         : m.top >= 80 ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
       item.tooltip = new vscode.MarkdownString(hoverText([...all.filter((x) => x.id === id), ...all.filter((x) => x.id !== id)], chat));
@@ -225,26 +225,15 @@ function engineOf() { try { return brain.engineOf(brain.currentModel()); } catch
 // The limit's name in the status bar: "Session" (the 5-hour limit), "Weekly", "Weekly (Opus)", "Weekly (Gemini)".
 const shortName = (w) => usage.limitName(w);
 const pct = (w) => `${Math.round(w.usedPercent)}%`;
-const NEARLY_FULL = 80;
-// What one AI's status bar item says (null: no item). Its Session limit; a weekly (or other longer) limit only when it's at
-// 80 %+. Gemini has only weekly limits: as the chat's AI its fullest one shows (the chat's AI always has its meter), else
-// only a nearly full one. No limits known yet, only tokens: the chat's AI shows today's tokens. top: the highest number
-// shown, for the color.
+// Only Session usage belongs in the status bar. A provider with weekly limits only gets its name so its hover remains
+// available. top includes every limit for the warning color; it never adds weekly numbers to the label.
 function meter(name, u, mine, now = Date.now()) {
   const windows = (u && u.windows) || [];
+  if (!windows.length) return null;
   const session = windows.find(usage.isSession);
-  const longer = windows.filter((w) => !usage.isSession(w)).sort((a, b) => b.usedPercent - a.usedPercent);
-  const full = longer.filter((w) => w.usedPercent >= NEARLY_FULL)[0] || (!session && mine ? longer[0] : null);
   const resets = (w) => mine && w.resetsAt ? ` · resets ${usage.until(w.resetsAt, now, true)}` : "";
-  if (!session && !full) {
-    const t = u && u.tokens;
-    return mine && t && t.input + t.output ? { text: `$(dashboard) ${name} ${tokens(t.input + t.output)} tok`, top: 0 } : null;
-  }
-  const parts = [];
-  if (session) parts.push(`${mine ? "Session " : ""}${pct(session)}${resets(session)}`);
-  // ("Weekly (Gemini)" on Gemini's own item is just "Weekly".)
-  if (full) parts.push(`${shortName(full) === `Weekly (${name})` ? "Weekly" : shortName(full)} ${pct(full)}${resets(full)}`);
-  return { text: `$(dashboard) ${name} ${parts.join(mine ? " | " : " · ")}`, top: Math.max(...[session, full].filter(Boolean).map((w) => w.usedPercent)) };
+  const label = session ? ` ${mine ? "Session " : ""}${pct(session)}${resets(session)}` : "";
+  return { text: `$(dashboard) ${name}${label}`, top: Math.max(0, ...windows.map((w) => Number(w.usedPercent) || 0)) };
 }
 // The hover: every AI's limits in full (Session and Weekly, when each resets), the one you point at first.
 function hoverText(entries, chat, now = Date.now()) {

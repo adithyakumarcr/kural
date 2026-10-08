@@ -147,8 +147,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   "Session 50% used, resets in 42 min" (Session = the 5-hour limit, Claude's and Codex's), "Weekly 25% used, resets in 3
   days 4 h", for Claude, Gemini and Codex.
   The status bar shows only each AI's Session limit: the chat's AI with when it resets ("Claude Session 50% · resets
-  42m"), the others short ("Codex 12%"); a Weekly limit appears there only once it's at 80 % or more (Gemini, which has
-  only weekly limits: its fullest one when it's the chat's AI); hover for every AI's Session and Weekly limits; orange
+  42m"), the others short ("Codex 12%"); Gemini, which has only weekly limits, shows its name. Weekly numbers stay in
+  the hover at every usage level; hover for every AI's Session and Weekly limits; orange
   from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
   the cache) and written, today, 7 days and 30 days (every Kural feature: chat, Tab Completion, Ctrl+K…).
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
