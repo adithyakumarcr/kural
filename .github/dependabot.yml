@@ -1,9 +1,17 @@
 version: 2
 updates:
+  # GitHub Actions used by the workflows (pinned to commits): once a month, all updates together in ONE pull request,
+  # so CodeQL's parts move together and the PR list stays short.
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    groups:
+      actions:
+        patterns: ["*"]
   # Kural has no npm dependencies; this is ready for the day a devDependency appears.
   - package-ecosystem: npm
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    groups:
+      npm:
+        patterns: ["*"]
