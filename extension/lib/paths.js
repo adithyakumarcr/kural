@@ -12,11 +12,17 @@ const norm = (p) => process.platform === "win32" ? p.toLowerCase() : p;
 const expand = (p) => String(p).replace(/^~(?=$|[\\/])/, os.homedir());
 
 // The real place of a path (links followed), also for a file that doesn't exist yet (its nearest existing folder's).
-// So a link inside the project that points at ~/.zshrc counts as ~/.zshrc.
-function real(p) {
+// So a link inside the project that points at ~/.zshrc counts as ~/.zshrc. A link whose target doesn't exist yet
+// (dangling) is followed too: writing through it would create the target, wherever it points.
+function real(p, depth = 0) {
   let cur = path.resolve(expand(p)), rest = [];
   for (let i = 0; i < 64; i++) {
-    try { return path.join(fs.realpathSync.native(cur), ...rest.reverse()); } catch { /* not there yet */ }
+    try { return path.join(fs.realpathSync.native(cur), ...rest.reverse()); } catch { /* not there yet, or a dangling link */ }
+    if (depth < 16) {
+      let to = null;
+      try { to = fs.lstatSync(cur).isSymbolicLink() ? fs.readlinkSync(cur) : null; } catch { /* no such entry */ }
+      if (to !== null) return path.join(real(path.resolve(path.dirname(cur), to), depth + 1), ...rest.reverse());
+    }
     const up = path.dirname(cur);
     if (up === cur) break;
     rest.push(path.basename(cur)); cur = up;
