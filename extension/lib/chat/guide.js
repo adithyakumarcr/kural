@@ -147,6 +147,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
   buttons and focus.
+- VS Code's Run and Debug side bar, Debug Console and Ports panels are hidden to keep Kural simple; the setting
+  kural.showDebugViews brings them back at once. While you debug (F5), Run and Debug and the Debug Console show anyway.
 - Full guide: ${WIKI}
 If they ask for something Kural doesn't have, say so plainly (don't pretend), suggest the closest thing it has, and
 invite them to ask for it as a feature, with this link: [Ask for this feature](${ISSUES}).`;
