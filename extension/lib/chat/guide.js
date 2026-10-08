@@ -160,7 +160,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   the next message. This works with a model you picked yourself and with Auto. Without a suitable service it stays put;
   usage reports can arrive after an answer, so the percentage is a switching trigger, not a hard quota cap.
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
-  Inside the project it doesn't ask (Agent mode still asks before commands). Kural never looks through Desktop,
+  Inside the project it doesn't ask, except for files that run code later (git hooks, .vscode/tasks.json, package.json,
+  .env, Makefile, Dockerfile, workflows, shell profiles) and the temp folder (Agent mode still asks before commands). Kural never looks through Desktop,
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
 - In a folder you haven't trusted (VS Code's Restricted Mode), its settings can't pick programs or modes for Kural, and
   its Claude Code setup (hooks, MCP servers) isn't loaded.

@@ -26,6 +26,11 @@ Skip). Files you attached are fine. That keeps the AI out of your other folders,
 "Kural would like to access your Documents folder" (or Music, Photos…) unless you said yes to such a file. In Auto mode
 nothing asks.
 
+**Files that run code later ask too, even in your project** (Agent mode): git hooks, `.vscode/tasks.json`, `package.json`,
+`.env`, a Makefile, a Dockerfile, GitHub workflows and shell profiles. A page or README the AI reads could try to trick it
+into planting one, so writing one gets a card ("This file can make your computer run something later."). The temp folder
+isn't writable without asking either.
+
 You can change the mode while an answer is running. Agent → Auto: the commands waiting for your OK run at once, and
 later ones don't ask. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.

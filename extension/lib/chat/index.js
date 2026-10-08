@@ -13,7 +13,7 @@ const { projectInstructions } = require("./project");
 const { ChangeTracker, inProject } = require("./changes");
 const ws = require("../workspace");
 const { Attachments } = require("./attachments");
-const { within, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
+const { within, runsLater, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
 const { forkConversation } = require("./fork");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("../ai/ollama");
@@ -2196,7 +2196,8 @@ class ChatView {
       // Anywhere else (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks) a write can make the
       // computer run something later, so it asks like a command does (Auto still doesn't ask).
       // (agy only tells, `notice`: it doesn't wait for an answer, so no card.)
-      if (!file || req.notice || ws.mayUse(file, true)) return { allow: true };
+      // (Also inside the project, a file that runs code later — a git hook, a task, a workflow, package.json — asks: paths.runsLater.)
+      if (!file || req.notice || (ws.mayUse(file, true) && !runsLater(file))) return { allow: true };
     }
     // Reading inside your project: no asking. Elsewhere (your Documents, Desktop…) it asks, like a command: on a Mac
     // reading there also makes macOS ask about Kural.
@@ -2764,7 +2765,10 @@ function permDetail(tool, input) {
   if (tool === "DeviceCommand") return input.command || "";
   if (tool === "DeviceWrite") return `${input.path || ""}\n\n${String(input.content || "").slice(0, 600)}${String(input.content || "").length > 600 ? "\n…" : ""}`;
   if (tool === "WebFetch") return input.url || "";
-  if (EDIT_TOOLS.has(tool)) return `${input.file_path || input.notebook_path || ""}\n(outside this project)`;
+  if (EDIT_TOOLS.has(tool)) {
+    const f = input.file_path || input.notebook_path || "";
+    return `${f}\n${runsLater(f) ? "This file can make your computer run something later." : "(outside this project)"}`;
+  }
   if (READ_TOOLS.includes(tool)) return `${input.file_path || input.path || ""}\n(outside this project)`;
   return JSON.stringify(input).slice(0, 300);
 }
