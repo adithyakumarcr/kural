@@ -33,6 +33,8 @@ const { RouterMemory } = require("./lib/router/learn");
 const scmCommit = require("./lib/scm/commit");
 const settingsIO = require("./lib/settings-io");
 const { CrashLog } = require("./lib/crash");
+const { StayAwake } = require("./lib/chat/awake");
+const welcome = require("./lib/welcome");
 const usageHub = require("./lib/ai/usage");
 const brain = require("./lib/ai");
 const ws = require("./lib/workspace");
@@ -78,6 +80,7 @@ function activate(context) {
   require("./lib/ai/agy").setLog(log);
   getStarted = new GetStarted(context);
   getStarted.register();
+  welcome.register(context, log);   // closing the last editor tab opens Welcome (kural.welcomeWhenEmpty)
   // Which of Claude Code's newer options this claude knows (thinking summaries, agents' text, messages while answering):
   // asked once per Claude Code version, in the background now, so the chat's first answer never waits for it.
   require("./lib/ai/claude").setFlagsStore(context.globalStorageUri.fsPath);
@@ -200,6 +203,13 @@ function activate(context) {
   // A chat answering with a model on this computer keeps Ollama busy: Tab Completion lets Claude help meanwhile
   // (lib/tab/local.js busy, lib/tab/completion.js).
   local.chatBusy = () => chat.tabs.some((t) => t.status === "running" && brain.isLocal(t.model));
+  // While any chat works, the Mac doesn't idle-sleep (lib/chat/awake.js; setting kural.chat.keepAwake). The chat calls
+  // onTabs whenever its tabs change; the timer catches a change that didn't redraw them.
+  const awake = new StayAwake({ log });
+  const keepAwake = () => awake.set(cfg().get("chat.keepAwake", true) && chat.tabs.some((t) => t.status === "running"));
+  chat.onTabs = keepAwake;
+  const awakeTimer = setInterval(keepAwake, 30000);
+  context.subscriptions.push(awake, { dispose: () => clearInterval(awakeTimer) });
   const router = new ModelRouter(context,cfg,() => chat.routerModels(),() => vscode.workspace.isTrusted);
   // Auto steers away from an AI close to its usage limit (lib/ai/usage.js) and learns from what you do after its
   // answers, per workspace (lib/router/learn.js).

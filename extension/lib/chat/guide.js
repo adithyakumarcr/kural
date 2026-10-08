@@ -17,7 +17,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   restore. Start has New File, Open File, Open Folder and Clone Git Repository; Recent reopens projects;
   Walkthroughs includes "Get started with Kural" (AI setup, a project, chat, theme), "Learn the Fundamentals" and
   installed extensions' guides. "Show welcome page on startup" at the bottom turns it on/off. It doesn't open by itself
-  when Kural restores files from last time: use Help → Welcome. Kural has no VSCodium walkthrough or announcements,
+  when Kural restores files from last time: use Help → Welcome. Closing the last editor tab opens it again (not when
+  that tab was Welcome; setting kural.welcomeWhenEmpty). Kural has no VSCodium walkthrough or announcements,
   and Help → Report Issue goes to Kural's GitHub issues.
 - Get started (Command Palette: "Kural: Get Started"): pick Claude, Google Gemini, ChatGPT (Codex) or your own model;
   Kural checks each step (install, log in or download a model, a test request). Any one is enough; all can be set up.
@@ -62,7 +63,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   error, a login), a system notification names the chat ("Fix the login is done"); click it to go there. By default only
   while you're not looking (Kural's window not in front, or that chat not on screen); setting kural.notifications:
   whenAway, always, off. A team's answer notifies once, at the end; Stop doesn't. macOS asks once whether Kural may send
-  notifications; if you chose Don't Allow: System Settings > Notifications > Kural. Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
+  notifications; if you chose Don't Allow: System Settings > Notifications > Kural. While any chat works, the Mac
+  doesn't go to sleep by itself (the screen may turn off; closing the lid still sleeps it; macOS only; setting
+  kural.chat.keepAwake). Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
   the conversation stays; checkpoints are kept 30 days, also after a restart). Hover any message in an idle chat:
   "Fork from here" opens a new chat with the recorded conversation through that message, including attached context
