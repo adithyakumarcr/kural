@@ -281,6 +281,29 @@ class ChatView {
   tab(id) { return this.tabs.find((t) => t.id === id); }
   active() { return this.tab(this.activeId); }
 
+  // "Fork from here" on an earlier message: when answers after it changed files (not undone), ask first whether the code
+  // goes back too, like editing a message does: Restore Code / Keep Code (closing the dialog = no fork). The new chat
+  // starts from that message either way; this chat's conversation stays (restored changes show as Undone in it).
+  async forkAsk(source, index, pane = this.cur()) {
+    const m = source && source.messages[index];
+    if (!m || source.status !== "idle" || source.visiting) return null;
+    const files = this.laterChanges(source, index);
+    if (files.length) {
+      const since = files.filter((f) => f.changedSince).map((f) => f.rel);
+      const go = await vscode.window.showWarningMessage("Also put the code back as it was at this message?", { modal: true,
+        detail: `The answers after it changed ${files.length} file${files.length === 1 ? "" : "s"}: ${files.map((f) => f.rel).join(", ")}.` +
+          (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: restoring loses those edits.` : "") +
+          "\n\nThe new chat starts from this message. This chat's conversation stays as it is." }, "Restore Code", "Keep Code");
+      if (!go || source.status !== "idle") return null;
+      if (go === "Restore Code") {
+        const { restored, missing } = await this.restoreCode(source, index);
+        this.redraw(source);
+        if (missing.length) this.post({ type: "flash", text: `Restored ${restored.length}; no checkpoint for ${missing.join(", ")}` });
+      }
+    }
+    return this.forkFrom(source, index, pane);
+  }
+
   forkFrom(source, index, pane = this.cur()) {
     const tab = forkConversation(source, index, { id: shortId(), sessionId: newSessionId() });
     if (!tab) return;
@@ -2003,7 +2026,7 @@ class ChatView {
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
         Number.isInteger(m.editIndex) ? m.editIndex : null); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
-      case "fork": if (tab) this.forkFrom(tab, m.index, pane); break;
+      case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);

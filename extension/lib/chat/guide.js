@@ -52,7 +52,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
   the conversation stays; checkpoints are kept 30 days, also after a restart). Hover any message in an idle chat:
   "Fork from here" opens a new chat with the recorded conversation through that message, including attached context
-  and tool results. It keeps the model, mode and other choices; the original chat and current files stay as they are.
+  and tool results. It keeps the model, mode and other choices; the original chat's conversation stays as it is. When
+  answers after that message changed files, it first asks whether the code goes back too (Restore Code: those files
+  as they were at that message; Keep Code: files stay as they are now).
   Inherited file-change cards can be reviewed; keep/undo belongs to the original chat. Both chats appear in History.
   Next to the send button: how full the
   conversation's context window is (hover: this chat's tokens read, from cache, written). Pictures in answers are shown;
