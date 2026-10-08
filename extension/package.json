@@ -197,6 +197,11 @@
         "category": "Kural"
       },
       {
+        "command": "kural.verifyInstall",
+        "title": "Verify this installation...",
+        "category": "Kural"
+      },
+      {
         "command": "kural.chat.split",
         "title": "Kural: Open a Chat Beside the Code",
         "icon": "$(split-horizontal)"
@@ -874,10 +879,21 @@
           "default": true,
           "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
         },
+        "kural.tabCompletion.learnFromActivity": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Let Tab Completion learn from your work in this workspace (what you asked the chat, suggestions you accepted, terminal commands) so its suggestions fit you. Kept on this computer only; lines that look like passwords or keys are skipped, but a filter can miss some. **Kural: Forget What Tab Completion Learned** deletes it."
+        },
         "kural.tabCompletion.renameAcrossFiles": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "When you change a name in your code (type over it, or accept a Tab suggestion that changes it), Kural looks for the old name in the rest of the project and offers to change it there too: **Review** (Search & Ask, filled in) or **Change all**."
+        },
+        "kural.browser.allowRemoteSites": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "Let Kural's own proxy browser open websites on the internet, not only local pages (localhost, your LAN). The proxy removes a page's security headers, so don't log in to anything there."
         },
         "kural.updates.autoCheck": {
           "type": "boolean",

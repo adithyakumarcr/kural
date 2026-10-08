@@ -13,14 +13,14 @@ const { projectInstructions } = require("./project");
 const { ChangeTracker, inProject } = require("./changes");
 const ws = require("../workspace");
 const { Attachments } = require("./attachments");
-const { within, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
+const { within, runsLater, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
 const { forkConversation } = require("./fork");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("../ai/ollama");
 const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
-const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
+const { Tickets, atlassianState, ticketNote } = require("./tickets");
 const { PROMPTS, MOODS, MOOD_PROMPTS, customMoods, moodPrompt } = require("./prompts");
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
@@ -62,14 +62,12 @@ const deviceOk = (m) => ["claude", "codex"].includes(engineOf(m));
 const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
 
-const READ_TOOLS = ["Read", "Grep", "Glob"];
+const { decide, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
 // Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
 const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
-const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
+const AUTO_WARNED = "kural.auto.warned";   // the first switch to Auto explained what it means
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
-const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
-const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 
 
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
@@ -2192,32 +2190,18 @@ class ChatView {
         const abs = path.resolve(this.root() || ws.workDir(), String(file));
         if (inProject(abs, this.projectRoots(tab))) this.changes.snapshot(turn, abs);
       }
-      // Inside your project (or Kural's own work folder, the temp folder): no asking, that's what Agent mode is for.
-      // Anywhere else (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks) a write can make the
-      // computer run something later, so it asks like a command does (Auto still doesn't ask).
-      // (agy only tells, `notice`: it doesn't wait for an answer, so no card.)
-      if (!file || req.notice || ws.mayUse(file, true)) return { allow: true };
     }
-    // Reading inside your project: no asking. Elsewhere (your Documents, Desktop…) it asks, like a command: on a Mac
-    // reading there also makes macOS ask about Kural.
-    if (READ_TOOLS.includes(req.tool_name)) {
-      const where = input.file_path || input.path;
-      if (!where || ws.mayUse(where) || within(where, [...(tab.granted || []), tab.handoffFile].filter(Boolean))) return { allow: true };
-    }
-    if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
-    // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
-    if (tab.device && DEVICE_TOOL_RE.test(req.tool_name)) return { allow: true };
-    // Reading Jira (the linked ticket, a search) changes nothing, so it doesn't ask. Writing to Jira
-    // (comments, status changes, new issues) still asks below.
-    if (isAtlassianRead(req.tool_name)) return { allow: true };
-    if (req.tool_name === "AskUserQuestion") return this.askUser(tab, r, req);
-    // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
-    const onDevice = req.tool_name === "DeviceCommand" || req.tool_name === "DeviceWrite";
-    if (tab.mode === "auto" || (onDevice ? !!tab.device && tab.allowAllDevice === tab.device : tab.allowAll)) return { allow: true };
+    // Run at once or ask: permission-policy.js decides (its test is the table of every case).
+    const verdict = decide({ tool: req.tool_name, input, mode: tab.mode, allowAll: tab.allowAll, allowAllDevice: tab.allowAllDevice, device: tab.device,
+      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice });
+    if (verdict.allow) return { allow: true };
+    if (verdict.question) return this.askUser(tab, r, req);
+    const risky = verdict.risky;
     // Agent mode: running commands asks you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
-    const block = { k: "perm", pid, tool: req.tool_name, detail: permDetail(req.tool_name, input), state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
+    const detail = permDetail(req.tool_name, input) + (risky ? `\n\nAsks even in Auto: ${risky.why}` : "");
+    const block = { k: "perm", pid, tool: req.tool_name, detail, risky: !!risky || undefined, state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
       where: input.device || undefined };   // (a linked device's name, for its commands and writes)
     if (turn) turn.reply.blocks.push(block);
     tab.status = "waiting";
@@ -2251,7 +2235,7 @@ class ChatView {
     if (tab.mode === "auto" && r) {
       const turn = r.turn;
       for (const b of (turn && turn.reply.blocks) || []) {
-        if (b.k !== "perm" || b.state !== "pending") continue;
+        if (b.k !== "perm" || b.state !== "pending" || b.risky) continue;   // (a risky command still waits for you)
         const resolve = r.perms.get(b.pid);
         if (resolve) { r.perms.delete(b.pid); resolve(true); }
       }
@@ -2521,6 +2505,13 @@ class ChatView {
         else this.post({ type: "flash", text: "Intensity applies from your next message" });   // set when Claude starts
       } break;
       case "setMode": if (valid(MODES, m.mode)) {
+        // The first switch to Auto ever: say what it means, once.
+        if (m.mode === "auto" && tab.mode !== "auto" && !this.context.globalState.get(AUTO_WARNED)) {
+          const pick = await vscode.window.showWarningMessage("Auto mode runs commands and edits files without asking. Dangerous commands (sudo, deleting outside the project, a forced push to main…) still ask.",
+            { modal: true }, "Use Auto");
+          if (pick !== "Use Auto") { this.postTabs(); break; }   // (the page goes back to the mode the tab has)
+          await this.context.globalState.update(AUTO_WARNED, true);
+        }
         const was = tab.mode;
         tab.mode = m.mode; this.remember(tab);
         if (m.mode === "agent" || m.mode === "auto") this.context.globalState.update(LAST_KEY, { ...this.context.globalState.get(LAST_KEY), buildMode: m.mode });
@@ -2764,7 +2755,10 @@ function permDetail(tool, input) {
   if (tool === "DeviceCommand") return input.command || "";
   if (tool === "DeviceWrite") return `${input.path || ""}\n\n${String(input.content || "").slice(0, 600)}${String(input.content || "").length > 600 ? "\n…" : ""}`;
   if (tool === "WebFetch") return input.url || "";
-  if (EDIT_TOOLS.has(tool)) return `${input.file_path || input.notebook_path || ""}\n(outside this project)`;
+  if (EDIT_TOOLS.has(tool)) {
+    const f = input.file_path || input.notebook_path || "";
+    return `${f}\n${runsLater(f) ? "This file can make your computer run something later." : "(outside this project)"}`;
+  }
   if (READ_TOOLS.includes(tool)) return `${input.file_path || input.path || ""}\n(outside this project)`;
   return JSON.stringify(input).slice(0, 300);
 }

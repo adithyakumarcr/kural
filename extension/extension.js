@@ -146,8 +146,15 @@ function activate(context) {
   }, () => {});
 
   // What you've been doing in this workspace: makes Tab's suggestions fit you (lib/activity.js).
-  const activity = new Activity(context.workspaceState, () => true);   // (always on; Kural: Forget… clears it)
+  // Off unless you turn it on (kural.tabCompletion.learnFromActivity): typed lines can hold secrets a filter misses.
+  const activity = new Activity(context.workspaceState, () => !!vscode.workspace.getConfiguration("kural").get("tabCompletion.learnFromActivity"));
   watchEdits(context, activity);
+  // Data learned while it was always on (older versions): ask once whether to delete it.
+  if (!activity.enabled() && activity.hasData() && !context.workspaceState.get("kural.activity.askedOptIn")) {
+    context.workspaceState.update("kural.activity.askedOptIn", true);
+    vscode.window.showInformationMessage("Kural stopped learning from your typing until you turn it on in Settings (Tab Completion: Learn From Activity). Delete the old data?", "Delete", "Keep")
+      .then((p) => { if (p === "Delete") activity.forget(); });
+  }
 
   // Tab's local engine (Ollama): checked now and every 15 s, so it's used as soon as it's there.
   const local = new LocalEngine();
@@ -269,6 +276,7 @@ function activate(context) {
     vscode.commands.registerCommand("kural.install", () => getStarted.open()),
     vscode.commands.registerCommand("kural.showLog", () => showLog()),
     vscode.commands.registerCommand("kural.checkForUpdates", () => updater.check()),
+    vscode.commands.registerCommand("kural.verifyInstall", () => updater.verifyInstall()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.tabCompletion.model")) { tabSession.stop(); terminalSession.stop(); }
       if (e.affectsConfiguration("kural.tabCompletion.localModel") || e.affectsConfiguration("kural.tabCompletion.ollamaUrl")) local.status(true);

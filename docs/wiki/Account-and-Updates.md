@@ -91,6 +91,11 @@ Check yourself any time: **Help → Check for Updates…**, the Chat panel's **�
 Settings (with the switch for the daily check). Kural Settings also links to Get started, Tab Completion, all of Kural's
 settings, Kural's log, the guide, and asking for a feature.
 
+Before installing, Kural checks the download against the release's signed checksum list (`SHA256SUMS`, signed with
+Kural's release key). A release without that list is not installed automatically: download it from the releases page.
+**Kural: Verify this installation...** (Command Palette) checks the list of the version you run. See
+`docs/release-signing.md` in the repository for checking a download by hand.
+
 Updates include test versions (alpha, beta, rc). Installing:
 
 - **Ubuntu**: asks for your password, installs the new `.deb`, restarts Kural.

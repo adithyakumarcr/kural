@@ -12,11 +12,18 @@
 // suggestions you accepted in this language. Tab in the terminal gets your usual commands; for a commit
 // message, what you did in Kural since the last commit (so the message says *why*, not only what).
 //
+// Only when you turn it on (setting kural.tabCompletion.learnFromActivity, off by default): what you type can hold
+// things a filter misses. Saved in VS Code's workspace storage on this computer; never sent anywhere except inside
+// Tab's own requests to the AI you use.
 // No vscode here (tests run without it): extension.js and chat.js feed it events.
 
 const MAX_WORK = 40, MAX_ACCEPTED = 30, MAX_COMMANDS = 100;
 const RECENT_WORK_MS = 3 * 60 * 60 * 1000;   // "your current task" = chat/Ctrl+K work in the last 3 hours
-const SECRET = /(pass(word|wd)?|secret|token|api[_-]?key|auth)\s*[=:]|bearer\s|authorization:/i;
+// Never kept: anything that looks like a password or key. One regex; its pieces catch:
+//   password=… token: … api_key=… auth=…  |  "Bearer …", "Authorization:"  |  mysql/psql/mongo -p<password>
+//   X-Api-Key headers  |  private_key / private-key  |  -----BEGIN (PEM keys and certificates)  |  AKIA… (AWS key id)
+//   ghp_… (GitHub token)  |  sk-… (OpenAI-style keys)  |  xoxb-/xoxp-… (Slack)  |  eyJ….  (a JWT)
+const SECRET = /(pass(word|wd)?|secret|token|api[_-]?key|auth)\s*[=:]|bearer\s|authorization:|\b(mysql|psql|mongo(sh)?)\b.*\s-p\S+|x-api-key|private[_-]?key|-----BEGIN|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}|xox[baprs]-|eyJ[A-Za-z0-9_-]{10,}\./i;
 
 const clip = (s, n) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 const ago = (t, now) => {
@@ -53,12 +60,15 @@ class Activity {
     if (this.store) this.store.update("kural.activity.v1", undefined);
   }
 
+  // Anything saved from before (to offer deleting it when learning is off).
+  hasData() { return this.work.length + this.accepted.length + Object.keys(this.commands).length > 0; }
+
   counts() { return { work: this.work.length, accepted: this.accepted.length, commands: Object.keys(this.commands).length }; }
 
   // ---------- events ----------
   // source: "chat" | "Ctrl+K" | "Apply" | "Insert"; files: workspace-relative paths it changed (may be empty).
   addWork(source, ask, files = []) {
-    if (!this.enabled() || !String(ask || "").trim()) return;
+    if (!this.enabled() || !String(ask || "").trim() || SECRET.test(ask)) return;
     this.work.push({ t: this.now(), source, ask: clip(ask, 240), files: [...new Set(files)].slice(0, 12) });
     if (this.work.length > MAX_WORK) this.work.splice(0, this.work.length - MAX_WORK);
     this.save();
@@ -70,7 +80,7 @@ class Activity {
     if (changed) this.save();
   }
   tabAccepted(file, lang, before, text) {
-    if (!this.enabled() || !String(text || "").trim()) return;
+    if (!this.enabled() || !String(text || "").trim() || SECRET.test(text) || SECRET.test(before)) return;
     this.accepted.push({ t: this.now(), file, lang, before: clip(before, 120), text: String(text).slice(0, 300) });
     if (this.accepted.length > MAX_ACCEPTED) this.accepted.splice(0, this.accepted.length - MAX_ACCEPTED);
     this.save();

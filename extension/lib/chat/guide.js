@@ -30,7 +30,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Gemini (Antigravity) can't ask before acting: in Agent mode it edits files but runs no commands (the answer says which it
   didn't run); in Auto it runs commands; Plan and Ask change nothing. A mode change applies from the next message.
   Multiple agents work with Gemini; devices do not.
-- Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking), Plan
+- Chat (Ctrl+L, panel on the right): tabs; modes Agent (edits files, asks before commands), Auto (no asking, except
+  dangerous commands: sudo, deleting outside the project, curl | sh, a forced push to main, git reset --hard…; the
+  first switch to Auto explains this once; Gemini can't ask, so not for Gemini), Plan
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
@@ -126,7 +128,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
   then downloads the model.
-  It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
+  It learns from your work in each workspace only when you turn it on (setting kural.tabCompletion.learnFromActivity,
+  off by default; "Kural: Forget What Tab Completion Learned" clears it).
   While a chat answers with a model on this computer (Ollama runs both on one GPU, so Tab's local answers slow to 2-3 s),
   Claude helps Tab if it's set up (also for "Local model"); without Claude, Tab asks a little less often meanwhile.
 - Change a name in your code (type over it, or accept a Tab suggestion that changes it) and Kural looks for the old name
@@ -160,7 +163,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   the next message. This works with a model you picked yourself and with Auto. Without a suitable service it stays put;
   usage reports can arrive after an answer, so the percentage is a switching trigger, not a hard quota cap.
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
-  Inside the project it doesn't ask (Agent mode still asks before commands). Kural never looks through Desktop,
+  Inside the project it doesn't ask, except for files that run code later (git hooks, .vscode/tasks.json, package.json,
+  .env, Makefile, Dockerfile, workflows, shell profiles) and the temp folder (Agent mode still asks before commands). Kural never looks through Desktop,
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
 - In a folder you haven't trusted (VS Code's Restricted Mode), its settings can't pick programs or modes for Kural, and
   its Claude Code setup (hooks, MCP servers) isn't loaded.
@@ -178,7 +182,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   "Kural: Show Crash Reports" lists them.
 - Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings. It
   installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), puts the old version back if the
-  install fails, and says at the next start if it didn't finish.
+  install fails, and says at the next start if it didn't finish. It installs only a release whose checksum list is signed
+  by Kural's release key and matches the download; "Kural: Verify this installation..." checks the running version's list.
 - Installing on Windows: Windows says "Windows protected your PC" with only "Don't run", because the installer isn't
   code-signed yet: click the small "More info" link, then "Run anyway" ("Unknown publisher"). Kural's own updates don't
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.

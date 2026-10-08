@@ -73,7 +73,7 @@ class Browser {
   async ensureProxy() {
     if (this.proxy) return this.proxy;
     const picker = path.join(this.context.extensionPath, "media", "browser-picker.js");
-    this.proxy = startProxy({ picker: () => fs.readFileSync(picker, "utf8"), log });
+    this.proxy = startProxy({ picker: () => fs.readFileSync(picker, "utf8"), log, allowRemote: () => !!vscode.workspace.getConfiguration("kural").get("browser.allowRemoteSites") });
     await this.proxy.ready;
     log(`browser: proxy at ${this.proxy.origin}`);
     return this.proxy;
@@ -117,7 +117,7 @@ class Browser {
     let src;
     try { src = this.proxy.open(url); } catch (e) { this.post({ type: "error", message: `Can't open ${text}: ${e.message}` }); return; }
     this.context.globalState.update(LAST, url);
-    this.post({ type: "load", src, url });
+    this.post({ type: "load", src, url, remote: this.proxy.remote });
   }
 
   async onMessage(m) {

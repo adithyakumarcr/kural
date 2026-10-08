@@ -13,6 +13,8 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 const { log } = require("./ai/claude");
+const { expectedSha, verifySignature, pickManifest } = require("./release-verify");
+const { RELEASE_PUBLIC_KEYS } = require("./release-keys");
 
 const REPO = "adithyakumarcr/kural";
 const LAST_CHECK = "kural.update.lastCheck";
@@ -235,23 +237,53 @@ class Updater {
     try { await this.fetchAndInstall(rel, asset); } finally { this.installing = false; }
   }
 
+  // The two small files that sign a release's checksums (SHA256SUMS + .sig), as text.
+  async manifest(rel) {
+    const m = pickManifest(rel.assets);
+    if (!m || !downloadOk(m.sums) || !downloadOk(m.sig)) return null;
+    const text = async (a) => {
+      const res = await fetch(a.browser_download_url, { headers: { "User-Agent": "Kural" } });
+      if (!res.ok) throw new Error(`download failed (${res.status})`);
+      return res.text();
+    };
+    return { sums: await text(m.sums), sig: await text(m.sig) };
+  }
+
   async fetchAndInstall(rel, asset) {
-    // Only Kural's own GitHub releases, and the file must be the one GitHub lists (its SHA-256, when GitHub gives it):
-    // a changed or broken download is never installed.
+    // Only Kural's own GitHub releases, and the file must match the checksum list that Kural's release key signed.
+    // GitHub's own SHA-256 comes from the same place as the file, so it only counts as an extra check: whoever could
+    // replace the file on GitHub could replace that too, but not sign the list.
     if (!downloadOk(asset)) throw new Error("the download isn't from Kural's GitHub releases");
+    const manifest = await this.manifest(rel);
+    if (!manifest) throw new Error("this release has no signed checksum list, so Kural won't install it automatically. Download it from the releases page and install by hand.");
+    const signedSha = expectedSha(manifest.sums, manifest.sig, asset.name, RELEASE_PUBLIC_KEYS);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-update-"));
     const file = path.join(dir, asset.name);
     const ok = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Downloading Kural ${rel.version}`, cancellable: true },
       async (progress, token) => { await download(asset.browser_download_url, file, progress, token); return !token.isCancellationRequested; });
-    if (!ok) return;
+    if (!ok) { fs.rmSync(dir, { recursive: true, force: true }); return; }
     log(`update: downloaded ${asset.name} (${fs.statSync(file).size} bytes)`);
+    const got = await sha256(file);
+    if (got !== signedSha) { fs.rmSync(dir, { recursive: true, force: true }); throw new Error("the download is damaged or has been changed (its checksum doesn't match the signed list)"); }
+    log("update: signature OK; checksum matches");
     const want = /^sha256:([0-9a-f]{64})$/i.exec(asset.digest || "");
-    if (want) {
-      const got = await sha256(file);
-      if (got !== want[1].toLowerCase()) { fs.rmSync(dir, { recursive: true, force: true }); throw new Error("the download is damaged (its checksum doesn't match); try again"); }
-      log("update: checksum matches");
-    } else log("update: GitHub gave no checksum for this file");
+    if (want && got !== want[1].toLowerCase()) { fs.rmSync(dir, { recursive: true, force: true }); throw new Error("the download is damaged (its checksum doesn't match GitHub's); try again"); }
     await this.install(file, dir, rel.version);
+  }
+
+  // "Verify this installation": is the checksum list of the release you're running really signed by Kural's key?
+  // (It can't re-hash the installed app: files change after install, so this only shows the release was authentic.)
+  async verifyInstall() {
+    const tag = `v${this.version}`;
+    try {
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${tag}`, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Kural" } });
+      if (!res.ok) throw new Error(`GitHub has no release ${tag} (${res.status}). A version built from the code can't be checked.`);
+      const m = await this.manifest(await res.json());
+      if (!m) throw new Error(`release ${tag} has no signed checksum list`);
+      const v = verifySignature(Buffer.from(m.sums), m.sig, RELEASE_PUBLIC_KEYS);
+      if (!v.ok) throw new Error(`release ${tag}: the checksum list is NOT signed by Kural's key`);
+      vscode.window.showInformationMessage(`Kural ${this.version}: the release's checksum list is signed by Kural's key (key #${v.keyIndex + 1}).`);
+    } catch (e) { log(`verify: ${e.message}`); vscode.window.showWarningMessage(`Couldn't verify: ${e.message}`); }
   }
 
   async install(file, dir, version) {

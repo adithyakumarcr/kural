@@ -57,12 +57,16 @@ Get the file for your computer from [Releases](https://github.com/adithyakumarcr
 | **Ubuntu 22.04 / 24.04** (x64) | `kural_…_amd64.deb` |
 | **Windows 10 / 11** (x64) | `Kural-…-windows-x64-setup.exe` (or the portable `.zip`) |
 
-**Mac.** Open the `.dmg` and drag **Kural** into **Applications**. Kural isn't signed with a paid Apple developer ID,
-so macOS blocks it the first time. Allow it once in Terminal:
+**Mac.** First [verify your download](#verify-your-download) (it's the check macOS can't do for Kural). Then open the
+`.dmg` and drag **Kural** into **Applications**. Kural isn't signed with a paid Apple developer ID, so macOS blocks it
+the first time: open it once, then **System Settings → Privacy & Security**, scroll down, **Open Anyway**. Only if macOS
+says the app "is damaged" (and you verified the download), allow it in Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Kural.app
 ```
+
+That turns off macOS's check for this one app; don't make it a habit for other downloads.
 
 **Ubuntu.**
 
@@ -363,6 +367,22 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 Inside the editor, Ctrl+K is Kural's inline edit. So VS Code's two-key Ctrl+K shortcuts don't work there, and Git's
 moved to Ctrl+Alt+K. Use Ctrl+/ to comment code.
 
+## Verify your download
+
+Every release has a signed checksum list (`SHA256SUMS` and `SHA256SUMS.sig`), and Kural's updater checks it before
+installing anything. You can check a download yourself too: see [docs/release-signing.md](docs/release-signing.md).
+
+## What Kural stores on your computer
+
+Kural keeps, on this computer only: your chat history (all chats, so you can reopen them), checkpoints for Restore code
+(30 days), the update log, crash reports, Kural's own SSH key for devices you link, and, only if you turn it on, what
+Tab Completion learns from your work. Nothing is sent to Kural's author. What you send to an AI goes to that AI's
+company (Anthropic, Google or OpenAI), under your own account; a model on your computer sends nothing.
+
+## Security
+
+Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md).
+
 ## Build it yourself
 
 No GitHub needed: one command builds Kural from the code in this folder and installs it on your computer
@@ -465,7 +485,7 @@ docs/                 screenshots for this README; docs/wiki/ the wiki's pages; 
 - **No Tab suggestions:** click the sparkle icon in the status bar (crossed out = off). The panel shows the engine,
   whether the local model is ready, and how long the last suggestion took.
 - **More:** the [Kural wiki](https://github.com/adithyakumarcr/kural/wiki) explains every feature.
-- **Mac says the app is damaged:** run the `xattr` command from [Install](#1-download-kural).
+- **Mac says the app is damaged:** verify the download, then run the `xattr` command from [Install](#1-download-kural).
 
 ## Credits
 

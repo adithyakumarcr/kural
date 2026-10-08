@@ -53,12 +53,13 @@ variable). Not offered: a new name you're typing, keywords (`let` → `const`), 
 cursors at once (that's already a rename). It searches text, so a different variable with the same name in another file
 shows up too: use **Review** when you're not sure. Off: setting `kural.tabCompletion.renameAcrossFiles`.
 
-## It learns from your work
+## It learns from your work (if you turn it on)
 
-The models never change, so with each suggestion Kural tells them what you've been doing in this workspace: what you
+Off by default: turn on **Settings → Kural › Tab Completion: Learn From Activity** (`kural.tabCompletion.learnFromActivity`).
+What you type can hold a password a filter misses, so Kural keeps nothing until you say so. The models never change, so with each suggestion Kural tells them what you've been doing in this workspace: what you
 asked the chat and which files it changed, Ctrl+K and Apply changes you accepted, suggestions you accepted, the file
 you just edited, and the commands you run. So suggestions fit your current task and style. It's kept only on this
-computer, per workspace; commands with passwords or tokens are never kept. To clear it: Command Palette → **Kural:
+computer, per workspace; lines that look like passwords, tokens or keys are never kept. To clear it: Command Palette → **Kural:
 Forget What Tab Completion Learned (This Workspace)**.
 
 ## Settings
