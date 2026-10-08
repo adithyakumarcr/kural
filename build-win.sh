@@ -17,6 +17,7 @@ if [ ! -f "$SRC" ]; then
   echo "Downloading VSCodium $CODIUM_VER for Windows (x64) ..."
   curl -fL -o "$SRC" "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/VSCodium-win32-x64-$CODIUM_VER.zip"
 fi
+./scripts/check-codium.sh "$(basename "$SRC")" "$SRC" || exit 1   # (also a file left from an earlier run)
 rm -rf "$WORK" && mkdir -p "$APP"
 unzip -q "$SRC" -d "$APP"
 

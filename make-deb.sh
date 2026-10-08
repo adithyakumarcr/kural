@@ -13,6 +13,7 @@ if [ ! -f codium.deb ]; then
   echo "Downloading VSCodium $CODIUM_VER ..."
   curl -fL -o codium.deb "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/codium_${CODIUM_VER}_amd64.deb"
 fi
+./scripts/check-codium.sh "codium_${CODIUM_VER}_amd64.deb" codium.deb || exit 1   # (also a file left from an earlier run)
 VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')+$(dpkg-deb -f codium.deb Version)"
 # "1:" (an epoch) makes 1.0.x count as newer than the earlier 3.0.0 builds, so apt upgrades cleanly.
 # A test version like 1.1.0-alpha.1 becomes 1.1.0~alpha.1 inside the package: "~" sorts before the final 1.1.0,

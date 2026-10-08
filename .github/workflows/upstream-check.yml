@@ -1,0 +1,28 @@
+# Weekly: is there a newer VSCodium than the one Kural is built on? If so, open (or update) one issue about it.
+name: upstream-check
+on:
+  schedule: [{ cron: "17 6 * * 1" }]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vscodium:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare with the latest VSCodium
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mine="$(sed -n 's/^# VSCodium \([0-9.]*\)\..*/\1/p' codium.lock)"
+          latest="$(gh api repos/VSCodium/vscodium/releases/latest --jq .tag_name)"
+          echo "Kural uses $mine; latest is $latest"
+          [ -n "$mine" ] && [ -n "$latest" ] || { echo "::error::couldn't read a version"; exit 1; }
+          [ "$mine" != "$latest" ] || exit 0
+          title="VSCodium $latest is out (Kural uses $mine)"
+          body="A newer VSCodium is available. Update with \`./scripts/update-codium.sh $latest\`, test, and release. Browser and Chromium security fixes come with it."
+          old="$(gh issue list --state open --search 'in:title "is out (Kural uses"' --json number --jq '.[0].number // empty')"
+          if [ -n "$old" ]; then gh issue edit "$old" --title "$title" --body "$body"; else gh issue create --title "$title" --body "$body"; fi

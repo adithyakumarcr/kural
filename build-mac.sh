@@ -15,6 +15,7 @@ if [ ! -f "$SRC" ]; then
   echo "Downloading VSCodium $CODIUM_VER for macOS (Apple Silicon) ..."
   curl -fL -o "$SRC" "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/VSCodium-darwin-arm64-$CODIUM_VER.zip"
 fi
+./scripts/check-codium.sh "$(basename "$SRC")" "$SRC" || exit 1   # (also a file left from an earlier run)
 rm -rf "$WORK" && mkdir -p "$WORK"
 unzip -q "$SRC" -d "$WORK"      # keeps the app's internal links (symlinks) intact
 mv "$WORK/VSCodium.app" "$WORK/Kural.app"
