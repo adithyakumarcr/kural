@@ -207,6 +207,10 @@ function fixture(model='haiku') {
   f.chat.finishReply(f.tab,r2,{type:'result',subtype:'success',is_error:true,result:"You've hit your usage limit. Try again at 5:00 PM."});
   await new Promise(res=>setTimeout(res,50));
   assert.deepStrictEqual(asked,['codex']);assert.strictEqual(f.tab.messages.length,5);assert.match(codexReply.error,/usage limit/);
+  // An answer that goes through: that AI isn't at its limit any more.
+  usageHub.markLimited('codex');f.tab.autoRoute=false;f.tab.model='codex:test';await f.chat.send(f.tab,[{t:'text',v:'again'}],[]);
+  f.chat.finishReply(f.tab,f.chat.runtime.get('chat'),{type:'result',subtype:'success',is_error:false});
+  assert.strictEqual(usageHub.current('codex').blockedUntil,undefined);
   // Not in Auto: the error stays (you picked that model), but Auto would avoid Claude now.
   usageHub._reset();
   const g=fixture('sonnet');g.tab.autoRoute=false;g.chat.router.route=async()=>assert.fail('no routing');Object.assign(g.chat,{panes:[],finishTurn:()=>{}});g.chat.router.taskDone=()=>{};

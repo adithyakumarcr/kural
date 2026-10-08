@@ -1967,6 +1967,8 @@ class ChatView {
     // AI at once, the conversation handed over (retryElsewhere). Not a second time for the same answer.
     const limited = journal.limitError(reply.error) && !r.stale;
     if (limited) usageHub.markLimited(engineOf(reply.model || tab.model));
+    // (An answer that went through: that AI isn't at its limit, whatever was noted before.)
+    else if (!reply.error) { const p = engineOf(reply.model || tab.model), u = usageHub.current(p); if (u && u.blockedUntil) usageHub.report(p, { allowed: true }); }
     const retry = limited && tab.autoRoute && this.router && !queued && !reply.retried;
     if (retry) {
       reply.retried = true;
