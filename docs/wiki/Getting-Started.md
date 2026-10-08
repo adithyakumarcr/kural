@@ -26,7 +26,8 @@ the editor's **Learn the Fundamentals** and guides from your installed extension
 VSCodium's GitHub); the editor's own texts say Kural, and Help → Report Issue opens Kural's issues.
 
 Open it again with **Kural: Welcome** in the Command Palette or **Help → Welcome**. The checkbox at the bottom controls
-whether it appears on startup; an existing startup preference is respected.
+whether it appears on startup; an existing startup preference is respected. It also comes back when you close the last
+editor tab (not when that tab was Welcome itself); setting `kural.welcomeWhenEmpty` turns that off.
 
 In **Get started with Kural**, choose **Set up your AI** to open the setup page. Pick Claude, Google Gemini,
 ChatGPT (Codex) or your own model. Any one is enough; you can add others later.

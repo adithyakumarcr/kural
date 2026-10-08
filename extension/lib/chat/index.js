@@ -524,6 +524,7 @@ class ChatView {
   postTabs() {
     this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)) });   // each pane gets its own activeId (post)
     for (const p of this.panes) if (p.panel) { const t = this.tab(p.activeId); p.panel.title = t ? t.title : "Kural chat"; }
+    if (this.onTabs) try { this.onTabs(); } catch { /* (the caller's own problem) */ }
   }
 
   // History: every saved chat (all workspaces), with this window's open tabs as they are right now.
