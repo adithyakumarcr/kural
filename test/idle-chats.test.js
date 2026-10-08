@@ -37,6 +37,16 @@ check("at most two idle ones stay warm: the least recently used stop first", () 
   chat.stopIdle(now);
   assert.deepStrictEqual(killed.sort(), ["c", "d"]);
 });
+check("a command still running in the background (a dev server) keeps the program, also after the answer ended", () => {
+  const { chat, killed } = setup([{ id: "server", ago: 30 }, { id: "done", ago: 30 }]);
+  const tab = (id) => chat.tabs.find((t) => t.id === id);
+  // Claude Code reports a background command as a task; Kural sees it even with no answer running.
+  chat.onClaude(tab("server"), chat.runtime.get("server"), { type: "system", subtype: "task_started", task_id: "t1", tool_use_id: "b1" });
+  chat.onClaude(tab("done"), chat.runtime.get("done"), { type: "system", subtype: "task_started", task_id: "t2", tool_use_id: "b2" });
+  chat.onClaude(tab("done"), chat.runtime.get("done"), { type: "system", subtype: "task_notification", task_id: "t2", status: "completed" });
+  chat.stopIdle(now);
+  assert.deepStrictEqual(killed, ["done"]);
+});
 check("a hidden side panel doesn't count as on screen", () => {
   const { chat, killed } = setup([{ id: "x", ago: 20 }]);
   chat.panes.push({ activeId: "x", view: { visible: false } });
