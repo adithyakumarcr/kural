@@ -780,6 +780,56 @@
           "default": true,
           "description": "Chat uses your whole Claude Code setup: connectors and MCP servers, plugins, skills, hooks, settings. Kural reloads it in the same conversation when it changes. Off = a faster, minimal setup (your CLAUDE.md and .claude/rules are still used)."
         },
+        "kural.notifications": {
+          "type": "string",
+          "enum": [
+            "whenAway",
+            "always",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Only when you're not looking: Kural's window isn't in front, or that chat isn't on screen",
+            "Every time an answer finishes or needs you",
+            "Never"
+          ],
+          "default": "whenAway",
+          "markdownDescription": "A system notification when a chat's answer is done or needs you (a command to allow, a question, a plan to build, an error). macOS asks once whether Kural may send notifications."
+        },
+        "kural.chat.didYouKnow": {
+          "type": "boolean",
+          "default": true,
+          "description": "While an answer is being worked on, show a short \"Did you know?\" tip or fact under it, with a Know more link."
+        },
+        "kural.chat.moods": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "hint": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "instructions": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "name",
+              "instructions"
+            ]
+          },
+          "markdownDescription": "Your own moods for the chat, next to Default, Explorer, Critic and Learn: a name, a one-line hint, and instructions for the AI. Edit them in **Kural Settings → Moods**."
+        },
         "kural.fontSize": {
           "type": "number",
           "default": 0,
