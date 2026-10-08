@@ -8,6 +8,11 @@
   Learn) takes it out of the chat's menu; **Restore** brings it back. A new chat starts with the first mood left.
 - **Fixed: "Add your own mood…" was in the code font.** It shared a style name with the "+12" line counts in Files
   changed, so it took their monospace font; it now uses the same font as the other moods.
+- **Welcome comes back when you close the last editor tab.** An empty editor area now shows the Welcome page (New File,
+  Open Folder, recent projects…). Closing Welcome itself leaves it closed. Setting `kural.welcomeWhenEmpty` turns it off.
+- **Your Mac stays awake while a chat works.** A long answer or an agent team is no longer paused because the Mac went
+  to sleep. The screen can still turn off, and closing the lid still sleeps it. Setting `kural.chat.keepAwake` turns it
+  off.
 - **No log button in the Kural panel's title bar.** Kural's log is in Kural Settings, or **Kural: Show Log**.
 
 ## What's new in 1.1.0-alpha.7
