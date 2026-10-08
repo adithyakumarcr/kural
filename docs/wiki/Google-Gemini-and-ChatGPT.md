@@ -49,7 +49,8 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
     nothing. A mode change applies from your next message. Undo works for its edits on a best-effort basis.
   - Gemini can't read attached pictures directly: Kural saves them where it can open them and tells it where.
 - Ask, Ctrl+K, Apply, commit messages and plain words in the terminal use the chat's model, so these too.
-- The usage meter: Gemini shows its weekly limits; Codex its 5-hour and weekly limits, like Claude.
+- The usage meter: Codex has a Session (5-hour) and a Weekly limit, like Claude: the status bar shows its Session.
+  Gemini has only weekly limits: the status bar shows its name. Hover for every limit; the AI Usage panel has them all.
 - Kural Settings (person icon in the status bar): who's logged in, the usage page, switch account, log out.
 
 ## What needs Claude
@@ -59,4 +60,15 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 - Linking Jira tickets
 - [[Devices]] work with Claude and Codex, not with Gemini (it can't ask before running a command there)
 
-Switching a chat between Claude, Gemini, Codex and your own model works: the new model gets the conversation so far.
+## Switching between them
+
+Switching a chat between Claude, Gemini, Codex and your own model works in every direction, in the middle of a
+conversation: the new model gets the conversation so far (what you asked and sent, the answers, the steps and their
+results, the files changed, the plan and to-do list, your pictures and PDFs, including attachments sent while it answered).
+A long conversation gets an overview that fits the next model, with a complete local record it can read to recover
+omitted details (see [[Model Router]]). The same happens when you switch an AI's account or log in again:
+a Codex or Gemini chat starts a new conversation that gets the old one; a Claude chat simply goes on.
+
+With **Auto**, Kural also moves a chat to another AI when its AI is at 80 % of a usage limit (Claude to ChatGPT (Codex)
+first, then Gemini), and when an answer stops because the limit was reached it carries that request on with another AI
+at once.

@@ -146,7 +146,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   and Tab-only models; there is no per-model allow-list (Adithya: Auto uses every model of your AIs). The panel has
   nothing to choose but the helper (Adithya, 7 Oct 2026): no profile (the chat's model menu is the only place,
   `setRouterProfile`; `kural.modelRouter.profile` is just a new chat's first default and Tab's Auto engine), no model
-  chips (one plain line per AI, counted with `eligible`), and an info button explaining the helpers (`ABOUT`; numbers
+  chips, "Picks from" or "Last choice" rows, and an info button explaining the helpers (`ABOUT`; numbers
   from the `HELPERS` notes, so they stay in step). The helper is a slider Faster → Quality (Adithya, 7 Oct: simpler than
   four names): its steps are `ABOUT`'s order (`STEPS`), `input` only names the step, `change` (or a dot) sets it. Profiles **cost /
   balance / intelligence** (old ids speed / balanced / quality map via `ALIASES`; keep accepting them). `select()`:
@@ -159,8 +159,26 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (`HELPER_WEIGHT`, `TEMPERATURE` 0.01: chosen by `test/router-eval-blend.js`), then attached context bumps (files, sizes by
   stat only, error output, browser elements). Measured (10-fold CV, M5): Native 74 %, MiniLM 82 %, Granite 87 %, Qwen3 90 %
   of sizes; old keyword rules 53 %; generative routers (qwen3 4b/1.7b) 351/241 ms = over the 200 ms budget
-  (docs/wiki/Model-Router.md, docs/benchmarks/). In the chat, a provider switch whose handoff is too big (or lost an
-  attachment) re-routes within the current AI (`provider: here`) instead of refusing. Learning: `routerFeedback` in the
+  (docs/wiki/Model-Router.md, docs/benchmarks/). In the chat, a provider switch whose handoff would lose detail re-routes
+  within the current AI (`provider: here`), unless that AI is near its limit. **Limits** (Adithya: Claude near its limit →
+  ChatGPT first, no context loss): `policy.js` `nearLimit` (from 80 % of a Session or Weekly limit, rising to 98 %;
+  beats any stay bonus) and `LEAVING_TO` (Codex/Claude before Gemini); `usage.js` `blockedUntil`/`markLimited`: an AI
+  that refused a request counts as full until its reset (`limitUsed` = 100), a later good answer clears it. An answer
+  that hit a limit in Auto → `retryElsewhere` (after `finishReply`): the same request on another AI with the handoff and
+  what the stopped answer did; never to an AI at ≥98 %. **Handoff** (`journal.handoff(messages, budget)`): built when
+  sent (`carryText`; `handoffBudget` = setting `kural.modelRouter.handoffChars`, or a local model's contextLength × 1.6),
+  with a plan excerpt and the latest to-do; too big → compacted in levels 0–4 by fixed rules (newest turns whole while
+  they fit; then earlier requests as a list), never a model summary. `handoffRecord` also saves the complete visible
+  history via `handoff-store.js` to a per-chat directory under `<globalStorage>/handoffs/`, mode 0600, replaced atomically
+  on the next handoff and removed when the chat is deleted. The prompt gives the path so omitted constraints, decisions
+  and tool results remain recoverable. Long strings use `kural_text_chunks` (join without separators) to keep each line
+  readable by tools; archive failure stops the handoff. The exact file is readable without another permission card;
+  its directory is available to the provider from launch. Questions answered and attachments in steer blocks travel too.
+  The same handoff for a model switch by hand. Account changes: `account.js` runs the internal command
+  `kural.chat.accountChanged` (log out, or another email) → `tab.freshSession` for Codex/Gemini chats (Claude chats
+  `--resume` with the new login); a conversation that can't be reopened is handed over, not started empty.
+  `test/handoff-fakes.test.js`: all 12 directions between the four AIs with the real adapters and their fakes
+  (`test/fake-claude-chat.js`), the account switch and compaction. Learning: `routerFeedback` in the
   chat: next message = good, `setModel` right after = better, every change undone = bad (replaces good); workspaceState
   `kural.router.memory.v1`, command `kural.router.forget`. Tests: `test/router.test.js`, `test/router-chat.test.js`,
   `test/router-words.test.js`; live: `node test/router-eval.js`, `node test/router-latency.js`.
@@ -169,8 +187,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   it. Codex: `account/rateLimits/read` (every 10 min) and `…/updated`. Gemini (agy): `--print /usage` weekly limits, and
   tokens per answer.
   Saved in globalState `kural.usage.v1` so the bar shows the last numbers at startup. In words (`usage.limitName`,
-  `until`, `inWords`): the status item of the chat's AI (`brain.engineOf(currentModel())`) reads "Claude 5h 50% · resets
-  42m | Weekly 25% · resets 3d 4h", the others short; `chat.onChoice` (model pick, tab switch) redraws it. Clicking it
+  `until`, `inWords`): the 5-hour window is called **Session** everywhere (Adithya), then "Weekly", "Weekly (Opus)",
+  "Weekly (Gemini)"; numbers saved as "5-hour" by older versions still read as the Session. The status bar shows only the
+  Session limit (Adithya: weekly only on hover): the chat's AI (`brain.engineOf(currentModel())`) "Claude Session 50% ·
+  resets 42m", the others short ("Codex 12%"); weekly limits stay on hover even near their limit. Gemini (weekly only)
+  shows its name. Warning colors still consider every window, including Weekly. The hover has every AI's
+  Session and Weekly in full. `chat.onChoice` (model pick, tab switch) redraws it. Clicking it
   opens the **AI Usage** bottom panel (`lib/usage-panel.js`, view `kural.usagePanel`, command `kural.showUsage`).
 - **Account** (`lib/account.js`): status item (plan); clicking it (command `kural.account`) opens **Kural Settings**
   (`lib/settings-page.js`, a WebviewPanel "kural.settings": a card per AI with who/plan/limits/buttons, then version,
@@ -249,7 +271,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   earned agreement, and hand work between roles for review. Test changes with a real run before shipping.
 - **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
   and `--forward-subagent-text`. Old Claude Code refuses unknown flags, so `supportedFlags()` probes once
-  (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. Debug raw output: start Kural with
+  (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. The answer is saved in
+  `<globalStorage>/claude-flags.json`, keyed by the binary's real path, size and date, and `prefetchFlags` asks in the
+  background at startup: the blocking `spawnSync` probe (only a fallback now) froze every extension for 0.3–8 s at a
+  window's first chat answer. Debug raw output: start Kural with
   `KURAL_RAW_LOG=/tmp/raw.jsonl`.
 - **Jira tickets** (`lib/chat/tickets.js`): no Jira login in Kural. Search = a Haiku `claude` helper with the full setup
   (so the Atlassian connector is there), only Atlassian tools allowed, JSON answer. claude.ai connectors connect in the
@@ -334,7 +359,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Tab completion engines**: `lib/tab/local.js` (Ollama, raw FIM prompt `<|fim_prefix|>…<|fim_suffix|>…<|fim_middle|>`
   for qwen2.5-coder base models; `tidyLocal()` trims its output) and Claude (`ClaudeSession`). Engine "auto" uses
   local when Ollama has the model, else Claude; in Auto, `race()` gives local a 350 ms head start, then Claude, first
-  real answer wins. The local engine counts only once chosen (`local.allowed`: globalState `kural.tabLocal.v1`, set by the
+  real answer wins. **While Ollama is busy** (`LocalEngine.busy()`: a chat in this window answers with a local model,
+  `local.chatBusy` set in extension.js, or answers take over 3× this computer's usual and over 0.8 s), Claude helps
+  even with engine "Local model": local gets a 200 ms head start, each engine has its own cancel switch and the slower
+  request is stopped (measured: local Tab took 2–6.4 s during a local chat, Ollama runs both models on one GPU; with a
+  Claude chat Tab was fine). Without Claude, Tab waits longer between keys then; terminal Tab the same
+  (`test/tab-busy.test.js`). Ollama keeps Tab's model 30 minutes after the last suggestion (was 2 h: 1.1 GB).
+  The local engine counts only once chosen (`local.allowed`: globalState `kural.tabLocal.v1`, set by the
   panel's Set up/Download, or Get started's own model): a model left over in Ollama isn't "ready". Local requests use short context (1500/400 chars) and few tokens: CPU-only machines are slow.
   Claude can't go below ~0.5 s per suggestion (measured). `test/fake-ollama.js` imitates Ollama for testing
   (modes via /tmp/rec/fake-mode: {"delay": ms} or {"empty": true}).
@@ -345,7 +376,25 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Linux: ollama.com/install.sh via `pkexec`, its curl % and `>>>` steps read by `readLinux`. Fails → a message offering
   ollama.com / the terminal installer. Test: `test/ollama-install.test.js` (a stand-in ollama.com). Not yet tried with the real download on any system.
 - **Tab completion speed (Claude)**: model time (~0.6 s, Haiku, thinking off) dominates. Don't add work before the
-  request. Two warm processes (`pool: 2`), early return on `</insert>`, type-through reuse.
+  request. Two warm processes (`pool: 2`), early return on `</insert>`, type-through reuse. They start only when Tab
+  needs Claude (`warmTab()`: engine Claude, or no local model ready) and stop after 15 idle minutes.
+- **Memory** (`scripts/bench-memory.js`, read-only: a running Kural's processes by part, each `claude` named by its job,
+  Ollama's loaded models; results and the long-term plan in `docs/benchmarks/memory-2026-10-08.md`): every
+  `ClaudeSession` pool stops after idle minutes (`idleStopMs`; Tab 15, terminal/Ctrl+K/Ask 10, commit/Source
+  Control/plain words 5; tests: `KURAL_IDLE_MS`) and the next question starts it (~0.8 s instead of 0.6 s once); Ask's
+  Claude starts on the Ask tab, not for text search; terminal Tab keeps one process; `~/.claude.json` is parsed again
+  only when it changed; Ollama's status is polled only while the window is in front. Idle chats: see "Idle chats free
+  their program". Measured 8 Oct 2026: Adithya's Kural 2.6 GB (326 MB idle helpers); test copy idle 1,268 → 1,078 MB.
+- **Rename offer** (`lib/tab/rename.js`, no vscode; setting `kural.tabCompletion.renameAcrossFiles`): follows one word
+  per document; after you change a name and move on, Kural searches the project for the old one (ripgrep, whole word,
+  case-sensitive; not node_modules/dist/build, minified/lock files or prose files) and offers Review (Search & Ask filled
+  in) / Change all (one undoable WorkspaceEdit) / Not now. Not for names being typed, keywords, one-letter names, undo,
+  or edits that aren't yours; a Tab acceptance (it replaces the rest of the line) is narrowed to what really changed.
+  Tests: `test/rename.test.js`, `test/rename-offer.test.js` (real ripgrep).
+- **Status bar icons**: Tab Completion = the sparkle (crossed out when off), Model Router = its icon; error, log in and
+  finish setup keep their words. The crossed sparkle is in `media/codicons/kural-icons.ttf` (package.json `icons`), made
+  by `scripts/make-status-icons.js` from Codicons' sparkle: edit the script, not the font (`test/status-icons.test.js`
+  fails when they differ).
 - **Tab in the terminal** (`lib/tab/terminal.js`): a terminal completion provider (proposed API
   `terminalCompletionProvider`, in package.json `enabledApiProposals`; fine for a built-in extension). The terminal
   waits for every provider before showing its list (up to 5 s), so Kural never waits: cache or nothing, then asks the
@@ -403,6 +452,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   icon and the panel tab go away. Same fingerprint rule as the Help menu patch (`patch_workbench`); a VSCodium whose code
   doesn't match keeps both views with a `::warning::`. Checked by launching the patched app (both gone, "Search & Ask"
   there). Edit → Find in Files still runs VS Code's command (it opens nothing now): Kural binds Ctrl/Cmd+Shift+F/H itself.
+- **Run and Debug, Debug Console, Ports hidden** (`rebrand.py` `hide_debug_views`, Adithya): the views registry's
+  `addViews` is patched so every view in those three containers gets `and config.kural.showDebugViews` (debug ones also
+  show `inDebugMode`, so F5 still shows them); Run and Debug gets `hideIfEmpty`. The setting brings them back at once.
+  Test: `test/rebrand-debug-views.test.js`; checked in a patched test copy.
+- **System notifications from the workbench** (`rebrand.py` `add_os_toast`): `_kural.osToast` {title, body, id, actions,
+  silent, timeout, attention} → {clicked, actionIndex, supported} and `_kural.osToastClear` {id}, inserted before the
+  file's final `export{… as main}`; the command registry and `hostService` are found by shape, with its own
+  cancellation token. VS Code's `showToast` is an Electron Notification from the main process, so it shows as Kural.
+  A click brings the window to the front. Test: `test/rebrand-toast.test.js` (also on the real workbench file).
 - **Search & Ask** (`lib/search/`: `index.js` the view and Ask (always `brain.fastestModel()`: Haiku, or the lightest
   Codex/Gemini model by router `traits`, the chat's AI first; a local model only with no cloud AI; Adithya: Ask should
   be fast; no Auto routing there), `find.js` text search in the editor, `text.js` no
@@ -476,7 +534,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Restore = each file back to the snapshot of the EARLIEST answer after the message that changed it; changes become
   "undone". Edit = optional restore (modal), messages cut at the index, a new session with `carryOver {edited}` (the
   handoff record), like a provider switch. Page: `.msg-actions` on user messages, `S.editing` + `.edit-bar`, `editIndex`
-  in the send message.
+  in the send message. Fork from here asks the same (`forkAsk`: Restore Code / Keep Code; closing it = no fork) when
+  answers after that message changed files (Adithya: going back to an older point must ask about the code).
 - **Messages sent while it answers (the queue)** (`queueSend`/`onEcho`/`giveBack` in `lib/chat/index.js`): Enter never
   stops an answer (Adithya: it did); only Stop/Esc does. The message goes to the program at once (`sendTo`), and every
   program echoes each message when it takes it in (`{type: "user", isReplay: true}`): Claude Code with
@@ -495,6 +554,36 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   added while it worked, splits it into parts; only the last part's dropdown is live); pending permissions/questions, agent cards, team
   posts, pictures and the text after the last step stay outside. An answer with steps is redrawn on each new block
   (`appendBlock` → `rerender`); `patchBlock` still patches inside the group and refreshes `.steps-line`.
+- **Instructions changed mid-chat** (`instructionsNote`, `tab.sessionInstructions` fingerprints): Claude Code (checked
+  with 2.1.289) ignores `--append-system-prompt(-file)` on `--resume`, so a mode, mood or team change after the first
+  message reached Claude never; now the next message starts with a `<kural_instructions_update>` saying what changed.
+- **Notifications** (`lib/chat/notify.js`, no vscode): done, or needs you (a permission, a question, a plan to build, an
+  error, a login), while you're away (setting `kural.notifications`: whenAway / always / off; `onScreen()` =
+  `pane.view.visible` / `panel.visible` and the window's focus). One per answer (a team's at the end; none after Stop),
+  one per chat at a time (toast id `kural-chat-<tabId>`), cleared when you answer or open the chat; a click shows it.
+  Shown by `_kural.osToast` (rebrand.py patch: VS Code's own native toast, an Electron Notification, so it says Kural on
+  every OS); without the patch: osascript / a PowerShell toast / notify-send (text passed as arguments), else VS Code's
+  in-window notification. macOS asks once (Allow / Don't Allow) and never tells an app it was denied: then nothing shows
+  until System Settings > Notifications > Kural allows it. The test copies share the bundle id com.kural with the real
+  app: a toast from them asks about (and changes) the real Kural's permission.
+- **Moods** (`prompts.js` `MOODS` + setting `kural.chat.moods`, edited in Kural Settings → Moods): your own moods are read
+  from user settings only (`inspect().globalValue`: a project's settings can't inject instructions); a deleted mood →
+  Default; editing one restarts idle chats with the new text. Webview pages: CSP blocks `style="…"` attributes, so set
+  `el.style.…` / `style.cssText` in the page script (Kural Settings showed every usage bar full); `replaceChildren(null)`
+  writes the text "null".
+- **Did you know** (`media/facts.js`, setting `kural.chat.didYouKnow`): one fact under the working line from ~4 s into an
+  answer, a new one every 15 s, a fixed three-line height (the answer never jumps), gone when it ends; "Know more" opens
+  in Kural's browser. Kural tips link to the wiki (pages not published yet link to `blob/main/docs/wiki/*.md`); the
+  others to MDN/Wikipedia/official docs. Every link answered 200 on 8 Oct 2026: check new ones the same way.
+- **Only the project's files are "changed"** (`changes.js` `inProject`): checkpoints, `finishTurn` and old chats
+  (`clean()`) leave out files outside the project folders (no folder open: `ws.workDir()`; a project inside /tmp counts),
+  e.g. notes the AI writes in /tmp or `~/.claude`. Undo all, Restore code and what Tab/Auto learn follow.
+- **Idle chats free their program** (`stopIdle`, every minute): a chat off screen and idle for 10 minutes (or beyond the
+  two most recently used idle ones) stops its program (`r.stale`); `warm()` starts it again in the same conversation
+  when you open the chat, show the side panel or send. Never while an answer, agent, queued message, question or a
+  background task runs (`r.bg`: Claude Code's `task_started`/`task_notification`, tracked also after the answer: a dev
+  server the AI started dies with the program). Streaming text is redrawn ~15 times a second (the page took 15 % of a
+  core at 60). A model on this computer gets `GUIDE_LOCAL` (~1,100 characters) instead of the whole guide.
 - **Tokens** (`lib/ai/usage.js` `addTokens`/`tokenTotals`, per provider per day, 35 days, saved with the rest): Claude's
   `result.modelUsage` (all models) in `ClaudeProcess.onData` (every Claude process); Codex `thread/tokenUsage/updated`
   (totals: deltas), Gemini's per-answer usage and Ollama's `prompt_eval_count/eval_count` → the hub + a `kural_usage`

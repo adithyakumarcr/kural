@@ -13,6 +13,8 @@ Everything VS Code's Search did:
   `$1`, `$&`, `\n`, and `\u` `\l` `\U` `\L` (upper/lower case) work. The results show each change (old struck through,
   new after it); click one for the **Replace Preview** (the file beside your changed version). Replace one match, a whole
   file, or **Replace All** (Ctrl+Alt+Enter; it asks first). Files you weren't editing are saved; undo with Ctrl+Z.
+  When you change a name in your code, Tab Completion's offer to change it elsewhere opens here with **Review**, filled
+  in (see [[Tab Completion]]).
 - **Search details** (the **...** under the box): **files to include** and **files to exclude** (`*.ts`, `src`,
   `./docs/*.md`, several with commas), **Search only in Open Editors**, and **Use Exclude Settings and Ignore Files**
   (VS Code's `files.exclude` / `search.exclude` and your `.gitignore`).

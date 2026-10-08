@@ -25,6 +25,9 @@
     for (const [k, v] of Object.entries(props || {})) {
       if (v === undefined || v === null || v === false) continue;
       if (k === "class") n.className = v;
+      // (Through the style object: the page's rules (CSP) block a style="…" attribute, so a bar's width set that way was
+      // ignored and every bar showed full.)
+      else if (k === "style") n.style.cssText = v;
       else if (k === "html") n.innerHTML = v;
       else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
       else n.setAttribute(k, v === true ? "" : v);
@@ -522,7 +525,8 @@
     // A previous live thinking box is finished once something comes after it.
     if (prev && msg.blocks[k - 1].k === "think") prev.replaceWith(blockNode(msg, msg.blocks[k - 1], k - 1));
     const node = blockNode(msg, msg.blocks[k], k);
-    const after = k === 0 ? (out.querySelector(".team-note") || null) : out.querySelector(`[data-b="${k - 1}"]`);
+    // (The first block goes after the lines on top: which model answers, the team's note.)
+    const after = k === 0 ? (out.querySelector(".team-note") || out.querySelector(".model-attribution") || null) : out.querySelector(`[data-b="${k - 1}"]`);
     if (after) after.after(node); else out.prepend(node);
     follow();
   }
@@ -557,7 +561,7 @@
 
   function forkButton(i) {
     return el("button", { class: "msg-act", "aria-label": "Fork from here",
-      title: "Fork from here\nStart a new chat with the conversation through this message. This chat and your files stay as they are.",
+      title: "Fork from here\nStart a new chat with the conversation through this message. This chat stays as it is. If later answers changed files, Kural asks whether the code goes back too.",
       onclick: () => S.tab.status !== "idle" ? busyNote() : post({ type: "fork", tabId: S.tab.id, index: i }) }, icon("git-branch"));
   }
 
@@ -603,6 +607,7 @@
       el("button", { class: "cb", title: "Stop the agents still working and have the lead answer with what it has", onclick: () => post({ type: "finishTeam", tabId: S.tab.id }) }, "Finish now")));
     else if (m.running) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
+    if (m.running && !waiting) out.append(dykNode(m));   // "Did you know?" while it works
     if (m.note) out.append(el("div", { class: "note" }, m.note));
     if (m.error === "stopped") out.append(el("div", { class: "note" }, "Stopped."));
     else if (m.error === "login") out.append(el("div", { class: "note warn" }, `${m.errorWho || "Claude"} isn't logged in. `, el("button", { class: "cb primary", onclick: () => post({ type: "login", tabId: S.tab.id }) }, "Log in")));
@@ -626,7 +631,39 @@
   }
   setInterval(() => {
     for (const e of listEl.querySelectorAll(".elapsed")) e.textContent = workingText(+e.dataset.t0);
+    // A "Did you know?" appearing (after a few seconds) makes the answer taller: keep following it if you were.
+    let grew = false;
+    for (const d of listEl.querySelectorAll(".dyk")) { const was = !!d.firstChild; if (fillDyk(d, true) && !was && d.firstChild) grew = true; }
+    if (grew) follow();
   }, 1000);
+
+  // ---------- "Did you know?" while an answer is worked on ----------
+  // One short Kural tip or programming fact (media/facts.js) under "Thinking…", from a few seconds in (a quick answer
+  // shows none), a new one every 15 s, with a Know more link (opens like any web link in the chat: Kural's browser tab).
+  // Which one shows is worked out from the time (the answer's start picks where the list begins), so redrawing the answer
+  // while it streams keeps the same fact. Fixed height (three lines), so a new fact never moves the answer. Gone when the
+  // answer ends; off with the setting kural.chat.didYouKnow.
+  const FACTS = Array.isArray(window.KURAL_FACTS) ? window.KURAL_FACTS : [];
+  const DYK_AFTER = 4000, DYK_EVERY = 15000;
+  function factIndex(t0, now = Date.now()) {
+    if (S.didYouKnow === false || !FACTS.length || !t0 || now - t0 < DYK_AFTER) return -1;
+    const start = (Math.floor(t0 / 1000) * 7919) % FACTS.length;
+    return (start + Math.floor((now - t0 - DYK_AFTER) / DYK_EVERY)) % FACTS.length;
+  }
+  function dykNode(m) { const node = el("div", { class: "dyk", "data-t0": m.t0 }); fillDyk(node, false); return node; }
+  // Shows the fact for now; true when it changed. fresh: fades in (a new fact, not a redraw of the same one).
+  function fillDyk(node, fresh) {
+    const i = factIndex(+node.dataset.t0);
+    if (String(i) === node.dataset.i) return false;
+    node.dataset.i = String(i);
+    if (i < 0) { node.replaceChildren(); return true; }
+    const f = FACTS[i];
+    node.replaceChildren(
+      el("div", { class: "dyk-head" }, icon("lightbulb"), el("span", { class: "dyk-label" }, "Did you know?"), el("span", { class: "spacer" }),
+        el("a", { class: "dyk-more", title: f.u, onclick: (e) => { e.preventDefault(); post({ type: "openUrl", url: f.u }); } }, "Know more")),
+      el("div", { class: `dyk-text${fresh ? " fresh" : ""}`, title: f.t }, f.t));
+    return true;
+  }
 
   // ONE dropdown per answer for how it worked: thoughts, tool steps (reads, searches, commands, edits…), permission cards
   // you've answered, and the short notes the model writes between them, so the chat shows the answer, not a stack of
@@ -1212,7 +1249,7 @@
           el("span", { class: "mi-hint" }, { balance: "quality, then speed",cost: "saves your usage limits",intelligence: "most capable" }[profile]))),
         el("div", { class: "mi",onclick: () => { post({ type: "routerPanel" }); closeMenu(); } },el("span", { class: "mi-icon" },icon("settings-gear")),el("span", { class: "mi-label" },"Configure Model Router…")),
         el("div", { class: "sep" }),
-        el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up")), ...S.models.map((m) =>
+        ...claudeHead(t, local), ...S.models.map((m) =>
         el("div", { class: `mi ${!t.autoRoute && t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
           if (S.claudeReady) post({ type: "setModel", tabId: t.id, model: m.id }); else post({ type: "getStarted", path: "claude" });
           closeMenu(); } },
@@ -1224,8 +1261,12 @@
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         levelNote(t),
+        // Moods: the four built-in ones, then yours (Kural Settings → Moods), then a way to add one.
         el("div", { class: "mh" }, "Mood"),
-        el("div", { class: "seg mood" }, S.moods.map((md) => el("button", { class: t.mood === md.id ? "on" : "", title: md.hint, onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label))),
+        el("div", { class: "moods" }, S.moods.map((md) => el("button", { class: `mood-chip${t.mood === md.id ? " on" : ""}`, title: md.hint || "",
+          "aria-pressed": String(t.mood === md.id), onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label)),
+          el("button", { class: "mood-chip add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
+            onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own mood…")),
         el("div", { class: "sep" }),
         // (Agent teams run on Claude Code: not with a model on this computer.)
         el("div", { class: `mi toggle-row ${local ? "dim off" : ""}`, onclick: () => { if (!local) post({ type: "setTeam", tabId: t.id, team: teamOn ? 0 : (S.teamSizes[1] || 3) }); } },
@@ -1236,8 +1277,7 @@
         teamOn && !local ? el("div", { class: "seg team" }, S.teamStyles.map((st) => el("button", { class: t.teamStyle === st.id ? "on" : "", title: st.hint, onclick: () => post({ type: "setTeamStyle", tabId: t.id, style: st.id }) }, st.label))) : null,
         teamOn && !local ? el("div", { class: "roles" }, el("span", { class: "roles-h" }, "Roles"),
           S.roles.map((r) => el("button", { class: `role ${(t.roles || []).includes(r.id) ? "on" : ""}`, title: r.desc, onclick: () => post({ type: "toggleRole", tabId: t.id, role: r.id }) }, r.label))) : null,
-        teamOn && !local && !(t.roles || []).length ? el("div", { class: "seg team" }, S.teamSizes.map((n) => el("button", { class: t.team === n ? "on" : "", onclick: () => post({ type: "setTeam", tabId: t.id, team: n }) }, `${n} agents`))) : null,
-        ...(local ? [] : setupItems(t))];   // (your Claude Code setup: connectors, skills — Claude only)
+        teamOn && !local && !(t.roles || []).length ? el("div", { class: "seg team" }, S.teamSizes.map((n) => el("button", { class: t.team === n ? "on" : "", onclick: () => post({ type: "setTeam", tabId: t.id, team: n }) }, `${n} agents`))) : null];
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");
@@ -1504,26 +1544,34 @@ ${d.system}` : ""}`,
     if (S.menu === "ticket") openMenu.refresh();
   }
 
-  // What this chat's Claude has from your Claude Code setup (connectors, plugins, skills), with Reload.
-  function setupItems(t) {
+  // Claude's heading in the model menu. On a Claude model its right side is what this chat's Claude has from your Claude
+  // Code setup ("10 connectors · 30 skills": click for each connector) and Reload. (It was a section at the bottom of the
+  // menu with its own "Your Claude Code setup" title; Adithya: beside Claude, no title.) Claude models only: Codex, Gemini
+  // and your own model don't use it.
+  function claudeHead(t, local) {
+    if (!S.claudeReady || local) return [el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up"))];
     const st = S.setups[t.id];
-    const head = el("div", { class: "mh" }, "Your Claude Code setup",
-      el("button", { class: "mh-btn", title: "Reload connectors, MCP servers, plugins and skills (same conversation)", onclick: (e) => { e.stopPropagation(); post({ type: "reloadSetup", tabId: t.id }); } }, icon("refresh"), " Reload"));
-    if (st && !st.full) return [el("div", { class: "sep" }), head,
-      el("div", { class: "setup-row" }, "Fast minimal setup: no connectors or plugins. ",
-        el("button", { class: "cb primary", onclick: () => post({ type: "useFullSetup", on: true }) }, "Use my full setup"))];
-    if (!st) return [el("div", { class: "sep" }), head, el("div", { class: "setup-row q-muted" }, "Loads with your first message.")];
-    // One short line ("10 connectors · 3 need attention · 30 skills"); click it to see each connector.
-    const n = st.servers.length, bad = st.servers.filter((x) => x.status !== "connected").length;
-    const plural = (k, w) => `${k} ${w}${k === 1 ? "" : "s"}`;
-    const summary = [n ? plural(n, "connector") : "no connectors", bad ? `${bad} need${bad === 1 ? "s" : ""} attention` : "",
-      st.plugins.length ? plural(st.plugins.length, "plugin") : "", st.skills ? plural(st.skills, "skill") : ""].filter(Boolean).join(" · ");
-    const line = el("div", { class: `setup-row setup-sum${S.setupOpen ? " open" : ""}`, title: n ? "Show connectors" : "",
-      onclick: (e) => { e.stopPropagation(); if (!n) return; S.setupOpen = !S.setupOpen; openMenu.refresh(); } },
-      n ? el("span", { class: "think-caret" }) : null, bad ? el("span", { class: "warn-tri", title: "Some connectors aren't connected" }, icon("warning")) : null, summary);
-    const servers = S.setupOpen && n ? el("div", { class: "setup-row" }, ...st.servers.map((x) =>
-      el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name))) : null;
-    return [el("div", { class: "sep" }), head, line, servers];
+    const reload = el("button", { class: "mh-btn", title: "Reload your Claude Code setup: connectors, MCP servers, plugins, skills (same conversation)",
+      "aria-label": "Reload your Claude Code setup", onclick: (e) => { e.stopPropagation(); post({ type: "reloadSetup", tabId: t.id }); } }, icon("refresh"));
+    let info = [], list = null;
+    if (st && !st.full) info = [el("span", { class: "setup-sum", title: "Fast minimal setup: no connectors, plugins or skills" }, "minimal setup"),
+      el("button", { class: "mh-btn", title: "Use your full Claude Code setup: your connectors, MCP servers, plugins and skills",
+        onclick: (e) => { e.stopPropagation(); post({ type: "useFullSetup", on: true }); } }, "use mine")];
+    else if (!st) info = [el("span", { class: "setup-sum", title: "Your Claude Code setup (connectors, plugins, skills) loads when Claude starts" }, "setup loads…")];
+    else {
+      // One short summary ("10 connectors · 30 skills"); a warning sign when some connector isn't connected.
+      const n = st.servers.length, bad = st.servers.filter((x) => x.status !== "connected").length;
+      const plural = (k, w) => `${k} ${w}${k === 1 ? "" : "s"}`;
+      const summary = [n ? plural(n, "connector") : "no connectors", st.plugins.length ? plural(st.plugins.length, "plugin") : "",
+        st.skills ? plural(st.skills, "skill") : ""].filter(Boolean).join(" · ");
+      info = [el("span", { class: `setup-sum${S.setupOpen ? " open" : ""}`, title: (n ? (S.setupOpen ? "Hide the connectors" : "Show each connector") : "Your Claude Code setup") +
+          (bad ? `\n${bad} connector${bad === 1 ? " isn't" : "s aren't"} connected` : ""),
+        onclick: (e) => { e.stopPropagation(); if (!n) return; S.setupOpen = !S.setupOpen; openMenu.refresh(); } },
+        bad ? el("span", { class: "warn-tri" }, icon("warning")) : null, el("span", { class: "setup-text" }, summary), n ? el("span", { class: "think-caret" }) : null)];
+      if (S.setupOpen && n) list = el("div", { class: "setup-row" }, ...st.servers.map((x) =>
+        el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name)));
+    }
+    return [el("div", { class: "mh claude-h" }, el("span", {}, "Claude"), el("span", { class: "spacer" }), ...info, reload), list];
   }
   openMenu.refresh = () => { const k = S.menu; S.menu = null; if (k) openMenu(k, openMenu.anchor); };
   function closeMenu() { S.menu = null; menuEl.classList.add("hidden"); }
@@ -1571,14 +1619,20 @@ ${d.system}` : ""}`,
   const lastAssistant = () => { const m = S.tab && S.tab.messages; return m && m.length && m[m.length - 1].role === "assistant" ? m.length - 1 : -1; };
   let pending = null;
   const scheduleRerender = (i) => { if (pending === null) { pending = i; requestAnimationFrame(() => { const k = pending; pending = null; patches.clear(); if (S.tab && S.tab.messages[k]) rerender(k); }); } };
-  // Streaming: patch one block, at most once per frame (several deltas in one frame → one redraw).
+  // Streaming: the growing blocks are redrawn about 15 times a second (all deltas since the last redraw at once). Every
+  // frame was 60 a second: Ross measured the page using 15 % of a core while an answer streamed.
   const patches = new Set();
+  const PATCH_MS = 66;
+  let patchTimer = null, lastPatch = 0;
   const schedulePatch = (i, k) => {
     if (pending !== null) return;   // a full redraw is coming anyway
-    const key = `${i}:${k}`;
-    if (patches.has(key)) return;
-    patches.add(key);
-    requestAnimationFrame(() => { if (!patches.delete(key)) return; if (S.tab && S.tab.messages[i]) patchBlock(i, k); });
+    patches.add(`${i}:${k}`);
+    if (patchTimer) return;
+    patchTimer = setTimeout(() => requestAnimationFrame(() => {
+      patchTimer = null; lastPatch = Date.now();
+      const keys = [...patches]; patches.clear();
+      for (const key of keys) { const [a, b] = key.split(":").map(Number); if (S.tab && S.tab.messages[a]) patchBlock(a, b); }
+    }), Math.max(0, PATCH_MS - (Date.now() - lastPatch)));
   };
   const findAgent = (id) => { const i = lastAssistant(); return i >= 0 ? [i, S.tab.messages[i].blocks.find((b) => b.k === "agent" && b.id === id)] : [i, null]; };
 
@@ -1590,7 +1644,10 @@ ${d.system}` : ""}`,
       case "config":
         S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false; S.clis = m.clis || [];
         S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.pics = m.pics || S.pics;
+        S.didYouKnow = m.didYouKnow !== false;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
+      case "didYouKnow": S.didYouKnow = m.on !== false; for (const d of listEl.querySelectorAll(".dyk")) fillDyk(d, true); break;
+      case "moods": S.moods = m.moods || S.moods; renderFoot(); if (S.menu === "model") openMenu.refresh(); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
         // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.

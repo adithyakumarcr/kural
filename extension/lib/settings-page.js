@@ -12,6 +12,12 @@ const { WIKI, ISSUES } = require("./chat/guide");
 const { fontScale } = require("./ui");
 const { versionLabel } = require("./version");
 const { USAGE } = require("./account");
+const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
+
+// Your own moods: the user setting kural.chat.moods (never a project's).
+const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
+const saveMoods = (list) => vscode.workspace.getConfiguration("kural").update("chat.moods",
+  list.map((m) => ({ id: m.id, name: m.label, hint: m.hint, instructions: m.instructions })), vscode.ConfigurationTarget.Global);
 
 class SettingsPage {
   constructor(context, account, getStarted) {
@@ -26,11 +32,14 @@ class SettingsPage {
   register() {
     this.account.onChange(() => this.push());
     this.gs.onChange(() => this.push());
-    this.context.subscriptions.push(usage.onChange(() => this.push()));
+    this.context.subscriptions.push(usage.onChange(() => this.push()),
+      vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("kural.chat.moods")) this.push(); }));
   }
 
-  async open() {
-    if (this.panel) { this.panel.reveal(); }
+  // section: "moods" scrolls to the Moods editor (the chat's model menu, "Add your own mood…").
+  async open(section) {
+    this.section = section || null;
+    if (this.panel) { this.panel.reveal(); if (section) this.panel.webview.postMessage({ type: "show", section }); }
     else {
       const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
       const p = this.panel = vscode.window.createWebviewPanel("kural.settings", "Kural Settings", vscode.ViewColumn.Active,
@@ -89,7 +98,30 @@ class SettingsPage {
     const engine = (() => { try { return brain.engineOf(brain.currentModel()); } catch { return null; } })();
     return { type: "state", cards, loading: !!this.loading, refreshing: this.refreshing, checking: this.checking, chatAI: engine === "ollama" ? "local" : engine,
       version: versionLabel(this.context.extensionPath, this.context.extension.packageJSON.version),
-      autoUpdates: vscode.workspace.getConfiguration("kural").get("updates.autoCheck") !== false };
+      autoUpdates: vscode.workspace.getConfiguration("kural").get("updates.autoCheck") !== false,
+      moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
+      section: this.section || null };
+  }
+
+  // Add or change one of your moods ({ id?, name, hint, instructions }); returns an error to show, or "".
+  async saveMood(m) {
+    const name = String((m && m.name) || "").replace(/\s+/g, " ").trim(), instructions = String((m && m.instructions) || "").trim();
+    if (!name) return "Give the mood a name.";
+    if (!instructions) return "Write what the AI should do in this mood.";
+    if (name.length > MOOD_LIMITS.name) return `Keep the name to ${MOOD_LIMITS.name} characters.`;
+    if (instructions.length > MOOD_LIMITS.instructions) return `Keep the instructions to ${MOOD_LIMITS.instructions} characters: a few sentences work best.`;
+    const list = userMoods(), others = list.filter((x) => x.id !== m.id);
+    if ([...MOODS, ...others].some((x) => x.label.toLowerCase() === name.toLowerCase())) return `There's already a mood called ${name}.`;
+    const mood = { id: m.id && list.some((x) => x.id === m.id) ? m.id : null, label: name, hint: String(m.hint || "").replace(/\s+/g, " ").trim().slice(0, MOOD_LIMITS.hint), instructions };
+    if (!mood.id) {   // a new one: an id from its name ("custom-pair-programmer"), kept when you rename it later
+      const base = moodId(name);
+      let id = base;
+      for (let n = 2; list.some((x) => x.id === id); n++) id = `${base}-${n}`;
+      mood.id = id;
+    }
+    const next = list.some((x) => x.id === mood.id) ? list.map((x) => x.id === mood.id ? mood : x) : [...list, mood];
+    await saveMoods(next);
+    return "";
   }
 
   push() { if (this.panel) this.panel.webview.postMessage(this.state()); }
@@ -124,6 +156,14 @@ class SettingsPage {
       case "exportSettings": vscode.commands.executeCommand("kural.settings.export"); break;
       case "crashes": vscode.commands.executeCommand("kural.showCrashReports"); break;
       case "importSettings": vscode.commands.executeCommand("kural.settings.import"); break;
+      case "saveMood": {
+        const error = await this.saveMood(m.mood || {});
+        if (this.panel) this.panel.webview.postMessage({ type: "moodSaved", reqId: m.reqId, error });
+        this.push();
+        break;
+      }
+      case "deleteMood": await saveMoods(userMoods().filter((x) => x.id !== m.id)); this.push(); break;
+      case "shown": this.section = null; break;   // (the page scrolled to the section it was asked to show)
     }
   }
 }

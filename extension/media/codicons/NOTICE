@@ -1,2 +1,4 @@
 Codicons 0.0.46-24 by Microsoft (https://github.com/microsoft/vscode-codicons).
 Icons: CC BY 4.0 (LICENSE-icons). Code: MIT (LICENSE-code). Used as-is.
+kural-icons.ttf: Kural's status bar icons, made by scripts/make-status-icons.js from the Codicons "sparkle" icon
+(changed: crossed out with a slash). CC BY 4.0 like Codicons.

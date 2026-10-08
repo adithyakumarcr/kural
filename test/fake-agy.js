@@ -4,7 +4,8 @@
 // seen from agy 1.2.2–1.2.7 (init, step_update, result), plus `--version`, `models` and print-mode slash commands.
 //
 // State: $FAKE_AGY_STATE, or else the file $FAKE_AGY_FILE (default <tmp>/kural-fake-agy-state): ok | loggedout.
-// Every run's arguments are added to $FAKE_AGY_LOG (one JSON per line), so a test can see the flags Kural used.
+// Every run's arguments are added to $FAKE_AGY_LOG (one JSON per line), so a test can see the flags Kural used; each
+// turn's text to $FAKE_AGY_INPUT_LOG.
 // What it answers depends on your message:
 //   "edit notes"  changes notes.txt in the folder (replace_file_content); refused unless accept-edits or skip-permissions
 //   "run tests"   runs `npm test` (run_command); refused unless --dangerously-skip-permissions
@@ -121,6 +122,8 @@ async function turn(text) {
   const t0 = Date.now();
   const denied = [];
   const msg = text.replace(/<kural_instructions>[\s\S]*?<\/kural_instructions>\s*/, "");
+  // (A test can see exactly what a turn was given: $FAKE_AGY_INPUT_LOG, one JSON per line.)
+  if (process.env.FAKE_AGY_INPUT_LOG) fs.appendFileSync(process.env.FAKE_AGY_INPUT_LOG, JSON.stringify({ text }) + "\n");
   if (/slow/i.test(msg)) {
     let stop = false;
     interrupted = () => { stop = true; };

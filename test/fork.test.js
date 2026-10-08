@@ -2,7 +2,9 @@
 const assert = require("assert");
 const fs = require("fs"), os = require("os"), path = require("path"), Module = require("module");
 const originalLoad = Module._load;
+const dialogs = [];   // what the chat asked (showWarningMessage) and what "you" answer: dialogs.answer
 const vscode = { workspace: { isTrusted: true, workspaceFolders: [], textDocuments: [], getConfiguration: () => ({ get: (_, d) => d }) },
+  window: { showWarningMessage: async (text, opts, ...buttons) => { dialogs.push({ text, detail: opts && opts.detail, buttons }); return dialogs.answer; } },
   env: { appRoot: "/unused" }, commands: { executeCommand: () => {} }, Uri: { file: (f) => ({ scheme: "file", fsPath: f }) } };
 Module._load = function (name, ...args) { return name === "vscode" ? vscode : originalLoad.call(this, name, ...args); };
 const { ChatView } = require("../extension/lib/chat");
@@ -129,6 +131,37 @@ function fixture(tab) {
     f.messages.push({ role: "assistant", changes: [{ id: "own-change", file: code, rel: "code.js", state: "pending" }] });
     assert.deepStrictEqual((await chat.restoreCode(f, 0)).restored, ["code.js"]);
     assert.strictEqual(f.messages[1].changes[0].state, "pending"); assert.strictEqual(f.messages.at(-1).changes[0].state, "undone");
+  });
+  // Forking from an earlier message whose later answers changed files: like Edit, Kural asks whether the code goes back.
+  const laterSource = () => {
+    const s = source();
+    s.messages[3] = { role: "assistant", blocks: [{ k: "text", text: "Changed it again" }], changes: [{ id: "later-change", file: code, rel: "code.js", state: "pending" }] };
+    return s;
+  };
+  const tracker = (calls) => ({ undo: async (id) => { calls.push(["undo", id]); return true; }, unchangedSince: () => true, review: async () => {}, keep: () => {} });
+  await check("fork with later file changes asks; Restore Code puts the code back and forks", async () => {
+    const s = laterSource(), { chat, pane } = fixture(s), calls = []; chat.changes = tracker(calls); chat.redraw = () => {};
+    dialogs.length = 0; dialogs.answer = "Restore Code";
+    await chat.handle({ type: "fork", tabId: s.id, index: 1 }, pane);
+    assert.strictEqual(dialogs.length, 1); assert.match(dialogs[0].text, /code back/); assert.deepStrictEqual(dialogs[0].buttons, ["Restore Code", "Keep Code"]);
+    assert.match(dialogs[0].detail, /code\.js/);
+    assert.deepStrictEqual(calls, [["undo", "later-change"]]); assert.strictEqual(s.messages[3].changes[0].state, "undone");
+    assert.strictEqual(chat.tabs.length, 2); assert.strictEqual(chat.tabs[1].messages.length, 2);
+  });
+  await check("Keep Code forks and leaves the files; closing the dialog doesn't fork", async () => {
+    for (const answer of ["Keep Code", undefined]) {
+      const s = laterSource(), { chat, pane } = fixture(s), calls = []; chat.changes = tracker(calls);
+      dialogs.length = 0; dialogs.answer = answer;
+      await chat.handle({ type: "fork", tabId: s.id, index: 1 }, pane);
+      assert.strictEqual(dialogs.length, 1); assert.deepStrictEqual(calls, []); assert.strictEqual(s.messages[3].changes[0].state, "pending");
+      assert.strictEqual(chat.tabs.length, answer ? 2 : 1, String(answer));
+    }
+  });
+  await check("no later changes (or only undone ones): forks without asking", async () => {
+    const s = laterSource(); s.messages[3].changes[0].state = "undone";
+    const { chat, pane } = fixture(s); chat.changes = tracker([]); dialogs.length = 0;
+    await chat.handle({ type: "fork", tabId: s.id, index: 1 }, pane);
+    assert.strictEqual(dialogs.length, 0); assert.strictEqual(chat.tabs.length, 2);
   });
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(failed ? `fork: ${failed} FAILED` : "fork: ALL PASS"); process.exitCode = failed ? 1 : 0;

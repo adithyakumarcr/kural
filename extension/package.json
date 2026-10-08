@@ -735,7 +735,7 @@
           "default": 75,
           "minimum": 0,
           "maximum": 2000,
-          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set from Tab Completion in the status bar."
+          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set in the Tab Completion panel (the sparkle in the status bar)."
         },
         "kural.chat.model": {
           "type": "string",
@@ -780,6 +780,56 @@
           "default": true,
           "description": "Chat uses your whole Claude Code setup: connectors and MCP servers, plugins, skills, hooks, settings. Kural reloads it in the same conversation when it changes. Off = a faster, minimal setup (your CLAUDE.md and .claude/rules are still used)."
         },
+        "kural.notifications": {
+          "type": "string",
+          "enum": [
+            "whenAway",
+            "always",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Only when you're not looking: Kural's window isn't in front, or that chat isn't on screen",
+            "Every time an answer finishes or needs you",
+            "Never"
+          ],
+          "default": "whenAway",
+          "markdownDescription": "A system notification when a chat's answer is done or needs you (a command to allow, a question, a plan to build, an error). macOS asks once whether Kural may send notifications."
+        },
+        "kural.chat.didYouKnow": {
+          "type": "boolean",
+          "default": true,
+          "description": "While an answer is being worked on, show a short \"Did you know?\" tip or fact under it, with a Know more link."
+        },
+        "kural.chat.moods": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 30
+              },
+              "hint": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "instructions": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "name",
+              "instructions"
+            ]
+          },
+          "markdownDescription": "Your own moods for the chat, next to Default, Explorer, Critic and Learn: a name, a one-line hint, and instructions for the AI. Edit them in **Kural Settings → Moods**."
+        },
         "kural.fontSize": {
           "type": "number",
           "default": 0,
@@ -797,10 +847,10 @@
           ],
           "enumDescriptions": [
             "The local model when Ollama has it (fastest), otherwise Claude",
-            "Always the local model (Claude only if Ollama isn't available)",
+            "The local model (Claude helps if Ollama isn't available, or while a chat keeps it busy)",
             "Always Claude"
           ],
-          "description": "What writes Tab Completion suggestions. Easiest to set in the Tab Completion panel (click Tab Completion in the status bar)."
+          "description": "What writes Tab Completion suggestions. Easiest to set in the Tab Completion panel (the sparkle in the status bar)."
         },
         "kural.tabCompletion.localModel": {
           "type": "string",
@@ -824,10 +874,20 @@
           "default": true,
           "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
         },
+        "kural.tabCompletion.renameAcrossFiles": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When you change a name in your code (type over it, or accept a Tab suggestion that changes it), Kural looks for the old name in the rest of the project and offers to change it there too: **Review** (Search & Ask, filled in) or **Change all**."
+        },
         "kural.updates.autoCheck": {
           "type": "boolean",
           "default": true,
           "description": "Check for a new Kural version once a day (it asks before installing anything)."
+        },
+        "kural.showDebugViews": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show VS Code's **Run and Debug** side bar and the **Debug Console** and **Ports** panels. Off by default to keep Kural simple; while you debug (F5), the debug views show anyway."
         },
         "kural.modelRouter.profile": {
           "type": "string",
@@ -947,6 +1007,15 @@
         "path": "./themes/kural-light-color-theme.json"
       }
     ],
+    "icons": {
+      "kural-tab-off": {
+        "description": "Tab Completion is off (its sparkle, crossed out)",
+        "default": {
+          "fontPath": "./media/codicons/kural-icons.ttf",
+          "fontCharacter": "\\E001"
+        }
+      }
+    },
     "walkthroughs": [
       {
         "id": "welcome",

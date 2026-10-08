@@ -16,12 +16,12 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 
 | Page | What's in it |
 |---|---|
-| [[Getting Started]] | Install Kural, then pick Claude or your own model |
+| [[Getting Started]] | Install Kural, then pick Claude, Google Gemini, ChatGPT (Codex) or your own model |
 | [[Chat]] | The chat: modes, models, moods, files and pictures, history, two chats at once |
 | [[Multiple Agents]] | A project team (PM, Researcher, Architect, Developers, Tester), or agents that discuss |
 | [[Google Gemini and ChatGPT]] | Using your Google account (Gemini) or ChatGPT plan (Codex) in Kural |
 | [[Your Own Model]] | Models on your computer: finding, downloading, what they can and can't do |
-| [[Tab Completion]] | Grey suggestions as you type; the Tab Completion panel; what it learns |
+| [[Tab Completion]] | Grey suggestions as you type; the Tab Completion panel; changing a name in other files too; what it learns |
 | [[Terminal]] | Whole command lines in the terminal, commit messages, plain words → commands |
 | [[Devices]] | A Raspberry Pi or board computer over SSH: link it to a chat, a terminal on it |
 | [[Inline Edit]] | Ctrl+K, and Apply from the chat |

@@ -7,7 +7,7 @@ Module._load = function (req, ...a) {
   return load.call(this, req, ...a);
 };
 const usage = require("../extension/lib/ai/usage");
-const { _test: { shortName } } = require("../extension/lib/account");
+const { _test: { shortName, meter, hoverText } } = require("../extension/lib/account");
 const { _page } = require("../extension/lib/usage-panel");
 
 let fail = 0;
@@ -15,14 +15,15 @@ const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e)
 const now = Date.UTC(2026, 9, 4, 12, 0);
 const min = 60000;
 
-check("Claude's limits in words: 5-hour and weekly, with when they reset", () => {
+check("Claude's limits in words: the 5-hour limit is the Session, then Weekly, with when they reset", () => {
   usage._reset();
   const r = usage.fromClaude({ rate_limit_info: { unifiedWindows: { five_hour: { utilization: 0.5, resetsAt: (now + 42 * min) / 1000 }, seven_day: { utilization: 0.25, resetsAt: (now + (3 * 1440 + 4 * 60) * min) / 1000 } } } });
   const [five, week] = r.windows;
-  assert.strictEqual(usage.inWords(five, now), "5-hour limit 50% used, resets in 42 min");
-  assert.strictEqual(usage.inWords(week, now), "Weekly limit 25% used, resets in 3 days 4 h");
-  assert.strictEqual(shortName(five), "5h");
+  assert.strictEqual(usage.inWords(five, now), "Session 50% used, resets in 42 min");
+  assert.strictEqual(usage.inWords(week, now), "Weekly 25% used, resets in 3 days 4 h");
+  assert.strictEqual(shortName(five), "Session");
   assert.strictEqual(shortName(week), "Weekly");
+  assert.ok(usage.isSession(five) && !usage.isSession(week) && usage.isWeekly(week) && !usage.isWeekly(five));
 });
 check("time until a reset, long and short", () => {
   assert.strictEqual(usage.until(now + 5 * min, now), "5 min");
@@ -33,12 +34,44 @@ check("time until a reset, long and short", () => {
   assert.strictEqual(usage.until(now + (2 * 1440 + 60) * min, now, true), "2d 1h");
   assert.strictEqual(usage.until(now - min, now), "0 min");
 });
-check("other names: Codex's windows, Gemini's weekly limits, Opus's own week", () => {
-  assert.strictEqual(usage.limitName({ label: "Week (Opus)" }), "Weekly limit (Opus)");
-  assert.strictEqual(usage.limitName({ label: "5-hour" }), "5-hour limit");
-  assert.strictEqual(usage.limitName({ label: "Gemini", period: "week" }), "Gemini: weekly limit");
-  assert.strictEqual(shortName({ label: "Gemini", period: "week" }), "Gemini weekly");
-  assert.strictEqual(usage.inWords({ label: "Week", usedPercent: 12.4, resetsAt: null }, now), "Weekly limit 12% used");
+check("other names: Codex's windows, Gemini's weekly limits, Opus's own week, numbers saved before the rename", () => {
+  assert.strictEqual(usage.limitName({ label: "Week (Opus)" }), "Weekly (Opus)");
+  assert.strictEqual(usage.limitName({ id: "primary", label: "Session" }), "Session");          // Codex's 5 hours
+  assert.strictEqual(usage.limitName({ id: "five_hour", label: "5-hour" }), "Session");        // saved by an older Kural
+  assert.strictEqual(usage.limitName({ id: "primary", label: "5-hour" }), "Session");
+  assert.strictEqual(usage.limitName({ label: "3-day" }), "3-day");
+  assert.strictEqual(usage.limitName({ label: "Gemini", period: "week" }), "Weekly (Gemini)");
+  assert.strictEqual(shortName({ label: "Gemini", period: "week" }), "Weekly (Gemini)");
+  assert.ok(usage.isWeekly({ label: "Gemini", period: "week" }) && !usage.isSession({ label: "Gemini", period: "week" }));
+  assert.strictEqual(usage.inWords({ label: "Week", usedPercent: 12.4, resetsAt: null }, now), "Weekly 12% used");
+});
+check("status bar: only Session usage; weekly limits stay on hover even at 100 %", () => {
+  const S = (p, reset = 42) => ({ id: "five_hour", label: "Session", usedPercent: p, resetsAt: now + reset * min });
+  const W = (p) => ({ id: "seven_day", label: "Week", usedPercent: p, resetsAt: now + (3 * 1440 + 4 * 60) * min });
+  assert.deepStrictEqual(meter("Claude", { windows: [S(50), W(25)] }, true, now), { text: "$(dashboard) Claude Session 50% · resets 42m", top: 50 });
+  assert.deepStrictEqual(meter("Codex", { windows: [S(12), W(3)] }, false, now), { text: "$(dashboard) Codex 12%", top: 12 });
+  // Weekly pressure still colors the item without adding weekly numbers to its label.
+  assert.deepStrictEqual(meter("Claude", { windows: [S(10), W(85)] }, true, now), { text: "$(dashboard) Claude Session 10% · resets 42m", top: 85 });
+  assert.deepStrictEqual(meter("Codex", { windows: [S(10), W(100)] }, false, now), { text: "$(dashboard) Codex 10%", top: 100 });
+  // Saved before the rename ("5-hour") still counts as the session.
+  assert.strictEqual(meter("Claude", { windows: [{ id: "five_hour", label: "5-hour", usedPercent: 30 }, W(5)] }, false, now).text, "$(dashboard) Claude 30%");
+  // Gemini (weekly limits only): just its name, with a hover and warning color.
+  const G = (p, label = "Gemini") => ({ id: label.toLowerCase(), label, usedPercent: p, resetsAt: null, period: "week" });
+  assert.deepStrictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, true, now), { text: "$(dashboard) Gemini", top: 13 });
+  assert.deepStrictEqual(meter("Gemini", { windows: [G(13), G(1, "Claude")] }, false, now), { text: "$(dashboard) Gemini", top: 13 });
+  assert.deepStrictEqual(meter("Gemini", { windows: [G(13), G(82, "Claude")] }, false, now), { text: "$(dashboard) Gemini", top: 82 });
+  // Token counts are available in AI Usage, with no extra status bar label.
+  assert.strictEqual(meter("Gemini", { windows: [], tokens: { input: 1200000, output: 34000 } }, true, now), null);
+  assert.strictEqual(meter("Gemini", { windows: [], tokens: { input: 1200000, output: 34000 } }, false, now), null);
+  assert.strictEqual(meter("Codex", { windows: [] }, true, now), null);
+});
+check("the hover has every AI's limits in full, the one you point at first", () => {
+  const md = hoverText([
+    { id: "codex", u: { at: now, windows: [{ id: "primary", label: "Session", usedPercent: 12, resetsAt: now + 130 * min }, { id: "secondary", label: "Week", usedPercent: 3, resetsAt: null }] } },
+    { id: "claude", u: { at: now - 5 * min, windows: [{ id: "five_hour", label: "Session", usedPercent: 50, resetsAt: now + 42 * min }, { id: "seven_day", label: "Week", usedPercent: 25, resetsAt: null }] } },
+    { id: "agy", u: { at: now, windows: [], tokens: { input: 0, output: 0 } } }], "claude", now);
+  assert.strictEqual(md, "**Codex** · updated just now  \nSession: **12%** used, resets in 2 h 10 min  \nWeekly: **3%** used\n\n" +
+    "**Claude** (the chat's AI) · updated 5 min ago  \nSession: **50%** used, resets in 42 min  \nWeekly: **25%** used\n\n_Click for the AI Usage panel._");
 });
 check("the AI Usage page: its rules allow no outside scripts or styles", () => {
   const html = _page("abc", "vscode-resource:", "codicons.css");

@@ -136,7 +136,8 @@ const SPEEDS = [
 ];
 
 // engine "auto": the local model when Ollama has it, else Claude. "local" / "claude": that one
-// (local still falls back to Claude if Ollama isn't there, so Tab keeps working).
+// (local still falls back to Claude if Ollama isn't there, or races it while Ollama is busy with another model, so Tab
+// keeps working).
 function completionProvider(session, review, onTiming = () => {}, local = null, activity = null, router = null) {
   return {
     async provideInlineCompletionItems(document, position, ctx, token) {
@@ -154,8 +155,12 @@ function completionProvider(session, review, onTiming = () => {}, local = null, 
       if (rest) return [item(document, position, rest, rel)];
 
       // While typing, wait for a short pause. When you just placed the cursor, go right away.
+      // Ollama busy with another model (a chat answering on this computer: LocalEngine.busy) and no Claude to help: a
+      // little longer, so fewer requests compete with the chat's answer for the computer's GPU.
       const typing = ctx.triggerKind === vscode.InlineCompletionTriggerKind.Automatic;
-      const wait = cfg.get("tabCompletion.debounceMs");
+      const claudeOk = require("../ai/claude").isSetUp();
+      const busy = !!(local && local.busy && cfg.get("tabCompletion.engine") !== "claude" && local.busy());
+      const wait = Math.max(cfg.get("tabCompletion.debounceMs") || 0, busy && !claudeOk ? BUSY_WAIT : 0);
       if (typing && wait > 0 && !(await sleep(wait, token))) return [];
 
       const all = document.getText();
@@ -169,7 +174,7 @@ function completionProvider(session, review, onTiming = () => {}, local = null, 
       const useLocal = local && engineSetting !== "claude" && await local.ready();
       if (router && engineSetting === "auto") {
         const cached = router.tabEngine({ language: document.languageId,localModel: completionModel(cfg.get("tabCompletion.localModel")),
-          claudeModel: cfg.get("tabCompletion.model"),localReady: !!useLocal,claudeReady: require("../ai/claude").isSetUp() });
+          claudeModel: cfg.get("tabCompletion.model"),localReady: !!useLocal,claudeReady: claudeOk });
         if (cached) engineSetting = cached;
       }
       if (engineSetting === "none") return [];
@@ -178,14 +183,17 @@ function completionProvider(session, review, onTiming = () => {}, local = null, 
         const text = await session.ask(completionPrompt(all, offset, document.languageId, rel, note), tok);
         return text ? trimOverlap(extractInsert(text), after) : "";
       };
-      const viaLocal = async () => {
-        const raw = await local.complete(all.slice(Math.max(0, offset - 1500), offset), all.slice(offset, offset + 400), token, !!restOfLine.trim());
+      const viaLocal = async (tok = token) => {
+        const raw = await local.complete(all.slice(Math.max(0, offset - 1500), offset), all.slice(offset, offset + 400), tok, !!restOfLine.trim());
         return raw == null ? "" : trimOverlap(tidyLocal(raw, restOfLine), after);
       };
+      // Ollama busy with another model: Claude helps (when it's set up), also for "Local model", so suggestions keep coming
+      // while a chat answers on this computer (the local model still answers first when it's quick enough).
+      const help = busy && claudeOk;
       let insert = "", engine = "claude";
       if (!useLocal || engineSetting === "claude") insert = await viaClaude();
-      else if (engineSetting === "local") { insert = await viaLocal(); engine = "local"; }
-      else [insert, engine] = await race(viaLocal, viaClaude, token);
+      else if (engineSetting === "local" && !help) { insert = await viaLocal(); engine = "local"; }
+      else [insert, engine] = await race(viaLocal, viaClaude, token, help ? BUSY_HEAD_START : LOCAL_HEAD_START);
       if (token.isCancellationRequested || preferenceKey(vscode.workspace.getConfiguration("kural"),router) !== preferences || !insert || !insert.trim()) return [];
       cache.set(key, insert);
       shown = { uri: document.uri.toString(), start: offset, before: all.slice(Math.max(0, offset - 300), offset), insert };
@@ -199,29 +207,35 @@ function completionProvider(session, review, onTiming = () => {}, local = null, 
 
 // Auto: the local model gets a head start; if it hasn't answered (or answered nothing) by then,
 // Claude is asked too, and the first real suggestion wins. So Auto is never slower than Claude alone.
-const LOCAL_HEAD_START = 350;
-function race(viaLocal, viaClaude, token) {
+// While Ollama is busy with another model (BUSY_*): Claude starts sooner, and without Claude the wait between keys is longer.
+const LOCAL_HEAD_START = 350, BUSY_HEAD_START = 200, BUSY_WAIT = 250;
+function race(viaLocal, viaClaude, token, headStart = LOCAL_HEAD_START) {
   return new Promise((resolve) => {
     let done = false, claudeStarted = false, pending = 0;
     const finish = (text, engine) => {
       if (done) return;
-      if (text && text.trim()) { done = true; clearTimeout(timer); if (engine === "local") cancelClaude(); resolve([text, engine]); }
+      if (text && text.trim()) { done = true; clearTimeout(timer); (engine === "local" ? claudeTok : localTok).cancel(); resolve([text, engine]); }
       else if (--pending === 0 && (claudeStarted || token.isCancellationRequested)) { done = true; resolve(["", engine]); }
       else if (!claudeStarted) startClaude();
     };
-    // Claude gets its own cancel switch, so it's stopped when the local model wins.
-    const fns = [];
-    const claudeTok = { isCancellationRequested: false, onCancellationRequested(f) { fns.push(f); return { dispose() {} }; } };
-    const cancelClaude = () => { if (!claudeTok.isCancellationRequested) { claudeTok.isCancellationRequested = true; fns.forEach((f) => f()); } };
-    token.onCancellationRequested(cancelClaude);
+    // Each gets its own cancel switch, so the loser is stopped: Claude when the local model wins, and the local model when
+    // Claude wins (it would keep Ollama's GPU busy for nothing, slowing a chat that answers on this computer).
+    const switchFor = () => {
+      const fns = [];
+      const t = { isCancellationRequested: false, onCancellationRequested(f) { fns.push(f); return { dispose() {} }; },
+        cancel() { if (!t.isCancellationRequested) { t.isCancellationRequested = true; fns.forEach((f) => f()); } } };
+      return t;
+    };
+    const claudeTok = switchFor(), localTok = switchFor();
+    token.onCancellationRequested(() => { claudeTok.cancel(); localTok.cancel(); });
     const startClaude = () => {
       if (claudeStarted || done || token.isCancellationRequested) return;
       claudeStarted = true; pending++;
       viaClaude(claudeTok).then((t) => finish(t, "claude"), () => finish("", "claude"));
     };
     pending++;
-    viaLocal().then((t) => finish(t, "local"), () => finish("", "local"));
-    const timer = setTimeout(startClaude, LOCAL_HEAD_START);
+    viaLocal(localTok).then((t) => finish(t, "local"), () => finish("", "local"));
+    const timer = setTimeout(startClaude, headStart);
   });
 }
 
@@ -264,4 +278,5 @@ function triggerOnCursor(context) {
   }));
 }
 
-module.exports = { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionPrompt, extractInsert, trimOverlap, completionProvider, triggerOnCursor };
+module.exports = { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionPrompt, extractInsert, trimOverlap, completionProvider, triggerOnCursor, race,
+  LOCAL_HEAD_START, BUSY_HEAD_START, BUSY_WAIT };

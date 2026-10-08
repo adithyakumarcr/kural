@@ -10,7 +10,7 @@ const fs = require("fs");
 const os = require("os");
 const { ClaudeProcess, log, newSessionId, LOGIN_RE, findClaude, isSetUp } = require("../ai/claude");
 const { projectInstructions } = require("./project");
-const { ChangeTracker } = require("./changes");
+const { ChangeTracker, inProject } = require("./changes");
 const ws = require("../workspace");
 const { Attachments } = require("./attachments");
 const { within, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
@@ -21,15 +21,17 @@ const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote, isAtlassianRead } = require("./tickets");
-const { PROMPTS, MOODS, MOOD_PROMPTS } = require("./prompts");
-const { GUIDE } = require("./guide");
+const { PROMPTS, MOODS, MOOD_PROMPTS, customMoods, moodPrompt } = require("./prompts");
+const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
-const { profileOf } = require("../router/policy");
+const { profileOf, limitUsed } = require("../router/policy");
 const journal = require("../router/journal");
+const handoffStore = require("./handoff-store");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
+const { Notifier, shouldNotify, message: notifyText } = require("./notify");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -74,6 +76,10 @@ const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 const BUILD_TEXT = "Go ahead and implement the plan above.";
 const MAX_NUDGES = 4;   // how often Kural may wake a paused lead for one question (a project team has phases)
 const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
+// Memory: a chat's program (Claude Code ~120 MB, Ross measured) stops when that chat isn't on screen and has been idle
+// this long; at most this many such idle ones stay warm. It starts again with the same conversation when needed.
+const IDLE_STOP_MS = 10 * 60 * 1000;
+const MAX_IDLE_WARM = 2;
 
 const MAX_INLINE = 60000;       // files bigger than this are read by Claude instead of pasted in
 const STORE_KEY = "kural.chat.v4";
@@ -116,6 +122,16 @@ class ChatView {
     this.lastEditor = vscode.window.activeTextEditor;
     this.lastSelection = null;   // for turning pasted code into a "main.py (L3-9)" reference
     this.files = null;
+    // System notifications: an answer is done, or it needs you (lib/chat/notify.js).
+    this.notifier = new Notifier({
+      hasToast: async () => (await vscode.commands.getCommands(false)).includes("_kural.osToast"),
+      toast: (o) => vscode.commands.executeCommand("_kural.osToast", o),
+      clearToast: (id) => vscode.commands.executeCommand("_kural.osToastClear", { id }),
+      run: (cmd, args, env) => new Promise((res) => require("child_process").execFile(cmd, args,
+        { env: { ...process.env, ...env }, timeout: 15000, windowsHide: true, cwd: os.tmpdir() }, (err) => res(!err))),
+      inApp: async (title, body) => (await vscode.window.showInformationMessage(`${title}. ${body}`, "Show")) === "Show",
+      log, platform: process.platform,
+    });
     this.load();
   }
 
@@ -125,6 +141,9 @@ class ChatView {
     registerTabEditor(c, this);   // a chat tab dragged into the editor area opens there (tab-editor.js)
     watchFontScale(c, (m) => this.post(m));
     watchSetup(c, () => ws.folders().map((f) => f.path), () => { if (fullSetup()) this.setupChanged("changed"); });
+    // Idle chats' programs stop after a while (stopIdle), checked every minute.
+    const sweep = setInterval(() => this.stopIdle(), 60 * 1000);
+    c.subscriptions.push({ dispose: () => clearInterval(sweep) });
     let lastFocusReload = Date.now();
     c.subscriptions.push(vscode.window.onDidChangeWindowState((st) => {
       if (!st.focused || !fullSetup() || Date.now() - lastFocusReload < 60000) return;
@@ -134,6 +153,11 @@ class ChatView {
     const refreshFiles = debounce(() => { this.files = null; if (this.panes.some((p) => p.ready)) this.sendFiles(); }, 1500);
     // You trusted this folder: Claude restarts with your full setup.
     c.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => this.setupChanged("trusted")));
+    // "Did you know?" under a working answer turned on or off (setting kural.chat.didYouKnow).
+    c.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("kural.chat.didYouKnow")) this.post({ type: "didYouKnow", on: didYouKnow() });
+      if (e.affectsConfiguration("kural.chat.moods")) this.moodsChanged();
+    }));
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
     watcher.onDidCreate(refreshFiles); watcher.onDidDelete(refreshFiles);
     c.subscriptions.push(
@@ -177,6 +201,8 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
       vscode.commands.registerCommand("kural.chat.moveToPanel", (uri) => this.moveToPanel(uri)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
+      // (Internal: lib/account.js, when you log out, log in again or switch an AI's account.)
+      vscode.commands.registerCommand("kural.chat.accountChanged", (provider) => this.accountChanged(provider)),
       vscode.commands.registerCommand("kural.chat.localModels", async () => { await this.reveal(); this.post({ type: "showLocal" }); }),
       vscode.commands.registerCommand("kural.chat.attach", async () => { this.reveal(); await this.onMessage({ type: "attachPick" }); }),
       // Keyboard shortcuts while the chat has focus (Ctrl+M/H/O intensity, Ctrl+P plan). "Next model" has no
@@ -207,10 +233,20 @@ class ChatView {
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
-      mood: valid(MOODS, last.mood) ? last.mood : "default",
+      mood: valid(allMoods(), last.mood) ? last.mood : "default",
       roles: Array.isArray(last.roles) ? last.roles.filter((r) => valid(ROLES, r)) : [],
       teamStyle: valid(TEAM_STYLES, last.teamStyle) ? last.teamStyle : "split",
     };
+  }
+
+  // You added, changed or deleted one of your moods (Kural Settings → Moods): the menus show the new list; a chat whose
+  // mood was deleted goes back to Default; an idle chat with a changed mood gets its new instructions now (procKey).
+  moodsChanged() {
+    const ids = new Set(allMoods().map((m) => m.id));
+    for (const t of this.tabs) if (!ids.has(t.mood)) t.mood = "default";
+    this.post({ type: "moods", moods: allMoods() });
+    this.postTabs(); this.save();
+    for (const t of this.tabs) { const r = this.runtime.get(t.id); if (r && r.proc && t.status === "idle") this.warm(t); }
   }
 
   // Set by extension.js from Get started: is anything set up, and the model on this computer that passed its test.
@@ -246,7 +282,8 @@ class ChatView {
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
     if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)
-    if (!valid(MOODS, tab.mood)) tab.mood = d.mood;
+    // (A mood of yours that you deleted: Default.)
+    if (!valid(allMoods(), tab.mood)) tab.mood = /^custom-/.test(tab.mood || "") ? "default" : d.mood;
     if (!Array.isArray(tab.roles)) tab.roles = d.roles;
     tab.roles = tab.roles.filter((r) => valid(ROLES, r));
     if (!valid(TEAM_STYLES, tab.teamStyle)) tab.teamStyle = d.teamStyle;
@@ -281,6 +318,29 @@ class ChatView {
   tab(id) { return this.tabs.find((t) => t.id === id); }
   active() { return this.tab(this.activeId); }
 
+  // "Fork from here" on an earlier message: when answers after it changed files (not undone), ask first whether the code
+  // goes back too, like editing a message does: Restore Code / Keep Code (closing the dialog = no fork). The new chat
+  // starts from that message either way; this chat's conversation stays (restored changes show as Undone in it).
+  async forkAsk(source, index, pane = this.cur()) {
+    const m = source && source.messages[index];
+    if (!m || source.status !== "idle" || source.visiting) return null;
+    const files = this.laterChanges(source, index);
+    if (files.length) {
+      const since = files.filter((f) => f.changedSince).map((f) => f.rel);
+      const go = await vscode.window.showWarningMessage("Also put the code back as it was at this message?", { modal: true,
+        detail: `The answers after it changed ${files.length} file${files.length === 1 ? "" : "s"}: ${files.map((f) => f.rel).join(", ")}.` +
+          (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: restoring loses those edits.` : "") +
+          "\n\nThe new chat starts from this message. This chat's conversation stays as it is." }, "Restore Code", "Keep Code");
+      if (!go || source.status !== "idle") return null;
+      if (go === "Restore Code") {
+        const { restored, missing } = await this.restoreCode(source, index);
+        this.redraw(source);
+        if (missing.length) this.post({ type: "flash", text: `Restored ${restored.length}; no checkpoint for ${missing.join(", ")}` });
+      }
+    }
+    return this.forkFrom(source, index, pane);
+  }
+
   forkFrom(source, index, pane = this.cur()) {
     const tab = forkConversation(source, index, { id: shortId(), sessionId: newSessionId() });
     if (!tab) return;
@@ -311,6 +371,7 @@ class ChatView {
     if (own && own.panel) { own.panel.reveal(); return; }
     if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
+    this.clearNotice(id);   // (its notification, if any, is old news now)
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
@@ -411,6 +472,7 @@ class ChatView {
   deleteChat(id) {
     if (this.tab(id)) this.closeTab(id, false);
     this.archive.remove(id);
+    try { fs.rmSync(this.handoffDir({ id }), { recursive: true, force: true }); } catch { /* best effort, like History */ }
     this.postHistory();
   }
 
@@ -477,14 +539,24 @@ class ChatView {
   clean(t) {
     this.fix(t);
     t.status = "idle"; t.pendingModel = false; delete t.worktree; delete t.closedAt;
+    const roots = this.projectRoots(t);
     for (const m of t.messages) if (m.role === "assistant") {
       if (m.running) { m.running = false; m.error = m.error || "stopped"; }
       for (const b of m.blocks || []) {
         if (b.k === "perm" && b.state === "pending") b.state = "denied";
         if (b.k === "question" && b.state === "pending") b.state = "skipped";
       }
+      // Older chats also listed files outside the project (a note in /tmp, Claude Code's plans): left out (inProject).
+      if (Array.isArray(m.changes)) { m.changes = m.changes.filter((c) => !c.file || inProject(c.file, roots)); if (!m.changes.length) delete m.changes; }
     }
     return t;
+  }
+
+  // The chat's project: its workspace's folders (and this window's), or Kural's work folder when no folder was open.
+  // Only files in there count as the chat's changes (changes.js inProject).
+  projectRoots(tab) {
+    const own = tab && tab.workspace && tab.workspace.key ? String(tab.workspace.key).split("|") : [];
+    return [...new Set([...ws.folders().map((f) => f.path), ...own, ws.workDir()])];
   }
 
   load() {
@@ -533,7 +605,10 @@ class ChatView {
     const old = this.side();
     if (old) this.panes.splice(this.panes.indexOf(old), 1);
     const pane = this.attach(view.webview, "side", null, old ? old.activeId : this._activeId);
+    pane.view = view;   // (is the side panel on screen: notifications, stopIdle)
     view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
+    // The panel shown again: its chat's program back, ready for your next message (it may have stopped while idle).
+    if (view.onDidChangeVisibility) view.onDidChangeVisibility(() => { const t = view.visible && this.tab(pane.activeId); if (t && t.status === "idle") this.warm(t); });
   }
 
   // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (pictures a
@@ -573,7 +648,7 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("facts.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
     webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
     return pane;
   }
@@ -721,7 +796,9 @@ class ChatView {
   // (Claude Code's setup and its reloads only matter to Claude: other programs don't restart for them.)
   procKey(tab) {
     const claude = isClaude(tab.model);
-    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${tab.mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
+    // (The mood's text too: editing one of your moods restarts its chats with the new instructions.)
+    const mood = `${tab.mood}:${require("crypto").createHash("sha1").update(moodPrompt(tab.mood, customMoods(userMoods()))).digest("hex").slice(0, 8)}`;
+    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
       (claude ? `|${fullSetup()}|${this.setupVersion}` : "");
   }
 
@@ -1055,9 +1132,10 @@ class ChatView {
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
       name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode,
-      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + GUIDE + (MOOD_PROMPTS[tab.mood] || "") +
+      // (A model on this computer gets the short guide: each word of the instructions costs it time before it answers.)
+      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + moodPrompt(tab.mood, customMoods(userMoods())) +
         (team ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
-      addDirs: ws.extraDirs(),
+      addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
       tools, allowedTools: [...WEB_TOOLS,...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
@@ -1086,13 +1164,25 @@ class ChatView {
     if (r.stale || this.runtime.get(tab.id) !== r) return;
     const last = tab.messages[tab.messages.length - 1];
     // A saved conversation that can't be reopened: start a new one and carry on.
+    // (Its first message is the one that was waiting, now starting with the conversation so far: nothing is lost.)
     if (tab.started && !r.gotOutput && Date.now() - r.started < 15000 && /no conversation|not found|session/i.test(info.stderr)) {
-      log(`chat ${tab.id}: couldn't reopen the saved conversation; starting a fresh one`);
+      log(`chat ${tab.id}: couldn't reopen the saved conversation; starting a fresh one with the conversation handed over`);
       tab.started = false;
       const pending = r.pendingSend;
+      const reply = r.turn && r.turn.reply, upto = reply && tab.messages.indexOf(reply) > 0 ? tab.messages.indexOf(reply) - 1 : tab.messages.length;
+      let carry = "";
+      try { if (upto > 0) carry = this.carryText({ model: true }, this.handoffRecord(tab, tab.messages.slice(0, upto))); }
+      catch (e) {
+        if (reply && reply.running) this.finishReply(tab, r, { type: "result", is_error: true, result: `Kural couldn't preserve the complete conversation: ${e.message}` });
+        return;
+      }
       this.giveBack(tab, r);
       const nr = this.startProc(tab, true);
-      if (nr && pending) { nr.pendingSend = pending; nr.turn = r.turn; this.sendTo(nr, pending, "turn"); }
+      if (nr && pending) {
+        const content = !carry ? pending : typeof pending === "string" ? carry + pending
+          : pending.map((b, k) => k === 0 && b.type === "text" ? { ...b, text: carry + b.text } : b);
+        nr.pendingSend = content; nr.turn = r.turn; this.sendTo(nr, content, "turn");
+      }
       return;
     }
     r.proc = null;
@@ -1102,6 +1192,7 @@ class ChatView {
       last.running = false;
       last.error = info.login ? "login" : "The model stopped unexpectedly. See Kural's log (Kural: Show Log).";
       if (info.login) last.errorWho = whoOf(tab.model);
+      if (!last.notified) { last.notified = true; this.notify(tab, info.login ? "login" : "error", { who: last.errorWho, error: last.error }); }
       tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(last) });
       this.postTabs(); this.save();
@@ -1234,6 +1325,7 @@ class ChatView {
   // The program starts answering `reply`: what the turn tracks (changes, agents, the team's board).
   beginTurn(tab, r, reply, ask, attachments = null) {
     r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0, dispatched: !!attachments, ...(attachments ? { attachments } : {}) };
+    r.lastUsed = Date.now();
     r.agents = new Map();   // Task call id -> agent card
     r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
     r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
@@ -1255,7 +1347,7 @@ class ChatView {
     // sent in its place.
     if (editIndex !== null && !(await this.rewindTo(tab, editIndex))) return;
     let routed = null;
-    const previousMedia = [...new Map(tab.messages.flatMap((m) => m.attachments || [])
+    const previousMedia = [...new Map(journal.attachmentsOf(tab.messages)
       .filter((a) => ["image","pdf"].includes(a.kind)).map((a) => [a.path,a])).values()];
     if (tab.autoRoute && this.router) {
       this.routerFeedback(tab, "good");   // you carried on after Auto's last answer
@@ -1265,7 +1357,7 @@ class ChatView {
       try {
         const attached = attachIds.map((id) => this.attachments.items.get(id)).filter(Boolean);
         // Attachments from earlier turns must remain usable after a provider handoff too.
-        const historical = tab.messages.flatMap((m) => m.attachments || []);
+        const historical = journal.attachmentsOf(tab.messages);
         routed = await this.router.route(this.routingRequest(tab,text,[...attached,...historical],contexts),ctl.signal);
         if (ctl.signal.aborted || !this.tab(tab.id) || !tab.autoRoute || tab.model !== previous) return;
         if (routed.error) {
@@ -1273,14 +1365,17 @@ class ChatView {
           if (!brain.providerOf(previous).ready()) { this.post({ type: "flash",text: routed.error }); return; }
           routed = { ...routed, model: previous, reason: `${routed.error} · kept ${previous}` };
         }
-        // Another AI takes over with a record of the conversation (journal.handoff). When that record is too big for the
-        // handoff budget, or an earlier picture/PDF is gone, Auto picks again within the current AI instead of refusing.
+        // Another AI takes over with a record of the conversation (journal.handoff: everything visible, compacted to fit
+        // the next model when it's long). Only when that would lose something (the record has to be shortened, or an
+        // earlier picture/PDF is gone) and the chat's AI isn't near its limit, Auto picks again within the current AI,
+        // whose own conversation keeps everything. Near its limit (80 %+) it moves anyway (Adithya: prioritize the other
+        // AI, with the knowledge carried over).
         const here = tab.engine || engineOf(previous);
         let changesProvider = engineOf(routed.model) !== here;
-        const tooBig = () => journal.handoff(tab.messages).length > this.router.options().handoffChars;
+        const tooBig = () => journal.handoff(tab.messages).length > this.handoffBudget(routed.model);
         const missing = () => previousMedia.some((a) => !a.path || !fs.existsSync(a.path));
-        if (changesProvider && tab.messages.length && (missing() || tooBig())) {
-          const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over";
+        if (changesProvider && tab.messages.length && this.limitOf(here, previous) < 80 && (missing() || tooBig())) {
+          const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over whole";
           // (On a model on this computer there's no "same AI" for Auto: that one stays.)
           const again = here === "ollama" ? { error: "local" }
             : await this.router.route({ ...this.routingRequest(tab,text,[...attached,...historical],contexts), provider: here }, ctl.signal);
@@ -1289,6 +1384,7 @@ class ChatView {
             : { ...again, reason: `${again.reason} · stayed with this AI: ${why}` };
           changesProvider = false;
         }
+        log(`chat ${tab.id}: Auto chose ${routed.model} (was ${previous}): ${routed.reason || ""}`);
         tab.model = routed.model;
         // Auto also sets the intensity, unless you picked one yourself (picking a profile hands it back to Auto).
         if (routed.effort && !tab.effortPinned && valid(EFFORTS, routed.effort)) tab.effort = routed.effort;
@@ -1320,16 +1416,28 @@ class ChatView {
 
     // The chat was on the other engine (Claude Code ↔ Kural's own): that one has the conversation, this one doesn't.
     // A new session, and this message carries the conversation so far (everything before it).
+    // The same after you switched that AI's account (Codex, Gemini: their conversations may not open for another
+    // account; tab.freshSession, accountChanged).
     const engine = engineOf(tab.model);
-    const changedProvider = tab.engine && tab.engine !== engine;
+    const changedProvider = (tab.engine && tab.engine !== engine) || (tab.freshSession && tab.started);
     if (changedProvider) {
-      if (tab.messages.length > 2) tab.carryOver = { model: true, text: journal.handoff(tab.messages.slice(0,-2)) };
+      if (tab.messages.length > 2) tab.carryOver = tab.freshSession && tab.engine === engine ? { model: true, account: true } : { model: true };
       tab.sessionId = newSessionId(); tab.started = false; tab.context = null;
       const old = this.runtime.get(tab.id);
       if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
       this.endDevice(old);
     }
     tab.engine = engine;
+    delete tab.freshSession;
+    // Prepare the complete record before starting the provider, so its read directory is available from launch.
+    let carry = "";
+    try { if (tab.carryOver && !tab.started) carry = this.carryText(tab.carryOver, this.handoffRecord(tab, tab.messages.slice(0, -2))); }
+    catch (e) {
+      reply.running = false; reply.error = `Kural couldn't preserve the complete conversation: ${e.message}`; tab.status = "idle";
+      this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); this.save();
+      this.notify(tab, "error", { error: reply.error });
+      return;
+    }
     let r = this.runtime.get(tab.id);
     // A model on this computer: check Ollama and prepare the model first (says what's missing if it can't).
     if (isLocal(tab.model) && (!r || !r.proc || r.proc.exited || r.procKey !== this.procKey(tab) || !this.localReady.has(tab.model))) {
@@ -1355,16 +1463,6 @@ class ChatView {
     // (For "Build it", what the plan was for is the earlier question.)
     const ask = text === BUILD_TEXT ? this.lastAsk({ messages: tab.messages.slice(0, -2) }) : text;
     this.beginTurn(tab, r, reply, ask);
-    // Continued from another workspace, or switched to a model on another engine (Claude ↔ your computer): the first
-    // message carries the conversation so far.
-    const carry = tab.carryOver && !tab.started ? (tab.carryOver.fork
-      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThis chat branches from that conversation at the selected message. Continue from it using my next message. The workspace files are still in their current state.\n\n`
-      : tab.carryOver.edited
-      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far. I've changed my next message: answer it as it is now.\n\n`
-      : tab.carryOver.model
-      ? `<earlier_conversation>\n${tab.carryOver.text}\n</earlier_conversation>\nThat's our conversation so far (with another model). Carry on from it.\n\n`
-      : `<earlier_conversation workspace="${tab.carryOver.from}">\n${tab.carryOver.text}\n</earlier_conversation>\n` +
-        "That's our earlier conversation, from another workspace. Carry on from it here.\n\n") : "";
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
     let retrieved = "";
@@ -1380,7 +1478,7 @@ class ChatView {
     const built = await this.buildPrompt(text,contexts);
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
     if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    const { content: prompt, meta } = this.attachments.content(carry + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
+    const { content: prompt, meta } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
     user.sentText = journal.textOf(prompt).slice(carry.length);
     r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
@@ -1393,6 +1491,145 @@ class ChatView {
     this.sendTo(r, prompt, "turn");
     delete tab.carryOver;
     log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
+    this.save();
+  }
+
+  // What the AI is told for this chat's mode, mood and team (the parts of its instructions you can change mid-chat).
+  instructionsOf(tab) {
+    const team = this.teamSize(tab);
+    return { mode: PROMPTS[tab.mode] || "", mood: moodPrompt(tab.mood, customMoods(userMoods())).trim(),
+      team: team ? teamPrompt(team, tab.roles || [], tab.teamStyle).trim() : "" };
+  }
+  // Claude Code keeps a resumed conversation's first instructions: on --resume it ignores a new --append-system-prompt
+  // (checked with Claude Code 2.1.289). So a mood, mode or team you change after the first message would never reach
+  // it; instead your next message starts with what changed. (The other programs get it the same way: harmless.)
+  // tab.sessionInstructions: what this conversation was given so far.
+  // (Kept as short fingerprints, saved with the chat.)
+  instructionsNote(tab) {
+    const now = this.instructionsOf(tab), was = tab.sessionInstructions;
+    const print = (t) => require("crypto").createHash("sha1").update(t).digest("hex").slice(0, 12);
+    tab.sessionInstructions = { mode: print(now.mode), mood: print(now.mood), team: print(now.team) };
+    if (!tab.started || !was) return "";
+    const changed = [];
+    if (was.mode !== print(now.mode)) changed.push(now.mode);
+    if (was.mood !== print(now.mood)) changed.push(now.mood || "Mood: Default. Drop the earlier mood's instructions and work in your normal, balanced way.");
+    if (was.team !== print(now.team)) changed.push(now.team || "No agent team any more: answer by yourself, without starting agents.");
+    return changed.length ? "<kural_instructions_update>\nI changed how you should work in this chat. These replace your earlier instructions about the " +
+      "same things (mode, mood, team):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
+  }
+
+  // ---------- carrying the conversation over (another AI, a new session) ----------
+  handoffDir(tab) {
+    const storage = this.context && this.context.globalStorageUri && this.context.globalStorageUri.fsPath;
+    return handoffStore.directory(storage ? path.join(storage, "handoffs") : privateTmp("handoffs"), tab.id);
+  }
+
+  // The inline overview fits the receiving model. Omitted details remain in a private, readable local file, which is
+  // replaced on the next handoff and deleted with the chat. A failed save stops the handoff instead of losing details.
+  handoffRecord(tab, messages, model = tab.model) {
+    const budget = this.handoffBudget(model), whole = journal.handoff(messages);
+    if (whole.length <= budget) {
+      // An edit/fork can shorten a previously large chat. Its old record must not expose the discarded future turns.
+      if (fs.existsSync(path.join(this.handoffDir(tab), "history.json"))) handoffStore.save(messages, this.handoffDir(tab));
+      return whole;
+    }
+    const archive = handoffStore.save(messages, this.handoffDir(tab));
+    tab.handoffFile = archive.path;
+    return journal.handoff(messages, budget, archive);
+  }
+
+  // What the first message of a new session starts with: the record of the conversation (journal.handoff) and why.
+  carryText(c, record) {
+    const wrapped = (attrs, why) => `<earlier_conversation${attrs}>\n${record}\n</earlier_conversation>\n${why}\n\n`;
+    if (c.fork) return wrapped("", "This chat branches from that conversation at the selected message. Continue from it using my next message. The workspace files are still in their current state.");
+    if (c.edited) return wrapped("", "That's our conversation so far. I've changed my next message: answer it as it is now.");
+    if (c.retry) return wrapped("", `That's our conversation so far. ${c.retry} stopped in the middle of my last request (above) because it reached its usage limit: carry that request on from where it got to. Steps marked complete happened already; check the files before you change them.`);
+    if (c.account) return wrapped("", "That's our conversation so far (before I switched accounts). Carry on from it.");
+    if (c.model) return wrapped("", "That's our conversation so far (with another model). Carry on from it.");
+    return wrapped(` workspace="${String(c.from || "").replace(/"/g, "'")}"`, "That's our earlier conversation, from another workspace. Carry on from it here.");
+  }
+
+  // How many characters of conversation record the next model gets: the router's handoff setting (120,000 by default);
+  // a model on this computer only what fits about half its context (setting kural.localModels.contextLength, in tokens).
+  handoffBudget(model) {
+    const set = this.router ? this.router.options().handoffChars : cfg().get("modelRouter.handoffChars", 120000);
+    if (!isLocal(model)) return set;
+    const ctx = Number(cfg().get("localModels.contextLength", 32768)) || 32768;
+    return Math.max(8000, Math.min(set, Math.round(ctx * 1.6)));
+  }
+
+  // How much of an AI's usage limit is used now (0-100; 100 = it refused a request on its limit), from the programs'
+  // own reports (lib/ai/usage.js).
+  limitOf(provider, model) {
+    try { const u = limitUsed({ id: model || "" }, usageHub.current(provider)); return Number.isFinite(u) ? u : 0; } catch { return 0; }
+  }
+
+  // An answer of Auto's failed because its AI reached a usage limit (the error said so): the same request goes on with
+  // another AI right away, with the conversation (and what the stopped answer had done) handed over, instead of just
+  // failing. The stopped answer stays, with a note. false: nothing else can take it (the error stays).
+  async retryElsewhere(tab, failed) {
+    // (Your request: the message before it, or before the answers that already stopped on a limit.)
+    const i = tab.messages.indexOf(failed), user = [...tab.messages.slice(0, Math.max(0, i))].reverse().find((m) => m.role === "user");
+    if (i < 1 || !user || i !== tab.messages.length - 1 || tab.status !== "idle" || !tab.autoRoute || !this.router) return false;
+    const from = engineOf(failed.model || tab.model), who = whoOf(failed.model || tab.model);
+    const ask = ChatView.textOf(user.segments || []).trim() || "Have a look at what I attached.";
+    const historical = journal.attachmentsOf(tab.messages);
+    const media = [...new Map(historical.filter((a) => ["image", "pdf"].includes(a.kind)).map((a) => [a.path, a])).values()];
+    const ctl = new AbortController(); this.routingJobs.set(tab.id, ctl);
+    tab.status = "running"; tab.routingState = "Choosing another AI…"; this.postTabs();
+    let routed;
+    try { routed = await this.router.route({ ...this.routingRequest(tab, ask, historical, []), avoid: from }, ctl.signal); }
+    catch { routed = null; }
+    finally { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); delete tab.routingState; tab.status = "idle"; this.postTabs(); }
+    // (Not to an AI that's at its limit too: no going back and forth between two that are both out.)
+    if (ctl.signal.aborted || !routed || routed.error || engineOf(routed.model) === from || !brain.providerOf(routed.model).ready() || !tab.autoRoute || tab.status !== "idle" ||
+      this.limitOf(engineOf(routed.model), routed.model) >= 98) return false;
+    let record;
+    try { record = this.handoffRecord(tab, tab.messages, routed.model); }
+    catch (e) { log(`chat ${tab.id}: couldn't preserve its complete conversation for a handoff: ${e.message}`); return false; }
+    log(`chat ${tab.id}: ${who} reached its limit; Auto carries the request on with ${routed.model}`);
+    failed.note = `${who} reached its usage limit here. Auto carried on with ${whoOf(routed.model)} below.`;
+    failed.limitError = failed.error; delete failed.error;
+    this.post({ type: "patch", tabId: tab.id, index: i, msg: this.patchOf(failed) });
+    tab.model = routed.model; tab.modelName = null; tab.pendingModel = false;
+    if (routed.effort && !tab.effortPinned && valid(EFFORTS, routed.effort)) tab.effort = routed.effort;
+    this.remember(tab);
+    const reply = this.newReply(tab, routed);
+    tab.messages.push(reply);
+    tab.status = "running"; tab.updatedAt = Date.now();
+    this.post({ type: "append", tabId: tab.id, requestId: null, msgs: [reply] });
+    this.postTabs();
+    // A new session with the other AI; its first message: the conversation up to and including the stopped answer.
+    const old = this.runtime.get(tab.id);
+    if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
+    this.endDevice(old);
+    tab.sessionId = newSessionId(); tab.started = false; tab.context = null; tab.engine = engineOf(tab.model);
+    const r = this.startProc(tab);
+    if (!r) { reply.running = false; tab.status = "idle"; reply.error = `${whoOf(tab.model)} didn't start. Check it in Get started.`; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); return false; }
+    this.beginTurn(tab, r, reply, ask);
+    const carry = this.carryText({ retry: who }, record);
+    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket), [], media);
+    r.turn.attachments = media;
+    r.pendingSend = content; r.turn.dispatched = true;
+    this.sendTo(r, content, "turn");
+    log(`chat ${tab.id}: sent to ${tab.model} (${JSON.stringify(content).length} chars, the conversation handed over)`);
+    this.save();
+    return true;
+  }
+
+  // You logged out of an AI, logged in again, or switched its account (Kural Settings, or outside Kural): its chats go on
+  // with everything they knew. Claude Code keeps its conversations on this computer, so a Claude chat just goes on (if
+  // it can't, onExit starts it again with the conversation). Codex's and Gemini's conversations may belong to the
+  // account: those chats start a new conversation that's handed this one at the next message (tab.freshSession).
+  accountChanged(provider) {
+    if (!provider) return;
+    log(`chat: ${provider} account changed; its chats carry their conversations over`);
+    for (const t of this.tabs) {
+      if ((t.engine || engineOf(t.model)) !== provider || !t.started) continue;
+      if (provider !== "claude") t.freshSession = "account";
+      const r = this.runtime.get(t.id);
+      if (r && r.proc && t.status === "idle") { r.stale = true; r.proc.kill(); r.proc = null; this.endDevice(r); }
+    }
     this.save();
   }
 
@@ -1439,6 +1676,13 @@ class ChatView {
       if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
       this.noteSetup(tab, r, m);
       return;
+    }
+    // What Claude Code keeps running in the background (agents, a long command like a dev server), also after the answer
+    // ended: while one runs, stopIdle leaves the chat's program alone (stopping it would stop them too).
+    if (m.type === "system" && m.task_id && /^task_/.test(m.subtype || "")) {
+      const st = m.subtype === "task_notification" ? m.status : m.subtype === "task_updated" && m.patch ? m.patch.status : null;
+      if (m.subtype === "task_started") (r.bg || (r.bg = new Set())).add(m.task_id);
+      else if (st && st !== "running" && st !== "pending" && r.bg) r.bg.delete(m.task_id);
     }
     if (!reply) return;
     // Team members: Claude reports each one's start and end as system events, keyed by the Task call.
@@ -1734,6 +1978,7 @@ class ChatView {
     r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
+    r.lastUsed = Date.now();
     if (this.router && (reply.models || []).length === 1) this.router.taskDone(reply.model,reply.ms,!m.is_error);
     // Stop can happen while context is still being prepared, before the provider receives anything.
     if (r.turn.dispatched !== false) tab.started = true;
@@ -1761,6 +2006,27 @@ class ChatView {
       }, 30000);
     }
     if (!this.shown(tab.id)) tab.unread = true;
+    // Its AI reached a usage limit: Auto avoids that AI until it resets, and (in Auto) the request goes on with another
+    // AI at once, the conversation handed over (retryElsewhere). Not a second time for the same answer.
+    const limited = journal.limitError(reply.error) && !r.stale;
+    if (limited) usageHub.markLimited(engineOf(reply.model || tab.model));
+    // (An answer that went through: that AI isn't at its limit, whatever was noted before.)
+    else if (!reply.error) { const p = engineOf(reply.model || tab.model), u = usageHub.current(p); if (u && u.blockedUntil) usageHub.report(p, { allowed: true }); }
+    const retry = limited && tab.autoRoute && this.router && !queued && !reply.retried;
+    if (retry) {
+      reply.retried = true;
+      setTimeout(() => this.retryElsewhere(tab, reply).then((moved) => {
+        if (!moved && !reply.notified) { reply.notified = true; this.notify(tab, "error", { error: reply.error }); }
+      }, (e) => log(`chat ${tab.id}: couldn't carry the request on elsewhere: ${e.message}`)), 0);
+    }
+    // Done (or it needs you: an error, a login, a plan to build): one notification per answer, while you're not looking.
+    // Not after Stop (that was you), not while a message you queued is answered next (or Auto carries it on elsewhere).
+    if (!reply.notified && reply.error !== "stopped" && !queued && !retry) {
+      reply.notified = true;
+      if (reply.error === "login") this.notify(tab, "login", { who: reply.errorWho });
+      else if (reply.error) this.notify(tab, "error", { error: reply.error });
+      else this.notify(tab, reply.planReady ? "plan" : "done", { text: answerText(reply) });
+    }
     this.finishTurn(tab, r);
     // Tab learns what you're working on, and which files the chat changed for it.
     if (this.activity && r.turn.ask && reply.error !== "stopped") this.activity.addWork("chat", r.turn.ask, (reply.changes || []).map((c) => c.rel));
@@ -1806,7 +2072,8 @@ class ChatView {
     const reply = r.turn.reply;
     if (reply.mode !== "agent" && reply.mode !== "auto") return;
     try {
-      const files = this.changes.summary(r.turn, this.root());
+      const roots = this.projectRoots(tab);
+      const files = this.changes.summary(r.turn, this.root()).filter((c) => inProject(c.file, roots));
       if (files.length) reply.changes = files;
     } catch (e) { log(`chat: couldn't list changes: ${e.message}`); }
   }
@@ -1824,7 +2091,10 @@ class ChatView {
         const same = (a, b) => process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
         const open = vscode.workspace.textDocuments.find((d) => same(d.uri.fsPath, file));
         if (open && open.isDirty) await open.save();
-        this.changes.snapshot(turn, file);
+        // A checkpoint (for Undo, Restore code and the Files changed card) only for a file in the project: not a note in
+        // the temp folder, not Claude Code's own plans or memory (~/.claude).
+        const abs = path.resolve(this.root() || ws.workDir(), String(file));
+        if (inProject(abs, this.projectRoots(tab))) this.changes.snapshot(turn, abs);
       }
       // Inside your project (or Kural's own work folder, the temp folder): no asking, that's what Agent mode is for.
       // Anywhere else (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks) a write can make the
@@ -1836,7 +2106,7 @@ class ChatView {
     // reading there also makes macOS ask about Kural.
     if (READ_TOOLS.includes(req.tool_name)) {
       const where = input.file_path || input.path;
-      if (!where || ws.mayUse(where) || within(where, tab.granted || [])) return { allow: true };
+      if (!where || ws.mayUse(where) || within(where, [...(tab.granted || []), tab.handoffFile].filter(Boolean))) return { allow: true };
     }
     if (SUBAGENT_TOOLS.has(req.tool_name)) return { allow: true };
     // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
@@ -1857,8 +2127,9 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" is waiting for your OK to run a command.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    this.notify(tab, "permission", { tool: req.tool_name, detail: block.detail, where: block.where });
     const allow = await new Promise((resolve) => r.perms.set(pid, resolve));
+    this.clearNotice(tab.id);
     block.state = allow ? "allowed" : "denied";
     // (After Stop the answer is already over: don't flip the tab back to "running".)
     if (turn && turn.reply.running) tab.status = "running";
@@ -1909,8 +2180,9 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" has a question for you.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    this.notify(tab, "question", { question: (questions[0] || {}).question });
     const answers = await new Promise((resolve) => r.perms.set(pid, resolve));
+    this.clearNotice(tab.id);
     const ok = answers && typeof answers === "object";
     block.state = ok ? "answered" : "skipped";
     block.answers = ok ? answers : null;
@@ -1936,6 +2208,57 @@ class ChatView {
     this.post({ type: "flash", text: flash || `${MODES.find((x) => x.id === t.mode).label} mode` });
   }
 
+  // ---------- memory: idle chats' programs ----------
+  // A chat that isn't on screen and has had no answer, agent, background command, queued message or question for IDLE_STOP_MS: its program
+  // stops (Claude Code, Codex, Gemini or Kural's engine). Of the idle ones off screen, at most MAX_IDLE_WARM stay warm
+  // (the most recently used). It starts again, in the same conversation, when you open the chat or send to it (1-2 s).
+  stopIdle(now = Date.now()) {
+    const idle = [];
+    for (const t of this.tabs) {
+      const r = this.runtime.get(t.id);
+      if (!r || !r.proc || r.proc.exited || r.stale) continue;
+      const busy = t.status !== "idle" || (r.turn && r.turn.reply && r.turn.reply.running) || (r.steers || []).length || (r.perms && r.perms.size) ||
+        [...(r.agents || new Map()).values()].some((a) => a.state === "running") || (r.bg && r.bg.size) || this.routingJobs.has(t.id);
+      if (busy || this.onScreen(t.id)) continue;
+      idle.push({ t, r, at: r.lastUsed || r.started || 0 });
+    }
+    idle.sort((a, b) => b.at - a.at);
+    idle.forEach(({ t, r, at }, i) => {
+      if (now - at < IDLE_STOP_MS && i < MAX_IDLE_WARM) return;
+      log(`chat ${t.id}: its ${engineOf(t.model)} program stops while the chat is idle and off screen (it starts again when needed)`);
+      r.stale = true; r.proc.kill(); r.proc = null;
+      this.endDevice(r);
+    });
+  }
+
+  // ---------- system notifications ----------
+  // A system notification about this chat (lib/chat/notify.js): when it's done or needs you, while you're not looking at
+  // it (setting kural.notifications: whenAway, always, off). One per chat at a time; clicking it shows the chat.
+  notify(tab, kind, info = {}) {
+    try {
+      const setting = cfg().get("notifications", "whenAway");
+      if (!shouldNotify(setting, { focused: !!(vscode.window.state && vscode.window.state.focused), onScreen: this.onScreen(tab.id) })) return;
+      const { title, body } = notifyText(kind, { chat: tab.title, ...info });
+      log(`chat ${tab.id}: notification: ${title}`);
+      if (!this.notifier) return;
+      this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind) }, () => this.showChat(tab.id));
+    } catch (e) { log(`chat: notification failed: ${e.message}`); }
+  }
+  clearNotice(id) { if (this.notifier) this.notifier.clear(`kural-chat-${id}`); }
+  // Is this chat on screen: a pane shows it and that pane is visible (the side panel open, its editor in view).
+  onScreen(id) {
+    return this.panes.some((p) => p.activeId === id && (p.view ? p.view.visible !== false : p.panel ? p.panel.visible !== false : true));
+  }
+  // A notification was clicked (Kural is in front already): show that chat, in its own editor or the side panel.
+  async showChat(id) {
+    if (!this.tab(id)) return;
+    const own = this.panes.find((p) => p.single && p.activeId === id && p.panel);
+    if (own) { own.panel.reveal(); return; }
+    await vscode.commands.executeCommand("kural.chat.focus");
+    const side = this.side();
+    if (side) this.activate(id, side);
+  }
+
   // ---------- messages from the panel ----------
   async onMessage(m, pane = this.cur()) {
     this.pane = pane;                          // replies and "the current tab" mean this pane's
@@ -1951,7 +2274,8 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: MOODS, roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
+          moods: allMoods(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w),
+          didYouKnow: didYouKnow() });
         w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
@@ -1989,7 +2313,7 @@ class ChatView {
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
         Number.isInteger(m.editIndex) ? m.editIndex : null); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
-      case "fork": if (tab) this.forkFrom(tab, m.index, pane); break;
+      case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;
       case "attachPick": {
         const uris = await vscode.window.showOpenDialog({ canSelectMany: true, canSelectFiles: true, openLabel: "Attach", title: "Attach files to your message" });
         const items = (uris || []).map((u) => this.attachments.add(u.fsPath)).filter(Boolean);
@@ -2105,7 +2429,9 @@ class ChatView {
         if (tab.status !== "idle") this.modeChangedMidAnswer(tab, was);
         this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab);
       } break;
-      case "setMood": if (valid(MOODS, m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
+      case "setMood": if (valid(allMoods(), m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
+      // "Add your own mood…" in the model menu: Kural Settings, at Moods (lib/settings-page.js).
+      case "editMoods": vscode.commands.executeCommand("kural.settings.moods"); break;
       case "toggleRole": if (valid(ROLES, m.role)) {
         const roles = tab.roles || [];
         tab.roles = roles.includes(m.role) ? roles.filter((r) => r !== m.role) : [...roles, m.role].slice(0, FRIENDS.length);
@@ -2294,6 +2620,12 @@ class ChatView {
   }
 }
 
+// An answer's own words (its text after the last step), for a notification.
+function answerText(reply) {
+  const texts = (reply.blocks || []).filter((b) => b.k === "text" && String(b.text || "").trim());
+  return texts.length ? texts[texts.length - 1].text : "";
+}
+
 // "claude_ai_Notion" / "claude.ai Notion" -> "Notion"
 function prettyServer(name) { return String(name).replace(/^claude[._ ]ai[_ ]/i, "").replace(/_/g, " "); }
 
@@ -2342,6 +2674,12 @@ function permDetail(tool, input) {
 // Your full Claude Code setup (your MCP servers, hooks, skills, and the project's .claude settings) only in a folder
 // you trust: a project's own .claude/settings.json can run commands (hooks), and Kural starts Claude early.
 function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
+// Your own moods, from your user settings only (never a project's: their instructions go into the AI's prompt).
+function userMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.moods") : null; return i ? i.globalValue : undefined; }
+// The moods in the model menu: the four built-in ones, then yours (prompts.js customMoods).
+function allMoods() { return [...MOODS, ...customMoods(userMoods()).map(({ id, label, hint, custom }) => ({ id, label, hint, custom }))]; }
+// While an answer is worked on, a "Did you know?" tip or fact under it (media/facts.js). On unless you turned it off.
+function didYouKnow() { return cfg().get("chat.didYouKnow", true) !== false; }
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 

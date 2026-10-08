@@ -7,20 +7,23 @@ Usage*) shows each of your plan's limits in words, with a bar and the time it st
 
 ```
 Claude   Claude Pro
-5-hour limit 50% used          resets in 42 min (Sun 9:24 PM)
-Weekly limit 25% used          resets in 3 days 4 h (Thu 12:42 AM)
+Session 50% used          resets in 42 min (Sun 9:24 PM)
+Weekly 25% used           resets in 3 days 4 h (Thu 12:42 AM)
 ```
 
-Google Gemini (its weekly limits) and ChatGPT (Codex) (5-hour and weekly) are shown the same way. **Refresh** asks
-each program now (for Claude, one tiny request); **usage page** opens the provider's own page.
+**Session** is the short limit, 5 hours long (Claude's and Codex's); **Weekly** is the week's. Google Gemini (its
+weekly limits, one per model family: "Weekly (Gemini)") and ChatGPT (Codex) (Session and Weekly) are shown the same
+way. **Refresh** asks each program now (for Claude, one tiny request); **usage page** opens the provider's own page.
 
-**The status bar** (bottom right) shows the AI your chat is using in words, the others short:
+**The status bar** (bottom right) shows only each AI's **Session** limit: the AI your chat is using in words, the
+others short. Hover it for everything: every AI's Session and Weekly limits and when each resets.
 
 | Shows | Means |
 |---|---|
-| `Claude 5h 50% · resets 42m \| Weekly 25% · resets 3d 4h` | the chat's AI: each limit used, and when it resets |
-| `Codex 12% · 3%` | another AI you use: its 5-hour and weekly limits used |
-| `Gemini 13% · 1%` | Google Gemini: its weekly limits used (Gemini models, other models…) |
+| `Claude Session 50% · resets 42m` | the chat's AI: its Session limit used, and when it resets |
+| `Codex 12%` | another AI you use: its Session limit used |
+| `Claude Session 10% · resets 42m` with a warning color | a Weekly limit is near its limit; hover for its percentage and reset time |
+| `Gemini` | Google Gemini has only weekly limits: hover for its usage |
 
 **Tokens.** Below each AI's limits, how many tokens it read and wrote today, in the last 7 days and the last 30 days.
 "Read" is everything sent to the model (your messages, files, the conversation so far), with how much of it came from
@@ -49,6 +52,9 @@ ChatGPT (Codex) and your own model:
 - **Log in** (when you're logged out), or **Set up** (when you haven't yet).
 - **Your own model**: which model on this computer is set up, or set one up.
 - **Get started**, **Check for updates**, **Kural guide** (this wiki), **Ask for a feature**.
+- **Moods**: the chat's moods. The four built-in ones, and your own: **Add a mood** (name, a one-line hint,
+  instructions for the AI), with tips on what works best and examples to start from; **Edit** and delete them. See
+  [[Chat]].
 - **Export settings / Import settings**: your Kural preferences to a file and back (another computer, a fresh
   install). You choose what goes in: Kural's settings (not program paths: they differ per computer), your editor settings
   and keyboard shortcuts, the extensions you installed (installed again on import), chat defaults, saved devices (names

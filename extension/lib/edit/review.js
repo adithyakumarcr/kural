@@ -40,9 +40,11 @@ class ReviewManager {
           if (!this.pending || doc.uri.toString() !== this.pending.uri) return [];
           const range = new vscode.Range(this.pending.start, 0, this.pending.start, 0);
           const n = this.pending.ops.filter((o) => o.op !== "same").length;
+          // (The keys as this computer has them: Cmd on a Mac, package.json "keybindings".)
+          const mod = process.platform === "darwin" ? "Cmd" : "Ctrl";
           return [
-            new vscode.CodeLens(range, { title: "$(check) Accept  (Ctrl+Enter)", command: "kural.review.accept" }),
-            new vscode.CodeLens(range, { title: "$(close) Reject  (Ctrl+Shift+Backspace)", command: "kural.review.reject" }),
+            new vscode.CodeLens(range, { title: `$(check) Accept  (${mod}+Enter)`, command: "kural.review.accept" }),
+            new vscode.CodeLens(range, { title: `$(close) Reject  (${mod}+Shift+Backspace)`, command: "kural.review.reject" }),
             new vscode.CodeLens(range, { title: `${n} line${n === 1 ? "" : "s"} changed`, command: "" }),
           ];
         },
