@@ -356,12 +356,30 @@ class ClaudeProcess {
 //   previous one to finish being interrupted or cleared (you kept typing): it goes to the other.
 // earlyStop: return the answer as soon as Claude has written this text (e.g. "</insert>"),
 //   without waiting for the end of its turn.
+// idleStopMs: stop the processes after this long without a question (each is ~100 MB: docs/benchmarks); the next
+//   question starts them again (1-2 s once). KURAL_IDLE_MS overrides it (tests, measuring).
 class ClaudeSession {
   constructor(opts, onState = () => {}) {
     this.opts = { restartAfter: 25, timeoutMs: 20000, pool: 1, ...opts };
+    if (this.opts.idleStopMs && Number(process.env.KURAL_IDLE_MS) > 0) this.opts.idleStopMs = Number(process.env.KURAL_IDLE_MS);
     this.slots = [];
     this.freeWaiters = [];   // asks waiting for a process to become free
     this.onState = onState;
+    this.idleTimer = null;
+  }
+
+  // (Re)starts the idle countdown; a question still being answered postpones it.
+  touch() {
+    clearTimeout(this.idleTimer);
+    const ms = this.opts.idleStopMs;
+    if (!ms) return;
+    this.idleTimer = setTimeout(() => {
+      if (this.slots.some((s) => s.expect.some((e) => e.ask))) return this.touch();
+      if (!this.slots.length) return;
+      log(`${this.opts.name}: stopped after ${Math.round(ms / 60000) || "<1"} min without questions (starts again when needed)`);
+      this.stop();
+    }, ms);
+    if (this.idleTimer.unref) this.idleTimer.unref();
   }
 
   // Start one process. Each slot keeps the list of answers it still expects (in order):
@@ -435,15 +453,16 @@ class ClaudeSession {
     return true;
   }
 
-  start() { return this.ensurePool(); }
+  start() { this.touch(); return this.ensurePool(); }
 
-  stop() { for (const s of [...this.slots]) this.retire(s); this.wakeWaiters(); }
+  stop() { clearTimeout(this.idleTimer); for (const s of [...this.slots]) this.retire(s); this.wakeWaiters(); }
 
   wakeWaiters() { const w = this.freeWaiters.splice(0); for (const f of w) f(); }
 
   freeSlot() { return this.slots.find((s) => !s.dead && !s.expect.length); }
 
   async ask(prompt, token) {
+    this.touch();
     // Questions nobody wants any more (you kept typing): stop them.
     for (const s of this.slots) for (const e of s.expect) if (e.ask && e.ask.token && e.ask.token.isCancellationRequested && !e.ask.interrupted) {
       e.ask.interrupted = true; s.cp.interrupt();
