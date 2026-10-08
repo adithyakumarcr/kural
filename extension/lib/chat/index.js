@@ -1641,6 +1641,13 @@ class ChatView {
       this.noteSetup(tab, r, m);
       return;
     }
+    // What Claude Code keeps running in the background (agents, a long command like a dev server), also after the answer
+    // ended: while one runs, stopIdle leaves the chat's program alone (stopping it would stop them too).
+    if (m.type === "system" && m.task_id && /^task_/.test(m.subtype || "")) {
+      const st = m.subtype === "task_notification" ? m.status : m.subtype === "task_updated" && m.patch ? m.patch.status : null;
+      if (m.subtype === "task_started") (r.bg || (r.bg = new Set())).add(m.task_id);
+      else if (st && st !== "running" && st !== "pending" && r.bg) r.bg.delete(m.task_id);
+    }
     if (!reply) return;
     // Team members: Claude reports each one's start and end as system events, keyed by the Task call.
     // With Opus they often run in the background: the lead's turn ends ("result") while they keep
@@ -2166,7 +2173,7 @@ class ChatView {
   }
 
   // ---------- memory: idle chats' programs ----------
-  // A chat that isn't on screen and has had no answer, agent, queued message or question for IDLE_STOP_MS: its program
+  // A chat that isn't on screen and has had no answer, agent, background command, queued message or question for IDLE_STOP_MS: its program
   // stops (Claude Code, Codex, Gemini or Kural's engine). Of the idle ones off screen, at most MAX_IDLE_WARM stay warm
   // (the most recently used). It starts again, in the same conversation, when you open the chat or send to it (1-2 s).
   stopIdle(now = Date.now()) {
@@ -2175,7 +2182,7 @@ class ChatView {
       const r = this.runtime.get(t.id);
       if (!r || !r.proc || r.proc.exited || r.stale) continue;
       const busy = t.status !== "idle" || (r.turn && r.turn.reply && r.turn.reply.running) || (r.steers || []).length || (r.perms && r.perms.size) ||
-        [...(r.agents || new Map()).values()].some((a) => a.state === "running") || this.routingJobs.has(t.id);
+        [...(r.agents || new Map()).values()].some((a) => a.state === "running") || (r.bg && r.bg.size) || this.routingJobs.has(t.id);
       if (busy || this.onScreen(t.id)) continue;
       idle.push({ t, r, at: r.lastUsed || r.started || 0 });
     }
