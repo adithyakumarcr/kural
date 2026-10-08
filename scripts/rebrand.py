@@ -111,8 +111,10 @@ def main(app, platform):
     print(f"rebranded {app} for {platform}")
 
 
-# Kural changes three things in VS Code's own code (workbench.desktop.main.js):
+# Kural changes these things in VS Code's own code (workbench.desktop.main.js):
 #   - VSCodium's own content off the Welcome page (see drop_vscodium_welcome).
+#   - the Integrated Browser's "Add to Chat" goes to Kural's chat (route_browser_to_kural).
+#   - notifications from the system for Kural's chat (add_os_toast).
 #   - Help → Check for Updates…: extensions can't add items to the Help menu, so the item goes next to VS Code's
 #     "Ask @vscode" Help item.
 #   - VS Code's Search view and Output view never show: Kural's Search & Ask side bar has text search (find and
@@ -263,6 +265,53 @@ def route_browser_to_kural(text):
     return text
 
 
+# Notifications from the system (a Mac banner, a Windows toast, a Linux notification) that say Kural: VS Code's own
+# `hostService.showToast` (its chat uses it when an answer arrives in a window you aren't looking at) shows an Electron
+# notification from Kural's main process. Extensions can't reach it, so a command is added that does:
+#   executeCommand("_kural.osToast", {title, body?, id?, actions?, silent?, timeout?, attention?})
+#     -> {clicked, actionIndex?, supported}. A click (or a button) brings that Kural window to the front first.
+#     id: a new toast with the same id replaces the old one. timeout (ms): withdrawn after it. attention: when the
+#     window isn't focused, the Dock icon bounces once (Mac) / the taskbar button flashes (Windows), like VS Code's own.
+#   executeCommand("_kural.osToastClear", {id?}) withdraws one (no id: all of Kural's toasts) -> how many.
+# Added at the end of the file (everything it needs exists by then), found by shape; a miss -> ::warning::, and the
+# chat's notifications fall back to Kural's own (the command isn't there).
+TOAST_HOST = re.compile(r'(?<![\w$.])([\w$]+)=[\w$]+\("hostService"\)')
+TOAST_COMMANDS = re.compile(r'(?<![\w$.])([\w$]+)=new class\{constructor\(\)\{this\._commands=new Map,this\._onDidRegisterCommand=')
+TOAST_METHOD = re.compile(r'async showToast\([\w$]+,[\w$]+\)\{const [\w$]+=[\w$]+\(\),[\w$]+=[\w$]+\.onCancellationRequested\(\(\)=>this\.nativeHostService\.clearToast\(')
+TOAST_END = re.compile(r';(export\{[\w$]+ as main\})')
+TOAST_MARK = '/*kural-toast*/'
+# (C = the command registry, H = the host service's id; a cancellation token of its own, so no minified class is needed)
+TOAST_CODE = TOAST_MARK + (
+    '(()=>{const T=new Map,'
+    'tok=()=>{let f=[],c=!1;return{token:{get isCancellationRequested(){return c},onCancellationRequested(l,s){const e=()=>l.call(s);'
+    'if(c){e();return{dispose(){}}}f.push(e);return{dispose(){f=f.filter(x=>x!==e)}}}},'
+    'cancel(){if(c)return;c=!0;const g=f;f=[];for(const e of g)try{e()}catch{}}}};'
+    'C.registerCommand("_kural.osToast",async(a,o)=>{o=o||{};const h=a.get(H),w=globalThis,s=tok(),'
+    'id=typeof o.id=="string"&&o.id?o.id:"#"+Math.random(),old=T.get(id);old&&old();T.set(id,s.cancel);'
+    'const t=o.timeout>0?setTimeout(s.cancel,o.timeout):void 0;'
+    'try{if(o.attention&&!w.document.hasFocus())await h.focus(w,{mode:1});'
+    'const r=await h.showToast({title:String(o.title||"Kural"),body:o.body?String(o.body):void 0,silent:!!o.silent,'
+    'actions:Array.isArray(o.actions)&&o.actions.length?o.actions.map(String):void 0},s.token)||{},'
+    'n=typeof r.actionIndex=="number",clicked=!!(r.clicked||n);'
+    'if(clicked&&o.focus!==!1)await h.focus(w,{mode:2});'
+    'return{clicked,actionIndex:n?r.actionIndex:void 0,supported:r.supported!==!1}}'
+    'finally{clearTimeout(t);T.get(id)===s.cancel&&T.delete(id)}});'
+    'C.registerCommand("_kural.osToastClear",(a,o)=>{const ids=o&&o.id?[o.id]:[...T.keys()];let n=0;'
+    'for(const i of ids){const d=T.get(i);d&&(d(),n++)}return n})})();')
+
+
+def add_os_toast(text):
+    if TOAST_MARK in text:
+        return text
+    host, commands, end = TOAST_HOST.findall(text), TOAST_COMMANDS.findall(text), list(TOAST_END.finditer(text))
+    if len(host) != 1 or len(commands) != 1 or len(end) != 1 or not TOAST_METHOD.search(text):
+        print("::warning::VS Code's notification code not found as expected; Kural's notifications stay inside the window "
+              f"(host service {len(host)}, command registry {len(commands)}, end {len(end)}, showToast {bool(TOAST_METHOD.search(text))})")
+        return text
+    code = TOAST_CODE.replace("C.registerCommand", commands[0] + ".registerCommand").replace("a.get(H)", f"a.get({host[0]})")
+    return text[:end[0].start() + 1] + code + text[end[0].start() + 1:]
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -274,7 +323,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))
+    new = add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))
     if new == text:
         return
     data = new.encode("utf-8")
