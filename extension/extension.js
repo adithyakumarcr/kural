@@ -74,6 +74,10 @@ function activate(context) {
   require("./lib/ai/agy").setLog(log);
   getStarted = new GetStarted(context);
   getStarted.register();
+  // Which of Claude Code's newer options this claude knows (thinking summaries, agents' text, messages while answering):
+  // asked once per Claude Code version, in the background now, so the chat's first answer never waits for it.
+  require("./lib/ai/claude").setFlagsStore(context.globalStorageUri.fsPath);
+  if (getStarted.claudeReady) require("./lib/ai/claude").prefetchFlags(findClaude()).catch(() => {});
 
   // ---------- status bar ----------
   const status = vscode.window.createStatusBarItem("kural.status", vscode.StatusBarAlignment.Right, 100);
@@ -173,6 +177,9 @@ function activate(context) {
   chat.activity = activity;
   chat.readyCheck = () => getStarted.ready;           // Claude or your own model set up
   chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
+  // A chat answering with a model on this computer keeps Ollama busy: Tab Completion lets Claude help meanwhile
+  // (lib/tab/local.js busy, lib/tab/completion.js).
+  local.chatBusy = () => chat.tabs.some((t) => t.status === "running" && brain.isLocal(t.model));
   const router = new ModelRouter(context,cfg,() => chat.routerModels(),() => vscode.workspace.isTrusted);
   // Auto steers away from an AI close to its usage limit (lib/ai/usage.js) and learns from what you do after its
   // answers, per workspace (lib/router/learn.js).

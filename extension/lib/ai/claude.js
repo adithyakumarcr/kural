@@ -117,26 +117,98 @@ const newSessionId = () => crypto.randomUUID();
 // next one. (Probing it without --input-format stream-json fails with "requires both…", not "unknown option": known.)
 const OPTIONAL_FLAGS = { thinkingDisplay: ["--thinking-display", "summarized"], forwardSubagentText: ["--forward-subagent-text"],
   replayUserMessages: ["--replay-user-messages"] };
-let flagCache = null;
-function supportedFlags(bin) {
-  if (flagCache && flagCache.bin === bin) return flagCache;
-  const left = Object.keys(OPTIONAL_FLAGS);
-  const known = { bin };
-  for (let i = 0; i <= left.length; i++) {
-    const args = ["-p", "--output-format", "stream-json", "--verbose", ...left.flatMap((k) => OPTIONAL_FLAGS[k])];
-    const r = spawnSync(bin, args, { cwd: os.tmpdir(), input: "", timeout: 8000, encoding: "utf8", env: cleanEnv({}), windowsHide: true });
-    if (r.error || r.status === null) break;                    // couldn't tell: use none of them
-    const bad = /unknown option '([^']+)'/.exec(`${r.stdout || ""}${r.stderr || ""}`);
-    if (!bad) { for (const k of left) known[k] = true; break; }
-    const k = left.find((x) => OPTIONAL_FLAGS[x][0] === bad[1]);
-    if (!k) break;
-    left.splice(left.indexOf(k), 1);
-  }
+// The answer is the same for every start of the same Claude Code, so it's saved (Kural's storage: setFlagsStore) with the
+// program's real path, size and date, and asked again only after Claude Code changed (an update). extension.js asks in the
+// background at startup (prefetchFlags). Before, the first chat start of every window asked with spawnSync: every extension,
+// Tab Completion too, froze for ~0.3 s (up to the 8 s limit when claude started slowly), right as the chat began to answer.
+let flagCache = null, flagsFile = null;
+const flagJobs = new Map();
+function setFlagsStore(dir) { flagsFile = dir ? path.join(dir, "claude-flags.json") : null; }
+function binKey(bin) {
+  try { const real = fs.realpathSync(bin), st = fs.statSync(real); return `${real}|${st.size}|${Math.round(st.mtimeMs)}`; } catch { return null; }
+}
+function savedFlags(bin) {
+  const key = flagsFile && binKey(bin);
+  if (!key) return null;
+  try {
+    const d = JSON.parse(fs.readFileSync(flagsFile, "utf8"));
+    if (d.key !== key || !d.flags) return null;
+    const known = { bin };
+    for (const k of Object.keys(OPTIONAL_FLAGS)) if (d.flags[k] === true) known[k] = true;
+    return known;
+  } catch { return null; }
+}
+// Keeps what was found (and saves it when it's sure: a probe that couldn't tell is asked again next time).
+function rememberFlags(bin, known, sure) {
   log(`claude options: thinking summaries ${known.thinkingDisplay ? "on" : "not supported"}, agents' text ${known.forwardSubagentText ? "on" : "not supported"}, ` +
     `messages while answering ${known.replayUserMessages ? "on" : "not supported (update Claude Code)"}`);
   flagCache = known;
+  const key = sure && flagsFile && binKey(bin);
+  if (key) {
+    const flags = Object.fromEntries(Object.keys(OPTIONAL_FLAGS).map((k) => [k, !!known[k]]));
+    try { fs.mkdirSync(path.dirname(flagsFile), { recursive: true }); fs.writeFileSync(flagsFile, JSON.stringify({ key, flags })); } catch { /* memory only */ }
+  }
   return known;
 }
+const probeArgs = (left) => ["-p", "--output-format", "stream-json", "--verbose", ...left.flatMap((k) => OPTIONAL_FLAGS[k])];
+// One probe's result: "ok" (Claude knows all of `left`), the option it didn't know, or null (couldn't tell).
+function probeVerdict(left, r) {
+  if (r.error || r.status === null) return null;
+  const bad = /unknown option '([^']+)'/.exec(`${r.stdout || ""}${r.stderr || ""}`);
+  if (!bad) return "ok";
+  return left.find((x) => OPTIONAL_FLAGS[x][0] === bad[1]) || null;
+}
+// Asks with all the flags, drops the one it doesn't know, asks again… run(args) gives one probe's result.
+async function probeFlags(bin, run) {
+  const left = Object.keys(OPTIONAL_FLAGS), known = { bin };
+  for (let i = 0; i <= Object.keys(OPTIONAL_FLAGS).length; i++) {
+    const v = probeVerdict(left, await run(probeArgs(left)));
+    if (v === "ok") { for (const k of left) known[k] = true; return { known, sure: true }; }
+    if (!v) return { known, sure: false };                       // couldn't tell: use none of them
+    left.splice(left.indexOf(v), 1);
+  }
+  return { known, sure: false };
+}
+const probeOpts = () => ({ cwd: os.tmpdir(), timeout: 8000, encoding: "utf8", env: cleanEnv({}), windowsHide: true });
+
+// In the background (execFile): extension.js at startup, so a chat never waits for it.
+function prefetchFlags(bin) {
+  if (!bin) return Promise.resolve(null);
+  if (flagCache && flagCache.bin === bin) return Promise.resolve(flagCache);
+  const saved = savedFlags(bin);
+  if (saved) return Promise.resolve(flagCache = saved);
+  if (flagJobs.has(bin)) return flagJobs.get(bin);
+  const run = (args) => new Promise((resolve) => {
+    const p = execFile(bin, args, probeOpts(), (err, stdout, stderr) => resolve({
+      error: err && typeof err.code === "string" ? err : null,           // couldn't start it (ENOENT…)
+      status: !err ? 0 : typeof err.code === "number" ? err.code : null,  // null: stopped (the time limit)
+      stdout, stderr }));
+    if (p.stdin) p.stdin.end();
+  });
+  const job = probeFlags(bin, run)
+    .then(({ known, sure }) => flagCache && flagCache.bin === bin ? flagCache : rememberFlags(bin, known, sure))
+    .finally(() => flagJobs.delete(bin));
+  flagJobs.set(bin, job);
+  return job;
+}
+
+// When a chat starts: what's known, the saved answer, or (only if neither: Claude Code was just installed or updated,
+// before the background probe finished) asking now, synchronously.
+function supportedFlags(bin) {
+  if (flagCache && flagCache.bin === bin) return flagCache;
+  const saved = savedFlags(bin);
+  if (saved) return (flagCache = saved);
+  const left = Object.keys(OPTIONAL_FLAGS), known = { bin };
+  let sure = false;
+  for (let i = 0; i <= Object.keys(OPTIONAL_FLAGS).length; i++) {
+    const v = probeVerdict(left, spawnSync(bin, probeArgs(left), { ...probeOpts(), input: "" }));
+    if (v === "ok") { for (const k of left) known[k] = true; sure = true; break; }
+    if (!v) break;
+    left.splice(left.indexOf(v), 1);
+  }
+  return rememberFlags(bin, known, sure);
+}
+supportedFlags._reset = () => { flagCache = null; };   // (tests)
 
 // ---------- one running `claude` process ----------
 // opts: name, model, effort, systemPrompt, appendSystemPrompt, tools, allowedTools, cwd,
@@ -410,4 +482,4 @@ function stripFence(text) {
   return m ? m[1] : text;
 }
 
-module.exports = { supportedFlags, IS_WIN, initLog, log, findClaude, cleanEnv, setSetupGate, isSetUp, ClaudeProcess, ClaudeSession, stripFence, newSessionId, LOGIN_RE };
+module.exports = { supportedFlags, prefetchFlags, setFlagsStore, OPTIONAL_FLAGS, IS_WIN, initLog, log, findClaude, cleanEnv, setSetupGate, isSetUp, ClaudeProcess, ClaudeSession, stripFence, newSessionId, LOGIN_RE };

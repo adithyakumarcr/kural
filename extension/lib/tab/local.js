@@ -15,6 +15,8 @@ const LOCAL_MODELS = [
   { id: "qwen2.5-coder:3b-base", label: "3B · smarter", size: "~2 GB" },
 ];
 
+const SLOW_MIN_MS = 800, BUSY_FOR_MS = 20000;   // (LocalEngine.noteTime: what counts as "Ollama is busy")
+
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const url = (p) => (cfg().get("tabCompletion.ollamaUrl") || "http://127.0.0.1:11434").replace(/\/$/, "") + p;
 const model = () => completionModel(cfg().get("tabCompletion.localModel"));
@@ -57,9 +59,42 @@ class LocalEngine {
     // or their own model set up in Get started)? Ollama with the model already there (from an earlier install, another
     // app) isn't a choice: until then Tab doesn't use it and the panel doesn't call it ready. (extension.js sets this.)
     this.allowed = () => true;
+    // Is Ollama busy with something else? (lib/tab/completion.js then lets Claude help, or asks less often.) Ollama runs
+    // one GPU for every model: while a chat answers with a model on this computer, Tab's answers took 2-2.5 s instead of
+    // 0.3 s, and 6.4 s when Ollama had to load the chat's model first (measured on an M5, docs/benchmarks). Busy = a chat in
+    // this window answering with a local model (extension.js sets chatBusy), or this engine's own answers suddenly much
+    // slower than usual (a chat in another window, Ctrl+K with a local model, another app): compared with its own usual
+    // time, so a computer that's always slow doesn't count as busy.
+    this.chatBusy = () => false;
+    this.times = [];       // recent answer times (ms) while not busy: what's usual here
+    this.slowUntil = 0;
   }
 
   note(ms, ok, note) { this.last = { ms, ok, note, at: Date.now() }; this.changed(); }
+
+  busy() {
+    let chat = false;
+    try { chat = !!this.chatBusy(); } catch { /* the chat isn't there yet */ }
+    return chat || Date.now() < this.slowUntil;
+  }
+  // The usual time of an answer here: the middle of the recent ones (300 ms before there are any).
+  typical() {
+    if (!this.times.length) return 300;
+    const s = [...this.times].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  }
+  // One answer's time. Much slower than usual (3 times the usual and over 0.8 s), or no answer in time: busy for the next
+  // 20 s. Back to usual: not busy any more.
+  // (Times while the chat in this window is busy aren't "usual"; others are, slow ones too: on a computer that's always
+  // slow, the usual time catches up after one answer.)
+  noteTime(ms, failed = false) {
+    const usual = this.typical();
+    if (failed || ms > Math.max(SLOW_MIN_MS, 3 * usual)) this.slowUntil = Date.now() + BUSY_FOR_MS;
+    else if (ms <= Math.max(SLOW_MIN_MS / 2, 1.5 * usual)) this.slowUntil = 0;
+    let chat = false;
+    try { chat = !!this.chatBusy(); } catch { /* not there yet */ }
+    if (!failed && !chat) { this.times.push(ms); if (this.times.length > 20) this.times.shift(); }
+  }
 
   onChange(f) { this.listeners.push(f); }
   changed() { for (const f of this.listeners) f(); }
@@ -110,6 +145,7 @@ class LocalEngine {
       const ms = Date.now() - t0;
       log(`tab: local model answered in ${ms} ms: ${JSON.stringify(text).slice(0, 100)}`);
       this.note(ms, !!text.trim(), text.trim() ? "" : "empty answer");
+      this.noteTime(ms);
       return text;
     } catch (e) {
       if (ctl.signal.aborted && token && token.isCancellationRequested) return null;   // you kept typing
@@ -117,6 +153,7 @@ class LocalEngine {
       const why = /abort|timeout/i.test(e.message) ? `no answer within ${Math.round(ms / 1000)} s — too slow on this computer` : e.message;
       log(`tab: local model failed after ${ms} ms: ${why}`);
       this.note(ms, false, why);
+      this.noteTime(ms, true);
       this.state.checkedAt = 0;
       return null;
     } finally { if (sub) sub.dispose(); }
