@@ -70,15 +70,24 @@ assert.strictEqual(run("Write", { file_path: P.zshrc }, "agent", { notice: true 
 // The reason for a risky command comes with the verdict.
 assert.ok(/administrator/.test(decide({ tool: "Bash", input: { command: "sudo ls" }, mode: "auto", cwd: proj }).risky.why));
 
-// A link inside the project that points at ~/.zshrc counts as ~/.zshrc (paths.real follows links).
-const link = path.join(proj, "innocent.txt");
-try { fs.symlinkSync(P.zshrc, link); } catch { /* no symlinks (Windows without rights): skip */ }
-if (fs.existsSync(link) || fs.lstatSync(link, { throwIfNoEntry: false })) {
-  assert.strictEqual(run("Write", { file_path: link }, "agent"), "ask", "a link to ~/.zshrc must ask");
-  const outLink = path.join(proj, "outdir");
-  fs.symlinkSync(home, outLink);
-  assert.strictEqual(run("Write", { file_path: path.join(outLink, ".profile") }, "agent"), "ask");
+// A link inside the project that points outside counts as the place it points to (paths.real follows links), also when
+// the target doesn't exist yet (a dangling link: writing through it would create the target; CI's home has no .zshrc).
+const outside = path.join(base, "outside");
+fs.mkdirSync(outside);
+const cases = [["existing target", path.join(outside, "target.txt"), true], ["dangling target", path.join(outside, "not-yet.txt"), false]];
+let n = 0;
+for (const [what, target, create] of cases) {
+  if (create) fs.writeFileSync(target, "x");
+  const link = path.join(proj, `link-${n++}.txt`);
+  try { fs.symlinkSync(target, link); } catch { continue; }   // (no symlinks, e.g. Windows without rights: skip)
+  assert.strictEqual(run("Write", { file_path: link }, "agent"), "ask", `a link to a ${what} outside the project must ask`);
 }
+try {
+  const dirLink = path.join(proj, "outdir");
+  fs.symlinkSync(outside, dirLink);
+  assert.strictEqual(run("Write", { file_path: path.join(dirLink, "new-file.txt") }, "agent"), "ask", "a new file inside a linked outside folder must ask");
+  assert.strictEqual(run("Write", { file_path: path.join(proj, "src", "fine.js") }, "agent"), "run", "a normal project file still runs");
+} catch (e) { if (e.code !== "EPERM") throw e; }
 
 fs.rmSync(base, { recursive: true, force: true });
 console.log(`permissions: ${rows} table cells + special cases ok`);
