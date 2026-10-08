@@ -81,6 +81,7 @@ function traits(model, overrides = {}) {
 // How much of a model's usage limit is used (0–100), from its provider's report in lib/ai/usage.js: the fullest general
 // window, plus the model's own weekly window when there is one (Claude's "seven_day_opus" counts only for Opus).
 function limitUsed(model, report) {
+  if (report && report.blockedUntil > Date.now()) return 100;   // it refused a request: the limit is reached
   if (!report || !Array.isArray(report.windows)) return null;
   const name = String(model.id || "").toLowerCase();
   const counts = (w) => { const own = /^seven_day_(\w+)$/.exec(w.id || ""); return !own || name.includes(own[1]); };
@@ -96,13 +97,23 @@ function effortFor(task, profile, settings = {}) {
   return EFFORT_LEVELS[Math.max(0, Math.min(3, base + step - (settings.saveTokens && base > 0 ? 1 : 0)))];
 }
 const LIMIT_WEIGHT = { cost: 3, balance: 1.5, intelligence: .6 };
+// Near a limit (Adithya: "if Claude's usage is hitting the limits, the router must prioritize ChatGPT models"): from 80 %
+// a push away that grows to 98 % (skipped from there), stronger than staying on the chat's AI is ever worth (at most
+// 2.9), in every profile: a long conversation moves too (its record goes along, lib/router/journal.js handoff). Leaving
+// an AI that's near its limit, Claude and ChatGPT (Codex) come before Gemini, which can't ask before a command.
+const NEAR = 80, FULL = 98;
+const nearLimit = (used) => used >= NEAR ? 3 + 6 * (used - NEAR) / (FULL - NEAR) : 0;
+const LEAVING_TO = { claude: .4, codex: .4, agy: 0 };
 const TIER_NAME = { 1: "light", 2: "balanced", 3: "most capable" };
 const pct = (n) => `${Math.round(n)}%`;
 // request: prompt, current (model id), profile, historyChars (the conversation so far), learned ({ model id: -2…2 } from
 // what you did after similar requests, lib/router/learn.js), checkpoint, and capability needs (see eligible).
 // models: each may carry limitUsed (0–100) and observedTaskMs.
 function select(models, request, settings, task = classify(request.prompt)) {
+  const all = models;
   models = eligible(models,request);
+  // avoid: an AI whose limit was just reached (its answer failed on it): any other AI that can do it.
+  if (request.avoid) { const others = models.filter((m) => m.providerId !== request.avoid); if (others.length) models = others; }
   if (!models.length) return { error: request.provider ? "No model of the current AI can handle this request."
     : "Auto picks from Claude, Google Gemini and ChatGPT (Codex): set one up in Get started, or pick a model yourself." };
   const profile = profileOf(request.profile || settings.profile), preferences = settings.modelPreferences || {};
@@ -134,13 +145,19 @@ function select(models, request, settings, task = classify(request.prompt)) {
   // but never against the task's needs or a lighter model that's enough.
   const history = Math.max(0, Number(request.historyChars) || 0);
   const stayModel = .3 + Math.min(.8, history / 60000), stayProvider = .3 + Math.min(1.5, history / 40000);
+  // The chat's AI is near its limit (80 %+; or its answer just failed on the limit: avoid): going elsewhere.
+  const was = all.find((m) => m.id === request.current) || null;
+  const currentProvider = request.avoid || (was && was.providerId) || null;
+  const currentUsed = request.avoid ? 100 : was && Number.isFinite(was.limitUsed) ? was.limitUsed : 0;
+  const leaving = currentUsed >= NEAR;
   const score = (m, parts = { limits: true, stay: true }) => {
     const t = traits(m,preferences);
     // Timing only breaks ties when every candidate has observations. Different tasks are not comparable benchmarks.
     const speed = observed.length === candidates.length ? 1 - m.observedTaskMs/maxTime : 0;
     return -2.5 * (t.quality - need) - (t.legacy ? .8 : 0) + .3 * speed +
       ((settings.saveTokens || profile === "cost") ? .2 * t.tokens : 0) + 1.2*lean(m) +
-      (parts.limits ? -LIMIT_WEIGHT[profile] * Math.max(0, used(m) - 50) / 50 : 0) +
+      (parts.limits ? -LIMIT_WEIGHT[profile] * Math.max(0, used(m) - 50) / 50 - nearLimit(used(m)) : 0) +
+      (parts.limits && leaving && m.providerId !== currentProvider ? LEAVING_TO[m.providerId] || 0 : 0) +
       (parts.stay ? (m.id === request.current ? stayModel : 0) + (current && m.providerId === current.providerId ? stayProvider : 0) : 0);
   };
   const best = (parts) => [...candidates].sort((a,b) => score(b,parts)-score(a,parts) || a.id.localeCompare(b.id))[0];
@@ -148,6 +165,10 @@ function select(models, request, settings, task = classify(request.prompt)) {
   // Say why when the limits or the conversation changed the choice.
   const plain = best({ limits: false, stay: true });
   if (plain !== chosen && used(plain) >= 50) notes.push(`${plain.label || plain.id} avoided: ${pct(used(plain))} of its limit used`);
+  if (leaving && currentProvider && chosen.providerId !== currentProvider) {
+    const name = (was && was.provider) || { claude: "Claude", codex: "ChatGPT (Codex)", agy: "Google Gemini" }[currentProvider] || currentProvider;
+    notes.push(request.avoid ? `${name} reached its limit: continued on ${chosen.provider || chosen.providerId}` : `left ${name}: ${pct(currentUsed)} of its limit used`);
+  }
   const fresh = best({ limits: true, stay: false });
   if (fresh !== chosen && current && chosen.providerId === current.providerId && history > 20000)
     notes.push(chosen.id === request.current ? "stayed on the current model: switching would lose the conversation's cache"

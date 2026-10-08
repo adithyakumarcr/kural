@@ -76,14 +76,27 @@ class Account {
     const bin = this.gs.passed ? findClaude() : null;
     this.auth = bin ? await checks.claudeAuth(bin, cleanEnv({})).catch(() => null) : null;
     if (this.auth && this.auth.loggedIn) this.auth.name = accountName("claude", this.auth.email);
+    this.noticeAccount("claude", this.auth);
     for (const id of CLI_IDS) {
       const c = brain.cli[id];
       this.cliAuth[id] = c.ready && c.bin ? await CLIS[id].auth(c.bin).catch(() => null) : null;
       if (this.cliAuth[id] && this.cliAuth[id].loggedIn) this.cliAuth[id].name = accountName(id, this.cliAuth[id].email);
+      this.noticeAccount(id, this.cliAuth[id]);
     }
     this.draw();
     return this.auth;
   }
+
+  // Another account than before (switched in Kural Settings, or outside Kural, e.g. in a terminal): the chats on that
+  // AI carry their conversations over (lib/chat/index.js accountChanged).
+  noticeAccount(provider, who) {
+    this.emails = this.emails || {};
+    const email = who && who.loggedIn && who.email ? who.email : null;
+    if (!email) return;
+    if (this.emails[provider] && this.emails[provider] !== email) this.accountChanged(provider);
+    this.emails[provider] = email;
+  }
+  accountChanged(provider) { vscode.commands.executeCommand("kural.chat.accountChanged", provider).then(undefined, () => {}); }
 
   // The status item shows whose account the chat's AI uses: the name on it ("Peasant Adithya"), else its email, else
   // the plan. (It showed the plan, "Team", which says little about whose account it is.) The tooltip lists them all.
@@ -165,6 +178,7 @@ class Account {
     this.draw();
     this.relogin = true;
     this.gs.loggedOut();
+    this.accountChanged("claude");   // (its chats go on with what they knew, whoever logs in next)
     return true;
   }
 
@@ -190,6 +204,7 @@ class Account {
     if (r && r.error) { vscode.window.showErrorMessage(`Kural couldn't log out of ${C.short}: ${r.error}`); return false; }
     this.cliAuth[id] = { loggedIn: false };
     await this.gs.forgetCli(id);
+    this.accountChanged(id);   // (its chats go on with what they knew, whoever logs in next)
     this.onSwitched();
     this.draw();
     return true;

@@ -17,6 +17,9 @@ function report(provider, info) {
   const old = state.get(provider) || {};
   const next = { ...old, at: Date.now() };
   if (Array.isArray(info.windows) && info.windows.length) next.windows = info.windows.filter((w) => w && Number.isFinite(w.usedPercent));
+  // The program said a limit is reached (it refused a request): until when. Allowed again: no longer.
+  if (info.blockedUntil) next.blockedUntil = info.blockedUntil;
+  else if (info.allowed) delete next.blockedUntil;
   if (info.tokens) next.tokens = addTokensToday(old.tokens, info.tokens);
   if (info.plan) next.plan = info.plan;
   state.set(provider, next);
@@ -96,7 +99,16 @@ function fromClaude(msg) {
     const id = info.rateLimitType || "five_hour";
     windows.push({ id, label: CLAUDE_WINDOWS[id] || id, usedPercent: Math.round(info.utilization * 1000) / 10, resetsAt: info.resetsAt ? info.resetsAt * 1000 : null });
   }
-  return windows.length ? { windows } : null;
+  // "rejected": a limit is reached right now (until it resets; Auto avoids Claude meanwhile: lib/router/policy.js).
+  const rejected = info.status === "rejected";
+  const reset = info.resetsAt ? info.resetsAt * 1000 : Math.max(0, ...windows.filter((w) => w.usedPercent >= 100).map((w) => w.resetsAt || 0));
+  const out = { ...(windows.length ? { windows } : {}), ...(rejected ? { blockedUntil: reset > Date.now() ? reset : Date.now() + 30 * 60000 } : info.status === "allowed" ? { allowed: true } : {}) };
+  return Object.keys(out).length ? out : null;
+}
+
+// An answer failed because this AI's limit is reached (its error said so): Auto avoids it until `until` (else 30 min).
+function markLimited(provider, until) {
+  report(provider, { blockedUntil: until && until > Date.now() ? until : Date.now() + 30 * 60000 });
 }
 
 // A window whose reset time has passed starts again at 0.
@@ -106,7 +118,9 @@ function current(provider) {
   const now = Date.now();
   const windows = (s.windows || []).map((w) => w.resetsAt && w.resetsAt <= now ? { ...w, usedPercent: 0, resetsAt: null, reset: true } : w);
   const tokens = s.tokens && s.tokens.day === new Date().toDateString() ? s.tokens : null;
-  return { ...s, windows, tokens };
+  const out = { ...s, windows, tokens };
+  if (!(out.blockedUntil > now)) delete out.blockedUntil;
+  return out;
 }
 
 // ---------- in words ----------
@@ -145,5 +159,5 @@ const providers = () => [...state.keys()];
 const snapshot = () => Object.fromEntries(state);
 function restore(saved) { for (const [k, v] of Object.entries(saved || {})) if (!state.has(k) && v) state.set(k, v); }
 
-module.exports = { report, fromClaude, current, limitName, isSession, isWeekly, until, inWords, onChange, providers, snapshot, restore,
+module.exports = { report, fromClaude, markLimited, current, limitName, isSession, isWeekly, until, inWords, onChange, providers, snapshot, restore,
   addTokens, tokenTotals, fromUsage, fromResult, tokenWords, dayKey, _reset: () => state.clear() };

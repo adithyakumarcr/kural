@@ -104,10 +104,16 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
   cheaper model). Per message it picks the model and the intensity, only among Claude, Google Gemini and ChatGPT (Codex)
   models (never a model on this computer: pick those yourself), switching between those AIs with the conversation handed
-  over. It reads how much work the request is (Kural's word classifier, or a helper model through Ollama: MiniLM,
+  over (everything visible: requests, what was sent, answers, steps and results, files changed, plan and to-do list,
+  pictures; a long conversation is compacted to fit the next model, newest turns whole, every request kept, never cut
+  off). It reads how much work the request is (Kural's word classifier, or a helper model through Ollama: MiniLM,
   Granite or Qwen3, downloaded in the panel), what's attached (files, error output, a picked element), each AI's usage
-  left (avoids one past half, skips one at 98 %), the conversation's length (long chats stay on their AI on close calls)
-  and what you did after earlier answers (learned per workspace; "Kural: Forget What Model Router Learned"). Each answer
+  left (avoids one past half; from 80 % of a Session or Weekly limit it moves to another AI, Claude to ChatGPT (Codex)
+  first, then Gemini, even in a long chat; skips one at 98 %), the conversation's length (long chats stay on their AI on
+  close calls) and what you did after earlier answers (learned per workspace; "Kural: Forget What Model Router
+  Learned"). When an answer stops because its AI reached its usage limit, Auto carries the same request on with another
+  AI at once (the stopped answer gets a note) and avoids that AI until the limit resets. Switching a chat to another AI
+  yourself (model menu), or switching an AI's account or logging in again, also hands the conversation over. Each answer
   shows the model; hover: why. The profile is picked only in the model menu. The Model Router icon in the status bar
   (two arrows in boxes; hover: "Model Router" and the step that reads requests) opens its panel: only a slider from
   Faster to Quality for what reads requests (four steps: Native, MiniLM, Granite, Qwen3; the panel names the step,

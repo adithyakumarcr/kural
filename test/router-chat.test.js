@@ -166,6 +166,63 @@ function fixture(model='haiku') {
   const f=fixture();f.tab.messages=[{role:'user',segments:[{t:'text',v:'hello'}]},{role:'assistant',blocks:[{k:'text',text:'hi there'}]}];
   const req=f.chat.routingRequest(f.tab,'next',[],[]);assert.strictEqual(req.historyChars,13);assert.deepStrictEqual(req.context,{files:0,chars:0,elements:0});
  });
+ // ---------- usage limits: no staying on an AI that's nearly out, and nothing lost on the way ----------
+ const usageHub=require('../extension/lib/ai/usage');
+ const longChat=(n=30)=>{const m=[];for(let i=0;i<n;i++)m.push({role:'user',segments:[{t:'text',v:`REQUEST-${i} never deploy`}],sentText:`REQUEST-${i}\n${'source '.repeat(3000)}`},{role:'assistant',model:'sonnet',blocks:[{k:'text',text:`ANSWER-${i} ${'words '.repeat(2000)}`}],journal:{tools:[{id:`t${i}`,name:'Read',input:{file_path:`f${i}.js`},status:'complete',result:'y'.repeat(9000)}]}});return m;};
+ await check('near its limit a long chat still moves to another AI, its conversation compacted to fit (not refused, not kept)',async()=>{
+  usageHub._reset();usageHub.report('claude',{windows:[{id:'five_hour',label:'Session',usedPercent:91,resetsAt:Date.now()+3600e3}]});
+  const f=fixture('sonnet'),asked=[];f.tab.messages=longChat();
+  f.chat.router.route=async(req)=>{asked.push(req.provider||null);return {model:'codex:test',source:'native',reason:'balance profile · left Claude: 91% of its limit used'};};
+  await f.chat.send(f.tab,[{t:'text',v:'NEW-REQUEST continue'}],[]);
+  assert.deepStrictEqual(asked,[null]);                                  // no second try within Claude
+  assert.strictEqual(f.tab.model,'codex:test');assert.strictEqual(f.sent.length,1);
+  const sent=f.sent[0];assert.ok(sent.length<120000+5000,`${sent.length} characters`);
+  for(const s of ['compacted','REQUEST-0 never deploy','REQUEST-29 never deploy','NEW-REQUEST continue'])assert.ok(sent.includes(s),s);
+  // Not near its limit: the long chat stays with Claude (its own conversation keeps everything) instead of a shortened record.
+  usageHub._reset();
+  const g=fixture('sonnet'),asked2=[];g.tab.messages=longChat();
+  g.chat.router.route=async(req)=>{asked2.push(req.provider||null);return req.provider?{model:'opus',source:'native',reason:'balance profile'}:{model:'codex:test',source:'native',reason:'balance profile'};};
+  await g.chat.send(g.tab,[{t:'text',v:'next'}],[]);
+  assert.deepStrictEqual(asked2,[null,'claude']);assert.strictEqual(g.tab.model,'opus');
+ });
+ await check('an answer that fails on its AI\'s usage limit goes on with another AI, the conversation handed over',async()=>{
+  usageHub._reset();
+  const f=fixture('sonnet'),asked=[];f.tab.messages=[{role:'user',segments:[{t:'text',v:'SECRET-CONSTRAINT keep the API'}],sentText:'SECRET-CONSTRAINT keep the API'},{role:'assistant',model:'sonnet',blocks:[{k:'text',text:'ok'}]}];
+  Object.assign(f.chat,{panes:[],finishTurn:()=>{}});f.chat.router.taskDone=()=>{};
+  f.chat.router.route=async(req)=>{asked.push(req.avoid||null);return req.avoid?{model:'codex:test',source:'native',reason:'Claude reached its limit: continued on ChatGPT (Codex)'}:{model:'sonnet',source:'native',reason:'balance profile'};};
+  await f.chat.send(f.tab,[{t:'text',v:'NEW-REQUEST refactor the login'}],[]);
+  const r=f.chat.runtime.get('chat'),reply=f.tab.messages.at(-1);
+  r.turn.journal.tools.push({id:'e1',name:'Edit',input:{file_path:'login.js'},status:'complete',result:'edited login.js'});
+  reply.journal=r.turn.journal;reply.blocks.push({k:'text',text:'Halfway there.'});
+  f.chat.finishReply(f.tab,r,{type:'result',subtype:'success',is_error:true,result:'Claude AI usage limit reached|1791999999'});
+  await new Promise(res=>setTimeout(res,50));
+  assert.deepStrictEqual(asked,[null,'claude']);
+  assert.ok(usageHub.current('claude').blockedUntil>Date.now(),'Auto avoids Claude until its limit resets');
+  assert.strictEqual(f.tab.model,'codex:test');assert.strictEqual(f.tab.messages.length,5);   // the stopped answer stays, a new one follows
+  const stopped=f.tab.messages[3];assert.strictEqual(stopped.error,undefined);assert.match(stopped.note,/reached its usage limit here/);
+  const sent=f.sent.at(-1),text=typeof sent==='string'?sent:sent[0].text;
+  for(const s of ['SECRET-CONSTRAINT keep the API','NEW-REQUEST refactor the login','edited login.js','Halfway there.','reached its usage limit'])assert.ok(text.includes(s),s);
+  // The other AI fails on its limit too: no going back to Claude (also at its limit): that error stays.
+  const codexReply=f.tab.messages.at(-1),r2=f.chat.runtime.get('chat');asked.length=0;
+  f.chat.finishReply(f.tab,r2,{type:'result',subtype:'success',is_error:true,result:"You've hit your usage limit. Try again at 5:00 PM."});
+  await new Promise(res=>setTimeout(res,50));
+  assert.deepStrictEqual(asked,['codex']);assert.strictEqual(f.tab.messages.length,5);assert.match(codexReply.error,/usage limit/);
+  // Not in Auto: the error stays (you picked that model), but Auto would avoid Claude now.
+  usageHub._reset();
+  const g=fixture('sonnet');g.tab.autoRoute=false;g.chat.router.route=async()=>assert.fail('no routing');Object.assign(g.chat,{panes:[],finishTurn:()=>{}});g.chat.router.taskDone=()=>{};
+  await g.chat.send(g.tab,[{t:'text',v:'x'}],[]);
+  g.chat.finishReply(g.tab,g.chat.runtime.get('chat'),{type:'result',subtype:'success',is_error:true,result:"You've hit your session limit · resets 3pm"});
+  await new Promise(res=>setTimeout(res,20));
+  assert.match(g.tab.messages.at(-1).error,/session limit/);assert.ok(usageHub.current('claude').blockedUntil>Date.now());
+ });
+ await check('a conversation that can\'t be reopened starts again with the conversation handed over',async()=>{
+  const f=fixture('sonnet');f.tab.autoRoute=false;f.tab.messages=[{role:'user',segments:[{t:'text',v:'SECRET-CONSTRAINT one'}],sentText:'SECRET-CONSTRAINT one'},{role:'assistant',model:'sonnet',blocks:[{k:'text',text:'done one'}]}];
+  await f.chat.send(f.tab,[{t:'text',v:'second'}],[]);
+  const r=f.chat.runtime.get('chat');r.started=Date.now();r.gotOutput=false;
+  f.chat.onExit(f.tab,r,{code:1,stderr:'No conversation found with session ID: old'});
+  const text=f.sent.at(-1);assert.ok(typeof text==='string'&&text.includes('SECRET-CONSTRAINT one')&&text.includes('done one')&&text.endsWith('second'),String(text).slice(0,200));
+  assert.strictEqual(f.tab.started,false);
+ });
  const html=require('../extension/lib/router/panel')._page('testnonce');new Function(html.split('<script nonce="testnonce">')[1].split('</script>')[0]);
  console.log(`router-chat: ${passed} passed, ${failed} failed; panel script parses`);fs.rmSync(dir,{recursive:true,force:true});process.exitCode=failed?1:0;
 })();

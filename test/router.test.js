@@ -285,6 +285,46 @@ const task=(complexity,intent='edit')=>({complexity,intent});
   assert.strictEqual(full.model,'codex:gpt-6-terra');assert.match(full.reason,/skipped Claude \(limit nearly reached\)/);
   assert.strictEqual(select([{...two[0],limitUsed:99}],req,{},t).model,'sonnet');                    // the only one: still used
  });
+ await check('near a limit (80 %+) Auto leaves the AI even in a long chat: ChatGPT (Codex) before Gemini, the tier kept',()=>{
+  const at=(p)=>three.map(m=>m.providerId==='claude'?{...m,limitUsed:p}:m);
+  const ask=(list,t,history=200000,profile='balance',extra={})=>select(list,{prompt:'x',current:'sonnet',profile,historyChars:history,...extra},{},t);
+  // 70 %: a long chat stays on its AI (handing it over costs more); 85 %: it leaves, to Codex's balanced model.
+  assert.strictEqual(ask(at(70),task('standard')).model,'sonnet');
+  const r=ask(at(85),task('standard'));assert.strictEqual(r.model,'codex:gpt-6-terra');assert.match(r.reason,/left Claude: 85% of its limit used/);
+  for(const p of ['cost','intelligence'])assert.ok(ask(at(85),task('standard'),200000,p).model.includes(':'),p);   // (Claude's ids have no "provider:")
+  // Complex work: the most capable elsewhere, Codex's before Gemini's (Gemini can't ask before a command).
+  assert.strictEqual(ask(at(90),task('complex')).model,'codex:gpt-6-sol');
+  // Only Gemini besides Claude: Gemini.
+  const noCodex=at(90).filter(m=>m.providerId!=='codex');assert.strictEqual(ask(noCodex,task('complex')).model,'agy:gemini-3.8-pro');
+  // Nothing else can do it: still Claude (never refused).
+  assert.strictEqual(ask(at(95).filter(m=>m.providerId==='claude'),task('standard')).model,'sonnet');
+  // Its answer just failed on the limit (avoid): any other AI, whatever the numbers say.
+  const avoided=ask(three,task('standard'),0,'balance',{avoid:'claude'});assert.notStrictEqual(avoided.model.split(':').length,1);assert.match(avoided.reason,/Claude reached its limit: continued on ChatGPT \(Codex\)/);
+  assert.strictEqual(ask(three.filter(m=>m.providerId==='claude'),task('standard'),0,'balance',{avoid:'claude'}).model,'sonnet');
+ });
+ await check('an AI that refused a request on its limit counts as full until it resets',()=>{
+  assert.strictEqual(limitUsed({id:'sonnet'},{windows:[{id:'five_hour',usedPercent:40}],blockedUntil:Date.now()+60000}),100);
+  assert.strictEqual(limitUsed({id:'sonnet'},{windows:[{id:'five_hour',usedPercent:40}],blockedUntil:Date.now()-1}),40);
+  const usage=require('../extension/lib/ai/usage');usage._reset();
+  const r=usage.fromClaude({rate_limit_info:{status:'rejected',resetsAt:Math.round(Date.now()/1000)+3600,unifiedWindows:{five_hour:{utilization:1,resetsAt:Math.round(Date.now()/1000)+3600}}}});
+  usage.report('claude',r);assert.ok(usage.current('claude').blockedUntil>Date.now()+3500e3);
+  usage.report('claude',usage.fromClaude({rate_limit_info:{status:'allowed',unifiedWindows:{five_hour:{utilization:.1}}}}));assert.strictEqual(usage.current('claude').blockedUntil,undefined);
+  usage.markLimited('codex');assert.ok(usage.current('codex').blockedUntil>Date.now()+25*60e3);
+  const {limitError}=require('../extension/lib/router/journal');
+  for(const t of ['Claude AI usage limit reached|1791999999',"You've hit your session limit · resets 3pm","You've hit your usage limit. Try again at 5:00 PM.","Gemini: you've reached your plan's limit for now.",'API Error: 429 Too Many Requests'])assert.ok(limitError(t),t);
+  for(const t of ['stopped','login','Something went wrong.','Credit balance is too low',undefined])assert.ok(!limitError(t),String(t));
+ });
+ await check('the handoff fits a budget: newer turns whole, older ones shortened, every request, plan and to-do kept',()=>{
+  const big='z'.repeat(40000),msgs=[];
+  for(let i=0;i<20;i++)msgs.push({role:'user',segments:[{t:'text',v:`REQUEST-${i}`}],sentText:`REQUEST-${i} ${big}`,attachments:i===0?[{name:'shot.png',kind:'image',path:'/tmp/shot.png'}]:undefined},
+   {role:'assistant',model:'sonnet',mode:i===2?'plan':'agent',blocks:[{k:'text',text:i===2?`THE-PLAN ${big}`:`ANSWER-${i} ${big}`}],journal:{tools:[{id:`t${i}`,name:'TodoWrite',input:{todos:[{content:`TODO-${i}`}]},status:'complete'},{id:`r${i}`,name:'Read',input:{file_path:`f${i}.js`},status:'failed',result:big}]},changes:[{rel:`f${i}.js`,added:1,removed:0,state:'kept'}]});
+  const whole=handoff(msgs);assert.ok(!/"compacted"/.test(whole)&&whole.length>1e6);
+  for(const budget of [120000,40000]){
+   const h=handoff(msgs,budget),record=/<kural_handoff>\n([\s\S]*)\n<\/kural_handoff>/.exec(h)[1];
+   assert.ok(record.length<=budget,`${record.length} > ${budget}`);assert.match(h,/older parts are shortened/);
+   for(const s of ['REQUEST-0','REQUEST-19','THE-PLAN','TODO-19','f0.js','f19.js','shot.png'])assert.ok(record.includes(s),`${budget}: ${s}`);
+  }
+ });
  await check('limitUsed: the fullest general window, and a model\'s own weekly window only for that model',()=>{
   const report={windows:[{id:'five_hour',usedPercent:20},{id:'seven_day',usedPercent:40},{id:'seven_day_opus',usedPercent:95}]};
   assert.strictEqual(limitUsed({id:'opus'},report),95);assert.strictEqual(limitUsed({id:'sonnet'},report),40);
