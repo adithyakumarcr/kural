@@ -197,6 +197,11 @@
         "category": "Kural"
       },
       {
+        "command": "kural.verifyInstall",
+        "title": "Verify this installation...",
+        "category": "Kural"
+      },
+      {
         "command": "kural.chat.split",
         "title": "Kural: Open a Chat Beside the Code",
         "icon": "$(split-horizontal)"

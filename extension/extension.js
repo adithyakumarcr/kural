@@ -269,6 +269,7 @@ function activate(context) {
     vscode.commands.registerCommand("kural.install", () => getStarted.open()),
     vscode.commands.registerCommand("kural.showLog", () => showLog()),
     vscode.commands.registerCommand("kural.checkForUpdates", () => updater.check()),
+    vscode.commands.registerCommand("kural.verifyInstall", () => updater.verifyInstall()),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.tabCompletion.model")) { tabSession.stop(); terminalSession.stop(); }
       if (e.affectsConfiguration("kural.tabCompletion.localModel") || e.affectsConfiguration("kural.tabCompletion.ollamaUrl")) local.status(true);
