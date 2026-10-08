@@ -137,23 +137,39 @@
         el("div", { class: "examples" }, S.moods.examples.map((x) => el("button", { class: "btn", title: x.hint, onclick: () => useExample(x) }, x.name)))));
   }
   // force: redraw even if the moods haven't changed (the form opened, closed, or says something new).
+  // A built-in mood: × removes it from the chat's menu; a removed one has Restore. The last mood left can't be removed
+  // (with all four removed and none of your own, Default comes back: prompts.js shownMoods).
+  function builtInMoods(D) {
+    const hidden = new Set(D.hidden || []);
+    if (D.builtIn.every((m) => hidden.has(m.id)) && !D.mine.length) hidden.delete("default");
+    const last = D.builtIn.filter((m) => !hidden.has(m.id)).length + D.mine.length <= 1;
+    return el("div", { class: "builtin" }, D.builtIn.map((m) => hidden.has(m.id)
+      ? el("span", { class: "pill off", title: `${m.label} isn't in the chat's model menu` }, m.label, " · removed",
+        el("button", { class: "pill-btn", title: `Put ${m.label} back in the chat's model menu`, onclick: () => post({ type: "hideMood", id: m.id, hidden: false }) }, icon("discard"), " Restore"))
+      : el("span", { class: "pill", title: m.hint }, m.label, el("span", { class: "muted" }, ` · ${m.hint}`),
+        el("button", { class: "pill-btn", disabled: last, "aria-label": `Remove ${m.label}`,
+          title: last ? "The chat needs at least one mood" : `Remove ${m.label} from the chat's model menu`,
+          onclick: () => post({ type: "hideMood", id: m.id, hidden: true }) }, icon("close")))));
+  }
   function renderMoods(force) {
     const D = S.moods;
-    const key = JSON.stringify(D.mine) + (M.confirm || "");
+    const key = JSON.stringify([D.mine, D.hidden]) + (M.confirm || "");
     if (!force && key === M.drawn) return;
     M.drawn = key;
+    // Where a chat goes when its mood is deleted: the first mood left in the menu.
+    const hidden = new Set(D.hidden || []), first = (D.builtIn.find((m) => !hidden.has(m.id)) || D.mine[0] || { label: "Default" }).label;
     const mine = D.mine.map((m) => el("div", { class: "mood-item" },
       el("div", { class: "row" }, el("strong", {}, m.label), m.hint ? el("span", { class: "muted" }, m.hint) : null, el("span", { class: "grow" }),
         el("button", { class: "btn", onclick: () => openMoodForm(m) }, icon("edit"), " Edit"),
         M.confirm === m.id
           ? el("button", { class: "btn danger", onclick: () => { M.confirm = null; post({ type: "deleteMood", id: m.id }); } }, "Delete it?")
-          : el("button", { class: "btn quiet", title: "Delete this mood (chats using it go back to Default)", onclick: () => { M.confirm = m.id; renderMoods(true); } }, icon("trash"))),
+          : el("button", { class: "btn quiet", title: `Delete this mood (chats using it go to ${m.label === first ? "the next mood" : first})`, onclick: () => { M.confirm = m.id; renderMoods(true); } }, icon("trash"))),
       el("div", { class: "muted small clamp2" }, m.instructions)));
     moodsBox.replaceChildren(...[   // (replaceChildren writes a null as the word "null": left out)
       el("div", { class: "sechead" }, el("h2", {}, "Moods"), el("span", { class: "grow" }),
         M.form ? null : el("button", { class: "btn", onclick: () => openMoodForm(null) }, icon("add"), " Add a mood")),
-      el("p", { class: "muted" }, "How the chat's AI works with you. Pick one in the chat's model menu, under Mood. Your own moods show there next to the four built-in ones."),
-      el("div", { class: "builtin" }, D.builtIn.map((m) => el("span", { class: "pill", title: m.hint }, m.label, el("span", { class: "muted" }, ` · ${m.hint}`)))),
+      el("p", { class: "muted" }, "How the chat's AI works with you. Pick one in the chat's model menu, under Mood. Your own moods show there next to the built-in ones; remove a built-in one you don't use with its ×. A new chat starts with the first mood in the menu."),
+      builtInMoods(D),
       D.mine.length ? el("div", { class: "mood-list" }, mine) : (M.form ? null : el("p", { class: "muted small" }, "No moods of your own yet.")),
       M.form ? moodForm() : null].filter(Boolean));
   }

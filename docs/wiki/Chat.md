@@ -1,7 +1,8 @@
 # Chat
 
-The chat sits on the right (**Ctrl+L**, **Cmd+L** on a Mac). Ask in plain words; Kural reads your project, changes
-files, runs commands and answers. With code selected, Ctrl+L adds it to your message.
+The chat sits on the right: **Ctrl+L** (**Cmd+L** on a Mac) shows it, and pressing it again hides it. Ask in plain
+words; Kural reads your project, changes files, runs commands and answers. With code selected in the editor, Ctrl+L adds
+it to your message instead (also while the chat is open).
 
 ## Modes: how much Kural may do
 
@@ -59,8 +60,11 @@ your next message, because which tools the model has is fixed when it starts.
     be and how it works with you ("Work like a pair programmer sitting next to me"), concrete behaviors (what to do
     first, what to always or never do), the tone and length you want, when to ask you and when to decide, all in a few
     sentences. Start from an example (Pair programmer, Strict reviewer, Explain like I'm new) and change it. Edit or
-    delete them there too; a chat whose mood you deleted goes back to Default. They're saved in your settings
-    (`kural.chat.moods`), so **Export settings** takes them along.
+    delete them there too; a chat whose mood you deleted gets the first mood in the menu. They're saved in your
+    settings (`kural.chat.moods`), so **Export settings** takes them along.
+  - **Remove the built-in moods you don't use**, Default too: **Kural Settings → Moods**, the **×** on a mood. **Restore**
+    brings it back. The menu always keeps at least one mood, and a new chat starts with the first one left (setting
+    `kural.chat.hiddenMoods`).
   - Changing the mood (or the mode) in the middle of a chat applies from your next message: Kural tells the AI what
     changed along with it.
 - **Multiple agents** (Claude, ChatGPT and Gemini models): a team instead of one assistant. See [[Multiple Agents]].
@@ -68,6 +72,9 @@ your next message, because which tools the model has is fixed when it starts.
 ## Adding things to your message
 
 - **@** mentions a file in your sentence.
+- **Text from the chat**: select part of an answer (or of a message you sent) and click **Add to chat** beside it. It goes
+  into your message as a quote (its first words; point at it to read it all), and the AI gets the whole selected text
+  (up to 8,000 characters) with your message.
 - **+ → Add files**: files, images, PDFs. You can also paste a screenshot, or hold **Shift** and drag files from Kural's
   own file explorer into the chat. (Dropping files from outside Kural doesn't work: VS Code doesn't pass them on.)
 - **+ → Link ticket** (Claude): link a Jira epic, story or task; Kural then knows which ticket you're working on in every
