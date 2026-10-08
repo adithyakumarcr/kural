@@ -58,6 +58,11 @@ function full(m) {
       followUpAttachments: m.blocks.filter((b) => b.k === "steer").flatMap((b) => b.attachments || []) } : {}),
     ...((m.blocks || []).some((b) => b.k === "question") ? {
       questions: m.blocks.filter((b) => b.k === "question").map((b) => ({ questions: b.questions, answers: b.answers, state: b.state })) } : {}),
+    ...((m.blocks || []).some((b) => b.k === "agent") ? {
+      agents: m.blocks.filter((b) => b.k === "agent").map((b) => ({ name: b.name, role: b.role, state: b.state,
+        steps: (b.steps || []).filter((s) => s.k !== "think").map((s) => ({ kind: s.k, name: s.name, text: s.text || s.detail || "" })) })) } : {}),
+    ...((m.blocks || []).some((b) => b.name === "mcp__team__post") ? {
+      teamReports: m.blocks.filter((b) => b.name === "mcp__team__post").map((b) => ({ agent: b.agent || "lead", role: b.role, text: b.detail })) } : {}),
     tools: m.journal && m.journal.tools || [], changes: m.changes || [], error: m.error };
 }
 
@@ -98,6 +103,8 @@ function at(m, level) {
   if (e.userAddedWhileAnswering) out.userAddedWhileAnswering = e.userAddedWhileAnswering.map((x) => cut(x, level >= 3 ? 200 : 600));
   if (e.followUpAttachments) out.followUpAttachments = e.followUpAttachments;
   if (e.questions) out.questions = e.questions;
+  if (e.agents) out.agents = e.agents.map((a) => ({ ...a, steps: a.steps.map((s) => ({ ...s, text: cut(s.text, level >= 3 ? 160 : 600) })) }));
+  if (e.teamReports) out.teamReports = e.teamReports.map((p) => ({ ...p, text: cut(p.text, [0, 3000, 1000, 300, 160][level]) }));
   const tools = e.tools || [];
   if (level < 4) out.tools = tools.map((t) => toolAt(t, level));
   else if (tools.length) out.steps = `${tools.length} (${[...new Set(tools.map((t) => t.name))].join(", ")}; ${tools.filter((t) => t.status === "failed").length} failed)`;

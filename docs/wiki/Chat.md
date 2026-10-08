@@ -55,7 +55,7 @@ your next message, because which tools the model has is fixed when it starts.
     (`kural.chat.moods`), so **Export settings** takes them along.
   - Changing the mood (or the mode) in the middle of a chat applies from your next message: Kural tells the AI what
     changed along with it.
-- **Multiple agents** (Claude models): a team instead of one assistant. See [[Multiple Agents]].
+- **Multiple agents** (Claude, ChatGPT and Gemini models): a team instead of one assistant. See [[Multiple Agents]].
 
 ## Adding things to your message
 
@@ -68,7 +68,7 @@ your next message, because which tools the model has is fixed when it starts.
 - **+ → Pick from a browser**: opens the [[Browser]] to select an element of your app and add it here.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
-- The file you're looking at is added by itself ("current file"); click its × to leave it out.
+- The composer shows only context you choose. Attach a file with **@** or **+ → Add files**; opening it does not attach it.
 
 ## In the answer
 
@@ -143,8 +143,8 @@ a restart and after you pressed **Keep**.
 ## Context and tokens
 
 Next to the send button, a small ring shows how full the conversation's context window is (for example 5 % of
-Sonnet's 1,000,000 tokens). Hover it for the numbers and for this chat's tokens: how many the AI read (and how many of
-those came from the cache, which is cheap) and wrote. Near full, the AI starts summarising or forgetting the oldest
+Sonnet's 1,000,000 tokens). **Click it to open AI Usage.** Hover it for **tokens in context / context capacity** and
+**tokens consumed** in this chat (read plus written). Near full, the AI starts summarising or forgetting the oldest
 parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage panel ([[Account and Updates]]).
 
 ## Tabs, history, two chats

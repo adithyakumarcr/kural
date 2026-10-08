@@ -13,6 +13,7 @@ const { fontScale } = require("./ui");
 const { versionLabel } = require("./version");
 const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
+const usageSwitch = require("./ai/usage-switch");
 
 // Your own moods: the user setting kural.chat.moods (never a project's).
 const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
@@ -33,10 +34,10 @@ class SettingsPage {
     this.account.onChange(() => this.push());
     this.gs.onChange(() => this.push());
     this.context.subscriptions.push(usage.onChange(() => this.push()),
-      vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("kural.chat.moods")) this.push(); }));
+      vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("kural.chat.moods") || e.affectsConfiguration("kural.usageSwitch")) this.push(); }));
   }
 
-  // section: "moods" scrolls to the Moods editor (the chat's model menu, "Add your own mood…").
+  // section: Moods from the chat's model menu; usage controls from the AI Usage panel.
   async open(section) {
     this.section = section || null;
     if (this.panel) { this.panel.reveal(); if (section) this.panel.webview.postMessage({ type: "show", section }); }
@@ -99,6 +100,7 @@ class SettingsPage {
     return { type: "state", cards, loading: !!this.loading, refreshing: this.refreshing, checking: this.checking, chatAI: engine === "ollama" ? "local" : engine,
       version: versionLabel(this.context.extensionPath, this.context.extension.packageJSON.version),
       autoUpdates: vscode.workspace.getConfiguration("kural").get("updates.autoCheck") !== false,
+      usageSwitch: usageSwitch.options(vscode.workspace.getConfiguration("kural")),
       moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
       section: this.section || null };
   }
@@ -149,6 +151,14 @@ class SettingsPage {
       case "tab": vscode.commands.executeCommand("kural.tabPanel.focus"); break;
       case "router": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "usagePanel": vscode.commands.executeCommand("kural.showUsage"); break;
+      case "usageSwitch": {
+        const c = vscode.workspace.getConfiguration("kural");
+        if (typeof m.enabled === "boolean") await c.update("usageSwitch.enabled", m.enabled, vscode.ConfigurationTarget.Global);
+        if (typeof m.threshold === "number" && Number.isInteger(m.threshold) && m.threshold >= 1 && m.threshold <= 99)
+          await c.update("usageSwitch.threshold", m.threshold, vscode.ConfigurationTarget.Global);
+        this.push();
+        break;
+      }
       case "log": vscode.commands.executeCommand("kural.showLog"); break;
       case "allSettings": vscode.commands.executeCommand("workbench.action.openSettings", "@ext:kural.kural"); break;
       case "guide": open(WIKI); break;

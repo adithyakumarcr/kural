@@ -5,8 +5,11 @@ typing to ignore it. Write a comment, press Enter, and the suggestion implements
 
 ## The Tab Completion panel
 
-Click the **sparkle** icon in the status bar (bottom right; its hover says Tab Completion, and it's crossed out while
-Tab Completion is off). There you can:
+Click the **sparkle** icon in the status bar (bottom right) to turn suggestions **on or off**. It is crossed out while
+off, and remains an icon during setup or errors; hover for details. **Ctrl+Alt+Space** toggles it too (Ctrl on Mac).
+
+Open its panel from **Tab Completion settings** in the icon's hover, **Kural Settings → Tab Completion**, or the
+Command Palette → **Tab Completion**. There you can:
 
 - turn it **on or off** (also **Ctrl+Alt+Space**, Ctrl on a Mac too),
 - set **how fast it suggests**: Instant (as you type) to Slow (waits longer after your last key),

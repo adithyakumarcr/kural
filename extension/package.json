@@ -1,7 +1,7 @@
 {
   "name": "kural",
   "displayName": "Kural",
-  "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude (your Claude Code login) or your own model on this computer (Ollama, offline).",
+  "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude, Google Gemini, ChatGPT (Codex), or your own model on this computer (Ollama, offline).",
   "version": "1.1.0-alpha.6",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
@@ -735,7 +735,7 @@
           "default": 75,
           "minimum": 0,
           "maximum": 2000,
-          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Easiest to set in the Tab Completion panel (the sparkle in the status bar)."
+          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Open its panel from Kural Settings → Tab Completion or the settings link in the status icon's hover."
         },
         "kural.chat.model": {
           "type": "string",
@@ -850,7 +850,7 @@
             "The local model (Claude helps if Ollama isn't available, or while a chat keeps it busy)",
             "Always Claude"
           ],
-          "description": "What writes Tab Completion suggestions. Easiest to set in the Tab Completion panel (the sparkle in the status bar)."
+          "description": "What writes Tab Completion suggestions. Open its panel from Kural Settings → Tab Completion or the settings link in the status icon's hover."
         },
         "kural.tabCompletion.localModel": {
           "type": "string",
@@ -888,6 +888,20 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Show VS Code's **Run and Debug** side bar and the **Debug Console** and **Ports** panels. Off by default to keep Kural simple; while you debug (F5), the debug views show anyway."
+        },
+        "kural.usageSwitch.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Automatically move a chat to another AI when its reported usage reaches your threshold, preserving its conversation. Applies to Auto and manually selected models."
+        },
+        "kural.usageSwitch.threshold": {
+          "type": "integer",
+          "default": 70,
+          "minimum": 1,
+          "maximum": 99,
+          "scope": "application",
+          "description": "Percentage of a model's Session or Weekly usage limit at which Kural switches to an available AI below this threshold. Used when automatic usage switching is enabled."
         },
         "kural.modelRouter.profile": {
           "type": "string",

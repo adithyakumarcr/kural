@@ -44,7 +44,7 @@ class Account {
   onChange(f) { this.listeners.push(f); }
 
   register() {
-    this.context.subscriptions.push(this.item, vscode.commands.registerCommand("kural.account", () => this.page && this.page.open()),
+    this.context.subscriptions.push(this.item, vscode.commands.registerCommand("kural.account", (section) => this.page && this.page.open(section)),
       // (The chat's model menu, "Add your own mood…": Kural Settings, at Moods.)
       vscode.commands.registerCommand("kural.settings.moods", () => this.page && this.page.open("moods")),
       vscode.commands.registerCommand("kural.refreshUsage", () => this.refreshUsage(true)));

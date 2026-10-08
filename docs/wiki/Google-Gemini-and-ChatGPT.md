@@ -52,10 +52,10 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 - The usage meter: Codex has a Session (5-hour) and a Weekly limit, like Claude: the status bar shows its Session.
   Gemini has only weekly limits: the status bar shows its name. Hover for every limit; the AI Usage panel has them all.
 - Kural Settings (person icon in the status bar): who's logged in, the usage page, switch account, log out.
+- [[Multiple Agents]]: project teams and discussions, with roles, live activity and shared reports between phases.
 
 ## What needs Claude
 
-- [[Multiple Agents]]
 - Claude Code's connectors, MCP servers, plugins and skills
 - Linking Jira tickets
 - [[Devices]] work with Claude and Codex, not with Gemini (it can't ask before running a command there)
@@ -72,3 +72,7 @@ a Codex or Gemini chat starts a new conversation that gets the old one; a Claude
 With **Auto**, Kural also moves a chat to another AI when its AI is at 80 % of a usage limit (Claude to ChatGPT (Codex)
 first, then Gemini), and when an answer stops because the limit was reached it carries that request on with another AI
 at once.
+
+**Kural Settings → AI Usage → Automatically switch AI** applies this protection to manually selected models too.
+Set the percentage (default 70%) and turn it on. Kural waits for active work to finish, preserves the same chat and
+continues a paused request with another available service below your threshold. See [[Account and Updates]].

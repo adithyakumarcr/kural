@@ -83,9 +83,12 @@ function usable(model = currentModel()) {
 function cliAgent(id, model, opts, handlers) {
   const c = cli[id];
   const json = opts.jsonSchema ? `\n\nAnswer with only one JSON object (no other text, no code fence) that matches this JSON schema: ${JSON.stringify(opts.jsonSchema)}` : "";
-  return new CLIS[id].Agent({ name: opts.name, bin: c.bin, model: cliModel(model), models: c.models, effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
+  const options = { name: opts.name, bin: c.bin, model: cliModel(model), models: c.models, effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
     cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs, appendSystemPrompt: (opts.appendSystemPrompt || "") + json,
-    sessionId: opts.sessionId, resume: opts.resume, store: cliStore || path.join(os.tmpdir(), "kural-cli-chats") }, handlers);
+    mcpServers: opts.mcpServers, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
+  if (opts.teamConfig) return new (require("../chat/team-agent").TeamAgent)({ ...options, teamConfig: opts.teamConfig }, handlers,
+    (o, h) => new CLIS[id].Agent(o, h));
+  return new CLIS[id].Agent(options, handlers);
 }
 async function askCli(id, model, system, prompt, token) {
   const ctl = new AbortController();

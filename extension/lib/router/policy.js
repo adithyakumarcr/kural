@@ -84,7 +84,13 @@ function limitUsed(model, report) {
   if (report && report.blockedUntil > Date.now()) return 100;   // it refused a request: the limit is reached
   if (!report || !Array.isArray(report.windows)) return null;
   const name = String(model.id || "").toLowerCase();
-  const counts = (w) => { const own = /^seven_day_(\w+)$/.exec(w.id || ""); return !own || name.includes(own[1]); };
+  const counts = (w) => {
+    const own = /^seven_day_(\w+)$/.exec(w.id || "");
+    if (own) return name.includes(own[1]);
+    // Gemini reports weekly limits per model family (including Claude models served by Antigravity).
+    const family = /^agy:/.test(name) && /\b(gemini|claude)\b/i.exec(w.label || w.id || "");
+    return !family || /:default$/.test(name) || name.includes(family[1].toLowerCase());
+  };
   const used = report.windows.filter(counts).map((w) => w.usedPercent).filter(Number.isFinite);
   return used.length ? Math.max(...used) : null;
 }
@@ -120,6 +126,15 @@ function select(models, request, settings, task = classify(request.prompt)) {
   const used = (m) => Number.isFinite(m.limitUsed) ? m.limitUsed : 0;
   const tier = (m) => traits(m,preferences).quality;
   const notes = [];
+  // The user's optional threshold also applies when Auto selects a model.
+  const guard = settings.usageSwitch;
+  if (guard && guard.enabled) {
+    const under = models.filter((m) => used(m) < guard.threshold);
+    if (under.length && under.length < models.length) {
+      models = under;
+      notes.push(`kept below your ${guard.threshold}% usage threshold`);
+    }
+  }
   // Nearly out (98 %+): not chosen while another model can do the task.
   const full = models.filter((m) => used(m) >= 98);
   if (full.length && full.length < models.length) {

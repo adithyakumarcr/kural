@@ -1,5 +1,15 @@
 ## Not released yet
 
+- **Choose the files you attach.** Removed automatic current-file attachments and suggested file chips from the chat box.
+- **Set your usage threshold.** Kural Settings → AI Usage has optional automatic service switching and an editable
+  percentage (70% initially). It preserves the same chat, recorded context and completed work, and continues a paused
+  request on another available service after active work finishes. Works with manual models and Auto.
+- **Context meter shortcut.** Click it for AI Usage; hover for tokens consumed and tokens in context / context capacity.
+- **Tab Completion toggles with one click.** The status bar stays icon-only in every state; its hover links to settings.
+- **Smaller AI Usage panel.** One summary per AI; other limits and token history expand under Details.
+- **Multiple agents for ChatGPT and Gemini.** Kural manages project teams and discussions through separate Codex or
+  Antigravity sessions, with roles, plan approval, shared reports, agent cards, Stop and a final summary.
+
 - **No more VSCodium on the Welcome page.** It listed VSCodium's own **Get started with VSCodium** walkthrough and
   **VSCodium Announcements** (news about the VSCodium project, fetched from VSCodium's GitHub every time Welcome opened).
   Both are gone, and nothing is fetched from VSCodium any more; **Get started with Kural** is the first walkthrough.
