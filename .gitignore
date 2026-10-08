@@ -3,7 +3,9 @@
 /dist/
 /pkg/
 /root/
-
+/bench-results/
+/benchmark/
+/regulations/
 node_modules/
 *.log
 .DS_Store
