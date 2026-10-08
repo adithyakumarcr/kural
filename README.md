@@ -368,6 +368,13 @@ moved to Ctrl+Alt+K. Use Ctrl+/ to comment code.
 Every release has a signed checksum list (`SHA256SUMS` and `SHA256SUMS.sig`), and Kural's updater checks it before
 installing anything. You can check a download yourself too: see [docs/release-signing.md](docs/release-signing.md).
 
+## What Kural stores on your computer
+
+Kural keeps, on this computer only: your chat history (all chats, so you can reopen them), checkpoints for Restore code
+(30 days), the update log, crash reports, Kural's own SSH key for devices you link, and, only if you turn it on, what
+Tab Completion learns from your work. Nothing is sent to Kural's author. What you send to an AI goes to that AI's
+company (Anthropic, Google or OpenAI), under your own account; a model on your computer sends nothing.
+
 ## Security
 
 Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md).

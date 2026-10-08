@@ -128,7 +128,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
   then downloads the model.
-  It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
+  It learns from your work in each workspace only when you turn it on (setting kural.tabCompletion.learnFromActivity,
+  off by default; "Kural: Forget What Tab Completion Learned" clears it).
   While a chat answers with a model on this computer (Ollama runs both on one GPU, so Tab's local answers slow to 2-3 s),
   Claude helps Tab if it's set up (also for "Local model"); without Claude, Tab asks a little less often meanwhile.
 - Change a name in your code (type over it, or accept a Tab suggestion that changes it) and Kural looks for the old name

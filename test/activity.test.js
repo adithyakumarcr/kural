@@ -95,6 +95,20 @@ check("saved per workspace and read back; Forget clears it", () => {
   assert.strictEqual(make(s).tabNote("x.py", "python"), "");
 });
 
+check("secret filter: keys, tokens and passwords in their many shapes", () => {
+  const { SECRET } = require("../extension/lib/tab/activity");
+  const yes = ["mysql -uroot -p'x' db", "psql -h h -pSecret1", "curl -H \"X-Api-Key: abc\" https://x", "export PRIVATE_KEY=abc", "private-key.pem",
+    "-----BEGIN OPENSSH PRIVATE KEY-----", "aws configure set aws_access_key_id AKIAABCDEFGHIJKLMNOP", "git clone https://ghp_" + "a".repeat(36) + "@github.com/x",
+    "OPENAI=sk-" + "b".repeat(24), "curl -d token xoxb-123-456", "curl -H 'Cookie: s=eyJhbGciOiJIUzI1.eyJ'", "export API_KEY=abc", "password: hunter2"];
+  const no = ["npm test", "git push origin main", "mysql -u root db", "ls -p", "make deploy", "skip-tests", "echo task", "docker compose up"];
+  for (const l of yes) assert.ok(SECRET.test(l), `should be secret: ${l}`);
+  for (const l of no) assert.ok(!SECRET.test(l), `should be kept: ${l}`);
+  const a = make(store());
+  a.tabAccepted("a.js", "javascript", "const key = ", "\"sk-" + "c".repeat(30) + "\"");
+  a.addWork("chat", "use token ghp_" + "d".repeat(36), []);
+  assert.strictEqual(a.accepted.length + a.work.length, 0);
+});
+
 check("switched off: learns nothing, says nothing", () => {
   const a = make(store(), () => false);
   a.addWork("chat", "Something", ["a.py"]);
