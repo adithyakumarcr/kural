@@ -879,6 +879,11 @@
           "default": true,
           "markdownDescription": "Tab in the terminal too: one suggested command line in the terminal's suggestion list (e.g. a commit message named from your changes). Uses the same engine and model as Tab in the editor."
         },
+        "kural.tabCompletion.learnFromActivity": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Let Tab Completion learn from your work in this workspace (what you asked the chat, suggestions you accepted, terminal commands) so its suggestions fit you. Kept on this computer only; lines that look like passwords or keys are skipped, but a filter can miss some. **Kural: Forget What Tab Completion Learned** deletes it."
+        },
         "kural.tabCompletion.renameAcrossFiles": {
           "type": "boolean",
           "default": true,
