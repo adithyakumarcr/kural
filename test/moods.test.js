@@ -4,18 +4,19 @@
 const assert = require("assert");
 const Module = require("module");
 const load = Module._load;
-const settings = { user: undefined, workspace: undefined };
+const settings = { user: undefined, workspace: undefined, hidden: undefined, hiddenWorkspace: undefined };
 const updates = [];
 const config = () => ({
   get: (k, d) => d,
-  inspect: (k) => k === "chat.moods" ? { globalValue: settings.user, workspaceValue: settings.workspace } : undefined,
-  update: async (k, v, target) => { updates.push({ k, v, target }); if (k === "chat.moods") settings.user = v; },
+  inspect: (k) => k === "chat.moods" ? { globalValue: settings.user, workspaceValue: settings.workspace }
+    : k === "chat.hiddenMoods" ? { globalValue: settings.hidden, workspaceValue: settings.hiddenWorkspace } : undefined,
+  update: async (k, v, target) => { updates.push({ k, v, target }); if (k === "chat.moods") settings.user = v; if (k === "chat.hiddenMoods") settings.hidden = v; },
 });
 const vscode = { workspace: { isTrusted: true, workspaceFolders: [], textDocuments: [], getConfiguration: config, onDidChangeConfiguration: () => ({ dispose() {} }) },
   window: {}, env: { appRoot: "/unused" }, commands: { executeCommand: () => {} }, Uri: { file: (f) => ({ scheme: "file", fsPath: f }), joinPath: () => ({}) },
   ConfigurationTarget: { Global: 1 }, EventEmitter: class { constructor() { this.event = () => {}; } fire() {} } };
 Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
-const { MOODS, MOOD_PROMPTS, MOOD_EXAMPLES, customMoods, moodPrompt, moodId } = require("../extension/lib/chat/prompts");
+const { MOODS, MOOD_PROMPTS, MOOD_EXAMPLES, customMoods, shownMoods, moodPrompt, moodId } = require("../extension/lib/chat/prompts");
 const { ChatView } = require("../extension/lib/chat");
 const { SettingsPage } = require("../extension/lib/settings-page");
 
@@ -103,6 +104,50 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
     assert.deepStrictEqual(settings.user.map((m) => [m.id, m.name]), [["custom-pair-programmer", "Pair partner"]]);
     await page.onMessage({ type: "deleteMood", id: "custom-pair-programmer" });
     assert.deepStrictEqual(settings.user, []);
+  });
+
+  // Removing built-in moods (setting kural.chat.hiddenMoods, Kural Settings → Moods).
+  await check("removed built-in moods leave the list; one mood always stays", () => {
+    const ids = (list) => list.map((m) => m.id);
+    assert.deepStrictEqual(ids(shownMoods(["explorer", "critic"])), ["default", "learn"]);
+    assert.deepStrictEqual(ids(shownMoods(["default"])), ["explorer", "critic", "learn"]);
+    assert.deepStrictEqual(ids(shownMoods(MOODS.map((m) => m.id))), ["default"], "all four removed, none of your own: Default comes back");
+    assert.deepStrictEqual(ids(shownMoods(MOODS.map((m) => m.id), customMoods([{ name: "Mine", instructions: "x" }]))), [], "your own mood is enough");
+    assert.deepStrictEqual(ids(shownMoods(undefined)), ids(MOODS));
+    assert.deepStrictEqual(ids(shownMoods("junk")), ids(MOODS));
+  });
+  await check("the chat: removed moods leave the menu; a chat using one (and a new chat) gets the first mood left", () => {
+    settings.user = []; settings.hidden = ["default", "explorer"]; posted.length = 0;
+    chat.tabs = [{ id: "a", model: "sonnet", mood: "explorer", messages: [], status: "idle" }, { id: "b", model: "sonnet", mood: "learn", messages: [], status: "idle" }];
+    chat.moodsChanged();
+    assert.deepStrictEqual(posted.find((m) => m.type === "moods").moods.map((m) => m.id), ["critic", "learn"]);
+    assert.deepStrictEqual(chat.tabs.map((t) => t.mood), ["critic", "learn"]);
+    assert.strictEqual(chat.lastChoices().mood, "critic", "your last mood (none saved here) → the first one left, not the removed Default");
+    assert.strictEqual(chat.fix({ id: "c", model: "sonnet", mood: "custom-deleted", messages: [] }).mood, "critic");
+    // A project's settings can't remove moods (only your user settings count, like your own moods).
+    settings.hidden = undefined; settings.hiddenWorkspace = ["default", "explorer", "critic"];
+    assert.strictEqual(chat.lastChoices().mood, "default");
+    settings.hiddenWorkspace = undefined;
+  });
+  await check("Kural Settings: remove and restore a built-in mood; the last mood left can't be removed", async () => {
+    settings.user = []; settings.hidden = [];
+    await page.onMessage({ type: "hideMood", id: "learn", hidden: true });
+    await page.onMessage({ type: "hideMood", id: "default", hidden: true });
+    assert.deepStrictEqual(settings.hidden, ["default", "learn"], "kept in the built-in order");
+    assert.strictEqual(updates.at(-1).target, vscode.ConfigurationTarget.Global);
+    await page.onMessage({ type: "hideMood", id: "learn", hidden: false });
+    assert.deepStrictEqual(settings.hidden, ["default"]);
+    await page.onMessage({ type: "hideMood", id: "explorer", hidden: true });
+    await page.onMessage({ type: "hideMood", id: "critic", hidden: true });
+    await page.onMessage({ type: "hideMood", id: "learn", hidden: true });
+    assert.deepStrictEqual(settings.hidden, ["default", "explorer", "critic"], "Learn is the last mood: it stays");
+    await page.onMessage({ type: "hideMood", id: "custom-x", hidden: true });
+    await page.onMessage({ type: "hideMood", id: "../etc", hidden: true });
+    assert.deepStrictEqual(settings.hidden, ["default", "explorer", "critic"], "only built-in moods can be removed");
+    settings.user = [{ id: "custom-mine", name: "Mine", instructions: "x" }];
+    await page.onMessage({ type: "hideMood", id: "learn", hidden: true });
+    assert.deepStrictEqual(settings.hidden, ["default", "explorer", "critic", "learn"], "with a mood of your own, all four can go");
+    settings.user = []; settings.hidden = [];
   });
 
   console.log(failed ? `moods: ${failed} FAILED` : "moods: ALL PASS");

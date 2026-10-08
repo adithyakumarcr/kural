@@ -21,7 +21,7 @@ const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote } = require("./tickets");
-const { PROMPTS, MOODS, MOOD_PROMPTS, customMoods, moodPrompt } = require("./prompts");
+const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt } = require("./prompts");
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
@@ -103,6 +103,7 @@ class ChatView {
     this.panes = [];
     this.pane = null;            // the pane whose message is being handled right now
     this.focusPane = null;       // the pane you used last (keyboard shortcuts and commands act on it)
+    this.chatFocused = false;    // the keyboard is in a chat page (Ctrl+L then hides the chat instead of adding code)
     this._activeId = null;       // the side panel's tab before the panel exists
     this.tabs = [];              // open tabs; see newTab() for the shape
     // Every chat from every workspace, in full (History). this.here: which workspace this window is.
@@ -158,7 +159,7 @@ class ChatView {
     // "Did you know?" under a working answer turned on or off (setting kural.chat.didYouKnow).
     c.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.chat.didYouKnow")) this.post({ type: "didYouKnow", on: didYouKnow() });
-      if (e.affectsConfiguration("kural.chat.moods")) this.moodsChanged();
+      if (e.affectsConfiguration("kural.chat.moods") || e.affectsConfiguration("kural.chat.hiddenMoods")) this.moodsChanged();
       if (e.affectsConfiguration("kural.usageSwitch")) this.usageChanged();
     }));
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
@@ -184,6 +185,7 @@ class ChatView {
         if (s && !s.isEmpty && e.textEditor.document.uri.scheme === "file") this.lastSelection = { doc: e.textEditor.document, range: new vscode.Range(s.start, s.end) };
       }),
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
+      vscode.commands.registerCommand("kural.chat.toggle", () => this.toggle()),
       // Kural: Devices → "Link it to the current chat".
       vscode.commands.registerCommand("kural.chat.linkDevice", async (id) => {
         const t = this.active();
@@ -236,17 +238,18 @@ class ChatView {
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
-      mood: valid(allMoods(), last.mood) ? last.mood : "default",
+      mood: valid(allMoods(), last.mood) ? last.mood : firstMood(),
       roles: Array.isArray(last.roles) ? last.roles.filter((r) => valid(ROLES, r)) : [],
       teamStyle: valid(TEAM_STYLES, last.teamStyle) ? last.teamStyle : "split",
     };
   }
 
-  // You added, changed or deleted one of your moods (Kural Settings → Moods): the menus show the new list; a chat whose
-  // mood was deleted goes back to Default; an idle chat with a changed mood gets its new instructions now (procKey).
+  // You added, changed or deleted one of your moods, or removed or restored a built-in one (Kural Settings → Moods): the
+  // menus show the new list; a chat whose mood is gone gets the first mood left (Default, unless you removed it); an
+  // idle chat with a changed mood gets its new instructions now (procKey).
   moodsChanged() {
     const ids = new Set(allMoods().map((m) => m.id));
-    for (const t of this.tabs) if (!ids.has(t.mood)) t.mood = "default";
+    for (const t of this.tabs) if (!ids.has(t.mood)) t.mood = firstMood();
     this.post({ type: "moods", moods: allMoods() });
     this.postTabs(); this.save();
     for (const t of this.tabs) { const r = this.runtime.get(t.id); if (r && r.proc && t.status === "idle") this.warm(t); }
@@ -285,8 +288,8 @@ class ChatView {
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
     if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)
-    // (A mood of yours that you deleted: Default.)
-    if (!valid(allMoods(), tab.mood)) tab.mood = /^custom-/.test(tab.mood || "") ? "default" : d.mood;
+    // (A mood of yours that you deleted: the first mood in the menu.)
+    if (!valid(allMoods(), tab.mood)) tab.mood = /^custom-/.test(tab.mood || "") ? firstMood() : d.mood;
     if (!Array.isArray(tab.roles)) tab.roles = d.roles;
     tab.roles = tab.roles.filter((r) => valid(ROLES, r));
     if (!valid(TEAM_STYLES, tab.teamStyle)) tab.teamStyle = d.teamStyle;
@@ -771,6 +774,15 @@ class ChatView {
     this.post({ type: "focus" });
   }
 
+  // Ctrl+L as a switch: the side panel's chat on screen → hide it; otherwise open it. Code selected in the editor you're
+  // typing in still goes into your message (open()), even while the chat is on screen.
+  toggle() {
+    const side = this.side(), ed = vscode.window.activeTextEditor;
+    const adding = !this.chatFocused && ed && !ed.selection.isEmpty;
+    if (side && side.view && side.view.visible && !adding) return vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar");
+    return this.open();
+  }
+
   // ---------- Claude process per tab ----------
   // How many agents this tab's team has (0 = no team). Splitting work needs a mode that can edit;
   // a discussion works in every mode. With roles picked, one agent per role.
@@ -954,6 +966,7 @@ class ChatView {
       if (c.kind === "selection") { files++; chars += String(c.code || "").length; }
       else if (c.kind === "file") { files++; chars += size(c.path); }
       else if (c.kind === "element") elements++;
+      else if (c.kind === "quote") chars += String(c.text || "").length;
     }
     for (const a of attachments || []) if (a && a.path && !["image", "pdf"].includes(a.kind)) { files++; chars += size(a.path); }
     return { files, chars, elements };
@@ -1285,10 +1298,14 @@ class ChatView {
     const parts = [];
     const seen = new Set();
     for (const c of contexts) {
-      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine, c.element && c.element.selector]);   // (two elements of one page are two)
+      // (Two elements of one page are two; so are two quotes.)
+      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine, c.element && c.element.selector, c.kind === "quote" ? c.text : null]);
       if (seen.has(key)) continue; seen.add(key);
       if (c.kind === "selection") {
         parts.push(`${c.path} (lines ${c.startLine}-${c.endLine}):\n\`\`\`${c.lang || ""}\n${c.code}\n\`\`\``);
+      } else if (c.kind === "quote") {
+        // Text you selected in this chat ("Add to chat"); the page keeps it to 8,000 characters.
+        parts.push(`Part of this chat I selected:\n${String(c.text || "").slice(0, 8001).split("\n").map((l) => `> ${l}`).join("\n")}`);
       } else if (c.kind === "element") {
         parts.push(elementNote(c.element || {}));
       } else if (c.kind === "file" || c.kind === "current") {
@@ -1304,15 +1321,16 @@ class ChatView {
     return parts.length ? `<context>\n${parts.join("\n\n")}\n</context>\n\n${text}` : text;
   }
 
-  // What you typed, with pills written as @main.py or @main.py (L3-9).
+  // What you typed, with pills written as @main.py or @main.py (L3-9); a quote from the chat as "its first words…".
   static textOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
       : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
   }
 
   // A tab title from your first message; pills read as "main.py (L3-9)".
   static titleOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "element" ? s.ctx.label : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? s.ctx.label
+      : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
 
@@ -2368,7 +2386,7 @@ class ChatView {
         break;
       }
       case "log": log(`chat panel: ${m.message}`); break;
-      case "focusChanged": vscode.commands.executeCommand("setContext", "kural.chatFocused", !!m.focused); break;
+      case "focusChanged": this.chatFocused = !!m.focused; vscode.commands.executeCommand("setContext", "kural.chatFocused", !!m.focused); break;
       case "newTab": this.newTab(true); break;
       case "switchTab": this.activate(m.id, pane); break;
       case "closeTab": this.closeTab(m.id); break;
@@ -2768,8 +2786,15 @@ function permDetail(tool, input) {
 function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
 // Your own moods, from your user settings only (never a project's: their instructions go into the AI's prompt).
 function userMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.moods") : null; return i ? i.globalValue : undefined; }
-// The moods in the model menu: the four built-in ones, then yours (prompts.js customMoods).
-function allMoods() { return [...MOODS, ...customMoods(userMoods()).map(({ id, label, hint, custom }) => ({ id, label, hint, custom }))]; }
+// Built-in moods you removed from the menu (Kural Settings → Moods): user settings only too.
+function hiddenMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.hiddenMoods") : null; return i ? i.globalValue : undefined; }
+// The moods in the model menu: the built-in ones you kept, then yours (prompts.js shownMoods, customMoods).
+function allMoods() {
+  const mine = customMoods(userMoods());
+  return [...shownMoods(hiddenMoods(), mine), ...mine.map(({ id, label, hint, custom }) => ({ id, label, hint, custom }))];
+}
+// The mood for a chat whose own is gone: the first in the menu (shownMoods keeps at least one).
+function firstMood() { return allMoods()[0].id; }
 // While an answer is worked on, a "Did you know?" tip or fact under it (media/facts.js). On unless you turned it off.
 function didYouKnow() { return cfg().get("chat.didYouKnow", true) !== false; }
 

@@ -157,6 +157,12 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--vscode-foreground); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); user-select: all; }
 .pill-icon { font-size: calc(10px * var(--fs, 1)); opacity: .75; font-family: var(--vscode-editor-font-family); }
 .pill.selection { background: color-mix(in srgb, var(--blue) 16%, transparent); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.pill.quote { cursor: default; max-width: calc(100% - 4px); vertical-align: bottom; }
+.pill.quote .pill-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* "Add to chat" beside text you select in the chat (chat.js placeQuoteBtn). */
+.quote-btn { position: fixed; z-index: 15; display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 6px; border: 0;
+  background: var(--accent); color: var(--on-accent); font-size: calc(11.5px * var(--fs, 1)); box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.quote-btn:hover { background: var(--accent-hi); }
 .foot { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
 .pick { display: inline-flex; align-items: center; gap: 5px; background: none; border: 1px solid transparent; border-radius: 6px; padding: 1px 6px; font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pick:hover { background: var(--hover); color: var(--vscode-foreground); }
@@ -399,8 +405,9 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mood-chip { background: none; border: 1px solid var(--border); border-radius: 12px; padding: 1px 9px; font-size: calc(11.5px * var(--fs, 1)); color: var(--vscode-foreground); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mood-chip:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
 .mood-chip.on { background: color-mix(in srgb, var(--accent) 25%, transparent); border-color: var(--accent); font-weight: 600; }
-.mood-chip.add { border-style: dashed; color: var(--muted); }
-.mood-chip.add:hover { color: var(--vscode-foreground); }
+/* (Not the class "add": that's the diff's monospace "+12", and it gave this chip the code font.) */
+.mood-chip.mood-add { border-style: dashed; color: var(--muted); }
+.mood-chip.mood-add:hover { color: var(--vscode-foreground); }
 /* roles and moods */
 .roles { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px 6px; align-items: center; }
 .roles-h { font-size: calc(10.5px * var(--fs, 1)); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 2px; }

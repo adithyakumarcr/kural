@@ -1,3 +1,15 @@
+## Not released yet
+
+- **Add text from the chat to your message.** Select part of an answer (or of a message you sent) and click **Add to
+  chat** beside it: it goes into your message as a quote, and the AI gets the whole selected text with your message.
+- **Ctrl+L (Cmd+L) shows and hides the chat.** Press it again to hide the chat. With code selected in the editor it still
+  adds that code to your message, also while the chat is open.
+- **Remove the moods you don't use.** Kural Settings → Moods: the **×** on a built-in mood (Default, Explorer, Critic,
+  Learn) takes it out of the chat's menu; **Restore** brings it back. A new chat starts with the first mood left.
+- **Fixed: "Add your own mood…" was in the code font.** It shared a style name with the "+12" line counts in Files
+  changed, so it took their monospace font; it now uses the same font as the other moods.
+- **No log button in the Kural panel's title bar.** Kural's log is in Kural Settings, or **Kural: Show Log**.
+
 ## What's new in 1.1.0-alpha.7
 
 - **What's new after an update.** After Kural updates (Check for Updates, or a new version you installed yourself), the

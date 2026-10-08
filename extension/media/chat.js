@@ -58,7 +58,7 @@
   const moodLabel = (id) => (S.moods.find((m) => m.id === id) || { label: "" }).label;
   const effortLabel = (id) => (S.efforts.find((e) => e.id === id) || { label: "Medium" }).label;
   const modeLabel = (id) => (S.modes.find((m) => m.id === id) || { label: "Agent" }).label;
-  const pillLabel = (c) => c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : c.kind === "element" ? c.label : base(c.path);
+  const pillLabel = (c) => c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : c.kind === "element" || c.kind === "quote" ? c.label : base(c.path);
   // Show ⌘ instead of Ctrl on a Mac.
   const MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
   // "Ctrl+" is ⌘ on a Mac; "Control+" means the Control key everywhere (⌃ on a Mac).
@@ -475,12 +475,15 @@
     follow();
   }
 
-  // Pills in sent messages open the file when clicked; pills you're still typing don't.
+  // Pills in sent messages open the file when clicked; pills you're still typing don't. A quote (text you selected in
+  // the chat) opens nothing: pointing at it shows what it says.
   function pillNode(ctx, openable = true) {
+    const quote = ctx.kind === "quote";
     return el("span", { class: `pill ${ctx.kind}`, contenteditable: "false", "data-ctx": JSON.stringify(ctx),
-      title: ctx.kind === "element" ? `${ctx.label} on ${ctx.path}${ctx.element && ctx.element.text ? `\n"${ctx.element.text.slice(0, 80)}"` : ""}` : openable ? `Open ${ctx.path}` : ctx.path,
-      onclick: !openable ? null : ctx.kind === "element" ? () => post({ type: "browser", url: ctx.path }) : () => post({ type: "openFile", path: ctx.path, line: ctx.startLine, endLine: ctx.endLine }) },
-      ctx.kind === "element" ? el("span", { class: "pill-icon" }, icon("inspect")) : el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"), pillLabel(ctx));
+      title: quote ? String(ctx.text || "").slice(0, 600) : ctx.kind === "element" ? `${ctx.label} on ${ctx.path}${ctx.element && ctx.element.text ? `\n"${ctx.element.text.slice(0, 80)}"` : ""}` : openable ? `Open ${ctx.path}` : ctx.path,
+      onclick: !openable || quote ? null : ctx.kind === "element" ? () => post({ type: "browser", url: ctx.path }) : () => post({ type: "openFile", path: ctx.path, line: ctx.startLine, endLine: ctx.endLine }) },
+      ctx.kind === "element" || quote ? el("span", { class: "pill-icon" }, icon(quote ? "quote" : "inspect")) : el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"),
+      quote ? el("span", { class: "pill-text" }, pillLabel(ctx)) : pillLabel(ctx));
   }
 
   // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock), and a
@@ -1075,6 +1078,42 @@
   }
   const insertPill = (ctx, range) => insertNodes([pillNode(ctx, false), document.createTextNode(" ")], range);
 
+  // --- text from the chat as context ---
+  // Select text in the chat (an answer, or a message you sent) and "Add to chat" puts it into your message as a quote
+  // pill; what it says goes to the AI with your message (buildPrompt in lib/chat/index.js).
+  const MAX_QUOTE = 8000;   // (a selection of the whole chat would otherwise be saved with every message)
+  const quoteBtn = el("button", { class: "quote-btn hidden", title: "Add the selected text to your message",
+    onmousedown: (e) => e.preventDefault(),   // (a click would clear the selection before it's read)
+    onclick: () => addQuote() }, icon("quote"), " Add to chat");
+  app.append(quoteBtn);
+  function chatSelection() {
+    const sel = getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) return null;
+    const r = sel.getRangeAt(0), text = sel.toString().trim();
+    return text && listEl.contains(r.commonAncestorContainer) ? { r, text } : null;
+  }
+  function placeQuoteBtn() {
+    const s = S.tab && !S.tab.visiting ? chatSelection() : null;
+    if (!s) { quoteBtn.classList.add("hidden"); return; }
+    const rects = s.r.getClientRects(), at = rects[rects.length - 1] || s.r.getBoundingClientRect();
+    quoteBtn.classList.remove("hidden");
+    const w = quoteBtn.offsetWidth, h = quoteBtn.offsetHeight, box = listEl.getBoundingClientRect();
+    // Under the selection's last line; above it when that's off the bottom of the chat.
+    const top = at.bottom + 6 + h <= box.bottom ? at.bottom + 6 : Math.max(box.top + 4, at.top - h - 6);
+    quoteBtn.style.top = `${top}px`;
+    quoteBtn.style.left = `${Math.max(6, Math.min(at.right - w, window.innerWidth - w - 6))}px`;
+  }
+  function addQuote() {
+    const s = chatSelection();
+    quoteBtn.classList.add("hidden");
+    if (!s) return;
+    const text = s.text.length > MAX_QUOTE ? `${s.text.slice(0, MAX_QUOTE)}…` : s.text, line = text.replace(/\s+/g, " ");
+    insertPill({ kind: "quote", text, label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line });
+  }
+  document.addEventListener("mouseup", () => setTimeout(placeQuoteBtn, 0));   // (after the click has set the selection)
+  document.addEventListener("selectionchange", () => { if (!quoteBtn.classList.contains("hidden") && !chatSelection()) quoteBtn.classList.add("hidden"); });
+  listEl.addEventListener("scroll", () => quoteBtn.classList.add("hidden"));
+
   // --- @ mentions ---
 
   function checkMention() {
@@ -1259,7 +1298,7 @@
         el("div", { class: "mh" }, "Mood"),
         el("div", { class: "moods" }, S.moods.map((md) => el("button", { class: `mood-chip${t.mood === md.id ? " on" : ""}`, title: md.hint || "",
           "aria-pressed": String(t.mood === md.id), onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label)),
-          el("button", { class: "mood-chip add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
+          el("button", { class: "mood-chip mood-add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
             onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own mood…")),
         el("div", { class: "sep" }),
         // Claude Code teams, or Kural's team runner for Codex and Gemini.

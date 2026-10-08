@@ -574,10 +574,21 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   until System Settings > Notifications > Kural allows it. The test copies share the bundle id com.kural with the real
   app: a toast from them asks about (and changes) the real Kural's permission.
 - **Moods** (`prompts.js` `MOODS` + setting `kural.chat.moods`, edited in Kural Settings → Moods): your own moods are read
-  from user settings only (`inspect().globalValue`: a project's settings can't inject instructions); a deleted mood →
-  Default; editing one restarts idle chats with the new text. Webview pages: CSP blocks `style="…"` attributes, so set
+  from user settings only (`inspect().globalValue`: a project's settings can't inject instructions); editing one
+  restarts idle chats with the new text. Built-in moods can be removed (Adithya, Default too): `kural.chat.hiddenMoods`,
+  user settings only as well; `shownMoods` keeps at least one (all four removed and none of yours → Default), and a chat
+  whose mood is gone (deleted or removed) gets `firstMood()`, the menu's first. Webview pages: CSP blocks `style="…"` attributes, so set
   `el.style.…` / `style.cssText` in the page script (Kural Settings showed every usage bar full); `replaceChildren(null)`
-  writes the text "null".
+  writes the text "null". chat.css class names are global: the mood chip once had class `add`, which is the diff's
+  monospace "+12", and showed in the code font (now `mood-add`).
+- **Ctrl/Cmd+L** = `kural.chat.toggle` (`toggle()` in the chat): the side panel's chat on screen (`side().view.visible`)
+  → `workbench.action.closeAuxiliaryBar`, unless code is selected in the editor you're typing in (then `open()` adds it;
+  `chatFocused`, from the page's focus events, means the editor's old selection doesn't count). `kural.chat.open` stays
+  for menus and the Command Palette.
+- **Quotes from the chat** (`media/chat.js` `placeQuoteBtn`/`addQuote`): text selected inside `.list` shows "Add to chat"
+  (a fixed button; mousedown is prevented so the click doesn't clear the selection) → a pill `kind: "quote"` {text ≤
+  8,000 chars, label}; `buildPrompt` sends it as "Part of this chat I selected" with `> ` lines; textOf/titleOf/journal
+  show `"label"`. Test: `test/chat-context.test.js` (also Ctrl+L and the no-log-button title bar).
 - **Did you know** (`media/facts.js`, setting `kural.chat.didYouKnow`): one fact under the working line from ~4 s into an
   answer, a new one every 15 s, a fixed three-line height (the answer never jumps), gone when it ends; "Know more" opens
   in Kural's browser. Kural tips link to the wiki (pages not published yet link to `blob/main/docs/wiki/*.md`); the
