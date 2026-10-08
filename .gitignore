@@ -14,3 +14,14 @@ __pycache__/
 
 # Written by install.sh: which branch/commit a build from the code came from ("Unreleased version · main")
 extension/build.json
+
+# Local security/compliance notes, not part of the product
+/regulations/
+
+# Engine benchmark (benchmark/run.sh): the scripts are tracked; downloaded engines, models and results stay local
+/benchmark/.tools/
+/benchmark/.venv/
+/benchmark/.venv-vllm/
+/benchmark/.cache/
+/benchmark/results/
+/bench-results/
