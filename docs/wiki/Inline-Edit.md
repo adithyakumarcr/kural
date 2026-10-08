@@ -1,8 +1,8 @@
 # Inline Edit (Ctrl+K)
 
 Select code, press **Ctrl+K** (**Cmd+K** on a Mac) and say what to change. Kural shows the change in place, red and
-green; keep it (**Ctrl+Enter**, or **Accept** above it) or reject it (**Ctrl+Shift+Backspace**, or **Reject**). With
-nothing selected, Ctrl+K writes new code at the cursor.
+green; keep it (**Ctrl+Enter**, **Cmd+Enter** on a Mac, or **Accept** above it) or reject it (**Ctrl+Shift+Backspace**,
+**Cmd+Shift+Backspace** on a Mac, or **Reject**). With nothing selected, Ctrl+K writes new code at the cursor.
 
 It uses the chat's model (Claude or [[Your Own Model]]).
 
