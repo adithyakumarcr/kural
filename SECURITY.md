@@ -9,7 +9,7 @@ Only the latest release gets security fixes. Please update first (Kural checks o
 Please don't open a public issue for a security problem.
 
 - Use GitHub's private reporting: https://github.com/adithyakumarcr/kural/security/advisories/new
-- Or email <email>.
+- Or email adithyakumarcr@hotmail.com.
 
 What to expect: an answer within 7 days, and a fix or a workaround within 90 days. If you like, you're credited in the
 release notes.
