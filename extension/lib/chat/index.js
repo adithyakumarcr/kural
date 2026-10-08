@@ -30,6 +30,7 @@ const journal = require("../router/journal");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
+const { Notifier, shouldNotify, message: notifyText } = require("./notify");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -116,6 +117,16 @@ class ChatView {
     this.lastEditor = vscode.window.activeTextEditor;
     this.lastSelection = null;   // for turning pasted code into a "main.py (L3-9)" reference
     this.files = null;
+    // System notifications: an answer is done, or it needs you (lib/chat/notify.js).
+    this.notifier = new Notifier({
+      hasToast: async () => (await vscode.commands.getCommands(false)).includes("_kural.osToast"),
+      toast: (o) => vscode.commands.executeCommand("_kural.osToast", o),
+      clearToast: (id) => vscode.commands.executeCommand("_kural.osToastClear", { id }),
+      run: (cmd, args, env) => new Promise((res) => require("child_process").execFile(cmd, args,
+        { env: { ...process.env, ...env }, timeout: 15000, windowsHide: true, cwd: os.tmpdir() }, (err) => res(!err))),
+      inApp: async (title, body) => (await vscode.window.showInformationMessage(`${title}. ${body}`, "Show")) === "Show",
+      log, platform: process.platform,
+    });
     this.load();
   }
 
@@ -350,6 +361,7 @@ class ChatView {
     if (own && own.panel) { own.panel.reveal(); return; }
     if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
+    this.clearNotice(id);   // (its notification, if any, is old news now)
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
@@ -582,6 +594,7 @@ class ChatView {
     const old = this.side();
     if (old) this.panes.splice(this.panes.indexOf(old), 1);
     const pane = this.attach(view.webview, "side", null, old ? old.activeId : this._activeId);
+    pane.view = view;   // (is the side panel on screen: notifications)
     view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
   }
 
@@ -1153,6 +1166,7 @@ class ChatView {
       last.running = false;
       last.error = info.login ? "login" : "The model stopped unexpectedly. See Kural's log (Kural: Show Log).";
       if (info.login) last.errorWho = whoOf(tab.model);
+      if (!last.notified) { last.notified = true; this.notify(tab, info.login ? "login" : "error", { who: last.errorWho, error: last.error }); }
       tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(last) });
       this.postTabs(); this.save();
@@ -1836,6 +1850,14 @@ class ChatView {
       }, 30000);
     }
     if (!this.shown(tab.id)) tab.unread = true;
+    // Done (or it needs you: an error, a login, a plan to build): one notification per answer, while you're not looking.
+    // Not after Stop (that was you), not while a message you queued is answered next.
+    if (!reply.notified && reply.error !== "stopped" && !queued) {
+      reply.notified = true;
+      if (reply.error === "login") this.notify(tab, "login", { who: reply.errorWho });
+      else if (reply.error) this.notify(tab, "error", { error: reply.error });
+      else this.notify(tab, reply.planReady ? "plan" : "done", { text: answerText(reply) });
+    }
     this.finishTurn(tab, r);
     // Tab learns what you're working on, and which files the chat changed for it.
     if (this.activity && r.turn.ask && reply.error !== "stopped") this.activity.addWork("chat", r.turn.ask, (reply.changes || []).map((c) => c.rel));
@@ -1936,8 +1958,9 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" is waiting for your OK to run a command.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    this.notify(tab, "permission", { tool: req.tool_name, detail: block.detail, where: block.where });
     const allow = await new Promise((resolve) => r.perms.set(pid, resolve));
+    this.clearNotice(tab.id);
     block.state = allow ? "allowed" : "denied";
     // (After Stop the answer is already over: don't flip the tab back to "running".)
     if (turn && turn.reply.running) tab.status = "running";
@@ -1988,8 +2011,9 @@ class ChatView {
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    if (!this.shown(tab.id)) vscode.window.showInformationMessage(`Kural: "${tab.title}" has a question for you.`, "Show").then((p) => p && (this.reveal(), this.activate(tab.id)));
+    this.notify(tab, "question", { question: (questions[0] || {}).question });
     const answers = await new Promise((resolve) => r.perms.set(pid, resolve));
+    this.clearNotice(tab.id);
     const ok = answers && typeof answers === "object";
     block.state = ok ? "answered" : "skipped";
     block.answers = ok ? answers : null;
@@ -2013,6 +2037,34 @@ class ChatView {
     await this.onMessage({ ...msg, tabId: tab.id });
     const t = this.active();
     this.post({ type: "flash", text: flash || `${MODES.find((x) => x.id === t.mode).label} mode` });
+  }
+
+  // ---------- system notifications ----------
+  // A system notification about this chat (lib/chat/notify.js): when it's done or needs you, while you're not looking at
+  // it (setting kural.notifications: whenAway, always, off). One per chat at a time; clicking it shows the chat.
+  notify(tab, kind, info = {}) {
+    try {
+      const setting = cfg().get("notifications", "whenAway");
+      if (!shouldNotify(setting, { focused: !!(vscode.window.state && vscode.window.state.focused), onScreen: this.onScreen(tab.id) })) return;
+      const { title, body } = notifyText(kind, { chat: tab.title, ...info });
+      log(`chat ${tab.id}: notification: ${title}`);
+      if (!this.notifier) return;
+      this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind) }, () => this.showChat(tab.id));
+    } catch (e) { log(`chat: notification failed: ${e.message}`); }
+  }
+  clearNotice(id) { if (this.notifier) this.notifier.clear(`kural-chat-${id}`); }
+  // Is this chat on screen: a pane shows it and that pane is visible (the side panel open, its editor in view).
+  onScreen(id) {
+    return this.panes.some((p) => p.activeId === id && (p.view ? p.view.visible !== false : p.panel ? p.panel.visible !== false : true));
+  }
+  // A notification was clicked (Kural is in front already): show that chat, in its own editor or the side panel.
+  async showChat(id) {
+    if (!this.tab(id)) return;
+    const own = this.panes.find((p) => p.single && p.activeId === id && p.panel);
+    if (own) { own.panel.reveal(); return; }
+    await vscode.commands.executeCommand("kural.chat.focus");
+    const side = this.side();
+    if (side) this.activate(id, side);
   }
 
   // ---------- messages from the panel ----------
@@ -2374,6 +2426,12 @@ class ChatView {
     if (open) return open.getText();                      // includes unsaved edits
     return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
   }
+}
+
+// An answer's own words (its text after the last step), for a notification.
+function answerText(reply) {
+  const texts = (reply.blocks || []).filter((b) => b.k === "text" && String(b.text || "").trim());
+  return texts.length ? texts[texts.length - 1].text : "";
 }
 
 // "claude_ai_Notion" / "claude.ai Notion" -> "Notion"

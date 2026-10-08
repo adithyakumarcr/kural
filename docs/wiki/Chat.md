@@ -95,6 +95,20 @@ your next message, because which tools the model has is fixed when it starts.
   **Latest** brings you back down.
 - **Stop** (the square button, or Esc) stops the answer.
 
+## Notifications
+
+When an answer is done, or it needs you (a command or a file to allow, a question, a plan to build, an error, a
+login), Kural shows a system notification, like any app: "Fix the login is done" with the answer's first sentence, or
+"Fix the login needs your OK: Run this command? npm test". Click it to go to that chat. By default it only does this
+while you're not looking: Kural's window isn't in front, or that chat isn't on screen. An agent team's answer notifies
+once, when the whole team is done; Stop doesn't notify (that was you). Each chat has one notification at a time, and it
+goes away when you answer in Kural or open the chat.
+
+Setting `kural.notifications`: **whenAway** (the default), **always**, or **off**. The first time, macOS asks whether
+Kural may send notifications; if you chose Don't Allow, turn them on in System Settings → Notifications → Kural. (On a
+Kural without its notification support, the system's own way is used: on a Mac that notification shows as Script
+Editor.)
+
 ## Sending while it works (a queue)
 
 Pressing **Enter** while an answer is running doesn't stop it. Your message goes into a queue, shown above the input

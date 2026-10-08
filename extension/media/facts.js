@@ -34,6 +34,7 @@
     { t: "You can make your own moods (Add your own mood… in the model menu): a name and a few sentences for the AI.", u: WIKI + "Chat" },
     { t: "Intensity, from Low to Max, sets how much the model thinks before it answers.", u: WIKI + "Chat" },
     { t: "Every file the AI changes shows under its answer: Review, Keep or Undo each one.", u: WIKI + "Chat" },
+    { t: "Kural notifies you when an answer is done or needs you, while you're in another window.", u: WIKI + "Chat" },
     { t: "Outside your project, Kural asks before the AI reads or changes a file (except in Auto mode).", u: WIKI + "Chat" },
     { t: "Click a picture in an answer to see it full size in its own tab.", u: WIKI + "Chat" },
     { t: "+ then Link ticket keeps a Jira ticket in mind for every message (Claude, with the Atlassian connector).", u: WIKI + "Chat" },
