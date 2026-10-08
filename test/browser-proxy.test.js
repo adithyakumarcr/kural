@@ -3,7 +3,7 @@
 // (also the dev server's live-reload websocket).
 const assert = require("assert");
 const http = require("http"), net = require("net"), zlib = require("zlib");
-const { startProxy, inject } = require("../extension/lib/browser/proxy");
+const { startProxy, inject, isLocalTarget } = require("../extension/lib/browser/proxy");
 
 let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
@@ -61,7 +61,7 @@ const get = (url, headers = {}) => new Promise((resolve, reject) => {
   await check("live reload: a websocket passes straight through", async () => {
     const reply = await new Promise((resolve, reject) => {
       const s = net.connect(Number(proxy.origin.split(":").pop()), "127.0.0.1", () => {
-        s.write("GET /hmr HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n");
+        s.write(`GET /hmr HTTP/1.1\r\nHost: ${proxy.origin.replace("http://", "")}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`);
       });
       let got = "";
       s.on("data", (d) => { got += d; if (got.includes("\r\n\r\n") && !got.includes("echo:")) s.write("ping"); if (got.includes("echo:ping")) { s.destroy(); resolve(got); } });
@@ -76,6 +76,27 @@ const get = (url, headers = {}) => new Promise((resolve, reject) => {
     const r = await get(proxy.origin + "/");
     assert.strictEqual(r.status, 502);
     assert.ok(/Is your app running/.test(r.body));
+  });
+  await check("only local pages by default (localhost, LAN); remote only when the setting is on", async () => {
+    for (const u of ["http://localhost:3000", "http://app.localhost/", "http://127.0.0.1:5173", "http://127.5.5.5", "http://[::1]:8080/", "http://10.0.0.5", "http://172.16.0.1", "http://172.31.255.255", "http://192.168.1.20:3000"])
+      assert.ok(isLocalTarget(u), u + " should be local");
+    for (const u of ["https://example.com", "http://172.32.0.1", "http://172.15.0.1", "http://192.169.0.1", "http://11.0.0.1", "http://localhost.evil.com", "http://8.8.8.8", "http://999.1.1.1", "nonsense"])
+      assert.ok(!isLocalTarget(u), u + " should not be local");
+    assert.throws(() => proxy.open("https://example.com/"), /only opens local development pages/);
+    let on = false;
+    const p2 = startProxy({ picker: () => "", allowRemote: () => on }); await p2.ready;
+    assert.throws(() => p2.open("https://example.com/"));
+    on = true; p2.open("https://example.com/"); assert.ok(p2.remote);
+    p2.open("http://localhost:3000/"); assert.ok(!p2.remote);
+    await p2.close();
+  });
+  await check("not for other web pages: wrong Host, or a request from another site's script", async () => {
+    proxy.open(appUrl + "/");
+    assert.strictEqual((await get(proxy.origin + "/app.js", { host: "evil.example" })).status, 403);               // DNS rebinding
+    assert.strictEqual((await get(proxy.origin + "/app.js", { "sec-fetch-site": "cross-site", "sec-fetch-dest": "empty" })).status, 403);   // fetch() from a website
+    assert.strictEqual((await get(proxy.origin + "/app.js", { "sec-fetch-site": "cross-site", "sec-fetch-dest": "script" })).status, 403);
+    assert.strictEqual((await get(proxy.origin + "/app.js", { "sec-fetch-site": "same-origin", "sec-fetch-dest": "script" })).status, 200);
+    assert.strictEqual((await get(proxy.origin + "/", { "sec-fetch-site": "cross-site", "sec-fetch-dest": "iframe" })).status, 200);   // Kural's own frame
   });
   await check("only web addresses", async () => { assert.throws(() => proxy.open("file:///etc/passwd")); });
 

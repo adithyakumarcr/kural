@@ -16,6 +16,9 @@ Only Adithya merges pull requests into `main`; nobody can push to it directly.
 3. Push your branch and open a pull request to `main`. Say what you changed, why, and how you tested it.
 4. The tests run automatically. Adithya reviews the pull request and merges it, or asks for changes.
 
+Security-relevant changes (the updater, permissions, the browser proxy, build scripts, workflows) need a test and a note
+in the pull request saying which threat they address (see [docs/threat-model.md](docs/threat-model.md)).
+
 Releases are made only by the maintainer, by tagging `main` (see "Releases" in the README).
 
 ## License

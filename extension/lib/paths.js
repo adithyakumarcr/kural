@@ -53,6 +53,19 @@ function isHomeOrAbove(dir) {
   return within(os.homedir(), [dir]);
 }
 
+// Files that make the computer run something later, even inside the project (a git hook, a task, a workflow, a shell
+// profile…). A model tricked by a README or web page could plant one, so writing one asks, like a command does.
+const RUNS_LATER = [
+  /(^|[\\/])\.git[\\/]hooks[\\/]/, /(^|[\\/])\.vscode[\\/](tasks|launch|settings)\.json$/,
+  /(^|[\\/])\.claude[\\/]settings(\.local)?\.json$/, /(^|[\\/])\.codex[\\/]/, /(^|[\\/])\.gemini[\\/]/,
+  /(^|[\\/])\.husky[\\/]/, /(^|[\\/])\.envrc$/, /(^|[\\/])\.env(\..*)?$/,
+  /(^|[\\/])package\.json$/, /(^|[\\/])(Makefile|justfile|Taskfile\.ya?ml)$/,
+  /(^|[\\/])\.github[\\/]workflows[\\/]/, /(^|[\\/])\.pre-commit-config\.yaml$/,
+  /(^|[\\/])(Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/,
+  /(^|[\\/])\.(bashrc|zshrc|profile|bash_profile)$/,
+];
+const runsLater = (file) => RUNS_LATER.some((re) => re.test(String(file)));
+
 // Only printable text on one line: a model's suggestion that hides a carriage return or an escape sequence could run a
 // command in the terminal without Enter being pressed.
 const hasControl = (s) => /[\x00-\x08\x0a-\x1f\x7f]/.test(String(s));
@@ -68,4 +81,4 @@ function privateTmp(sub) {
   return d;
 }
 
-module.exports = { privateTmp, real, within, isProtected, isHomeOrAbove, hasControl, expand, HOME_PROTECTED };
+module.exports = { runsLater, privateTmp, real, within, isProtected, isHomeOrAbove, hasControl, expand, HOME_PROTECTED };

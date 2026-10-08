@@ -1,0 +1,4 @@
+# VSCodium 1.135.06055. Update with: ./scripts/update-codium.sh <version>
+codium_1.135.06055_amd64.deb  5f5c00a9da9d232e4c84e9eee68bbdeb4d8737462022626ce3bdb6948f3d8649
+VSCodium-darwin-arm64-1.135.06055.zip  61ff9ebc3ac5563c63a0a9e1b479822647e7f2c3303b0629f15fefe9e291f7cc
+VSCodium-win32-x64-1.135.06055.zip  0bec978f201238624bc9ad43966f5e201ed8afacc37d77035a822252d9c9c200

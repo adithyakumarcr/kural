@@ -57,7 +57,11 @@
       return;
     }
     // From Kural.
-    if (d.type === "load") { frame.src = d.src; address.value = d.url; flash(""); }
+    if (d.type === "load") {
+      frame.src = d.src; address.value = d.url;
+      flash(d.remote ? "Remote site through Kural's proxy: page security headers are removed. Don't log in to anything here." : "");
+      note.classList.toggle("warn", !!d.remote);
+    }
     if (d.type === "address") { if (document.activeElement !== address) address.value = d.url; }
     if (d.type === "error") flash(d.message, 4000);
   });

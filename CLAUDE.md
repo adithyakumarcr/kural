@@ -421,7 +421,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `command` "kural.tab.accepted"), terminal commands (never ones matching `SECRET`); this session only: recent edits.
   `tabNote()` goes before the editor Tab prompt (Claude only; keep it short, it costs speed); `terminalNote()` into the
   terminal prompt: usual commands, or for a commit the work since the last commit on the changed files, plus
-  `git log -8` subjects for style. Always on (no setting); "Kural: Forget What Tab Completion Learned" clears it.
+  `git log -8` subjects for style. Off unless `kural.tabCompletion.learnFromActivity` is on (typed lines can hold secrets `SECRET` misses; older data:
+  a one-time Delete/Keep offer); "Kural: Forget What Tab Completion Learned" clears it.
   Live check: `node test/personal.live.js` (same request with and without the note, real Haiku).
 - **Ctrl+K / Apply replies** come inside `<code>…</code>` (`lib/edit/code-reply.js`): leading spaces at the very start of a
   reply can get lost, which broke the first line's indentation. Don't go back to bare replies.
