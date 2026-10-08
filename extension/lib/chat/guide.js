@@ -121,6 +121,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   It learns from your work in each workspace ("Kural: Forget What Tab Completion Learned" clears it).
   While a chat answers with a model on this computer (Ollama runs both on one GPU, so Tab's local answers slow to 2-3 s),
   Claude helps Tab if it's set up (also for "Local model"); without Claude, Tab asks a little less often meanwhile.
+- Change a name in your code (type over it, or accept a Tab suggestion that changes it) and Kural looks for the old name
+  in the rest of the project (whole word, same capitals; not node_modules, dist, build, minified/lock files or prose like
+  READMEs) and offers: "count" became "total" here. Also change it in this file (2 places) and 3 other files (7 places)?
+  Review opens Search & Ask filled in (Match Case + Whole Word, the new name in Replace); Change all changes every place
+  in one edit (Ctrl+Z undoes it). Not for new names you're typing, keywords or one-letter names. Off: setting
+  kural.tabCompletion.renameAcrossFiles.
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
