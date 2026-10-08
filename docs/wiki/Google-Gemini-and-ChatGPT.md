@@ -64,8 +64,9 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 
 Switching a chat between Claude, Gemini, Codex and your own model works in every direction, in the middle of a
 conversation: the new model gets the conversation so far (what you asked and sent, the answers, the steps and their
-results, the files changed, the plan and to-do list, your pictures and PDFs). A long conversation is compacted to fit
-the next model, never cut off (see [[Model Router]]). The same happens when you switch an AI's account or log in again:
+results, the files changed, the plan and to-do list, your pictures and PDFs, including attachments sent while it answered).
+A long conversation gets an overview that fits the next model, with a complete local record it can read to recover
+omitted details (see [[Model Router]]). The same happens when you switch an AI's account or log in again:
 a Codex or Gemini chat starts a new conversation that gets the old one; a Claude chat simply goes on.
 
 With **Auto**, Kural also moves a chat to another AI when its AI is at 80 % of a usage limit (Claude to ChatGPT (Codex)

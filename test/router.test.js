@@ -321,7 +321,7 @@ const task=(complexity,intent='edit')=>({complexity,intent});
   const whole=handoff(msgs);assert.ok(!/"compacted"/.test(whole)&&whole.length>1e6);
   for(const budget of [120000,40000]){
    const h=handoff(msgs,budget),record=/<kural_handoff>\n([\s\S]*)\n<\/kural_handoff>/.exec(h)[1];
-   assert.ok(record.length<=budget,`${record.length} > ${budget}`);assert.match(h,/older parts are shortened/);
+   assert.ok(record.length<=budget,`${record.length} > ${budget}`);assert.match(h,/details are shortened/);
    for(const s of ['REQUEST-0','REQUEST-19','THE-PLAN','TODO-19','f0.js','f19.js','shot.png'])assert.ok(record.includes(s),`${budget}: ${s}`);
   }
  });
