@@ -2,6 +2,6 @@
 // secret. More than one key so a key can be rotated: add the new one, release, later remove the old one.
 module.exports = { RELEASE_PUBLIC_KEYS: [
   `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAbw1uvx2m0B449L88Hi7JGYbRYzrBt4UZFK4BWXEHF2w=
+MCowBQYDK2VwAyEAGiXeNMVcY8EvBnKswLkiWHBKOPwN5YwXZyW4AQ4nnxQ=
 -----END PUBLIC KEY-----`,
 ] };
