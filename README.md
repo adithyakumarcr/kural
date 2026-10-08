@@ -363,6 +363,11 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 Inside the editor, Ctrl+K is Kural's inline edit. So VS Code's two-key Ctrl+K shortcuts don't work there, and Git's
 moved to Ctrl+Alt+K. Use Ctrl+/ to comment code.
 
+## Verify your download
+
+Every release has a signed checksum list (`SHA256SUMS` and `SHA256SUMS.sig`), and Kural's updater checks it before
+installing anything. You can check a download yourself too: see [docs/release-signing.md](docs/release-signing.md).
+
 ## Build it yourself
 
 No GitHub needed: one command builds Kural from the code in this folder and installs it on your computer
