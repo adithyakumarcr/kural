@@ -126,6 +126,12 @@ Kural may send notifications; if you chose Don't Allow, turn them on in System S
 Kural without its notification support, the system's own way is used: on a Mac that notification shows as Script
 Editor.)
 
+## Your Mac stays awake while a chat works
+
+While any chat is working (an answer, an agent team), the Mac doesn't go to sleep by itself, so a long job isn't
+paused halfway. The screen can still turn off, and closing the lid still sleeps it. When every chat is done, the Mac
+sleeps as usual again. Setting `kural.chat.keepAwake` (on by default) turns this off. macOS only for now.
+
 ## Sending while it works (a queue)
 
 Pressing **Enter** while an answer is running doesn't stop it. Your message goes into a queue, shown above the input

@@ -808,6 +808,16 @@
           "default": true,
           "description": "While an answer is being worked on, show a short \"Did you know?\" tip or fact under it, with a Know more link."
         },
+        "kural.chat.keepAwake": {
+          "type": "boolean",
+          "default": true,
+          "description": "While a chat is working, the Mac doesn't go to sleep by itself (the screen may still turn off; closing the lid still sleeps it). macOS only."
+        },
+        "kural.welcomeWhenEmpty": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Welcome page when you close the last editor tab (not when that tab was Welcome itself)."
+        },
         "kural.chat.moods": {
           "type": "array",
           "default": [],
