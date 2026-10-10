@@ -1,7 +1,7 @@
 ## Not released yet
 
 - **Side chat.** Select text in an answer and press **Ask** to ask a quick question about it right under the answer. A
-  fast model answers (Haiku, or the lightest Gemini/Codex model, or your own). It stays out of the conversation and is
+  fast model answers (Haiku, or the lightest Gemini model, or your own). It stays out of the conversation and is
   saved with the answer; **Add to chat** brings a useful side answer into your message.
 - **A settings page per AI.** Kural Settings is a short overview; **Settings** on an AI's card (or the gear in the model
   menu) opens that AI's page: its connectors and when to switch away from it near a limit.

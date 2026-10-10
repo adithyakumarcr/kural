@@ -94,7 +94,7 @@ your next message, because which tools the model has is fixed when it starts.
 ## Side chat
 
 Select text in an answer and press **Ask**. A small box opens right under that answer with your selection quoted. Type a
-question and press Enter: a fast model answers in the box (Haiku, or the lightest Gemini or Codex model, or your own
+question and press Enter: a fast model answers in the box (Haiku, or the lightest Gemini model, or your own
 model if that is all you have). Ask more in the same box and it remembers the side conversation.
 
 - It is separate from the chat: the chat's AI never sees it, it is not a turn, and you can ask while the main answer is
