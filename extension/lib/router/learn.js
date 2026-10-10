@@ -21,15 +21,17 @@ const valid = (e) => e && KINDS.has(e.kind) && Array.isArray(e.w) && typeof e.mo
   (e.kind !== "better" || typeof e.better === "string");
 
 class RouterMemory {
-  constructor(load = () => [], save = () => {}) {
+  // enabled(): false = learning is off (setting kural.modelRouter.learn): record() learns nothing and advise() gives no hint.
+  constructor(load = () => [], save = () => {}, enabled = () => true) {
     this.save = save;
+    this.enabled = enabled;
     let saved = []; try { saved = load() || []; } catch { /* a broken save starts empty */ }
     this.items = (Array.isArray(saved) ? saved : []).filter(valid).slice(-MAX);
   }
   // kind "good" | "bad" | "better" (then `better` is the model you picked instead).
   record(kind, { prompt, model, better }, now = Date.now()) {
     const w = words(prompt);
-    if (!KINDS.has(kind) || !model || w.length < 2 || (kind === "better" && (!better || better === model))) return false;
+    if (!this.enabled() || !KINDS.has(kind) || !model || w.length < 2 || (kind === "better" && (!better || better === model))) return false;
     const key = w.join(" ");
     // A later verdict on the same answer replaces the earlier one (carried on, then undid it: bad).
     this.items = this.items.filter((e) => !(e.model === model && e.w.join(" ") === key));
@@ -42,7 +44,7 @@ class RouterMemory {
   advise(prompt, now = Date.now()) {
     const w = words(prompt), lean = {};
     let matches = 0;
-    if (w.length < 2) return { lean, matches };
+    if (w.length < 2 || !this.enabled()) return { lean, matches };
     const add = (id, n) => { lean[id] = (lean[id] || 0) + n; };
     for (const e of this.items) {
       const sim = similarity(w, e.w);

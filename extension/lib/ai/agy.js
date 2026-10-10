@@ -441,6 +441,18 @@ class AgyAgent {
     } catch { /* best effort */ }
   }
 
+  // Takes this conversation out of the map (a side question is never reopened, so its entry would stay forever).
+  forget() {
+    const f = this.mapFile();
+    if (!f) return;
+    try {
+      const all = JSON.parse(fs.readFileSync(f, "utf8"));
+      if (!(this.sessionId in all)) return;
+      delete all[this.sessionId];
+      fs.writeFileSync(f, JSON.stringify(all));
+    } catch { /* no file, nothing to forget */ }
+  }
+
   // Sent while agy answers: it waits for the next turn (agy has no way to add to a running answer that Kural knows
   // of). Each message is echoed when agy takes it (like Claude Code's --replay-user-messages): the chat shows a queued
   // message as asked only then.

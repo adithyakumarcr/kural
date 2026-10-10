@@ -39,7 +39,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
-  beside it: it goes into your message as a quote, and the AI gets the whole selected text. Model menu (bottom of the chat): Auto (Model Router), Claude's Opus/Sonnet/Haiku, Google Gemini and
+  beside it: it goes into your message as a quote, and the AI gets the whole selected text. Side chat: select text in an
+  answer and press Ask (beside Add to chat) to ask a quick question about it right under the answer; a fast model answers
+  (Haiku, or the lightest Gemini model, or your own model; not ChatGPT, which can't be limited to answering), without tools. It's separate from the conversation (the
+  chat's AI never sees it, it doesn't wait for or stop the main answer) and saved with the answer; follow-ups in the same
+  box remember it; Add to chat under a side answer brings that Q&A into your message. Model menu (bottom of the chat): Auto (Model Router), Claude's Opus/Sonnet/Haiku, Google Gemini and
   ChatGPT (Codex) models (only the AIs you've set up), or a model on this computer (once you have one that can chat).
   The gear beside each name opens its settings: Auto's opens the Model Router; Claude's, Gemini's, ChatGPT's and your
   own model's open Kural Settings at that AI's card (connectors, when to switch away near a limit); intensity Low to Max (for Gemini it picks the model's thinking
@@ -170,9 +174,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   the hover at every usage level; hover for every AI's Session and Weekly limits; orange
   from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
   the cache) and written, today, 7 days and 30 days (every Kural feature: chat, Tab Completion, Ctrl+K…).
-- Switching AI near a limit: Kural Settings → AI Usage → "Switch AI near a limit" (off by default) turns it on; each
-  AI's card sets its own points: "Move the chat to another AI when the Session limit is [70] % used or a Weekly limit is
-  [70] % used" (1 to 99; Gemini: Weekly only). When the chat's AI reaches one, Kural transfers the same chat
+- Switching AI near a limit: on each AI's page in Kural Settings (Settings on its card, or the gear in the model menu):
+  "Switch to another AI near a limit" (off by default) and that AI's points: Session [70] % and Weekly [70] % (1 to 99;
+  Gemini: Weekly only). When the chat's AI reaches one, Kural transfers the same chat
   with its visible context to another available cloud service that's below its own points. It waits for commands, edits,
   approvals, background work and agents to finish. A paused request continues there; a completed answer switches for
   the next message. This works with a model you picked yourself and with Auto. Without a suitable service it stays put;
@@ -184,16 +188,20 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - In a folder you haven't trusted (VS Code's Restricted Mode), its settings can't pick programs or modes for Kural, and
   its Claude Code setup (hooks, MCP servers) isn't loaded.
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
-- Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
-  for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
-  page, switch account, log out, log in, set up; when to switch away from it (Session and Weekly); Connectors (Claude
-  and ChatGPT: the list with each one's status, Add (a name and a command, or a web address; Claude: for all your
-  projects, like "claude mcp add -s user", and Claude starts again with it; ChatGPT: like "codex mcp add", for new
-  ChatGPT chats), remove; claude.ai's own connectors are changed on claude.ai; Claude also: "Use my Claude Code setup"
-  and Reload; Gemini: Kural can't add connectors yet); your own model: Find & download models. Then AI Usage (the switch
-  for moving chats near a limit), Moods
-  (your own chat moods: add, edit, delete; remove or restore the built-in ones); then Kural's
-  version and Check for updates, Get started, Tab Completion,
+- Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a short
+  overview. A card each for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan,
+  usage bars, and Settings (that AI's own page; the model menu's gear opens the same page), log in / log out / switch
+  account / set up. An AI's page: Connectors (Claude and ChatGPT: each with its status, Sign in when one needs it (Codex
+  opens its login; Claude opens a terminal where you type /mcp), remove; "Add connector" opens a searchable list: Popular
+  ones (Notion, Linear, Sentry, Atlassian, Asana, Stripe, Vercel, Supabase, Hugging Face, Context7, Cloudflare docs,
+  Playwright, GitHub, Filesystem) and the official MCP directory as you type (those show the exact command or address
+  and ask you to confirm: nobody checked them); Add, and fill in a token or folder only if
+  it asks; "Add one by hand" at the bottom takes a command or web address; ChatGPT can't use ones that need a key header
+  or the older SSE kind; Claude also: "Use my Claude Code setup (plugins, skills)" and Reload; Gemini: no connectors
+  yet), then "Switch to another AI near a limit". Your own model's page: Find & download models, change model, context
+  length. Then Moods (your own chat moods: add, edit, delete; remove or restore the built-in ones); What Kural learns
+  (Tab Completion learning from your work, off by default; Auto learning which models you prefer, on by default; each
+  with "Delete what it learned"); then Kural's version and Check for updates, Get started, Tab Completion, Profiles,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
   editor settings, shortcuts, extensions, chat defaults, devices: no passwords or keys; you pick what to import).
   Kural's log: "Kural: Show Log" (Command Palette) or Kural Settings → the log (an editor tab; Kural hides VS Code's
@@ -223,7 +231,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   CLAUDE_CODE_OAUTH_TOKEN or an API key in your environment applies to every
   profile.
 - Workspace Color: right-click the activity bar (the icons on the far left) → "Workspace Color...", or "Kural: Workspace
-  Color...": pick a color (or Custom hex) and the activity bar takes it, so you can tell your workspaces apart. Each
+  Color...": pick a color (soft shades: deep muted ones with a dark theme, pastels with a light one; or Custom hex) and the activity bar takes it, so you can tell your workspaces apart. Each
   workspace keeps its color in its own settings (.vscode/settings.json, or the .code-workspace file); "Remove color"
   takes off only Kural's colors. Needs a folder open.
 - VS Code's Run and Debug side bar, Debug Console and Ports panels are hidden to keep Kural simple; the setting

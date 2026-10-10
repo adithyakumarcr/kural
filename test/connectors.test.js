@@ -50,6 +50,26 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
     assert.deepStrictEqual(calls[1], ["mcp", "add", "-s", "user", "--transport", "http", "docs", "https://x.dev/mcp"]);
     fs.rmSync(dir, { recursive: true, force: true });
   });
+  await check("rows that need signing in are marked (Claude's status, Codex's auth_status); sign-in runs in a terminal", async () => {
+    const c = C.parseClaudeList("a: https://x/mcp (HTTP) - ! Needs authentication\nb: npx y - ✓ Connected\n");
+    assert.deepStrictEqual(c.map((x) => x.needsAuth), [true, false]);
+    const x = C.parseCodexList(JSON.stringify([{ name: "a", enabled: true, auth_status: "not_logged_in", transport: { type: "streamable_http", url: "https://x" } },
+      { name: "b", enabled: true, auth_status: "o_auth", transport: { type: "streamable_http", url: "https://y" } }]));
+    assert.deepStrictEqual(x.map((r) => [r.needsAuth, r.status, r.ok]), [[true, "Needs sign-in", false], [false, "Added", true]]);
+    assert.deepStrictEqual(C.signInArgs("codex", "a"), ["mcp", "login", "a"]); assert.deepStrictEqual(C.signInArgs("claude", "a"), []);
+    assert.strictEqual(C.signInArgs("codex", "-x"), null); assert.strictEqual(C.signInArgs("agy", "a"), null);
+  });
+  await check("a catalog item is added with the arguments the catalog makes, and a taken name gets a number", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-conn-")), log = path.join(dir, "log"), fake = path.join(dir, "fake.js");
+    fs.writeFileSync(fake, `require("fs").appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "\\n");`);
+    const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, K = require("../extension/lib/ai/connector-catalog");
+    assert.deepStrictEqual(await C.addItem("claude", fake, env, K.BUILT_IN.find((b) => b.id === "context7"), {}, ["context7"]), { ok: true, name: "context7-2" });
+    assert.deepStrictEqual(await C.addItem("codex", fake, env, K.BUILT_IN.find((b) => b.id === "github"), { token: "t" }), { error: "ChatGPT (Codex) can't send a key to a web connector from here." });
+    assert.match((await C.addItem("claude", null, env, K.BUILT_IN[0], {}, [])).error, /Get started/);
+    const calls = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.strictEqual(calls.length, 1); assert.deepStrictEqual(calls[0].slice(-2), ["context7-2", "https://mcp.context7.com/mcp"]);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
   console.log(failed ? `connectors: ${failed} FAILED` : "connectors: ALL PASS");
   process.exitCode = failed ? 1 : 0;
 })();

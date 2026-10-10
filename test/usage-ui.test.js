@@ -6,7 +6,7 @@ const { _page } = require("../extension/lib/usage-panel");
 let failed = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } };
 function dom() {
-  const nodes = [], listeners = {}, sent = [], document = { activeElement: null };
+  const nodes = [], listeners = {}, sent = [], timers = [], document = { activeElement: null };
   function node(tag, text = "") {
     const classes = new Set(), attrs = {}, events = {};
     const n = { tag, nodeType: tag === "#text" ? 3 : 1, children: [], attrs, events, value: "", checked: false,
@@ -26,8 +26,9 @@ function dom() {
   document.documentElement = node("html"); document.createElement = (tag) => node(tag); document.createTextNode = (s) => node("#text", s);
   document.getElementById = (id) => nodes.find((n) => n.id === id);
   const window = { addEventListener: (type, f) => (listeners[type] || (listeners[type] = [])).push(f) };
-  const run = (js) => new Function("acquireVsCodeApi", "document", "window", "setInterval", js)(() => ({ postMessage: (m) => sent.push(m) }), document, window, () => 0);
-  return { node, nodes, document, sent, run, message: (data) => { for (const f of listeners.message || []) f({ data }); } };
+  const run = (js) => new Function("acquireVsCodeApi", "document", "window", "setInterval", "setTimeout", "clearTimeout", js)(() => ({ postMessage: (m) => sent.push(m) }), document, window, () => 0,
+    (f) => { timers.push(f); return timers.length; }, (id) => { timers[id - 1] = null; });
+  return { node, nodes, document, sent, run, timers, message: (data) => { for (const f of listeners.message || []) f({ data }); } };
 }
 check("AI Usage stays compact, expands details, remembers the expansion and links to settings", () => {
   const d = dom(); for (const id of ["sum", "list", "refresh", "rico", "acc"]) d.node("div").id = id;
@@ -47,26 +48,98 @@ check("AI Usage stays compact, expands details, remembers the expansion and link
   assert.strictEqual(d.document.getElementById("list").children[0].children.find((n) => n.tag === "details").open, true);
   d.document.getElementById("acc").trigger("click"); assert.strictEqual(d.sent.at(-1).type, "accounts");
 });
-check("settings: a switch for the whole thing, Session and Weekly points on each AI's card; a refresh keeps a value being edited", () => {
+check("settings: a short overview; each AI's own page has its connectors and switch points; a refresh keeps a value being edited", () => {
   const d = dom(); d.node("div").id = "app";
   d.run(fs.readFileSync(path.join(__dirname, "../extension/media/settings.js"), "utf8"));
   const card = (id, name) => ({ id, name, state: "on", who: "me", windows: [], tokens: null });
   const state = { type: "state", cards: [card("claude", "Claude"), card("agy", "Google Gemini")], moods: { mine: [], builtIn: [], examples: [], limits: {} }, version: "test",
     usageSwitch: { enabled: false, threshold: 70, limits: { claude: { session: 80, weekly: 90 }, codex: { session: 70, weekly: 70 }, agy: { session: 70, weekly: 60 } } },
-    connectors: { claude: { supported: true, servers: [{ name: "github", target: "npx gh", status: "Connected", ok: true }] }, agy: { supported: false } }, fullSetup: true };
+    learn: { tab: { on: false, has: true }, router: { on: true, has: false } },
+    connectors: { claude: { supported: true, servers: [{ name: "github", target: "npx gh", status: "Connected", ok: true }, { name: "notion", target: "https://x", status: "Needs authentication", ok: false, needsAuth: true }] }, agy: { supported: false } }, fullSetup: true };
   d.message(state);
-  const section = d.document.getElementById("usage"); assert.match(section.textContent, /AI Usage.*Switch AI near a limit/);
-  const numbers = d.nodes.filter((n) => n.tag === "input" && n.type === "number");
-  const [cs, cw, gs, gw] = numbers;   // Claude's session, weekly; Gemini's (its session isn't shown)
-  assert.deepStrictEqual([cs.value, cw.value, gw.value].map(Number), [80, 90, 60]);
-  const gem = d.document.getElementById("ai-agy").textContent;
-  assert.doesNotMatch(gem, /Session limit is/); assert.match(gem, /a Weekly limit is/); assert.match(gem, /can't add connectors to Google Gemini/);
-  assert.match(d.document.getElementById("ai-claude").textContent, /Session limit is.*Weekly limit is.*Connectors.*github/);
+  // The overview: no switch points, no connectors, no AI Usage section; a Settings button per AI; what Kural learns.
+  const main = d.document.getElementById("app").textContent;
+  assert.doesNotMatch(main, /Switch to another AI|Connectors|Switch AI near a limit|Weekly limit/);
+  assert.match(main, /Settings.*Settings/); assert.match(main, /What Kural learns.*Tab Completion learns from your work.*Auto learns which models you prefer/);
+  const click = (label, within) => { const b = d.nodes.find((n) => n.tag === "button" && n.textContent.trim() === label && (!within || within())); assert.ok(b, "button " + label); b.trigger("click"); return b; };
+  d.nodes.filter((n) => n.tag === "button" && n.textContent.trim() === "Settings")[1].trigger("click");   // Gemini's
+  let page = d.document.getElementById("app").textContent;
+  assert.match(page, /Kural Settings.*Google Gemini/); assert.match(page, /can't add connectors to Google Gemini/);
+  assert.match(page, /Switch to another AI near a limit/); assert.doesNotMatch(page, /Session limit/); assert.match(page, /Weekly limit/);
+  click("Kural Settings");
+  d.nodes.filter((n) => n.tag === "button" && n.textContent.trim() === "Settings")[0].trigger("click");   // Claude's
+  assert.deepStrictEqual(d.sent.at(-1), { type: "connectors", id: "claude" });
+  page = d.document.getElementById("app").textContent;
+  assert.match(page, /Connectors.*Add connector.*github.*Connected.*notion.*Needs sign-in.*Sign in/); assert.match(page, /Switch to another AI near a limit.*Session limit.*Weekly limit/);
+  assert.doesNotMatch(page, /`/);   // (the old help text showed literal backticks)
+  const numbers = d.nodes.filter((n) => n.tag === "input" && n.type === "number" && n.getAttribute("aria-label") !== "Context length in tokens");
+  const [, , cs, cw] = numbers.length > 3 ? numbers.slice(-2).length ? [0, 0, ...numbers.slice(-2)] : numbers : numbers;
+  assert.deepStrictEqual([cs.value, cw.value].map(Number), [80, 90]);
   cw.value = "85"; cw.trigger("change"); assert.deepStrictEqual(d.sent.at(-1), { type: "usageSwitch", ai: "claude", which: "weekly", value: 85 });
   const count = d.sent.length; cs.value = "101"; cs.trigger("change"); assert.strictEqual(d.sent.length, count);
-  cs.value = "81"; cs.focus(); d.message(state); assert.strictEqual(cs.value, "81");
-  d.message({ ...state, section: "claude" }); assert.ok(d.document.getElementById("ai-claude").scrolled); assert.deepStrictEqual(d.sent.find((m) => m.type === "connectors"), { type: "connectors", id: "claude" });
-  void gs;
+  cs.value = "81"; cs.focus(); d.message(state); assert.strictEqual(cs.value, "81");   // a refresh while you type leaves the field alone
+  // Remove asks on the row first; Sign in asks the host for a terminal and shows the hint for Claude.
+  d.document.activeElement = null;
+  click("Sign in"); assert.deepStrictEqual(d.sent.at(-1), { type: "signIn", id: "claude", name: "notion" });
+  assert.match(d.document.getElementById("app").textContent, /Type \/mcp, pick notion, then Authenticate/);
+  const trash = d.nodes.filter((n) => n.getAttribute && n.getAttribute("aria-label") === "Remove github").pop(); trash.trigger("click");
+  click("Remove?"); assert.strictEqual(d.sent.at(-1).type, "removeConnector"); assert.strictEqual(d.sent.at(-1).name, "github");
+  // The chat's gear: straight to the AI's page.
+  d.message({ ...state, section: "agy" }); assert.match(d.document.getElementById("app").textContent, /Google Gemini.*can't add connectors/);
+  d.message({ ...state, section: "usage" }); assert.ok(d.document.getElementById("switch").scrolled);
+});
+check("settings: the catalog (popular, search as you type, inputs in place) and what Kural learns", () => {
+  const d = dom(); d.node("div").id = "app";
+  d.run(fs.readFileSync(path.join(__dirname, "../extension/media/settings.js"), "utf8"));
+  const live = () => { const out = []; const walk = (n) => { out.push(n); n.children.forEach(walk); }; walk(d.document.getElementById("app")); return out; };   // (what is on the page now)
+  const flush = () => d.timers.splice(0).forEach((f) => f && f());   // (the search waits 300 ms after the last key)
+  const card = (id, name) => ({ id, name, state: "on", who: "me", windows: [], tokens: null });
+  const state = { type: "state", cards: [card("claude", "Claude")], moods: { mine: [], builtIn: [], examples: [], limits: {} }, version: "test", usageSwitch: { enabled: true, threshold: 70, limits: {} },
+    learn: { tab: { on: false, has: true }, router: { on: true, has: false } }, connectors: { claude: { supported: true, servers: [{ name: "context7", target: "https://mcp.context7.com/mcp (HTTP)", status: "Connected", ok: true }] } } };
+  d.message(state);
+  const btnNamed = (label) => live().find((n) => n.tag === "button" && n.textContent.trim() === label);
+  // What Kural learns: toggles post; delete asks inline first and never goes through a pop-up.
+  const toggles = live().filter((n) => n.tag === "input" && n.type === "checkbox");
+  const tabToggle = toggles[toggles.length - 2];   // (the two learn toggles are the last ones on the page)
+  tabToggle.checked = true; tabToggle.trigger("change"); assert.deepStrictEqual(d.sent.at(-1), { type: "learn", which: "tab", on: true });
+  const del = live().filter((n) => n.tag === "button" && n.textContent.trim() === "Delete what it learned");
+  assert.strictEqual(del.length, 2);
+  del[0].trigger("click"); btnNamed("Delete?").trigger("click"); assert.deepStrictEqual(d.sent.at(-1), { type: "forget", which: "tab" });
+  // Catalog.
+  btnNamed("Settings").trigger("click"); btnNamed("Add connector").trigger("click");
+  assert.deepStrictEqual(d.sent.at(-1), { type: "catalogSearch", id: "claude", query: "", reqId: d.sent.at(-1).reqId });
+  const items = [{ id: "notion", name: "Notion", description: "Pages", kind: "remote", url: "https://mcp.notion.com/mcp", signIn: true },
+    { id: "context7", name: "Context7", description: "Docs", kind: "remote", url: "https://mcp.context7.com/mcp" },
+    { id: "github", name: "GitHub", description: "Repos", kind: "remote", url: "https://x/", inputs: [{ key: "token", label: "GitHub token", secret: true, header: "Authorization", link: { label: "Get a token", url: "https://github.com/settings/tokens" } }] },
+    { id: "atl", name: "Atlassian", description: "Jira", kind: "remote", url: "https://a/sse", unsupported: "Not for this AI." }];
+  d.message({ type: "catalogResults", id: "claude", reqId: d.sent.at(-1).reqId, items, note: "" });
+  let text = d.document.getElementById("app").textContent;
+  assert.match(text, /Popular.*Notion.*Context7.*Added.*GitHub.*Atlassian.*Not for this AI/); assert.match(text, /Add one by hand/);
+  // Typing searches after a pause, not on every key.
+  const search = live().find((n) => n.tag === "input" && n.getAttribute("aria-label") === "Search connectors");
+  const before = d.sent.filter((m) => m.type === "catalogSearch").length;
+  search.value = "no"; search.trigger("input"); search.value = "not"; search.trigger("input");
+  assert.strictEqual(d.sent.filter((m) => m.type === "catalogSearch").length, before); flush();
+  assert.strictEqual(d.sent.filter((m) => m.type === "catalogSearch").length, before + 1); assert.strictEqual(d.sent.at(-1).query, "not");
+  d.message({ type: "catalogResults", id: "claude", reqId: d.sent.at(-1).reqId, items: items.slice(0, 1), note: "Couldn't reach the connector directory." });
+  text = d.document.getElementById("app").textContent; assert.match(text, /Results.*Notion/); assert.match(text, /Couldn't reach the connector directory/);
+  // A connector with no inputs adds at once; one with inputs opens its fields in the row first.
+  btnNamed("Add").trigger("click"); assert.deepStrictEqual(d.sent.at(-1), { type: "addCatalog", id: "claude", item: "notion", values: {}, reqId: d.sent.at(-1).reqId });
+  d.message({ type: "catalogDone", id: "claude", item: "notion", error: "boom" }); assert.match(d.document.getElementById("app").textContent, /boom/);
+  d.message({ type: "catalogResults", id: "claude", reqId: (search.value = "", search.trigger("input"), flush(), d.sent.at(-1).reqId), items, note: "" });
+  // A connector that needs a token: Add opens its field in the row (password, with a link), a second Add sends it.
+  const addIn = (name) => live().find((n) => /^cat-row/.test(n.className) && n.textContent.startsWith(name)).children[0].children[1];
+  addIn("GitHub").trigger("click");
+  const field = live().find((n) => n.tag === "input" && n.getAttribute("aria-label") === "GitHub token");
+  assert.strictEqual(field.getAttribute("type"), "password"); assert.match(d.document.getElementById("app").textContent, /Get a token/);
+  const lastAdd = () => live().filter((n) => n.tag === "button" && n.textContent.trim() === "Add").pop();
+  const n0 = d.sent.length; lastAdd().trigger("click");
+  assert.strictEqual(d.sent.length, n0); assert.match(d.document.getElementById("app").textContent, /Fill in GitHub token/);   // empty: refused on the row
+  field.value = "ghp_x"; lastAdd().trigger("click");
+  assert.deepStrictEqual(d.sent.at(-1), { type: "addCatalog", id: "claude", item: "github", values: { token: "ghp_x" }, reqId: d.sent.at(-1).reqId });
+  // Done → back on the AI's page with the note.
+  d.message({ type: "catalogDone", id: "claude", item: "notion", error: "", name: "notion" });
+  text = d.document.getElementById("app").textContent; assert.match(text, /Added Notion\. Sign in to finish/); assert.match(text, /Connectors/);
 });
 check("the context meter shows consumed and in-context tokens, and recommended files are absent", () => {
   const source = fs.readFileSync(path.join(__dirname, "../extension/media/chat.js"), "utf8");

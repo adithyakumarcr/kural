@@ -32,7 +32,7 @@ function parseClaudeList(text) {
     const m = /^(.+?): (.+) - (?:[^\w\s]\s*)?(.+)$/u.exec(line.trim());
     if (!m || /^checking\b/i.test(line)) continue;
     const name = m[1].trim(), [status, ...why] = m[3].trim().split(/\s+[—–]\s+/);
-    out.push({ name, target: m[2].trim(), status, why: why.join(" — "), ok: /^connected$/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : "" });
+    out.push({ name, target: m[2].trim(), status, why: why.join(" — "), ok: /^connected$/i.test(status), needsAuth: /authenticat|sign.?in|log.?in/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : "" });
   }
   return out;
 }
@@ -45,7 +45,9 @@ function parseCodexList(text) {
   return list.filter((s) => s && typeof s.name === "string").map((s) => {
     const t = s.transport || {};
     const target = t.url || [t.command, ...(Array.isArray(t.args) ? t.args : [])].filter(Boolean).join(" ");
-    return { name: s.name, target, status: s.enabled === false ? "Turned off" : "Added", ok: s.enabled !== false, managed: "" };
+    // (auth_status: "not_logged_in" for a web connector that needs you to sign in; "unknown" when it can't tell.)
+    const needsAuth = s.enabled !== false && /^not.?logged.?in$/i.test(String(s.auth_status || ""));
+    return { name: s.name, target, status: s.enabled === false ? "Turned off" : needsAuth ? "Needs sign-in" : "Added", ok: s.enabled !== false && !needsAuth, needsAuth, auth: String(s.auth_status || ""), managed: "" };
   });
 }
 
@@ -97,10 +99,25 @@ async function add(ai, bin, env, c) {
   return r.ok ? { ok: true } : { error: firstLine(r) || "It couldn't add the connector." };
 }
 
+// A connector from the catalog (lib/ai/connector-catalog.js) with the values you filled in. existing: the names already there.
+async function addItem(ai, bin, env, item, values, existing) {
+  const a = require("./connector-catalog").addArgs(ai, item || {}, values || {}, existing || []);
+  if (a.error) return { error: a.error };
+  if (!bin) return { error: "Set it up first (Get started)." };
+  const r = await run(bin, a.args, env);
+  return r.ok ? { ok: true, name: a.name } : { error: firstLine(r) || "It couldn't add the connector." };
+}
+
+// What signing in to a connector runs, in a terminal: Codex has a command for it; Claude Code only has /mcp inside its screen.
+function signInArgs(ai, name) {
+  if (!NAME_RE.test(String(name || ""))) return null;
+  return ai === "codex" ? ["mcp", "login", name] : ai === "claude" ? [] : null;
+}
+
 async function remove(ai, bin, env, name, cwd) {
   if (!SUPPORTED[ai] || !bin || !NAME_RE.test(String(name || ""))) return { error: "Kural can't remove this one." };
   const r = await run(bin, ["mcp", "remove", name], env, 30000, cwd || os.tmpdir());
   return r.ok ? { ok: true } : { error: firstLine(r) || "It couldn't remove the connector." };
 }
 
-module.exports = { SUPPORTED, list, add, remove, parseClaudeList, parseCodexList, splitArgs, addArgs };
+module.exports = { SUPPORTED, NAME_RE, run, addItem, signInArgs, list, add, remove, parseClaudeList, parseCodexList, splitArgs, addArgs };

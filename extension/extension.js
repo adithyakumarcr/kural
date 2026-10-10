@@ -223,7 +223,9 @@ function activate(context) {
   // Auto steers away from an AI close to its usage limit (lib/ai/usage.js) and learns from what you do after its
   // answers, per workspace (lib/router/learn.js).
   router.usageOf = (provider) => usageHub.current(provider);
-  router.memory = new RouterMemory(() => context.workspaceState.get(scope.key("kural.router.memory.v1", "data")), (v) => context.workspaceState.update(scope.key("kural.router.memory.v1", "data"), v));
+  // (kural.modelRouter.learn off: nothing new is learned and what was learned isn't used; the data stays until you delete it.)
+  router.memory = new RouterMemory(() => context.workspaceState.get(scope.key("kural.router.memory.v1", "data")), (v) => context.workspaceState.update(scope.key("kural.router.memory.v1", "data"), v),
+    () => cfg().get("modelRouter.learn") !== false);
   chat.router = router;
   new RouterPanel(context, router).register();
   chat.postLocal().catch(() => {});
@@ -241,13 +243,16 @@ function activate(context) {
   // Kural Settings (an editor tab): what the Account menu had. The person icon and "Kural: Settings" open it.
   account.page = new SettingsPage(context, account, getStarted);
   account.page.chat = chat;
+  // What Kural learned in this workspace, for the page's "What Kural learns" rows.
+  account.page.learning = () => ({ tab: { on: !!cfg().get("tabCompletion.learnFromActivity"), has: activity.hasData() },
+    router: { on: cfg().get("modelRouter.learn") !== false, has: router.memory.items.length > 0 } });
   account.page.register();
   // Profiles (status bar, left of the usage meters): a personal and a work Kural with their own Claude / ChatGPT accounts.
   // A switch reloads the window (lib/profiles/index.js).
   const profiles = new Profiles(context, profileStore, {
     // A chat is busy while it answers, has agents / background commands running, or has a message waiting.
     busy: () => chat.tabs.some((t) => { const r = chat.runtime.get(t.id); return t.status === "running" || !!(r && ((r.bg && r.bg.size) || (r.steers && r.steers.length))); }),
-    flush: () => Promise.all([chat.saveNow(), account.flush(), activity.flush()]),
+    flush: () => { chat.sideChats.stopAll(); return Promise.all([chat.saveNow(), account.flush(), activity.flush()]); },
     changed: (p) => { account.profileName = p.name; account.draw(); },
     // The installed Claude Code's version, "none" when there isn't one (a Mac needs 2.1.296+ for per-folder keychain logins).
     claudeVersion: async () => { const bin = findClaude(); if (!bin) return "none"; const v = await require("./lib/ai/claude-checks").claudeVersion(bin, require("./lib/ai/claude").cleanEnv({})); return v.version || null; },
@@ -287,14 +292,17 @@ function activate(context) {
     // Your preferences to a file and back (Kural Settings → Export / Import settings).
     vscode.commands.registerCommand("kural.settings.export", () => settingsIO.exportSettings(context).catch((e) => vscode.window.showErrorMessage(`Kural: ${e.message}`))),
     vscode.commands.registerCommand("kural.settings.import", () => settingsIO.importSettings(context, devices).catch((e) => vscode.window.showErrorMessage(`Kural: ${e.message}`))),
-    vscode.commands.registerCommand("kural.router.forget", () => {
+    // (No confirm pop-up in either: Kural Settings asks inline first and passes { quiet: true } to skip the message too.)
+    vscode.commands.registerCommand("kural.router.forget", (o) => {
       router.memory.forget();
-      vscode.window.showInformationMessage("Model Router forgot what it learned in this workspace.");
+      account.page.push();
+      if (!(o && o.quiet)) vscode.window.showInformationMessage("Model Router forgot what it learned in this workspace.");
     }),
-    vscode.commands.registerCommand("kural.tab.forget", () => {
+    vscode.commands.registerCommand("kural.tab.forget", (o) => {
       activity.forget();
       tabPanel.push();
-      vscode.window.showInformationMessage("Tab Completion forgot what it learned in this workspace.");
+      account.page.push();
+      if (!(o && o.quiet)) vscode.window.showInformationMessage("Tab Completion forgot what it learned in this workspace.");
     }),
     vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState) : getStarted.open()),
     vscode.commands.registerCommand("kural.toggleTab", async () => {
