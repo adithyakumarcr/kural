@@ -153,6 +153,8 @@ different Claude or ChatGPT account.
   your main profile; a separate one has its own. Change it in Manage profiles. Logins and usage numbers are always
   separate. A shared chat started under one account continues under the other as a new conversation, with the earlier
   messages handed over.
+- **On a Mac** a new profile needs Claude Code 2.1.296 or newer (run `claude update`): older versions keep one login
+  for the whole computer.
 - **Same in every profile:** Google Gemini (it has no setting for a second account) and models on your computer.
 - **Manage profiles:** rename, share or stop sharing, delete (not the main profile, not the one in use). Deleting removes
   its logins, and its own chats if it didn't share.

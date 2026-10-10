@@ -219,7 +219,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (rename, share / stop sharing, delete). Switching reloads the window so everything starts again with the other
   accounts; a new profile opens Get started to log in. Logins and usage numbers are always separate; sharing means the
   same chats, History, open tabs and Tab Completion memory as the main profile. Google Gemini and models on this
-  computer are the same in every profile. CLAUDE_CODE_OAUTH_TOKEN or an API key in your environment applies to every
+  computer are the same in every profile. On a Mac, a new profile needs Claude Code 2.1.296 or newer (claude update).
+  CLAUDE_CODE_OAUTH_TOKEN or an API key in your environment applies to every
   profile.
 - Workspace Color: right-click the activity bar (the icons on the far left) → "Workspace Color...", or "Kural: Workspace
   Color...": pick a color (or Custom hex) and the activity bar takes it, so you can tell your workspaces apart. Each
