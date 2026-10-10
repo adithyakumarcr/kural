@@ -229,7 +229,8 @@ With a Claude model, the chat uses your whole Claude Code setup: MCP servers, co
 
 1. **Kural Settings → Settings** on the Claude card (or the gear beside Claude in the model menu). That opens Claude's page.
 2. **Connectors → Add connector.** Search, or pick one from Popular.
-3. **Add.** Fill in a token or a folder only if it asks.
+3. **Add.** Fill in a token or a folder only if it asks. A result from the public MCP directory (not one of the Popular ones) first shows the exact
+   command or address it will run, since nobody checked it: add it only if you trust it.
 4. **Sign in**, if the connector needs your account. A terminal opens: type `/mcp`, pick the connector, then Authenticate.
 
 Connectors are added for all your projects, and your chats continue. **Add one by hand** at the bottom of the list takes a
