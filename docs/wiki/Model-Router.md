@@ -22,6 +22,8 @@ Auto then takes the **lightest model that has that level**. Levels come from the
 
 Older settings and chats saying Balanced, Speed or Quality keep working (they mean Balance, Cost and Intelligence). Capability checks come first: models that aren't set up, and ones that can't take the request's images or PDFs, a team, a device, connectors or (in Agent mode) commands, are left out.
 
+**Build it** on an agreed plan goes to a light model such as Haiku in Balance and Cost (not in Intelligence). The plan is settled by then, so the build needs less. A step that keeps failing moves to a stronger model again.
+
 ## How Auto decides
 
 **What the task is.** How much work the request is (simple, standard, complex) and what kind (search, explain, edit, review, other), read by Kural's word classifier and, if you choose one, a helper model (below). Then what came with it, like Cursor's "attached context": 4 or more attached files or selections (or more than 40,000 characters) make it one size bigger, 8 or more (or 120,000 characters) two; pasted error output (a stack trace, "TypeError: …", a failed exit code) makes it a review and never "simple"; a long message isn't a quick question. The open file always comes along, so it doesn't count.
@@ -61,12 +63,14 @@ Local assistance and automatic chat retrieval are disabled in Restricted Mode. N
 
 ## Model changes and conversation transfer
 
-**Your usage threshold.** Kural Settings → **AI Usage** has **Automatically switch AI** (off initially) and **Switch
-at** (70% initially, editable from 1–99). When enabled, Auto excludes models over that threshold while a suitable
-model is available below it. Manually selected models also transfer the same chat to another available service when
-their relevant Session or Weekly limit reaches it. A running request can continue after a pause between tools;
-active commands, approvals, background tasks and teams finish before switching. The visible conversation, completed
-work and attachments go along. See [[Account and Updates]] for usage-report timing and when no service can take over.
+**Switch points.** Kural Settings → **AI Usage** → **Switch AI near a limit** (off by default) turns it on. Each AI's card
+sets its own points: "Move the chat to another AI when the Session limit is [70] % used or a Weekly limit is [70] %
+used" (1 to 99 %, 70 % by default; Gemini has Weekly only). When it's on, Auto excludes models over their AI's points
+while a suitable model is available below them. A chat with a model you picked yourself moves to another available
+service when that AI's Session or Weekly limit reaches its points. A running request can continue after a pause between
+tools; active commands, approvals, background tasks and teams finish before switching. The visible conversation,
+completed work and attachments go along. See [[Account and Updates]] for usage-report timing and when no service can
+take over.
 
 Claude can acknowledge a native model change; Kural's local engine can change models before its next inference. Auto reassesses at completed tool boundaries after a tool failure, once per answer, with no pending tools, permissions or live agents. Permission denials and cancellations do not trigger escalation. These changes preserve the provider's existing conversation and completed tool results.
 

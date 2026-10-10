@@ -54,9 +54,17 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 - Kural Settings (person icon in the status bar): who's logged in, the usage page, switch account, log out.
 - [[Multiple Agents]]: project teams and discussions, with roles, live activity and shared reports between phases.
 
+## Connectors
+
+- **ChatGPT (Codex)**: Kural Settings → the ChatGPT card → **Connectors**. The list shows each one's status. **Add**
+  takes a name and a command or a web address (like `codex mcp add`); **remove** is the trash icon. New ChatGPT chats
+  use them.
+- **Google Gemini**: Kural can't add connectors yet.
+- **Claude**: its connectors are on the Claude card (see [[Chat]]).
+
 ## What needs Claude
 
-- Claude Code's connectors, MCP servers, plugins and skills
+- Claude Code's plugins, skills and hooks
 - Linking Jira tickets
 - [[Devices]] work with Claude and Codex, not with Gemini (it can't ask before running a command there)
 
@@ -73,6 +81,7 @@ With **Auto**, Kural also moves a chat to another AI when its AI is at 80 % of a
 first, then Gemini), and when an answer stops because the limit was reached it carries that request on with another AI
 at once.
 
-**Kural Settings → AI Usage → Automatically switch AI** applies this protection to manually selected models too.
-Set the percentage (default 70%) and turn it on. Kural waits for active work to finish, preserves the same chat and
-continues a paused request with another available service below your threshold. See [[Account and Updates]].
+**Kural Settings → AI Usage → Switch AI near a limit** applies this protection to manually selected models too. Turn it
+on, then set the points on each AI's card: "Move the chat to another AI when the Session limit is [70] % used or a
+Weekly limit is [70] % used" (default 70%; Gemini has Weekly only). Kural waits for active work to finish, preserves
+the same chat and continues a paused request with another available service below its points. See [[Account and Updates]].
