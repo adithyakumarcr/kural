@@ -123,7 +123,9 @@ class ChatView {
     // Side chat: a quick question about part of an answer, answered under it (side.js). Not part of the conversation.
     this.sideChats = new SideChats({
       makeAgent: (model, opts, local, handlers) => brain.makeAgent(model, opts, local, handlers),
-      model: () => brain.fastestModel(), check: (model) => brain.usable(model), isClaude: (model) => brain.engineOf(model) === "claude",
+      model: () => brain.fastestModel(undefined, ["codex"]),   // (Codex can run read-only commands, loads your MCP servers and searches the web: not answer-only)
+      mode: (model) => brain.engineOf(model) === "agy" ? "plan" : "ask",   // (agy: its read-only mode; its default was never checked)
+      emptyDir: () => privateTmp("side"), check: (model) => brain.usable(model), isClaude: (model) => brain.engineOf(model) === "claude",
       nameOf: (model) => brain.engineOf(model) === "claude" ? model[0].toUpperCase() + model.slice(1) : isLocal(model) ? localName(model) : model.replace(/^[a-z]+:/, "").replace(/^default$/, brain.providerOf(model).label),
       localOpts: (model) => isLocal(model) ? { tools: [], allowedTools: [], capabilities: [], store: brain.localStore(this.context) } : null,
       textOf: (segments) => ChatView.textOf(segments), cwd: () => this.root() || ws.workDir(),
@@ -246,7 +248,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
+      { dispose: () => { this.sideChats.stopAll(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -944,6 +946,7 @@ class ChatView {
         (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: those edits go too.` : "") +
         "\n\nWhat commands changed (installs, generated files) isn't undone. The conversation stays." }, "Restore Code");
     if (go !== "Restore Code") return;
+    this.sideChats.stopAll(tab.id);
     const { restored, missing } = await this.restoreCode(tab, index);
     this.redraw(tab);
     this.save();
@@ -965,6 +968,7 @@ class ChatView {
       if (!go) return false;
       if (go === "Restore Code") await this.restoreCode(tab, index);
     }
+    this.sideChats.stopAll(tab.id);
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
     this.endDevice(old);

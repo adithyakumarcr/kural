@@ -193,6 +193,27 @@ const ask = (h, t, p = {}) => h.side.ask(t, { index: 1, thread: "a1", quote: "th
     assert.deepStrictEqual(msgs[0].side, [{ id: "a1", quote: "q", items: [{ q: "x", a: "part", stopped: true }] }]);
     assert.strictEqual(msgs[1].side, undefined);
   });
+  await check("Claude gets the shared empty folder; the mode comes from the chat; the agent's leftovers are forgotten when it ends", () => {
+    let forgot = 0;
+    const h = harness({ emptyDir: () => "/tmp/kural-x/side", mode: () => "plan" });
+    ask(h, tab());
+    assert.strictEqual(h.agents[0].opts.cwd, "/tmp/kural-x/side"); assert.strictEqual(h.agents[0].opts.mode, "plan");
+    h.agents[0].forget = () => { forgot++; };
+    h.agents[0].say("ok"); h.agents[0].finish("ok");
+    assert.strictEqual(forgot, 1);
+    const g = harness({ model: () => "agy:gemini", isClaude: () => false, mode: () => "plan" });
+    ask(g, tab()); assert.strictEqual(g.agents[0].opts.cwd, "/work");
+  });
+  await check("nothing is posted for an answer that Edit cut away (index -1), and stopAll ends every question", () => {
+    const h = harness(), t = tab();
+    ask(h, t);
+    const before = h.posts.length;
+    t.messages = t.messages.slice(0, 1);   // (Edit)
+    h.agents[0].say("late"); h.side.stopAll(t.id);
+    assert.strictEqual(h.posts.length, before);
+    assert.ok(h.agents[0].killed);
+    assert.ok(!h.posts.some((p) => p.index === -1));
+  });
   await check("answerText joins the text blocks only", () => {
     assert.strictEqual(answerText({ blocks: [{ k: "text", text: "a" }, { k: "tool", name: "Read" }, { k: "text", text: "b" }] }), "ab");
   });
