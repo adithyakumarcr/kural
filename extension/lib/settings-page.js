@@ -15,6 +15,7 @@ const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
 const usageSwitch = require("./ai/usage-switch");
 const connectors = require("./ai/connectors");
+const { withProfileEnv } = require("./profiles/env");
 
 // Your own moods: the user setting kural.chat.moods (never a project's).
 const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
@@ -41,7 +42,7 @@ class SettingsPage {
   // Each AI's program and the environment to run it in (for its connectors).
   program(id) {
     if (id === "claude") { const c = require("./ai/claude"); return { bin: c.findClaude(), env: c.cleanEnv() }; }
-    return { bin: brain.cli && brain.cli[id] ? brain.cli[id].bin : null, env: process.env };
+    return { bin: brain.cli && brain.cli[id] ? brain.cli[id].bin : null, env: withProfileEnv() };   // (Codex: this profile's CODEX_HOME)
   }
   // The project folder, when you trust it (Claude then lists the project's own connectors too, and starts them to check).
   projectDir() {
@@ -196,6 +197,7 @@ class SettingsPage {
         break;
       case "autoUpdates": await vscode.workspace.getConfiguration("kural").update("updates.autoCheck", !!m.value, vscode.ConfigurationTarget.Global); this.push(); break;
       case "getStarted": this.gs.open(); break;
+      case "profiles": vscode.commands.executeCommand("kural.profiles.switch"); break;
       case "tab": vscode.commands.executeCommand("kural.tabPanel.focus"); break;
       case "router": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "findModels": vscode.commands.executeCommand("kural.findModels"); break;

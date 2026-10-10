@@ -300,6 +300,7 @@
       el("div", { class: "links" },
         link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
         link("dashboard", "AI Usage panel", "every limit, at the bottom", "usagePanel"),
+        link("organization", "Profiles", "personal and work: separate Claude and ChatGPT accounts", "profiles"),
         link("symbol-keyword", "Tab Completion", "engine, speed, model", "tab"),
         link("git-compare", "Model Router", "what reads your requests, which AIs Auto uses", "router"),
         link("search", "Find & download models", "models on this computer, with Ollama", "findModels"),

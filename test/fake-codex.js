@@ -21,7 +21,8 @@ let loginTimer = null;
 // $FAKE_CODEX_INPUT_LOG: each turn's text (and how many pictures) is added to this file, one JSON per line.
 // Use it in Kural: the Codex path setting pointing at this file.
 const fs = require("fs"), os = require("os"), path = require("path");
-const file = process.env.FAKE_CODEX_FILE || path.join(os.tmpdir(), "kural-fake-codex-state");
+// (With CODEX_HOME set, like a Kural profile's own Codex folder, the state is kept in that folder: separate logins.)
+const file = process.env.FAKE_CODEX_FILE || (process.env.CODEX_HOME ? path.join(process.env.CODEX_HOME, "fake-codex-state") : path.join(os.tmpdir(), "kural-fake-codex-state"));
 const read = (f) => { try { return fs.readFileSync(f, "utf8").trim(); } catch { return ""; } };
 const state = () => process.env.FAKE_CODEX_STATE || read(file) || "ok";
 // (Leading `-c key=value` options set config, like the real codex: skipped here, but kept for tests to check.)

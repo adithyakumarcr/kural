@@ -28,7 +28,10 @@ const setCli = (id, info) => {
   if (id === "agy" && Array.isArray(cli[id].models)) cli[id].models = require("./agy").groupModels(cli[id].models);
 };
 let cliStore = null;
-const setStore = (dir) => { cliStore = dir; };
+const cliStores = {};
+// dir: where the Codex / Gemini conversation ids are kept; byCli: another folder for one of them. A profile with its
+// own Codex account needs its own ids (a Codex conversation lives in that account's folder); Gemini's are the same everywhere.
+const setStore = (dir, byCli) => { cliStore = dir; Object.assign(cliStores, byCli || {}); };
 
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
@@ -85,7 +88,7 @@ function cliAgent(id, model, opts, handlers) {
   const json = opts.jsonSchema ? `\n\nAnswer with only one JSON object (no other text, no code fence) that matches this JSON schema: ${JSON.stringify(opts.jsonSchema)}` : "";
   const options = { name: opts.name, bin: c.bin, model: cliModel(model), models: c.models, effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
     cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs, appendSystemPrompt: (opts.appendSystemPrompt || "") + json,
-    mcpServers: opts.mcpServers, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
+    mcpServers: opts.mcpServers, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStores[id] || cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
   if (opts.teamConfig) return new (require("../chat/team-agent").TeamAgent)({ ...options, teamConfig: opts.teamConfig }, handlers,
     (o, h) => new CLIS[id].Agent(o, h));
   return new CLIS[id].Agent(options, handlers);
@@ -166,7 +169,7 @@ class Session {
   }
 }
 
-const localStore = (context) => path.join(context.globalStorageUri.fsPath, "local-chats");
+const localStore = () => require("../profiles/scope").dir("local-chats", "data");
 
 // "claude" | "ollama" | "codex" | "agy": which program has a chat's conversation.
 const engineOf = (model) => providerOf(model).id;
