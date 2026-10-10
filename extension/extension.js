@@ -252,7 +252,7 @@ function activate(context) {
   const profiles = new Profiles(context, profileStore, {
     // A chat is busy while it answers, has agents / background commands running, or has a message waiting.
     busy: () => chat.tabs.some((t) => { const r = chat.runtime.get(t.id); return t.status === "running" || !!(r && ((r.bg && r.bg.size) || (r.steers && r.steers.length))); }),
-    flush: () => Promise.all([chat.saveNow(), account.flush(), activity.flush()]),
+    flush: () => { chat.sideChats.stopAll(); return Promise.all([chat.saveNow(), account.flush(), activity.flush()]); },
     changed: (p) => { account.profileName = p.name; account.draw(); },
     // The installed Claude Code's version, "none" when there isn't one (a Mac needs 2.1.296+ for per-folder keychain logins).
     claudeVersion: async () => { const bin = findClaude(); if (!bin) return "none"; const v = await require("./lib/ai/claude-checks").claudeVersion(bin, require("./lib/ai/claude").cleanEnv({})); return v.version || null; },
