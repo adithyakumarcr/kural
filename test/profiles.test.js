@@ -8,7 +8,7 @@ if (process.platform === "win32") { console.log("profiles: skipped on Windows (t
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-profiles-"));
 // claude.js wants vscode; only its settings are read here.
-const vscode = { workspace: { getConfiguration: () => ({ get: () => undefined }) } };
+const vscode = { workspace: { workspaceFolders: [], getConfiguration: () => ({ get: (_, d) => d }) }, env: { appRoot: "/unused" } };
 const load = Module._load;
 Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
 // A login in the test machine's environment must not decide the results below.
@@ -214,6 +214,88 @@ const rejects = async (p, re) => { try { await p; } catch (e) { assert.match(e.m
     as(B);
     assert.strictEqual(accountName("claude", "work@example.com", { home }), "Work Me");
     penv.setProfileEnv({});
+  });
+
+  // ---------- review fixes ----------
+  await check("the AI's no-ask read roots leave out other profiles and every login folder (ws.aiRoots)", () => {
+    const { within } = require("../extension/lib/paths");
+    const ws = require("../extension/lib/workspace");
+    // (Not under the temp folder: that is a read root of its own, which would hide what this checks.)
+    const store = fs.mkdtempSync(path.join(__dirname, ".profiles-store-"));
+    process.on("exit", () => fs.rmSync(store, { recursive: true, force: true }));
+    for (const d of ["chats", "images", "profiles/me/claude/projects", "profiles/me/claude/plans", "profiles/me/codex", "profiles/me/chats", "profiles/other/claude", "profiles/other/chats"]) fs.mkdirSync(path.join(store, d), { recursive: true });
+    fs.writeFileSync(path.join(store, "profiles", "other", "claude", ".credentials.json"), "{}");
+    fs.writeFileSync(path.join(store, "profiles", "me", "claude", ".credentials.json"), "{}");
+    fs.writeFileSync(path.join(store, "profiles", "me", "codex", "auth.json"), "{}");
+    ws.setWorkDir(path.join(store, "work"));
+    const can = (f) => within(f, ws.aiRoots(false));
+    scope.configure({ storage: store, profile: { id: "me", share: false } });
+    penv.setProfileEnv(penv.envFor(path.join(store, "profiles", "me")));
+    assert.ok(can(path.join(store, "chats", "x.json")), "the main profile's data (shared or not, it is the main one's)" );
+    assert.ok(can(path.join(store, "images", "a.png")));
+    assert.ok(can(path.join(store, "profiles", "me", "chats", "x.json")), "its own chats");
+    assert.ok(can(path.join(store, "profiles", "me", "claude", "projects", "p")) && can(path.join(store, "profiles", "me", "claude", "plans", "p.md")));
+    assert.ok(!can(path.join(store, "profiles", "me", "claude", ".credentials.json")), "its own login");
+    assert.ok(!can(path.join(store, "profiles", "me", "codex", "auth.json")));
+    assert.ok(!can(path.join(store, "profiles", "other", "claude", ".credentials.json")), "another profile's login");
+    assert.ok(!can(path.join(store, "profiles", "other", "chats", "x.json")), "another profile's chats");
+    assert.ok(!can(path.join(store, "profiles", "x")));
+    fs.symlinkSync(path.join(store, "profiles", "other"), path.join(store, "chats", "link"));
+    assert.ok(!can(path.join(store, "chats", "link", "claude", ".credentials.json")), "a link into another profile");
+    scope.configure({ storage: store, profile: { id: "default", share: true } }); penv.setProfileEnv({});
+    assert.ok(!can(path.join(store, "profiles", "me", "chats", "x.json")) && !can(path.join(store, "profiles", "me", "codex", "auth.json")), "the main profile reads no profile folder");
+  });
+  await check("older Claude Code on a Mac can't keep logins apart; elsewhere any version can", () => {
+    assert.strictEqual(penv.claudeKeepsLoginPerFolder("2.1.296", "darwin"), true);
+    assert.strictEqual(penv.claudeKeepsLoginPerFolder("2.1.300", "darwin"), true);
+    assert.strictEqual(penv.claudeKeepsLoginPerFolder("2.1.295", "darwin"), false);
+    assert.strictEqual(penv.claudeKeepsLoginPerFolder("1.0.30", "darwin"), false);
+    assert.strictEqual(penv.claudeKeepsLoginPerFolder(null, "darwin"), false);
+    assert.strictEqual(penv.claudeKeepsLoginPerFolder("1.0.30", "linux"), true);
+    assert.strictEqual(penv.claudeKeepsLoginPerFolder(null, "win32"), true);
+  });
+  await check("logging a profile's Codex out by its folder leaves the window's own profile logged in", async () => {
+    fs.writeFileSync(path.join(A, "codex", "fake-codex-state"), "ok");
+    fs.writeFileSync(path.join(B, "codex", "fake-codex-state"), "ok");
+    as(A);
+    assert.deepStrictEqual(await codex.codexLogout(fakeCodex, { CODEX_HOME: path.join(B, "codex") }), { ok: true });
+    assert.strictEqual((await codex.codexAuth(fakeCodex)).loggedIn, true);
+    as(B); assert.strictEqual((await codex.codexAuth(fakeCodex)).loggedIn, false);
+    penv.setProfileEnv({});
+  });
+  await check("Tab's memory can be saved at once (before a profile switch)", () => {
+    const { Activity } = require("../extension/lib/tab/activity");
+    scope.configure({ storage: tmp, profile: { id: "w-9", share: false } });
+    const saved = {}; const a = new Activity({ get: (k) => saved[k], update: (k, v) => { saved[k] = v; } }, () => true);
+    a.addWork("chat", "fix the thing", ["a.js"]);
+    assert.ok(a.saveTimer, "waiting to save");
+    a.flush();
+    assert.deepStrictEqual(Object.keys(saved), ["kural.activity.v1@w-9"]);
+    assert.strictEqual(saved["kural.activity.v1@w-9"].work.length, 1);
+    assert.strictEqual(a.saveTimer, null);
+    scope.configure({ storage: tmp, profile: { id: "default", share: true } });
+  });
+
+  await check("a chat begun under another profile starts a new conversation; back in its own profile it resumes again", () => {
+    const { ChatView } = require("../extension/lib/chat");
+    const chat = Object.create(ChatView.prototype);
+    chat.projectRoots = () => [];
+    chat.fix = () => {};
+    const tab = () => ({ id: "t", model: "sonnet", engine: "claude", started: true, profile: "default", messages: [] });
+    scope.configure({ storage: tmp, profile: { id: "w-9", share: true } });
+    const t = chat.clean(tab());
+    assert.strictEqual(t.freshSession, "account");
+    scope.configure({ storage: tmp, profile: { id: "default", share: true } });
+    chat.clean(t);
+    assert.strictEqual(t.freshSession, undefined, "no marker left over");
+    // a real account change (Codex / Gemini) is not ours to clear
+    const u = tab(); u.freshSession = "account";
+    chat.clean(u);
+    assert.strictEqual(u.freshSession, "account");
+    // Ollama / Gemini chats resume anywhere
+    scope.configure({ storage: tmp, profile: { id: "w-9", share: true } });
+    assert.strictEqual(chat.clean({ ...tab(), model: "ollama:x", engine: "ollama" }).freshSession, undefined);
+    scope.configure({ storage: tmp, profile: { id: "default", share: true } });
   });
 
   fs.rmSync(tmp, { recursive: true, force: true });

@@ -57,6 +57,13 @@ class Activity {
     if (this.saveTimer.unref) this.saveTimer.unref();
   }
 
+  // Save now (before the window reloads for another profile: the 2 s wait would be lost).
+  flush() {
+    if (!this.store || !this.saveTimer) return;
+    clearTimeout(this.saveTimer); this.saveTimer = null;
+    return this.store.update(KEY(), { work: this.work, accepted: this.accepted, commands: this.commands });
+  }
+
   forget() {
     this.work = []; this.accepted = []; this.commands = {}; this.edits.clear();
     if (this.store) this.store.update(KEY(), undefined);

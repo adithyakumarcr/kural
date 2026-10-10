@@ -35,7 +35,7 @@ function aiRoots(write = false) {
   // Writing: not the temp folder (anyone's files can be there; a write there asks). Reading: yes (attachments).
   return [...folders().map((f) => f.path), workDir(), ...(write ? [] : [os.tmpdir()]),
     ...(write ? [path.join(claude, "plans")]
-      : [store, path.join(claude, "projects"), path.join(claude, "plans"), process.platform === "win32" ? null : "/tmp"])].filter(Boolean);
+      : [...require("./profiles/scope").storageReadRoots(store), path.join(claude, "projects"), path.join(claude, "plans"), process.platform === "win32" ? null : "/tmp"])].filter(Boolean);
 }
 function mayUse(file, write = false) { return require("./paths").within(file, aiRoots(write)); }
 function extraDirs() { return folders().slice(1).map((f) => f.path); }

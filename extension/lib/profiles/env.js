@@ -40,4 +40,15 @@ function claudeConfigDir(home = os.homedir(), env = process.env) {
   return extra.CLAUDE_CONFIG_DIR || env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
 }
 
-module.exports = { setProfileEnv, profileEnv, withProfileEnv, envFor, claudeConfigDir };
+// Claude Code on a Mac keeps its login in the keychain. Only newer versions name that item after CLAUDE_CONFIG_DIR (read
+// from 2.1.296's code); we couldn't find which version began it, so 2.1.296 is the minimum we have seen. With an older
+// one a profile's login could overwrite the main one, and logging a profile out would log the main account out.
+// Other systems keep the login in the folder, so any version is fine there. version: "2.1.300", or null when unknown.
+const MIN_KEYCHAIN_CLAUDE = "2.1.296";
+function claudeKeepsLoginPerFolder(version, platform = process.platform) {
+  if (platform !== "darwin") return true;
+  if (!version) return false;
+  return require("../version-compare").compareVersions(version, MIN_KEYCHAIN_CLAUDE) >= 0;
+}
+
+module.exports = { MIN_KEYCHAIN_CLAUDE, claudeKeepsLoginPerFolder, setProfileEnv, profileEnv, withProfileEnv, envFor, claudeConfigDir };

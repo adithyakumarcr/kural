@@ -104,12 +104,12 @@ function fromShell() {
 }
 
 // Run `codex <args>` and wait. Resolves { status, stdout, stderr, error }.
-function run(bin, args, timeout = 20000) {
+function run(bin, args, timeout = 20000, extraEnv = {}) {
   return new Promise((resolve) => {
     const c = command(bin, args);
     let p;
     try {
-      p = execFile(c.file, c.args, { cwd: os.tmpdir(), env: { ...process.env, ...profileEnv(), ...c.env }, timeout, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout, stderr) =>
+      p = execFile(c.file, c.args, { cwd: os.tmpdir(), env: { ...process.env, ...profileEnv(), ...extraEnv, ...c.env }, timeout, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout, stderr) =>
         resolve({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: stdout || "", stderr: stderr || "",
           error: error && (error.killed ? Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }) : typeof error.code === "string" ? error : null) }));
     } catch (e) { resolve({ status: null, stdout: "", stderr: "", error: e }); return; }
@@ -171,8 +171,9 @@ async function codexLogin(bin, { openUrl, signal, timeout = 10 * 60 * 1000 } = {
   }
 }
 
-async function codexLogout(bin) {
-  const r = await run(bin, ["logout"]);
+// env: another Codex folder than this window's profile (deleting a profile logs out ITS Codex: { CODEX_HOME }).
+async function codexLogout(bin, env) {
+  const r = await run(bin, ["logout"], 20000, env);
   if (r.error || r.status !== 0) return { error: ((r.error && r.error.message) || r.stderr.trim() || r.stdout.trim() || `exit code ${r.status}`).split("\n").pop().slice(0, 200) };
   return { ok: true };
 }
