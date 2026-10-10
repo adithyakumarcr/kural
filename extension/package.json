@@ -119,6 +119,11 @@
         "category": "Kural"
       },
       {
+        "command": "kural.findModels",
+        "title": "Find and Download Models",
+        "category": "Kural"
+      },
+      {
         "command": "kural.testNotification",
         "title": "Test Notification",
         "category": "Kural"
@@ -954,7 +959,7 @@
           "type": "boolean",
           "default": false,
           "scope": "application",
-          "description": "Automatically move a chat to another AI when its reported usage reaches your threshold, preserving its conversation. Applies to Auto and manually selected models."
+          "description": "When an AI's usage reaches the switch point you set (Kural Settings, on each AI's card), carry the same chat on with another AI. Applies to Auto and to a model you picked yourself."
         },
         "kural.usageSwitch.threshold": {
           "type": "integer",
@@ -962,7 +967,18 @@
           "minimum": 1,
           "maximum": 99,
           "scope": "application",
-          "description": "Percentage of a model's Session or Weekly usage limit at which Kural switches to an available AI below this threshold. Used when automatic usage switching is enabled."
+          "description": "The switch point for an AI that has no switch points of its own (kural.usageSwitch.limits): when its Session or Weekly limit is this much used, the chat moves to another AI."
+        },
+        "kural.usageSwitch.limits": {
+          "type": "object",
+          "default": {},
+          "scope": "application",
+          "markdownDescription": "Each AI's own switch points, set on its card in **Kural Settings**: `{ \"claude\": { \"session\": 80, \"weekly\": 90 }, \"codex\": {…}, \"agy\": {…} }`. When the AI's Session limit (a few hours) or Weekly limit is this much used (1-99 %), the chat carries on with another AI. A missing one uses `kural.usageSwitch.threshold`.",
+          "properties": {
+            "claude": { "type": "object", "properties": { "session": { "type": "integer", "minimum": 1, "maximum": 99 }, "weekly": { "type": "integer", "minimum": 1, "maximum": 99 } } },
+            "codex": { "type": "object", "properties": { "session": { "type": "integer", "minimum": 1, "maximum": 99 }, "weekly": { "type": "integer", "minimum": 1, "maximum": 99 } } },
+            "agy": { "type": "object", "properties": { "session": { "type": "integer", "minimum": 1, "maximum": 99 }, "weekly": { "type": "integer", "minimum": 1, "maximum": 99 } } }
+          }
         },
         "kural.modelRouter.profile": {
           "type": "string",

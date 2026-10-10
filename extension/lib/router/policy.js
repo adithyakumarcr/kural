@@ -80,19 +80,29 @@ function traits(model, overrides = {}) {
 }
 // How much of a model's usage limit is used (0–100), from its provider's report in lib/ai/usage.js: the fullest general
 // window, plus the model's own weekly window when there is one (Claude's "seven_day_opus" counts only for Opus).
+function counts(model, w) {
+  const name = String(model.id || "").toLowerCase();
+  const own = /^seven_day_(\w+)$/.exec(w.id || "");
+  if (own) return name.includes(own[1]);
+  // Gemini reports weekly limits per model family (including Claude models served by Antigravity).
+  const family = /^agy:/.test(name) && /\b(gemini|claude)\b/i.exec(w.label || w.id || "");
+  return !family || /:default$/.test(name) || name.includes(family[1].toLowerCase());
+}
 function limitUsed(model, report) {
   if (report && report.blockedUntil > Date.now()) return 100;   // it refused a request: the limit is reached
   if (!report || !Array.isArray(report.windows)) return null;
-  const name = String(model.id || "").toLowerCase();
-  const counts = (w) => {
-    const own = /^seven_day_(\w+)$/.exec(w.id || "");
-    if (own) return name.includes(own[1]);
-    // Gemini reports weekly limits per model family (including Claude models served by Antigravity).
-    const family = /^agy:/.test(name) && /\b(gemini|claude)\b/i.exec(w.label || w.id || "");
-    return !family || /:default$/.test(name) || name.includes(family[1].toLowerCase());
-  };
-  const used = report.windows.filter(counts).map((w) => w.usedPercent).filter(Number.isFinite);
+  const used = report.windows.filter((w) => counts(model, w)).map((w) => w.usedPercent).filter(Number.isFinite);
   return used.length ? Math.max(...used) : null;
+}
+// The same, split into the Session limit (a few hours) and the longer ones (Weekly, Weekly (Opus)…): you set a switch point
+// for each (lib/ai/usage-switch.js). null where the AI reports none (Gemini has weekly limits only).
+function limitParts(model, report) {
+  if (report && report.blockedUntil > Date.now()) return { session: 100, weekly: 100 };
+  if (!report || !Array.isArray(report.windows)) return null;
+  const { isSession } = require("../ai/usage");
+  const top = (ws) => { const u = ws.map((w) => w.usedPercent).filter(Number.isFinite); return u.length ? Math.max(...u) : null; };
+  const mine = report.windows.filter((w) => counts(model, w));
+  return { session: top(mine.filter(isSession)), weekly: top(mine.filter((w) => !isSession(w))) };
 }
 // Intensity (thinking effort) for the task: complexity sets it, the profile moves it one step. Max only for hard work
 // under Intelligence. A model without intensity levels simply ignores it.
@@ -129,10 +139,11 @@ function select(models, request, settings, task = classify(request.prompt)) {
   // The user's optional threshold also applies when Auto selects a model.
   const guard = settings.usageSwitch;
   if (guard && guard.enabled) {
-    const under = models.filter((m) => used(m) < guard.threshold);
+    const { over } = require("../ai/usage-switch");
+    const under = models.filter((m) => !over(m, guard));
     if (under.length && under.length < models.length) {
       models = under;
-      notes.push(`kept below your ${guard.threshold}% usage threshold`);
+      notes.push("kept below your usage switch points");
     }
   }
   // Nearly out (98 %+): not chosen while another model can do the task.
@@ -213,4 +224,4 @@ function lexicalRank(query, candidates) {
     return { ...c,relevance: terms.length ? hits/terms.length : 0 };
   }).sort((a,b) => b.relevance-a.relevance);
 }
-module.exports = { needTier,effortFor,limitUsed,ALIASES,PROFILES,INTENTS,COMPLEXITIES,profileOf,eligible,classify,traits,select,contextWithinBudget,lexicalRank };
+module.exports = { needTier,effortFor,limitUsed,limitParts,ALIASES,PROFILES,INTENTS,COMPLEXITIES,profileOf,eligible,classify,traits,select,contextWithinBudget,lexicalRank };

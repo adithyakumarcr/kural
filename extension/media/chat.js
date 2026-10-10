@@ -977,12 +977,8 @@
     renderQueueBtn();
     renderQueue();
     // (While it answers, Enter doesn't stop it: what you send is added to the answer at its next step, or answered next.)
-    input.dataset.placeholder = running ? "Add to this answer: Kural reads it at its next step (Esc stops)…" : {
-      agent: "Ask Kural to change something…  @ to mention a file",
-      auto: "Ask Kural to change something (runs commands without asking)…",
-      plan: "Describe what you want; Kural plans it first…",
-      ask: "Ask about your code…  @ to mention a file",
-    }[t.mode] || "";
+    // Short (Adithya: "Ask Kural something", nothing more); the mode shows on its own button.
+    input.dataset.placeholder = running ? "Add to this answer…" : "Ask Kural something";
   }
   const hasDraft = () => !isEmptyInput() || S.attachments.length > 0;
   function renderQueueBtn() { queueBtn.classList.toggle("hidden", !(S.tab && S.tab.status !== "idle" && !S.tab.visiting && hasDraft())); }
@@ -1276,21 +1272,19 @@
       const editing = t.mode === "agent" || t.mode === "auto";
       const local = /^ollama:/.test(t.model || "");
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
-      items = [el("div", { class: "mh" }, "Auto · Kural Model Router"),
+      items = [mhead("Auto · Model Router", "", "router"),
         ...["balance","cost","intelligence"].map((profile) => el("div", { class: `mi ${t.autoRoute && profileName(t.routingProfile) === profile ? "on" : ""}`,onclick: () => { post({ type: "setRouterProfile",tabId: t.id,profile }); closeMenu(); } },
           el("span", { class: `check radio${t.autoRoute && profileName(t.routingProfile) === profile ? " on" : ""}` }),el("span", { class: "mi-label" },cap(profile)),
           el("span", { class: "mi-hint" }, { balance: "quality, then speed",cost: "saves your usage limits",intelligence: "most capable" }[profile]))),
-        el("div", { class: "mi",onclick: () => { post({ type: "routerPanel" }); closeMenu(); } },el("span", { class: "mi-icon" },icon("settings-gear")),el("span", { class: "mi-label" },"Configure Model Router…")),
         el("div", { class: "sep" }),
-        ...claudeHead(t, /^[a-z]+:/.test(t.model || "")), ...S.models.map((m) =>
+        mhead("Claude", S.claudeReady ? "" : "not set up", S.claudeReady ? "claude" : null), ...S.models.map((m) =>
         el("div", { class: `mi ${!t.autoRoute && t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
           if (S.claudeReady) post({ type: "setModel", tabId: t.id, model: m.id }); else post({ type: "getStarted", path: "claude" });
           closeMenu(); } },
           el("span", { class: `check radio${!t.autoRoute && t.model === m.id ? " on" : ""}` }),
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, S.claudeReady ? m.hint : "set up Claude…"))),
-        ...cliMenuItems(t, true),
+        ...cliMenuItems(t),
         ...localMenuItems(t),
-        ...cliMenuItems(t, false),
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         levelNote(t),
@@ -1345,18 +1339,13 @@
   }
 
   // ---------- Gemini and Codex ----------
-  // Set up: a section with their models (from the program itself). Not set up: one line each at the end that opens
-  // Get started for it.
-  function cliMenuItems(t, readyOnes) {
+  // Set up: a section with their models (from the program itself). Not set up: not in the menu (Adithya: set them up in
+  // Get started or Kural Settings).
+  function cliMenuItems(t) {
     const out = [];
     for (const c of S.clis || []) {
-      if (!!c.ready !== readyOnes) continue;
-      if (!c.ready) {
-        out.push(el("div", { class: "mi dim", onclick: () => { post({ type: "getStarted", path: c.id }); closeMenu(); } },
-          el("span", { class: "mi-icon" }, icon("add")), el("span", { class: "mi-label" }, `Use ${c.label}`), el("span", { class: "mi-hint" }, "set up…")));
-        continue;
-      }
-      out.push(el("div", { class: "mh" }, c.label, el("span", { class: "mh-key" }, c.account || "cloud")));
+      if (!c.ready) continue;
+      out.push(mhead(c.label, c.account || "", c.id));
       const models = c.models.length ? c.models : [{ id: "default", label: `${c.short} (its default model)` }];
       for (const m of models.slice(0, 8)) {
         const id = `${c.id}:${m.id}`;
@@ -1374,21 +1363,16 @@
     // Ask Ollama again when the menu opens (models come and go); the menu redraws when the answer comes.
     // (At most every few seconds: the redraw itself calls this again.)
     if (!S.localAskedAt || Date.now() - S.localAskedAt > 3000) { S.localAskedAt = Date.now(); post({ type: "localModels" }); }
+    // Only when there's a model that can chat; finding and downloading them is in Kural Settings (Your own model) now.
     const L = S.local;
-    const out = [el("div", { class: "mh" }, "On this computer", el("span", { class: "mh-key" }, "Ollama · offline"))];
-    if (!L) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint" }, "Looking for Ollama…")));
-    else if (!L.status.running) out.push(el("div", { class: "mi", onclick: () => { post({ type: "installOllama" }); closeMenu(); } },
-      el("span", { class: "mi-icon" }, icon("cloud-download")), el("span", { class: "mi-label" }, "Install Ollama"), el("span", { class: "mi-hint" }, "to run models on this computer")));
-    else if (!L.status.ok) out.push(el("div", { class: "mi dim" }, el("span", { class: "mi-hint warn-tri" }, icon("warning"), ` Ollama ${L.status.version} is too old for the chat; update to ${L.minVersion} or newer`)));
-    else for (const m of L.models.filter((x) => x.chat)) {   // (models without tools can't chat: not listed)
+    const chat = L && L.status.running && L.status.ok ? L.models.filter((x) => x.chat) : [];   // (models without tools can't chat)
+    if (!chat.length) return [];
+    const out = [mhead("On this computer", "offline", "local")];
+    for (const m of chat) {
       const id = `ollama:${m.name}`;
       out.push(el("div", { class: `mi ${!t.autoRoute && t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
         el("span", { class: `check radio${!t.autoRoute && t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
     }
-    if (L && L.status.ok && !L.models.some((x) => x.chat)) out.push(el("div", { class: "mi dim" },
-      el("span", { class: "mi-hint" }, "No model for the chat yet: find one below")));
-    out.push(el("div", { class: "mi", onclick: () => { closeMenu(); openLocal(); } },
-      el("span", { class: "mi-icon" }, icon("search")), el("span", { class: "mi-label" }, "Find & download models…")));
     return out;
   }
 
@@ -1577,34 +1561,14 @@ ${d.system}` : ""}`,
     if (S.menu === "ticket") openMenu.refresh();
   }
 
-  // Claude's heading in the model menu. On a Claude model its right side is what this chat's Claude has from your Claude
-  // Code setup ("10 connectors · 30 skills": click for each connector) and Reload. (It was a section at the bottom of the
-  // menu with its own "Your Claude Code setup" title; Adithya: beside Claude, no title.) Claude models only: Codex, Gemini
-  // and your own model don't use it.
-  function claudeHead(t, local) {
-    if (!S.claudeReady || local) return [el("div", { class: "mh" }, "Claude", el("span", { class: "mh-key" }, S.claudeReady ? "cloud" : "not set up"))];
-    const st = S.setups[t.id];
-    const reload = el("button", { class: "mh-btn", title: "Reload your Claude Code setup: connectors, MCP servers, plugins, skills (same conversation)",
-      "aria-label": "Reload your Claude Code setup", onclick: (e) => { e.stopPropagation(); post({ type: "reloadSetup", tabId: t.id }); } }, icon("refresh"));
-    let info = [], list = null;
-    if (st && !st.full) info = [el("span", { class: "setup-sum", title: "Fast minimal setup: no connectors, plugins or skills" }, "minimal setup"),
-      el("button", { class: "mh-btn", title: "Use your full Claude Code setup: your connectors, MCP servers, plugins and skills",
-        onclick: (e) => { e.stopPropagation(); post({ type: "useFullSetup", on: true }); } }, "use mine")];
-    else if (!st) info = [el("span", { class: "setup-sum", title: "Your Claude Code setup (connectors, plugins, skills) loads when Claude starts" }, "setup loads…")];
-    else {
-      // One short summary ("10 connectors · 30 skills"); a warning sign when some connector isn't connected.
-      const n = st.servers.length, bad = st.servers.filter((x) => x.status !== "connected").length;
-      const plural = (k, w) => `${k} ${w}${k === 1 ? "" : "s"}`;
-      const summary = [n ? plural(n, "connector") : "no connectors", st.plugins.length ? plural(st.plugins.length, "plugin") : "",
-        st.skills ? plural(st.skills, "skill") : ""].filter(Boolean).join(" · ");
-      info = [el("span", { class: `setup-sum${S.setupOpen ? " open" : ""}`, title: (n ? (S.setupOpen ? "Hide the connectors" : "Show each connector") : "Your Claude Code setup") +
-          (bad ? `\n${bad} connector${bad === 1 ? " isn't" : "s aren't"} connected` : ""),
-        onclick: (e) => { e.stopPropagation(); if (!n) return; S.setupOpen = !S.setupOpen; openMenu.refresh(); } },
-        bad ? el("span", { class: "warn-tri" }, icon("warning")) : null, el("span", { class: "setup-text" }, summary), n ? el("span", { class: "think-caret" }) : null)];
-      if (S.setupOpen && n) list = el("div", { class: "setup-row" }, ...st.servers.map((x) =>
-        el("span", { class: `srv ${x.status === "connected" ? "ok" : "bad"}`, title: x.status }, x.name)));
-    }
-    return [el("div", { class: "mh claude-h" }, el("span", {}, "Claude"), el("span", { class: "spacer" }), ...info, reload), list];
+  // A section's heading in the model menu, with a gear that opens that AI's settings (Kural Settings, on its card:
+  // connectors, when to switch away near a limit; for Auto, the Model Router). (Claude Code's setup and connectors were
+  // shown here; Adithya: keep the menu clean, put them in settings.)
+  function mhead(label, key, ai) {
+    const names = { router: "Model Router settings", local: "Your own model's settings" };
+    const what = names[ai] || `${label} settings: connectors, when to switch near a limit`;
+    return el("div", { class: "mh mh-gear" }, el("span", {}, label), el("span", { class: "spacer" }), key ? el("span", { class: "mh-key" }, key) : null,
+      ai ? el("button", { class: "mh-btn", title: what, "aria-label": what, onclick: (e) => { e.stopPropagation(); closeMenu(); post({ type: "aiSettings", ai }); } }, icon("settings-gear")) : null);
   }
   openMenu.refresh = () => { const k = S.menu; S.menu = null; if (k) openMenu(k, openMenu.anchor); };
   function closeMenu() { S.menu = null; menuEl.classList.add("hidden"); }
@@ -1694,6 +1658,7 @@ ${d.system}` : ""}`,
       case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
       case "full": S.tab = m.tab; renderAll(); renderEditBar(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
+      case "openLocal": closeMenu(); openLocal(); break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
       case "localModels": S.local = m; renderLocal(); if (S.menu === "model") openMenu.refresh(); break;
       case "localSearch": S.localSearch = m; S.localSearching = false; renderLocal(); break;

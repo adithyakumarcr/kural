@@ -152,7 +152,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .chip-x { background: none; border: 0; padding: 0 3px; opacity: .6; font-size: calc(13px * var(--fs, 1)); line-height: 1; }
 .chip-x:hover { opacity: 1; }
 .input { min-height: 22px; max-height: 240px; overflow-y: auto; outline: 0; white-space: pre-wrap; word-wrap: break-word; padding: 2px; line-height: 1.55; cursor: text; }
-.input:empty::before { content: attr(data-placeholder); color: var(--vscode-input-placeholderForeground, var(--muted)); pointer-events: none; }
+.input:empty::before { content: attr(data-placeholder); color: var(--vscode-input-placeholderForeground, var(--muted)); opacity: .7; pointer-events: none; }
 .pill { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; margin: 0 1px; border-radius: 5px; font-size: calc(12px * var(--fs, 1)); line-height: 18px; vertical-align: baseline; cursor: pointer; white-space: nowrap;
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--vscode-foreground); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); user-select: all; }
 .pill-icon { font-size: calc(10px * var(--fs, 1)); opacity: .75; font-family: var(--vscode-editor-font-family); }
@@ -385,21 +385,10 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 /* Claude Code setup in the model menu: on Claude's heading line ("CLAUDE … 10 connectors · 30 skills ⟳") */
 .mh-btn { float: right; background: none; border: 0; color: var(--accent-hi); font-size: calc(10.5px * var(--fs, 1)); text-transform: none; letter-spacing: 0; padding: 0 2px; cursor: pointer; }
 .mh-btn:hover { text-decoration: underline; }
-.mh.claude-h { display: flex; align-items: center; gap: 4px; }
-.claude-h .mh-btn { float: none; flex: none; display: inline-flex; align-items: center; border-radius: 4px; }
-.claude-h .mh-btn:hover { background: var(--hover); text-decoration: none; }
-.setup-sum { cursor: pointer; color: var(--muted); gap: 5px; }
-/* (A block, not a flex box: as a flex box with text in it Chromium made it three lines tall.) */
-.claude-h .setup-sum { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; font-size: calc(11px * var(--fs, 1)); }
-.claude-h .warn-tri { margin-right: 3px; }
-.claude-h .setup-sum .think-caret { margin-left: 2px; }
-.setup-sum:hover { color: var(--vscode-foreground); }
-.setup-sum.open .think-caret::before { content: "\eab4"; }
-.warn-tri { color: var(--yellow); }
-.setup-row { padding: 2px 8px 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: calc(12px * var(--fs, 1)); }
-.srv { padding: 0 7px; border-radius: 10px; font-size: calc(11.5px * var(--fs, 1)); border: 1px solid var(--border); }
-.srv.ok::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--green); }
-.srv.bad::before { font-family: codicon; content: "\ea71"; margin-right: 4px; vertical-align: -2px; color: var(--yellow); }
+.mh.mh-gear { display: flex; align-items: center; gap: 6px; }
+.mh-gear .mh-key { float: none; }
+.mh-gear .mh-btn { float: none; flex: none; display: inline-flex; align-items: center; border-radius: 4px; color: var(--muted); opacity: .75; }
+.mh-gear .mh-btn:hover { background: var(--hover); color: var(--vscode-foreground); opacity: 1; text-decoration: none; }
 /* Moods in the model menu: the built-in ones, yours, and "Add your own mood…" (chips that wrap). */
 .moods { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 6px; }
 .mood-chip { background: none; border: 1px solid var(--border); border-radius: 12px; padding: 1px 9px; font-size: calc(11.5px * var(--fs, 1)); color: var(--vscode-foreground); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
