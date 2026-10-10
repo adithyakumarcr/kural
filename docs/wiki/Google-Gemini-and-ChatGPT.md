@@ -56,11 +56,13 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 
 ## Connectors
 
-- **ChatGPT (Codex)**: Kural Settings → the ChatGPT card → **Connectors**. The list shows each one's status. **Add**
-  takes a name and a command or a web address (like `codex mcp add`); **remove** is the trash icon. New ChatGPT chats
-  use them.
+- **ChatGPT (Codex)**: added the same way as Claude's (see [[Chat]]): Kural Settings → the ChatGPT card → **Settings** →
+  **Connectors** → **Add connector** (a searchable list, Popular ones first; fill in a token or folder only if it asks).
+  **Sign in** opens the login in your browser when one needs your account. **Add one by hand** takes a command or a web
+  address (like `codex mcp add`); **remove** is the trash icon. New ChatGPT chats use them. It can't use connectors that
+  need a key header (like GitHub's) or the older SSE kind (Atlassian, Asana); the list says so.
 - **Google Gemini**: Kural can't add connectors yet.
-- **Claude**: its connectors are on the Claude card (see [[Chat]]).
+- **Claude**: its connectors are on Claude's page (see [[Chat]]).
 
 ## What needs Claude
 
@@ -81,7 +83,7 @@ With **Auto**, Kural also moves a chat to another AI when its AI is at 80 % of a
 first, then Gemini), and when an answer stops because the limit was reached it carries that request on with another AI
 at once.
 
-**Kural Settings → AI Usage → Switch AI near a limit** applies this protection to manually selected models too. Turn it
-on, then set the points on each AI's card: "Move the chat to another AI when the Session limit is [70] % used or a
-Weekly limit is [70] % used" (default 70%; Gemini has Weekly only). Kural waits for active work to finish, preserves
+**Switch to another AI near a limit**, on each AI's page in Kural Settings, applies this protection to manually selected
+models too. Turn it on, then set the points on that page: "Move the chat to another AI when the Session limit is [70] %
+used or a Weekly limit is [70] % used" (default 70%; Gemini has Weekly only). Kural waits for active work to finish, preserves
 the same chat and continues a paused request with another available service below its points. See [[Account and Updates]].
