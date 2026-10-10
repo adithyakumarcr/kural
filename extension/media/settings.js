@@ -1,4 +1,6 @@
-// Kural Settings page (an editor tab): one card per AI, then Kural itself. Talks to lib/settings-page.js.
+// Kural Settings page (an editor tab). Talks to lib/settings-page.js. It is a short overview (one card per AI, moods, what
+// Kural learns, links) and, one step in, a page per AI (its connectors, when to switch away from it); the connector
+// catalog is one step further. One webview, one view at a time, always with a way back: V.view = main | ai | catalog | manual.
 (function () {
   const vscode = acquireVsCodeApi();
   document.documentElement.style.setProperty("--fs", document.documentElement.dataset.fs || 1);
@@ -41,6 +43,23 @@
   const ICONS = { claude: "sparkle", agy: "globe", codex: "hubot", local: "server-environment" };
   const STATE = { on: ["Logged in", "ok"], set: ["Set up", "ok"], out: ["Not logged in", "warn"], off: ["Not set up", "off"] };
 
+  // Where you are. ai: the AI whose page (or catalog) it is; added: "Added Notion." shown once on that AI's page;
+  // confirm: the connector whose remove is waiting for a second click; hint: what to do after Sign in (Claude).
+  const V = { view: "main", ai: null, added: "", error: "", confirm: null, hint: null, drawn: "" };
+  const stage = el("div", { class: "stage" });
+  const cardOf = (id) => ((S && S.cards) || []).find((c) => c.id === id);
+  function go(view, ai) {
+    V.view = view; if (ai) V.ai = ai;
+    V.added = ""; V.error = "";
+    V.confirm = null; V.hint = null; S && (S.cardsWaiting = false);
+    render(true);
+    if (window.scrollTo) window.scrollTo(0, 0);
+    if (view === "ai" && connOf(V.ai).supported) post({ type: "connectors", id: V.ai });
+  }
+  const connOf = (id) => (S && S.connectors && S.connectors[id]) || { supported: false };
+  const back = (label, to) => el("button", { class: "back", onclick: to }, icon("chevron-left"), " ", label);
+
+  // ---------- the overview: one card per AI ----------
   function card(c) {
     const [label, cls] = c.id === "local" && c.state === "on" ? ["Set up", "ok"] : STATE[c.state];
     const head = el("div", { class: "head" }, icon(ICONS[c.id] || "account"), el("h3", {}, c.name),
@@ -52,7 +71,24 @@
       if (c.plan) body.push(el("div", { class: "muted" }, c.plan));
       if (c.note) body.push(el("div", { class: "muted small" }, c.note));
     } else body.push(el("p", { class: "muted" }, c.what));
-    // Usage: each limit in words, with a bar.
+    usageBars(c, body);
+    // The one main thing first (Settings, or what's needed to get going), the account actions quiet after it.
+    const acts = [], settings = () => el("button", { class: "btn primary", onclick: () => go("ai", c.id) }, icon("settings-gear"), " Settings");
+    if (c.id === "local") acts.push(c.state === "on" ? settings() : btn("Set up", "setUp", { id: "local" }, "primary"));
+    else if (c.state === "off") acts.push(btn("Set up", "setUp", { id: c.id }, "primary"));
+    else if (c.state === "out") acts.push(btn("Log in", "logIn", { id: c.id }, "primary"));
+    else {
+      acts.push(settings());
+      if (c.state === "set") acts.push(btn("Open Get started", "setUp", { id: c.id }, "quiet"));
+      if (c.state === "on") {
+        if (c.page) acts.push(el("button", { class: "btn quiet", onclick: () => post({ type: "usagePage", id: c.id }) }, icon("link-external"), " Usage page"));
+        acts.push(btn("Switch account", "switch", { id: c.id }, "quiet"), btn("Log out", "logOut", { id: c.id }, "quiet"));
+      }
+    }
+    return el("section", { class: "card " + (c.state === "off" ? "dim" : ""), id: "ai-" + c.id }, head, body, el("div", { class: "acts" }, acts));
+  }
+  // Usage: each limit in words, with a bar.
+  function usageBars(c, body) {
     if (c.windows.length) {
       for (const w of c.windows) {
         const lvl = w.used >= 95 ? "bad" : w.used >= 80 ? "warn" : "";
@@ -62,94 +98,227 @@
       }
     } else if (c.tokens) body.push(el("div", { class: "lim muted" }, "Today: " + tok(c.tokens.input) + " tokens in, " + tok(c.tokens.output) + " out"));
     if (c.at) body.push(el("div", { class: "muted small" }, "Usage updated " + ago(c.at)));
-    // Buttons for what you can do with it now.
-    const acts = [];
-    if (c.id === "local") acts.push(btn(c.state === "on" ? "Change" : "Set up", "setUp", { id: "local" }, c.state === "on" ? "" : "primary"));
-    else if (c.state === "off") acts.push(btn("Set up", "setUp", { id: c.id }, "primary"));
-    else if (c.state === "out") acts.push(btn("Log in", "logIn", { id: c.id }, "primary"));
-    else if (c.state === "on") {
-      if (c.page) acts.push(el("button", { class: "btn", onclick: () => post({ type: "usagePage", id: c.id }) }, icon("link-external"), " Usage page"));
-      acts.push(btn("Switch account", "switch", { id: c.id }), btn("Log out", "logOut", { id: c.id }, "quiet"));
-    } else acts.push(btn("Open Get started", "setUp", { id: c.id }));
-    if (c.id === "local") acts.push(el("button", { class: "btn", onclick: () => post({ type: "findModels" }) }, icon("search"), " Find & download models…"));
-    return el("section", { class: "card " + (c.state === "off" ? "dim" : ""), id: "ai-" + c.id }, head, body, aiSettings(c), el("div", { class: "acts" }, acts));
   }
 
-  // ---------- each AI's own settings (the gear beside its name in the chat's model menu opens them) ----------
-  // When to switch away from it (its Session and Weekly limits), and its connectors. The inputs and the add form are made
-  // once per AI and kept, so the page's redraws (every 30 s, every usage report) don't take them from under your fingers.
+  // ---------- one AI's page (the chat's gear beside its name lands here) ----------
+  // The switch points are made once per AI and kept, so the page's redraws (every 30 s, every usage report) don't take them
+  // from under your fingers.
   const CTL = {};
   function ctl(id) {
     if (CTL[id]) return CTL[id];
-    const C = CTL[id] = { open: false };
+    const C = CTL[id] = {};
     const point = (which) => el("input", { class: "in threshold", type: "number", min: "1", max: "99", step: "1", "aria-label": `${which} switch point (% used)`,
       onchange: (e) => { const t = e.target; if (t.reportValidity() && t.value !== "") post({ type: "usageSwitch", ai: id, which, value: Number(t.value) }); } });
     C.session = point("session"); C.weekly = point("weekly");
-    // (A redraw that waited while you typed happens when you leave the field.)
-    for (const f of [C.session, C.weekly]) f.addEventListener("blur", () => setTimeout(() => { if (S && S.cardsWaiting) render(); }, 0));
-    C.name = el("input", { class: "in", placeholder: "name, e.g. github", spellcheck: "false" });
-    const later = () => setTimeout(() => { if (S && S.cardsWaiting) render(); }, 0);
-    C.kind = el("select", { class: "in" }, el("option", { value: "command" }, "Command"), el("option", { value: "url" }, "Web address"));
-    C.value = el("input", { class: "in grow", placeholder: "npx -y @modelcontextprotocol/server-github", spellcheck: "false" });
-    for (const f of [C.name, C.value, C.kind]) f.addEventListener("blur", later);
-    C.kind.addEventListener("change", () => { C.value.placeholder = C.kind.value === "url" ? "https://example.com/mcp" : "npx -y @modelcontextprotocol/server-github"; });
-    C.details = el("details", { class: "conn" });
-    C.details.addEventListener("toggle", () => { C.open = C.details.open; if (C.open) post({ type: "connectors", id }); });
-    C.body = el("div", { class: "conn-body" });
-    C.details.append(el("summary", {}, icon("plug"), " Connectors"), C.body);
-    C.error = ""; C.reqId = 0;
     return C;
   }
-  function addConnector(id) {
-    const C = ctl(id);
-    C.reqId = Date.now(); C.error = "";
-    post({ type: "addConnector", id, reqId: C.reqId, connector: { name: C.name.value, kind: C.kind.value, value: C.value.value } });
+  const switchOn = el("input", { type: "checkbox", onchange: () => post({ type: "usageSwitch", enabled: switchOn.checked }) });
+  const ctxIn = el("input", { class: "in threshold wide", type: "number", min: "16384", step: "4096", "aria-label": "Context length in tokens",
+    onchange: (e) => { const t = e.target; if (t.reportValidity() && t.value !== "") post({ type: "localContext", value: Number(t.value) }); } });
+
+  const section = (title, ...kids) => el("section", { class: "sec" }, el("div", { class: "sechead" }, el("h2", {}, title), el("span", { class: "grow" }), kids.shift()), kids);
+
+  function connectorRow(id, x) {
+    const K = connOf(id), sure = V.confirm === x.name;
+    return el("div", { class: "srv-row" },
+      el("span", { class: "dot " + (x.ok ? "ok" : "warn") }), el("strong", { class: "ell", title: x.target }, x.name), el("span", { class: "grow" }),
+      el("span", { class: "muted small", title: x.why || x.status }, x.ok ? "Connected" : x.needsAuth ? "Needs sign-in" : /fail/i.test(x.status) ? "Failed" : x.status),
+      x.managed ? el("span", { class: "muted small", title: "Added on claude.ai: change it there" }, "on claude.ai")
+        : [x.needsAuth ? el("button", { class: "btn", onclick: () => { V.hint = id === "claude" ? x.name : null; post({ type: "signIn", id, name: x.name }); render(); } }, "Sign in") : null,
+          sure ? [el("button", { class: "btn danger", disabled: K.busy, onclick: () => { V.confirm = null; post({ type: "removeConnector", id, name: x.name, reqId: Date.now() }); } }, "Remove?"),
+            el("button", { class: "pill-btn", "aria-label": "Keep it", title: "Keep it", onclick: () => { V.confirm = null; render(); } }, icon("close"))]
+            : el("button", { class: "pill-btn", title: `Remove ${x.name}`, "aria-label": `Remove ${x.name}`, disabled: K.busy, onclick: () => { V.confirm = x.name; render(); } }, icon("trash"))]);
   }
-  function aiSettings(c) {
-    if (c.id === "local") return el("div", { class: "muted small" }, "Your own model can't use connectors yet, and has no usage limits.");
-    if (c.state === "off") return null;
+  function connectorsSection(c) {
+    const id = c.id, K = connOf(id), kids = [];
+    if (!K.supported) return section("Connectors", null, el("p", { class: "muted" }, "Kural can't add connectors to Google Gemini yet."));
+    if (V.added) kids.push(el("div", { class: "ok-note small" }, icon("check"), " ", V.added));
+    if (V.error) kids.push(el("div", { class: "err small" }, icon("warning"), " ", V.error));
+    if (K.loading && !(K.servers || []).length) kids.push(el("div", { class: "muted small" }, icon("loading", "spin"), id === "claude" ? " checking each connector…" : " loading…"));
+    else if (K.error) kids.push(el("div", { class: "err small" }, icon("warning"), " Couldn't list them: ", K.error));
+    else if (K.servers && !K.servers.length) kids.push(el("div", { class: "muted small" }, "No connectors yet."));
+    for (const x of K.servers || []) {
+      kids.push(connectorRow(id, x));
+      if (V.hint === x.name) kids.push(el("div", { class: "muted small hint" }, `A terminal opened. Type /mcp, pick ${x.name}, then Authenticate.`));
+    }
+    kids.push(el("div", { class: "muted small" }, id === "claude" ? "Claude starts again with a new connector; your chats continue." : "New ChatGPT chats use a new connector."));
+    if (id === "claude") kids.push(el("div", { class: "row wrap quiet-opts" },
+      el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.fullSetup, onchange: (e) => post({ type: "fullSetup", on: e.target.checked }) }), "Use my Claude Code setup (plugins, skills)"),
+      el("span", { class: "grow" }),
+      el("button", { class: "btn quiet", title: "Start Claude again with your setup: same conversations", onclick: () => post({ type: "reloadSetup" }) }, icon("refresh"), " Reload")));
+    return section("Connectors", el("button", { class: "btn primary", disabled: K.busy, onclick: () => openCatalog(id) }, icon("add"), " Add connector"), kids);
+  }
+  function switchSection(c) {
     const C = ctl(c.id), guard = S.usageSwitch || {}, lim = (guard.limits || {})[c.id] || { session: guard.threshold, weekly: guard.threshold };
     if (document.activeElement !== C.session) C.session.value = lim.session;
     if (document.activeElement !== C.weekly) C.weekly.value = lim.weekly;
-    // Gemini's limits are weekly only.
-    const points = el("div", { class: "points" + (guard.enabled ? "" : " off") },
-      el("div", { class: "flabel" }, "Move the chat to another AI when"),
-      c.id === "agy" ? null : el("label", { class: "row" }, "the Session limit is", C.session, "% used"),
-      el("label", { class: "row" }, c.id === "agy" ? "a Weekly limit is" : "or a Weekly limit is", C.weekly, "% used"),
-      guard.enabled ? null : el("div", { class: "muted small" }, "Off: turn on \"Switch AI near a limit\" under AI Usage below."));
-    const K = (S.connectors || {})[c.id] || { supported: false };
-    C.details.open = C.open;
-    const kids = [];
-    if (!K.supported) kids.push(el("p", { class: "muted small" }, "Kural can't add connectors to Google Gemini yet."));
-    else {
-      if (c.id === "claude") kids.push(el("div", { class: "row wrap" },
-        el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.fullSetup, onchange: (e) => post({ type: "fullSetup", on: e.target.checked }) }),
-          "Use my Claude Code setup (connectors, plugins, skills)"),
-        el("span", { class: "grow" }),
-        el("button", { class: "btn quiet", title: "Start Claude again with your setup: same conversations", onclick: () => post({ type: "reloadSetup" }) }, icon("refresh"), " Reload")));
-      if (K.loading && !(K.servers || []).length) kids.push(el("div", { class: "muted small" }, icon("loading", "spin"), c.id === "claude" ? " checking each connector…" : " loading…"));
-      else if (K.error) kids.push(el("div", { class: "err small" }, icon("warning"), " Couldn't list them: ", K.error));
-      else if (K.servers && !K.servers.length) kids.push(el("div", { class: "muted small" }, "No connectors yet."));
-      for (const x of K.servers || []) kids.push(el("div", { class: "srv-row" },
-        el("span", { class: "dot " + (x.ok ? "ok" : "warn") }), el("strong", {}, x.name),
-        el("span", { class: "muted small ell", title: x.target }, x.target), el("span", { class: "grow" }),
-        el("span", { class: "muted small", title: x.why || "" }, x.status),
-        x.managed ? el("span", { class: "muted small", title: "Added on claude.ai: change it there" }, "on claude.ai")
-          : el("button", { class: "pill-btn", title: `Remove ${x.name}`, "aria-label": `Remove ${x.name}`, disabled: K.busy,
-            onclick: () => post({ type: "removeConnector", id: c.id, name: x.name, reqId: Date.now() }) }, icon("trash"))));
-      kids.push(el("div", { class: "add-conn" }, C.name, C.kind, C.value,
-        el("button", { class: "btn", disabled: K.busy, onclick: () => addConnector(c.id) }, icon(K.busy ? "loading" : "add", K.busy ? "spin" : ""), " Add")));
-      if (C.error) kids.push(el("div", { class: "err small" }, icon("warning"), " ", C.error));
-      kids.push(el("div", { class: "muted small" }, c.id === "claude"
-        ? "Added for you (all projects), like `claude mcp add -s user`. Claude starts again with it; your chats continue."
-        : "Added to ChatGPT (Codex)'s settings, like `codex mcp add`. New ChatGPT chats use it."));
-    }
-    C.body.replaceChildren(...kids);
-    return el("div", { class: "ai-settings" }, points, C.details);
+    switchOn.checked = !!guard.enabled;
+    return el("section", { class: "sec", id: "switch" }, el("div", { class: "sechead" }, el("h2", {}, "Switch to another AI near a limit")),
+      el("label", { class: "check" }, switchOn, "Carry on with another AI when a limit is close"),
+      el("p", { class: "muted small" }, "The same chat carries on with another AI that's set up, with everything said so far. A command or agent that's running finishes first."),
+      el("div", { class: "points" + (guard.enabled ? "" : " off") },
+        c.id === "agy" ? null : el("label", { class: "row" }, "Switch when the Session limit is", C.session, "% used"),
+        el("label", { class: "row" }, c.id === "agy" ? "Switch when a Weekly limit is" : "or a Weekly limit is", C.weekly, "% used")));
   }
+  function localSections(c) {
+    if (document.activeElement !== ctxIn) ctxIn.value = S.localContext || 32768;
+    return [section("Model", c.state === "on" ? btn("Change", "setUp", { id: "local" }, "quiet") : null,
+        el("p", { class: "muted" }, c.state === "on" ? [c.who, " · on this computer."] : "No model set up yet."),
+        el("button", { class: "btn", onclick: () => post({ type: "findModels" }) }, icon("search"), " Find & download models…")),
+      el("section", { class: "sec" }, el("div", { class: "sechead" }, el("h2", {}, "Context length")),
+        el("label", { class: "row" }, ctxIn, "tokens the model can look at in a chat"),
+        el("p", { class: "muted small" }, "32,768 works well; more needs more memory. Your own model works offline, and has no connectors or usage limits."))];
+  }
+  function aiView() {
+    const c = cardOf(V.ai);
+    if (!c) return el("div", { class: "sub" }, back("Kural Settings", () => go("main")), el("p", { class: "muted" }, "Loading…"));
+    const sub = [c.who, c.plan].filter(Boolean).join(" · ");
+    return el("div", { class: "sub" }, back("Kural Settings", () => go("main")),
+      el("div", { class: "subhead" }, icon(ICONS[c.id] || "account"), el("h1", {}, c.name), sub ? el("span", { class: "muted" }, sub) : null),
+      c.id === "local" ? localSections(c) : [connectorsSection(c), switchSection(c)]);
+  }
+
+  // ---------- Add connector: a catalog you search ----------
+  const CAT = { ai: null, q: "", reqId: 0, items: [], note: "", loading: false, expanded: null, adding: null, errors: {}, fields: {}, timer: 0, folder: null, root: null };
+  function buildCatalog() {
+    if (CAT.root) return;
+    CAT.title = el("h1", {}, "Add a connector");
+    CAT.back = back("", () => go("ai", CAT.ai));
+    CAT.search = el("input", { class: "in search", type: "search", placeholder: "Search connectors", spellcheck: "false", autocomplete: "off", "aria-label": "Search connectors" });
+    CAT.search.addEventListener("input", () => { clearTimeout(CAT.timer); CAT.timer = setTimeout(() => runSearch(CAT.search.value), 300); });
+    CAT.list = el("div", { class: "cat-list" });
+    CAT.root = el("div", { class: "sub" }, CAT.back, CAT.title, CAT.search, CAT.list,
+      el("div", { class: "cat-foot" }, el("button", { class: "linkbtn", onclick: () => openManual() }, "Add one by hand (command or web address)")));
+  }
+  function openCatalog(ai) {
+    buildCatalog();
+    Object.assign(CAT, { ai, q: "", items: [], note: "", loading: false, expanded: null, adding: null, errors: {}, fields: {}, folder: null });
+    clearTimeout(CAT.timer);
+    CAT.search.value = "";
+    CAT.back.replaceChildren(icon("chevron-left"), " ", (cardOf(ai) || { name: "Back" }).name);
+    go("catalog", ai);
+    runSearch("");
+    if (CAT.search.focus) CAT.search.focus();
+  }
+  function runSearch(q) {
+    CAT.q = q.trim(); CAT.reqId = Date.now() + Math.random(); CAT.loading = !!CAT.q;
+    post({ type: "catalogSearch", id: CAT.ai, query: CAT.q, reqId: CAT.reqId });
+    renderCatalogList();
+  }
+  // Already there: a connector with this address or package (Claude shows the address with "(HTTP)" after it).
+  function isAdded(item) {
+    const url = (item.url || "").replace(/\/$/, ""), pkg = item.package || "";
+    return (connOf(CAT.ai).servers || []).some((s) => (url && s.target.includes(url)) || (pkg && s.target.includes(pkg)));
+  }
+  function fieldsFor(item) {
+    if (CAT.fields[item.id]) return CAT.fields[item.id];
+    const F = CAT.fields[item.id] = {};
+    for (const i of item.inputs || []) {
+      F[i.key] = el("input", { class: "in grow", type: i.secret ? "password" : "text", spellcheck: "false", autocomplete: "off", placeholder: i.placeholder || "", "aria-label": i.label });
+      F[i.key].addEventListener("keydown", (e) => { if (e.key === "Enter") submitItem(item); });
+    }
+    return F;
+  }
+  function startAdd(item) {
+    if (CAT.adding) return;
+    if ((item.inputs || []).length && CAT.expanded !== item.id) {
+      CAT.expanded = item.id; renderCatalogList(true);
+      const first = Object.values(fieldsFor(item))[0]; if (first && first.focus) first.focus();
+    } else submitItem(item);
+  }
+  function submitItem(item) {
+    if (CAT.adding) return;
+    const F = fieldsFor(item), values = {};
+    for (const i of item.inputs || []) {
+      values[i.key] = F[i.key].value.trim();
+      if (!values[i.key]) { CAT.errors[item.id] = `Fill in ${i.label}.`; renderCatalogList(true); return; }
+    }
+    CAT.adding = item.id; CAT.errors[item.id] = "";
+    post({ type: "addCatalog", id: CAT.ai, item: item.id, values, reqId: Date.now() });
+    renderCatalogList(true);
+  }
+  function fieldsBox(item) {
+    const F = fieldsFor(item);
+    return el("div", { class: "cat-fields" },
+      (item.inputs || []).map((i) => el("label", { class: "field" }, el("span", { class: "flabel" }, i.label),
+        el("div", { class: "row" }, F[i.key],
+          i.folder ? el("button", { class: "btn", onclick: () => { CAT.folder = { item: item.id, key: i.key, reqId: Date.now() }; post({ type: "pickFolder", reqId: CAT.folder.reqId }); } }, icon("folder"), " Browse") : null),
+        i.link ? el("button", { class: "linkbtn small", onclick: () => post({ type: "openLink", url: i.link.url }) }, i.link.label) : null)),
+      el("div", { class: "row" },
+        el("button", { class: "btn primary", disabled: !!CAT.adding, onclick: () => submitItem(item) }, CAT.adding === item.id ? [icon("loading", "spin"), " Adding…"] : "Add"),
+        el("button", { class: "btn quiet", disabled: !!CAT.adding, onclick: () => { CAT.expanded = null; renderCatalogList(true); } }, "Cancel")));
+  }
+  function catRow(item) {
+    const open = CAT.expanded === item.id, busy = CAT.adding === item.id;
+    return el("div", { class: "cat-row" + (open ? " open" : "") },
+      el("div", { class: "cat-main" },
+        el("div", { class: "cat-text" }, el("strong", {}, item.name), el("div", { class: "muted small desc" }, item.description),
+          item.unsupported ? el("div", { class: "muted small" }, item.unsupported) : null),
+        isAdded(item) ? el("span", { class: "muted small nowrap" }, icon("check"), " Added")
+          : item.unsupported || open ? null
+          : busy ? icon("loading", "spin")
+          : el("button", { class: "btn", disabled: !!CAT.adding, onclick: () => startAdd(item) }, "Add")),
+      open ? fieldsBox(item) : null,
+      CAT.errors[item.id] ? el("div", { class: "err small" }, icon("warning"), " ", CAT.errors[item.id]) : null);
+  }
+  // The list only: the search box is never redrawn, so typing in it is safe. A field being typed in keeps its row (waits).
+  function renderCatalogList(force) {
+    if (!CAT.list) return;
+    const a = document.activeElement;
+    if (!force && a && a !== CAT.search && /^(input|textarea)$/i.test(a.tagName || a.tag || "") && Object.values(CAT.fields).some((F) => Object.values(F).includes(a))) { CAT.waiting = true; return; }
+    CAT.waiting = false;
+    const kids = [];
+    kids.push(el("div", { class: "cat-head muted small" }, CAT.q ? "Results" : "Popular", CAT.loading ? [" ", icon("loading", "spin")] : null));
+    if (!CAT.items.length && !CAT.loading) kids.push(el("p", { class: "muted" }, CAT.q ? "Nothing found. Try another word, or add one by hand below." : "Loading…"));
+    for (const item of CAT.items) kids.push(catRow(item));
+    if (CAT.note) kids.push(el("div", { class: "muted small" }, icon("info"), " ", CAT.note));
+    CAT.list.replaceChildren(...kids);
+  }
+
+  // "Add one by hand": for power users; the old form.
+  const MAN = { error: "", reqId: 0, busy: false };
+  function buildManual() {
+    if (MAN.root) return;
+    MAN.name = el("input", { class: "in", placeholder: "name, e.g. github", spellcheck: "false", "aria-label": "Name" });
+    MAN.kind = el("select", { class: "in", "aria-label": "Kind" }, el("option", { value: "command" }, "Command"), el("option", { value: "url" }, "Web address"));
+    MAN.value = el("input", { class: "in grow", placeholder: "npx -y @modelcontextprotocol/server-github", spellcheck: "false", "aria-label": "Command or address" });
+    MAN.kind.addEventListener("change", () => { MAN.value.placeholder = MAN.kind.value === "url" ? "https://example.com/mcp" : "npx -y @modelcontextprotocol/server-github"; });
+    MAN.err = el("div", { class: "err small" });
+    MAN.go = el("button", { class: "btn primary", onclick: () => {
+      MAN.reqId = Date.now(); MAN.error = ""; MAN.busy = true; manualDraw();
+      post({ type: "addConnector", id: V.ai, reqId: MAN.reqId, connector: { name: MAN.name.value, kind: MAN.kind.value, value: MAN.value.value } });
+    } }, "Add");
+    MAN.root = el("div", { class: "sub" }, back("Add a connector", () => go("catalog")), el("h1", {}, "Add one by hand"),
+      el("p", { class: "muted" }, "For a connector that isn't in the list. Give it a short name, then the command that starts it or its web address."),
+      el("div", { class: "add-conn" }, MAN.name, MAN.kind, MAN.value), MAN.err, el("div", { class: "row" }, MAN.go));
+  }
+  function manualDraw() {
+    MAN.err.replaceChildren(...(MAN.error ? [icon("warning"), " ", MAN.error] : []));
+    MAN.go.disabled = MAN.busy;
+  }
+  function openManual() { buildManual(); MAN.error = ""; MAN.busy = false; manualDraw(); go("manual"); }
 
   function link(iconName, label, hint, type) {
     return el("button", { class: "link", onclick: () => post({ type }) }, icon(iconName), el("span", { class: "lt" }, el("span", {}, label), hint ? el("span", { class: "muted small" }, hint) : null));
+  }
+
+  // ---------- What Kural learns ----------
+  const L = { confirm: null };
+  function learnRow(which, title, what, d) {
+    const sure = L.confirm === which;
+    return el("div", { class: "learn-row" },
+      el("div", { class: "learn-text" }, el("label", { class: "check" }, el("input", { type: "checkbox", checked: d.on, onchange: (e) => post({ type: "learn", which, on: e.target.checked }) }), el("strong", {}, title)),
+        el("div", { class: "muted small" }, what)),
+      sure ? el("span", { class: "row" }, el("button", { class: "btn danger", onclick: () => { L.confirm = null; post({ type: "forget", which }); render(); } }, "Delete?"),
+          el("button", { class: "btn quiet", onclick: () => { L.confirm = null; render(); } }, "Keep"))
+        : el("button", { class: "btn quiet", disabled: !d.has, title: d.has ? "" : "Nothing learned yet", onclick: () => { L.confirm = which; render(); } }, "Delete what it learned"));
+  }
+  function learnSection() {
+    const d = S.learn;
+    if (!d) return null;
+    return el("section", { class: "sec", id: "learn" }, el("div", { class: "sechead" }, el("h2", {}, "What Kural learns")),
+      learnRow("tab", "Tab Completion learns from your work", "What you asked the chat, suggestions you accepted and terminal commands in this workspace. Stays on this computer.", d.tab),
+      learnRow("router", "Auto learns which models you prefer", "From what you do after its answers: picking another model, undoing a change, carrying on. Stays on this computer.", d.router));
   }
 
   // ---------- Moods ----------
@@ -247,55 +416,55 @@
       D.mine.length ? el("div", { class: "mood-list" }, mine) : (M.form ? null : el("p", { class: "muted small" }, "No moods of your own yet.")),
       M.form ? moodForm() : null].filter(Boolean));
   }
-  window.addEventListener("message", (e) => {
-    const m = e.data;
-    if (m.type === "moodSaved" && M.form && M.form.reqId === m.reqId) {
-      M.form.busy = false;
-      if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
-    }
-    if (m.type === "show") { shownSection = m.section; showSection(m.section); }
-    if (m.type === "connectorDone" && CTL[m.id]) {
-      const C = CTL[m.id];
-      if (m.error) C.error = m.error;
-      else { C.error = ""; if (m.reqId === C.reqId) { C.name.value = ""; C.value.value = ""; } }
-      if (S) render();
-    }
-  });
+
   // From the chat's "Add your own mood…": the Moods section, with a new mood's form open.
   function showMoods() {
     if (!S) return;
+    go("main");
     if (!M.form) openMoodForm(null);
     moodsBox.scrollIntoView({ block: "start" });
     post({ type: "shown" });
   }
 
-  // From the chat's model menu (the gear beside an AI's name): that AI's card, with its connectors open.
-  let shownSection = null;   // (the host keeps sending the section until the page says "shown": scroll once)
+  // From the chat's model menu (the gear beside an AI's name): that AI's page. "usage" (the AI Usage panel's link): the
+  // chat's AI page at its switch-point section.
+  let shownSection = null;   // (the host keeps sending the section until the page says "shown": go once)
   function showSection(section) {
     if (!S) return;
     if (section === "moods") return showMoods();
-    if (section === "usage") return showUsage();
-    const card = document.getElementById("ai-" + section);
-    if (!card) return;
-    if (((S.connectors || {})[section] || {}).supported) { const C = ctl(section); C.open = true; C.details.open = true; post({ type: "connectors", id: section }); }
-    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (section === "usage") {
+      go("ai", S.chatAI && S.chatAI !== "local" && cardOf(S.chatAI) ? S.chatAI : "claude");
+      const sw = document.getElementById("switch"); if (sw) sw.scrollIntoView({ block: "start" });
+      return post({ type: "shown" });
+    }
+    if (!cardOf(section)) return;
+    go("ai", section);
     post({ type: "shown" });
   }
 
-  // Layout: the page's header carries the version and updates (one line, always in sight); then your AIs, two cards
-  // to a row; then the moods; then the rest of Kural as a compact grid of links.
-  const top = el("div"), more = el("div"), usageBox = el("section", { class: "usage-settings", id: "usage" });
-  const switchOn = el("input", { type: "checkbox", onchange: () => post({ type: "usageSwitch", enabled: switchOn.checked }) });
-  usageBox.append(el("div", { class: "sechead" }, el("h2", {}, "AI Usage")),
-    el("div", { class: "usage-controls" }, el("label", { class: "check" }, switchOn, "Switch AI near a limit")),
-    el("p", { class: "muted small" }, "When an AI's Session or Weekly limit reaches the point you set on its card above, the same chat carries on with another AI that's set up, with everything said so far. A command or agent that's running finishes first."));
-  app.replaceChildren(top, usageBox, moodsBox, more);
-  function showUsage() { usageBox.scrollIntoView({ behavior: "smooth", block: "start" }); switchOn.focus({ preventScroll: true }); post({ type: "shown" }); }
-  function render() {
-    renderMoods(false);
-    const guard = S.usageSwitch || { enabled: false, threshold: 70 };
-    switchOn.checked = guard.enabled;
-    more.replaceChildren(
+  // ---------- drawing ----------
+  // Typing in a field of the AI's page (a switch point, the context length): leave the page as it is until you're done.
+  // Redrawing it moved the field, which took your cursor away and saved a half-typed number ("8" of "85").
+  const typingNow = () => {
+    const a = document.activeElement;
+    return !!a && /^(input|textarea|select)$/i.test(a.tagName || a.tag || "") && a.type !== "checkbox" && a !== CAT.search;
+  };
+  function mainView() {
+    return el("div", { class: "main" },
+      el("header", {},
+        el("div", { class: "title" }, el("h1", {}, "Kural Settings"),
+          el("div", { class: "muted" }, S.loading ? [icon("loading", "spin"), " checking who's logged in…"] : "Your AI accounts, their usage, and Kural itself.")),
+        el("span", { class: "grow" }),
+        el("div", { class: "update" },
+          el("div", { class: "row" }, el("span", { class: "muted" }, S.version),
+            el("button", { class: "btn primary", disabled: S.checking, onclick: () => post({ type: "updates" }) }, icon(S.checking ? "loading" : "sync", S.checking ? "spin" : ""), " Check for updates")),
+          el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.autoUpdates, onchange: (e) => post({ type: "autoUpdates", value: e.target.checked }) }), "Look for updates once a day"))),
+      el("div", { class: "sechead" }, el("h2", {}, "Your AI"), el("span", { class: "grow" }),
+        el("button", { class: "btn", disabled: S.refreshing, title: "Ask each AI for its usage now (Claude: one tiny request)", onclick: () => post({ type: "refresh" }) },
+          icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage")),
+      el("div", { class: "cards" }, S.cards.map(card)),
+      moodsBox,
+      learnSection(),
       el("div", { class: "sechead" }, el("h2", {}, "More")),
       el("div", { class: "links" },
         link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
@@ -311,31 +480,61 @@
         link("bug", "Crash reports", "what went wrong when Kural closed unexpectedly", "crashes"),
         link("book", "Kural guide", "what every feature does", "guide"),
         link("lightbulb", "Ask for a feature", "on GitHub", "feature")));
-    // Typing in an AI's settings (a switch point, a connector): leave the cards as they are until you're done. Redrawing
-    // them moved the field, which took your cursor away and saved a half-typed number ("8" of "85").
-    const typing = Object.values(CTL).some((C) => [C.session, C.weekly, C.name, C.kind, C.value].includes(document.activeElement));
-    if (typing) { S.cardsWaiting = true; return; }
-    S.cardsWaiting = false;
-    top.replaceChildren(
-      el("header", {},
-        el("div", { class: "title" }, el("h1", {}, "Kural Settings"),
-          el("div", { class: "muted" }, S.loading ? [icon("loading", "spin"), " checking who's logged in…"] : "Your AI accounts, their usage, and Kural itself.")),
-        el("span", { class: "grow" }),
-        el("div", { class: "update" },
-          el("div", { class: "row" }, el("span", { class: "muted" }, S.version),
-            el("button", { class: "btn primary", disabled: S.checking, onclick: () => post({ type: "updates" }) }, icon(S.checking ? "loading" : "sync", S.checking ? "spin" : ""), " Check for updates")),
-          el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.autoUpdates, onchange: (e) => post({ type: "autoUpdates", value: e.target.checked }) }), "Look for updates once a day"))),
-      el("div", { class: "sechead" }, el("h2", {}, "Your AI"), el("span", { class: "grow" }),
-        el("button", { class: "btn", disabled: S.refreshing, title: "Ask each AI for its usage now (Claude: one tiny request)", onclick: () => post({ type: "refresh" }) },
-          icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage")),
-      el("div", { class: "cards" }, S.cards.map(card)));
   }
+  function render(force) {
+    if (!S) return;
+    renderMoods(false);
+    if (V.view === "catalog") {
+      if (V.drawn !== "catalog") { stage.replaceChildren(CAT.root); V.drawn = "catalog"; }
+      return renderCatalogList(!!force);
+    }
+    if (V.view === "manual") {
+      if (V.drawn !== "manual") { stage.replaceChildren(MAN.root); V.drawn = "manual"; }
+      return;
+    }
+    if (!force && typingNow()) { S.cardsWaiting = true; return; }
+    S.cardsWaiting = false;
+    stage.replaceChildren(V.view === "ai" ? aiView() : mainView());
+    V.drawn = V.view;
+  }
+  app.replaceChildren(stage);
+  // (A redraw that waited while you typed happens when you leave the field.)
+  window.addEventListener("focusout", () => setTimeout(() => { if (S && S.cardsWaiting) render(); if (CAT.waiting) renderCatalogList(); }, 0));
 
   window.addEventListener("message", (e) => {
-    if (e.data.type !== "state") return;
-    S = e.data; render();
-    if (S.section && S.section !== shownSection) { shownSection = S.section; showSection(S.section); }
-    if (!S.section) shownSection = null;   // (opened by "Add your own mood…" or a gear before the page was ready)
+    const m = e.data;
+    if (m.type === "state") {
+      S = m; render();
+      if (S.section && S.section !== shownSection) { shownSection = S.section; showSection(S.section); }
+      if (!S.section) shownSection = null;   // (opened by "Add your own mood…" or a gear before the page was ready)
+      return;
+    }
+    if (m.type === "moodSaved" && M.form && M.form.reqId === m.reqId) {
+      M.form.busy = false;
+      if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
+    }
+    if (m.type === "show") { shownSection = m.section; showSection(m.section); }
+    if (m.type === "catalogResults" && m.id === CAT.ai && m.reqId === CAT.reqId) {
+      Object.assign(CAT, { items: m.items || [], note: m.note || "", loading: false });
+      renderCatalogList();
+    }
+    if (m.type === "catalogDone" && m.id === CAT.ai) {
+      CAT.adding = null;
+      const item = CAT.items.find((x) => x.id === m.item);
+      if (m.error) { CAT.errors[m.item] = m.error; renderCatalogList(true); }
+      else { go("ai", m.id); V.added = `Added ${item ? item.name : "the connector"}.${item && item.signIn ? " Sign in to finish." : ""}`; render(true); }
+    }
+    if (m.type === "folder" && CAT.folder && CAT.folder.reqId === m.reqId) {
+      const f = CAT.folder; CAT.folder = null;
+      const F = CAT.fields[f.item];
+      if (m.path && F && F[f.key]) F[f.key].value = m.path;
+    }
+    if (m.type === "connectorDone") {
+      if (V.view === "manual" && m.reqId === MAN.reqId) {
+        MAN.busy = false; MAN.error = m.error || "";
+        if (!m.error) { MAN.name.value = ""; MAN.value.value = ""; go("ai", V.ai); V.added = "Added."; render(true); } else manualDraw();
+      } else if (m.error && V.view === "ai") { V.added = ""; V.error = m.error; render(true); }
+    }
   });
   setInterval(() => { if (S) render(); }, 30000);   // ("resets in", "updated … ago")
   post({ type: "ready" });

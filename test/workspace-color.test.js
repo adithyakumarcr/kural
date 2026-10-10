@@ -9,7 +9,7 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
 // ---- vscode stand-in: workspace values kept per "section.key", writes recorded ----
 const store = {};
 const writes = [], messages = [];
-let folders = [{}], qp, inputText;
+let folders = [{}], qp, inputText, themeKind = 2;
 const vscode = {
   ConfigurationTarget: { Workspace: 2 }, QuickPickItemKind: { Separator: -1 },
   workspace: {
@@ -23,6 +23,7 @@ const vscode = {
     }),
   },
   window: {
+    get activeColorTheme() { return { kind: themeKind }; },
     showInformationMessage: (m) => { messages.push(m); }, showWarningMessage: (m) => { messages.push(m); },
     showInputBox: async (o) => { assert.ok(o.validateInput("zzz") && !o.validateInput("#28d")); return inputText; },
     createQuickPick: () => {
@@ -58,24 +59,44 @@ const pick = (q, finder) => { q.selectedItems = [q.items.find(finder)]; q.handle
     assert.strictEqual(wc.foregroundFor("#ffffff"), "#1e1e1e");
     assert.strictEqual(wc.foregroundFor("#f1c40f"), "#1e1e1e");
     assert.strictEqual(wc.foregroundFor("#4b3fb5"), "#ffffff");
-    for (const c of wc.COLORS) assert.ok(wc.contrast(c.hex, wc.foregroundFor(c.hex)) >= 4.5, c.name);
+    for (const palette of [wc.DARK, wc.LIGHT]) for (const c of palette) assert.ok(wc.contrast(c.hex, wc.foregroundFor(c.hex)) >= 4.5, c.name);
+  });
+  await check("DARK and LIGHT have the same 11 names; DARK is deep (HSL lightness < 35 %), LIGHT is pastel (> 75 %)", () => {
+    const names = (p) => p.map((c) => c.name);
+    assert.deepStrictEqual(names(wc.DARK), names(wc.LIGHT));
+    assert.strictEqual(wc.DARK.length, 11);
+    const lightness = (hex) => { const n = parseInt(hex.slice(1), 16); const v = [(n >> 16) & 255, (n >> 8) & 255, n & 255]; return (Math.max(...v) + Math.min(...v)) / 2 / 255; };
+    for (const c of wc.DARK) assert.ok(lightness(c.hex) < 0.35, `DARK ${c.name} ${c.hex}`);
+    for (const c of wc.LIGHT) assert.ok(lightness(c.hex) > 0.75, `LIGHT ${c.name} ${c.hex}`);
+  });
+  await check("the picker shows LIGHT for light themes (kind 1, high contrast light 4), DARK otherwise", async () => {
+    const shown = async (kind) => {
+      themeKind = kind; let hexes = [];
+      await drive(async (q) => { hexes = q.items.filter((i) => i.hex).map((i) => i.hex); q.handlers.hide(); });
+      return hexes;
+    };
+    assert.deepStrictEqual(await shown(1), wc.LIGHT.map((c) => c.hex));
+    assert.deepStrictEqual(await shown(4), wc.LIGHT.map((c) => c.hex));
+    assert.deepStrictEqual(await shown(2), wc.DARK.map((c) => c.hex));
+    assert.deepStrictEqual(await shown(3), wc.DARK.map((c) => c.hex));
+    themeKind = 2;
   });
   await check("colorsFor sets exactly the six keys; inactive is the foreground at 60 % opacity", () => {
-    const c = wc.colorsFor("#2f6fdb");
+    const c = wc.colorsFor("#2e476b");
     assert.deepStrictEqual(Object.keys(c).sort(), [...wc.KEYS].sort());
-    assert.strictEqual(c["activityBar.background"], "#2f6fdb");
+    assert.strictEqual(c["activityBar.background"], "#2e476b");
     assert.strictEqual(c["activityBar.inactiveForeground"], c["activityBar.foreground"] + "99");
-    assert.strictEqual(c["activityBarBadge.foreground"], "#2f6fdb");
+    assert.strictEqual(c["activityBarBadge.foreground"], "#2e476b");
   });
   await check("merge keeps other keys and replaces ours; remove drops only our unchanged keys", () => {
-    const mine = wc.mergeColors({ "editor.background": "#000", "activityBar.background": "#111" }, "#2f6fdb");
+    const mine = wc.mergeColors({ "editor.background": "#000", "activityBar.background": "#111" }, "#2e476b");
     assert.strictEqual(mine["editor.background"], "#000");
-    assert.strictEqual(mine["activityBar.background"], "#2f6fdb");
-    const left = wc.removeColors({ ...mine, "activityBar.activeBorder": "#ff0000" }, "#2f6fdb");   // the border was changed by hand
+    assert.strictEqual(mine["activityBar.background"], "#2e476b");
+    const left = wc.removeColors({ ...mine, "activityBar.activeBorder": "#ff0000" }, "#2e476b");   // the border was changed by hand
     assert.deepStrictEqual(left, { "editor.background": "#000", "activityBar.activeBorder": "#ff0000" });
-    assert.strictEqual(wc.removeColors(wc.mergeColors(undefined, "#2f6fdb"), "#2f6fdb"), null);
+    assert.strictEqual(wc.removeColors(wc.mergeColors(undefined, "#2e476b"), "#2e476b"), null);
     assert.deepStrictEqual(wc.removeColors({ "activityBar.background": "#123456" }, undefined), { "activityBar.background": "#123456" });
-    assert.deepStrictEqual(wc.mergeColors("nonsense", "#2f6fdb"), wc.colorsFor("#2f6fdb"));
+    assert.deepStrictEqual(wc.mergeColors("nonsense", "#2e476b"), wc.colorsFor("#2e476b"));
   });
 
   await check("no folder open: says so and writes nothing", async () => {
@@ -88,8 +109,8 @@ const pick = (q, finder) => { q.selectedItems = [q.items.find(finder)]; q.handle
     store["workbench.colorCustomizations"] = { "editor.background": "#101010" };
     await drive(async (q) => { q.handlers.active([q.items[0]]); q.handlers.active([q.items.find((i) => /Blue/.test(i.label))]); await tick(); pick(q, (i) => /Blue/.test(i.label)); });
     const c = store["workbench.colorCustomizations"];
-    assert.strictEqual(c["editor.background"], "#101010"); assert.strictEqual(c["activityBar.background"], "#2f6fdb");
-    assert.strictEqual(store["kural.workspaceColor"], "#2f6fdb");
+    assert.strictEqual(c["editor.background"], "#101010"); assert.strictEqual(c["activityBar.background"], "#2e476b");
+    assert.strictEqual(store["kural.workspaceColor"], "#2e476b");
     assert.ok(qp.items.every((i) => i.kind === -1 || /^\$\([a-z-]+\) /.test(i.label)));
     assert.ok(!qp.items.some((i) => /\p{Extended_Pictographic}/u.test(i.label)));
   });
@@ -100,11 +121,11 @@ const pick = (q, finder) => { q.selectedItems = [q.items.find(finder)]; q.handle
       q.handlers.active([q.items[0]]); await tick();   // (the list opening: its first item, not a preview)
       assert.deepStrictEqual(writes.length, writesAtOpen, "opening writes nothing");
       q.handlers.active([q.items.find((i) => /Red/.test(i.label))]); await tick(); await tick();
-      assert.strictEqual(store["workbench.colorCustomizations"]["activityBar.background"], "#c0392b", "previewed");
+      assert.strictEqual(store["workbench.colorCustomizations"]["activityBar.background"], "#642b2b", "previewed");
       q.handlers.hide();
     });
     assert.deepStrictEqual(store["workbench.colorCustomizations"], before);
-    assert.strictEqual(store["kural.workspaceColor"], "#2f6fdb");
+    assert.strictEqual(store["kural.workspaceColor"], "#2e476b");
   });
   await check("opening the list and pressing Esc writes nothing", async () => {
     const n = writes.length;
