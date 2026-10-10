@@ -232,6 +232,7 @@ function activate(context) {
   account.register();
   // Kural Settings (an editor tab): what the Account menu had. The person icon and "Kural: Settings" open it.
   account.page = new SettingsPage(context, account, getStarted);
+  account.page.chat = chat;
   account.page.register();
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();

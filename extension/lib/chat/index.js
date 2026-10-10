@@ -25,7 +25,7 @@ const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt } = require("
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
-const { profileOf, limitUsed } = require("../router/policy");
+const { profileOf, limitUsed, limitParts } = require("../router/policy");
 const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
 const usageHub = require("../ai/usage");
@@ -187,6 +187,12 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
       vscode.commands.registerCommand("kural.chat.toggle", () => this.toggle()),
       vscode.commands.registerCommand("kural.testNotification", () => this.testNotification()),
+      // Kural Settings → Your own model → "Find & download models…": the chat's Models page (it was in the model menu).
+      vscode.commands.registerCommand("kural.findModels", async () => {
+        await this.reveal();
+        const p = this.side();
+        if (p) this.postTo(p, { type: "openLocal" }); else this.post({ type: "openLocal" });
+      }),
       // Kural: Devices → "Link it to the current chat".
       vscode.commands.registerCommand("kural.chat.linkDevice", async (id) => {
         const t = this.active();
@@ -1401,7 +1407,7 @@ class ChatView {
         let changesProvider = engineOf(routed.model) !== here;
         const tooBig = () => journal.handoff(tab.messages).length > this.handoffBudget(routed.model);
         const missing = () => previousMedia.some((a) => !a.path || !fs.existsSync(a.path));
-        if (changesProvider && tab.messages.length && this.limitOf(here, previous) < (guard.enabled ? guard.threshold : 80) && (missing() || tooBig())) {
+        if (changesProvider && tab.messages.length && !(guard.enabled ? this.overLimit(here, previous) : this.limitOf(here, previous) >= 80) && (missing() || tooBig())) {
           const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over whole";
           // (On a model on this computer there's no "same AI" for Auto: that one stays.)
           const again = here === "ollama" ? { error: "local" }
@@ -1594,12 +1600,18 @@ class ChatView {
   }
 
   usageOptions() { return require("../ai/usage-switch").options(cfg()); }
+  // Has this AI reached one of your switch points (its Session or Weekly limit, Kural Settings)?
+  overLimit(provider, model) {
+    let parts = null;
+    try { parts = limitParts({ id: model || "" }, usageHub.current(provider)); } catch { /* no report yet */ }
+    return !!require("../ai/usage-switch").over({ providerId: provider, limitUsed: this.limitOf(provider, model), ...(parts ? { limitParts: parts } : {}) }, this.usageOptions());
+  }
 
   async usageChoice(tab, text = this.lastAsk(tab), attached = [], contexts = []) {
     const guard = this.usageOptions();
-    if (!guard.enabled || this.limitOf(engineOf(tab.model), tab.model) < guard.threshold) return null;
+    if (!guard.enabled || !this.overLimit(engineOf(tab.model), tab.model)) return null;
     const models = this.router && this.router.availableModels ? await this.router.availableModels() : this.routerModels().map((m) =>
-      ({ ...m, limitUsed: this.limitOf(m.providerId, m.id) }));
+      ({ ...m, limitUsed: this.limitOf(m.providerId, m.id), ...(() => { try { const p = limitParts(m, usageHub.current(m.providerId)); return p ? { limitParts: p } : {}; } catch { return {}; } })() }));
     return require("../ai/usage-switch").choose(models,
       this.routingRequest(tab, text, [...journal.attachmentsOf(tab.messages), ...attached], contexts), guard);
   }
@@ -1678,7 +1690,7 @@ class ChatView {
     if (ctl.signal.aborted || (previous && previous.userStopped) || (usageChoice && !this.usageOptions().enabled) ||
       (this.usageOptions().enabled && previous && previous.bg && previous.bg.size) ||
       !routed || routed.error || engineOf(routed.model) === from || !brain.providerOf(routed.model).ready() || !enabled() || tab.status !== "idle" ||
-      this.limitOf(engineOf(routed.model), routed.model) >= (this.usageOptions().enabled ? this.usageOptions().threshold : 98)) return false;
+      (this.usageOptions().enabled ? this.overLimit(engineOf(routed.model), routed.model) : this.limitOf(engineOf(routed.model), routed.model) >= 98)) return false;
     let record;
     try { record = this.handoffRecord(tab, tab.messages, routed.model); }
     catch (e) { log(`chat ${tab.id}: couldn't preserve its complete conversation for a handoff: ${e.message}`); return false; }
@@ -2533,6 +2545,11 @@ class ChatView {
         break;
       }
       case "routerPanel": vscode.commands.executeCommand("kural.modelRouter"); break;
+      // The gear beside an AI's name in the model menu: its settings (Kural Settings on its card; Auto: the Model Router).
+      case "aiSettings":
+        if (m.ai === "router") vscode.commands.executeCommand("kural.modelRouter");
+        else if (["claude", "codex", "agy", "local"].includes(m.ai)) vscode.commands.executeCommand("kural.account", m.ai);
+        break;
       case "showUsage": vscode.commands.executeCommand("kural.showUsage"); break;
       case "setEffort": if (valid(EFFORTS, m.effort)) {
         tab.effort = m.effort; tab.effortPinned = !!tab.autoRoute; this.remember(tab); this.postTabs(); this.save();

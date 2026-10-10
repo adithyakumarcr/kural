@@ -71,7 +71,77 @@
       if (c.page) acts.push(el("button", { class: "btn", onclick: () => post({ type: "usagePage", id: c.id }) }, icon("link-external"), " Usage page"));
       acts.push(btn("Switch account", "switch", { id: c.id }), btn("Log out", "logOut", { id: c.id }, "quiet"));
     } else acts.push(btn("Open Get started", "setUp", { id: c.id }));
-    return el("section", { class: "card " + (c.state === "off" ? "dim" : "") }, head, body, el("div", { class: "acts" }, acts));
+    if (c.id === "local") acts.push(el("button", { class: "btn", onclick: () => post({ type: "findModels" }) }, icon("search"), " Find & download models…"));
+    return el("section", { class: "card " + (c.state === "off" ? "dim" : ""), id: "ai-" + c.id }, head, body, aiSettings(c), el("div", { class: "acts" }, acts));
+  }
+
+  // ---------- each AI's own settings (the gear beside its name in the chat's model menu opens them) ----------
+  // When to switch away from it (its Session and Weekly limits), and its connectors. The inputs and the add form are made
+  // once per AI and kept, so the page's redraws (every 30 s, every usage report) don't take them from under your fingers.
+  const CTL = {};
+  function ctl(id) {
+    if (CTL[id]) return CTL[id];
+    const C = CTL[id] = { open: false };
+    const point = (which) => el("input", { class: "in threshold", type: "number", min: "1", max: "99", step: "1", "aria-label": `${which} switch point (% used)`,
+      onchange: (e) => { const t = e.target; if (t.reportValidity() && t.value !== "") post({ type: "usageSwitch", ai: id, which, value: Number(t.value) }); } });
+    C.session = point("session"); C.weekly = point("weekly");
+    C.name = el("input", { class: "in", placeholder: "name, e.g. github", spellcheck: "false" });
+    C.kind = el("select", { class: "in" }, el("option", { value: "command" }, "Command"), el("option", { value: "url" }, "Web address"));
+    C.value = el("input", { class: "in grow", placeholder: "npx -y @modelcontextprotocol/server-github", spellcheck: "false" });
+    C.kind.addEventListener("change", () => { C.value.placeholder = C.kind.value === "url" ? "https://example.com/mcp" : "npx -y @modelcontextprotocol/server-github"; });
+    C.details = el("details", { class: "conn" });
+    C.details.addEventListener("toggle", () => { C.open = C.details.open; if (C.open) post({ type: "connectors", id }); });
+    C.body = el("div", { class: "conn-body" });
+    C.details.append(el("summary", {}, icon("plug"), " Connectors"), C.body);
+    C.error = ""; C.reqId = 0;
+    return C;
+  }
+  function addConnector(id) {
+    const C = ctl(id);
+    C.reqId = Date.now(); C.error = "";
+    post({ type: "addConnector", id, reqId: C.reqId, connector: { name: C.name.value, kind: C.kind.value, value: C.value.value } });
+  }
+  function aiSettings(c) {
+    if (c.id === "local") return el("div", { class: "muted small" }, "Your own model can't use connectors yet, and has no usage limits.");
+    if (c.state === "off") return null;
+    const C = ctl(c.id), guard = S.usageSwitch || {}, lim = (guard.limits || {})[c.id] || { session: guard.threshold, weekly: guard.threshold };
+    if (document.activeElement !== C.session) C.session.value = lim.session;
+    if (document.activeElement !== C.weekly) C.weekly.value = lim.weekly;
+    // Gemini's limits are weekly only.
+    const points = el("div", { class: "points" + (guard.enabled ? "" : " off") },
+      el("div", { class: "flabel" }, "Move the chat to another AI when"),
+      c.id === "agy" ? null : el("label", { class: "row" }, "the Session limit is", C.session, "% used"),
+      el("label", { class: "row" }, c.id === "agy" ? "a Weekly limit is" : "or a Weekly limit is", C.weekly, "% used"),
+      guard.enabled ? null : el("div", { class: "muted small" }, "Off: turn on \"Switch AI near a limit\" under AI Usage below."));
+    const K = (S.connectors || {})[c.id] || { supported: false };
+    C.details.open = C.open;
+    const kids = [];
+    if (!K.supported) kids.push(el("p", { class: "muted small" }, "Kural can't add connectors to Google Gemini yet."));
+    else {
+      if (c.id === "claude") kids.push(el("div", { class: "row wrap" },
+        el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.fullSetup, onchange: (e) => post({ type: "fullSetup", on: e.target.checked }) }),
+          "Use my Claude Code setup (connectors, plugins, skills)"),
+        el("span", { class: "grow" }),
+        el("button", { class: "btn quiet", title: "Start Claude again with your setup: same conversations", onclick: () => post({ type: "reloadSetup" }) }, icon("refresh"), " Reload")));
+      if (K.loading && !(K.servers || []).length) kids.push(el("div", { class: "muted small" }, icon("loading", "spin"), c.id === "claude" ? " checking each connector…" : " loading…"));
+      else if (K.error) kids.push(el("div", { class: "err small" }, icon("warning"), " Couldn't list them: ", K.error));
+      else if (K.servers && !K.servers.length) kids.push(el("div", { class: "muted small" }, "No connectors yet."));
+      for (const x of K.servers || []) kids.push(el("div", { class: "srv-row" },
+        el("span", { class: "dot " + (x.ok ? "ok" : "warn") }), el("strong", {}, x.name),
+        el("span", { class: "muted small ell", title: x.target }, x.target), el("span", { class: "grow" }),
+        el("span", { class: "muted small" }, x.status),
+        x.managed ? el("span", { class: "muted small", title: "Added on claude.ai: change it there" }, "on claude.ai")
+          : el("button", { class: "pill-btn", title: `Remove ${x.name}`, "aria-label": `Remove ${x.name}`, disabled: K.busy,
+            onclick: () => post({ type: "removeConnector", id: c.id, name: x.name, reqId: Date.now() }) }, icon("trash"))));
+      kids.push(el("div", { class: "add-conn" }, C.name, C.kind, C.value,
+        el("button", { class: "btn", disabled: K.busy, onclick: () => addConnector(c.id) }, icon(K.busy ? "loading" : "add", K.busy ? "spin" : ""), " Add")));
+      if (C.error) kids.push(el("div", { class: "err small" }, icon("warning"), " ", C.error));
+      kids.push(el("div", { class: "muted small" }, c.id === "claude"
+        ? "Added for you (all projects), like `claude mcp add -s user`. Claude starts again with it; your chats continue."
+        : "Added to ChatGPT (Codex)'s settings, like `codex mcp add`. New ChatGPT chats use it."));
+    }
+    C.body.replaceChildren(...kids);
+    return el("div", { class: "ai-settings" }, points, C.details);
   }
 
   function link(iconName, label, hint, type) {
@@ -179,9 +249,12 @@
       M.form.busy = false;
       if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
     }
-    if (m.type === "show") {
-      if (m.section === "moods") showMoods();
-      else if (m.section === "usage") showUsage();
+    if (m.type === "show") showSection(m.section);
+    if (m.type === "connectorDone" && CTL[m.id]) {
+      const C = CTL[m.id];
+      if (m.error) C.error = m.error;
+      else { C.error = ""; if (m.reqId === C.reqId) { C.name.value = ""; C.value.value = ""; } }
+      if (S) render();
     }
   });
   // From the chat's "Add your own mood…": the Moods section, with a new mood's form open.
@@ -192,23 +265,31 @@
     post({ type: "shown" });
   }
 
+  // From the chat's model menu (the gear beside an AI's name): that AI's card, with its connectors open.
+  function showSection(section) {
+    if (!S) return;
+    if (section === "moods") return showMoods();
+    if (section === "usage") return showUsage();
+    const card = document.getElementById("ai-" + section);
+    if (!card) return;
+    if (CTL[section] || (S.connectors || {})[section]) { const C = ctl(section); C.open = true; C.details.open = true; post({ type: "connectors", id: section }); }
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    post({ type: "shown" });
+  }
+
   // Layout: the page's header carries the version and updates (one line, always in sight); then your AIs, two cards
   // to a row; then the moods; then the rest of Kural as a compact grid of links.
   const top = el("div"), more = el("div"), usageBox = el("section", { class: "usage-settings", id: "usage" });
   const switchOn = el("input", { type: "checkbox", onchange: () => post({ type: "usageSwitch", enabled: switchOn.checked }) });
-  const threshold = el("input", { class: "in threshold", type: "number", min: "1", max: "99", step: "1", "aria-label": "Usage percentage to switch at",
-    onchange: () => { if (threshold.reportValidity() && threshold.value !== "") post({ type: "usageSwitch", threshold: Number(threshold.value) }); } });
   usageBox.append(el("div", { class: "sechead" }, el("h2", {}, "AI Usage")),
-    el("div", { class: "usage-controls" }, el("label", { class: "check" }, switchOn, "Automatically switch AI"),
-      el("label", { class: "row" }, "Switch at", threshold, "% used")),
-    el("p", { class: "muted small" }, "Keep the same chat and its context. Kural moves to an available AI below this percentage when a Session or Weekly limit reaches it. Active tools and agents finish before switching."));
+    el("div", { class: "usage-controls" }, el("label", { class: "check" }, switchOn, "Switch AI near a limit")),
+    el("p", { class: "muted small" }, "When an AI's Session or Weekly limit reaches the point you set on its card above, the same chat carries on with another AI that's set up, with everything said so far. A command or agent that's running finishes first."));
   app.replaceChildren(top, usageBox, moodsBox, more);
   function showUsage() { usageBox.scrollIntoView({ behavior: "smooth", block: "start" }); switchOn.focus({ preventScroll: true }); post({ type: "shown" }); }
   function render() {
     renderMoods(false);
     const guard = S.usageSwitch || { enabled: false, threshold: 70 };
     switchOn.checked = guard.enabled;
-    if (document.activeElement !== threshold) threshold.value = guard.threshold;
     more.replaceChildren(
       el("div", { class: "sechead" }, el("h2", {}, "More")),
       el("div", { class: "links" },
@@ -216,6 +297,7 @@
         link("dashboard", "AI Usage panel", "every limit, at the bottom", "usagePanel"),
         link("symbol-keyword", "Tab Completion", "engine, speed, model", "tab"),
         link("git-compare", "Model Router", "what reads your requests, which AIs Auto uses", "router"),
+        link("search", "Find & download models", "models on this computer, with Ollama", "findModels"),
         link("export", "Export settings", "your preferences to a file, for another computer", "exportSettings"),
         link("desktop-download", "Import settings", "from a file you exported", "importSettings"),
         link("settings", "All settings", "Kural's, in VS Code's settings", "allSettings"),
@@ -241,8 +323,7 @@
   window.addEventListener("message", (e) => {
     if (e.data.type !== "state") return;
     S = e.data; render();
-    if (S.section === "moods") showMoods();   // (opened by "Add your own mood…" before the page was ready)
-    else if (S.section === "usage") showUsage();
+    if (S.section) showSection(S.section);   // (opened by "Add your own mood…" or a gear before the page was ready)
   });
   setInterval(() => { if (S) render(); }, 30000);   // ("resets in", "updated … ago")
   post({ type: "ready" });
