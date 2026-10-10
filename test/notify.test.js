@@ -9,7 +9,7 @@ const vscode = { workspace: { isTrusted: true, workspaceFolders: [], textDocumen
   window: { state: { focused: false } }, env: { appRoot: "/unused" }, commands: { executeCommand: () => {} },
   Uri: { file: (f) => ({ scheme: "file", fsPath: f }) }, EventEmitter: class { constructor() { this.event = () => {}; } fire() {} } };
 Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
-const { shouldNotify, plainLine, message, fallbackCommand, Notifier } = require("../extension/lib/chat/notify");
+const { shouldNotify, notifyDecision, plainLine, message, fallbackCommand, Notifier } = require("../extension/lib/chat/notify");
 const { ChatView } = require("../extension/lib/chat");
 
 let failed = 0;
@@ -51,7 +51,7 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
   await check("how: Kural's own system notification when the build has it; a click runs onClick; cleared on request", async () => {
     const calls = [];
     const n = new Notifier({ hasToast: async () => true, toast: async (o) => { calls.push(["toast", o]); return { clicked: true, supported: true }; },
-      clearToast: async (id) => calls.push(["clear", id]), run: async () => assert.fail("no fallback"), inApp: async () => assert.fail("no fallback"), log: () => {}, platform: "darwin" });
+      clearToast: async (id) => calls.push(["clear", id]), run: async () => assert.fail("no fallback"), inApp: async () => assert.fail("no fallback"), log: () => {}, platform: "linux" });
     let clicked = 0;
     await n.show({ id: "kural-chat-a", title: "A is done", body: "Fixed.", attention: false }, () => clicked++);
     await tick();
@@ -76,6 +76,35 @@ const tick = () => new Promise((r) => setTimeout(r, 10));
     await n.show({ id: "x", title: "T is done", body: "B" }, () => clicked++); await tick();
     assert.deepStrictEqual(inApp, [["Kural: T is done", "B"]]); assert.strictEqual(clicked, 1);
     n.clear("x");   // (nothing to clear: no assert.fail)
+  });
+
+  await check("decide: says why (for the log)", () => {
+    assert.deepStrictEqual(notifyDecision("off", { focused: false, onScreen: false }), { send: false, why: "setting is off" });
+    assert.strictEqual(notifyDecision("whenAway", { focused: false, onScreen: true }).send, true);
+    assert.ok(/not in front/.test(notifyDecision("whenAway", { focused: false, onScreen: true }).why));
+    assert.ok(/not on screen/.test(notifyDecision("whenAway", { focused: true, onScreen: false }).why));
+    assert.strictEqual(notifyDecision("whenAway", { focused: true, onScreen: true }).send, false);
+  });
+  await check("a Mac: osascript first (Electron's toast from an ad-hoc-signed app is dropped silently); then the toast; then the window", async () => {
+    const calls = [], logs = [];
+    const mk = (run) => new Notifier({ hasToast: async () => true, toast: async () => { calls.push("toast"); return { clicked: false, supported: true }; },
+      clearToast: async () => {}, run, inApp: async () => { calls.push("app"); return false; }, log: (t) => logs.push(t), platform: "darwin" });
+    let n = mk(async (c, a) => { calls.push(["run", c, a[1]]); return true; });
+    assert.strictEqual(await n.show({ id: "x", title: 'A "b"', body: "C" }), "os");
+    assert.strictEqual(calls[0][1], "/usr/bin/osascript"); assert.ok(!calls.includes("toast"));
+    calls.length = 0; n = mk(async () => false);   // osascript failed: the toast
+    n.toastWaitMs = 20;
+    assert.strictEqual(await n.show({ id: "x", title: "T", body: "B" }), "toast");
+    assert.ok(logs.some((l) => /osascript failed/.test(l)));
+    calls.length = 0; n = mk(async () => { throw new Error("no"); });
+    n.e.toast = async () => ({ supported: false });   // both fail: inside the window
+    assert.strictEqual(await n.show({ id: "x", title: "T", body: "B" }), "app");
+  });
+  await check("Linux: the toast first, notify-send when it isn't supported, none when nothing works", async () => {
+    const n = new Notifier({ hasToast: async () => true, toast: async () => ({ supported: false }), clearToast: async () => {}, run: async () => true, inApp: async () => false, log: () => {}, platform: "linux" });
+    assert.strictEqual(await n.show({ id: "x", title: "T", body: "B" }), "os");
+    const bad = new Notifier({ hasToast: async () => { throw new Error("x"); }, toast: async () => ({}), clearToast: async () => {}, run: async () => false, inApp: async () => { throw new Error("x"); }, log: () => {}, platform: "aix" });
+    assert.strictEqual(await bad.show({ id: "x", title: "T", body: "B" }), "app");
   });
 
   // The chat: which moments notify.
