@@ -99,6 +99,7 @@ header .title { flex: 1 1 260px; }
 .points { display: flex; flex-direction: column; gap: 6px; }
 .points .row { flex-wrap: wrap; }
 .points.off .row { opacity: .6; }
+.points .pl { min-width: 110px; }
 .threshold.wide { width: 110px; }
 .row.wrap { flex-wrap: wrap; }
 .srv-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 0; border-bottom: 1px solid var(--border); }

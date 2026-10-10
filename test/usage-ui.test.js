@@ -59,18 +59,18 @@ check("settings: a short overview; each AI's own page has its connectors and swi
   d.message(state);
   // The overview: no switch points, no connectors, no AI Usage section; a Settings button per AI; what Kural learns.
   const main = d.document.getElementById("app").textContent;
-  assert.doesNotMatch(main, /Switch to another AI|Connectors|Switch AI near a limit|Weekly limit is/);
+  assert.doesNotMatch(main, /Switch to another AI|Connectors|Switch AI near a limit|Weekly limit/);
   assert.match(main, /Settings.*Settings/); assert.match(main, /What Kural learns.*Tab Completion learns from your work.*Auto learns which models you prefer/);
   const click = (label, within) => { const b = d.nodes.find((n) => n.tag === "button" && n.textContent.trim() === label && (!within || within())); assert.ok(b, "button " + label); b.trigger("click"); return b; };
   d.nodes.filter((n) => n.tag === "button" && n.textContent.trim() === "Settings")[1].trigger("click");   // Gemini's
   let page = d.document.getElementById("app").textContent;
   assert.match(page, /Kural Settings.*Google Gemini/); assert.match(page, /can't add connectors to Google Gemini/);
-  assert.match(page, /Switch to another AI near a limit/); assert.doesNotMatch(page, /Session limit is/); assert.match(page, /Weekly limit is/);
+  assert.match(page, /Switch to another AI near a limit/); assert.doesNotMatch(page, /Session limit/); assert.match(page, /Weekly limit/);
   click("Kural Settings");
   d.nodes.filter((n) => n.tag === "button" && n.textContent.trim() === "Settings")[0].trigger("click");   // Claude's
   assert.deepStrictEqual(d.sent.at(-1), { type: "connectors", id: "claude" });
   page = d.document.getElementById("app").textContent;
-  assert.match(page, /Connectors.*Add connector.*github.*Connected.*notion.*Needs sign-in.*Sign in/); assert.match(page, /Switch to another AI near a limit.*Session limit is.*Weekly limit is/);
+  assert.match(page, /Connectors.*Add connector.*github.*Connected.*notion.*Needs sign-in.*Sign in/); assert.match(page, /Switch to another AI near a limit.*Session limit.*Weekly limit/);
   assert.doesNotMatch(page, /`/);   // (the old help text showed literal backticks)
   const numbers = d.nodes.filter((n) => n.tag === "input" && n.type === "number" && n.getAttribute("aria-label") !== "Context length in tokens");
   const [, , cs, cw] = numbers.length > 3 ? numbers.slice(-2).length ? [0, 0, ...numbers.slice(-2)] : numbers : numbers;

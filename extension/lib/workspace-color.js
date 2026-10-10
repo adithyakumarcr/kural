@@ -111,7 +111,11 @@ async function ask() {
   qp.title = "Workspace Color";
   qp.placeholder = "Pick a color for this workspace's activity bar";
   qp.items = [
-    ...palette.map((c) => ({ label: `$(circle-filled) ${c.name}`, description: c.hex === current ? `${c.hex}  (current)` : c.hex, hex: c.hex })),
+    ...palette.map((c) => {
+      const icon = swatch(c.hex);   // (a dot in the color itself: a Codicon can't take a color per row)
+      return { label: icon ? c.name : `$(circle-filled) ${c.name}`, ...(icon ? { iconPath: icon } : {}),
+        description: c.hex === current ? `${c.hex}  (current)` : c.hex, hex: c.hex };
+    }),
     { label: "", kind: vscode.QuickPickItemKind.Separator },
     { label: "$(edit) Custom... (hex)", custom: true },
     { label: "$(close) Remove color", remove: true },
@@ -151,7 +155,22 @@ async function ask() {
   }
 }
 
+// A small round SVG in the color, saved once in Kural's storage, for the list's icons.
+let swatchDir = null;
+function swatch(hex) {
+  if (!swatchDir || !/^#[0-9a-f]{6}$/i.test(hex)) return null;
+  const fs = require("fs"), path = require("path"), file = path.join(swatchDir, `${hex.slice(1).toLowerCase()}.svg`);
+  try {
+    if (!fs.existsSync(file)) {
+      fs.mkdirSync(swatchDir, { recursive: true });
+      fs.writeFileSync(file, `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="6" fill="${hex}" stroke="#8888" stroke-width="1"/></svg>`);
+    }
+    return vscode.Uri.file(file);
+  } catch { return null; }
+}
+
 function register(context) {
+  swatchDir = require("path").join(context.globalStorageUri.fsPath, "swatches");
   context.subscriptions.push(vscode.commands.registerCommand("kural.workspaceColor", ask));
 }
 
