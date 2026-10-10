@@ -31,6 +31,12 @@
   report** and **Report a bug** (also **Kural: Show Crash Reports**). A common cause: Kural's app was replaced while it
   was still running (an install while Kural was open). `./install.sh` and Kural's own updates now wait until Kural has
   fully closed before replacing it.
+- **Kural won't start on a Mac, "Library not loaded: Electron Framework" (or the Electron Framework is missing):** an
+  older version's update left Kural.app half replaced. Reinstall Kural from the release download for your Mac. Newer
+  updates copy and check the whole app before they replace the old one (see [[Account and Updates]]).
+- **No notifications on a Mac:** allow **Script Editor** and **Kural** in System Settings → Notifications, and turn off
+  Focus / Do Not Disturb. **Kural: Test Notification** shows whether one can get through, and **Kural: Show Log** says
+  why each notification was or wasn't sent (see [[Chat]]).
 - **Mac: the window edges don't show the resize arrows:** this comes from macOS 26 and 27, not from Kural (Kural doesn't
   change the window). macOS made the corners much rounder and moved the area that grabs a corner mostly *outside* the
   window, and on macOS 27 edge resizing fails in other apps too. What works: put the pointer just outside the window's

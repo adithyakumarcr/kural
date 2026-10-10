@@ -41,11 +41,17 @@ your next message, because which tools the model has is fixed when it starts.
 
 ## The model menu (bottom of the chat)
 
-- **Model.** Claude's **Opus**, **Sonnet** or **Haiku**, **Google Gemini** and **ChatGPT (Codex)** models (see
-  [[Google Gemini and ChatGPT]]), or a model **on this computer** (see [[Your Own Model]]). You can switch in the middle of a
+- **Model.** **Auto** (the [[Model Router]] picks a model for each message), Claude's **Opus**, **Sonnet** or **Haiku**,
+  **Google Gemini** and **ChatGPT (Codex)** models (see [[Google Gemini and ChatGPT]]), or a model **on this computer**
+  (see [[Your Own Model]]). Only the AIs you've set up are listed; set one up in Get started or Kural Settings. A model
+  on this computer is listed once you've downloaded one that can chat. You can switch in the middle of a
   conversation, also to another AI: the new model gets the conversation so far. Long chats get an overview that fits
   the next model and a complete local record it can read for earlier details. Switching an AI's account carries that
   record over too.
+- **The gear.** Each section heading in the menu (Auto · Model Router, Claude, Google Gemini, ChatGPT (Codex), On this
+  computer) has a gear button. Auto's opens the Model Router panel; the others open Kural Settings at that AI's card
+  (its connectors, its switch points near a limit, its login). There is no "Configure Model Router…" item any more: use
+  the gear.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
   Medium / High / Max). Google Gemini's models come in thinking levels; the menu lists each model once and the
   intensity picks its level (the nearest one the model has; a line under the buttons says which it has).
@@ -121,10 +127,13 @@ while you're not looking: Kural's window isn't in front, or that chat isn't on s
 once, when the whole team is done; Stop doesn't notify (that was you). Each chat has one notification at a time, and it
 goes away when you answer in Kural or open the chat.
 
-Setting `kural.notifications`: **whenAway** (the default), **always**, or **off**. The first time, macOS asks whether
-Kural may send notifications; if you chose Don't Allow, turn them on in System Settings → Notifications → Kural. (On a
-Kural without its notification support, the system's own way is used: on a Mac that notification shows as Script
-Editor.)
+Setting `kural.notifications`: **whenAway** (the default), **always**, or **off**.
+
+On a Mac, Kural sends the notification with the system's own notification command, so it shows as **Script Editor**:
+macOS silently dropped the app's own notifications. If none shows, go to System Settings → Notifications, allow
+**Script Editor** and **Kural**, and turn off Focus and Do Not Disturb. **Kural: Test Notification** (Command Palette)
+sends one now and says how it was sent. Kural's log (**Kural: Show Log**) says why each notification was or wasn't
+sent. On Ubuntu, Kural uses `notify-send` (package `libnotify-bin`).
 
 ## Your Mac stays awake while a chat works
 
@@ -203,11 +212,17 @@ commits, with the chat's model. Edit it if you like and commit as usual.
 ## Your Claude Code setup
 
 With a Claude model, the chat uses your whole Claude Code setup: MCP servers, connectors, plugins, skills, hooks and
-`CLAUDE.md` files. When you add one, Kural reloads Claude in the same conversation. The model menu shows it on
-Claude's line, next to "Claude": "10 connectors · 30 skills" (click it to see each connector; a warning sign when one
-isn't connected) and a reload button. (Setting `kural.chat.fullClaudeCodeSetup`: off = a faster, minimal setup; that
-line then says "minimal setup", with **use mine** to switch back.) The full Claude Code terminal is one shortcut away:
-**Ctrl+Esc**.
+`CLAUDE.md` files. You manage it in **Kural Settings → Claude card → Connectors**:
+
+- The list shows each connector with its status.
+- **Add**: a name, then a command or a web address. It's added for all your projects (like `claude mcp add -s user`).
+  Claude starts again with it, and your chats continue.
+- **Remove**: the trash icon. Connectors from claude.ai are changed on claude.ai.
+- **Use my Claude Code setup (connectors, plugins, skills)**: the checkbox (setting `kural.chat.fullClaudeCodeSetup`).
+  Off = a faster, minimal setup.
+- **Reload** starts Claude again.
+
+The model menu no longer shows the setup. The full Claude Code terminal is one shortcut away: **Ctrl+Esc**.
 
 ## Asking about Kural
 

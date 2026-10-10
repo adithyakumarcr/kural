@@ -512,8 +512,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Mac/Windows: `afterQuit` writes a script FILE (not `sh -c`: `pgrep -f <app>` would find itself) that waits for Kural's
   main process (`process.ppid`) AND every process running from inside the app (`<app>/Contents/`, the install folder on
   Windows; 20 s, then stopped), then installs. Replacing the app while any helper still ran crashed it ("Kural quit
-  unexpectedly") and the new one sometimes didn't start. Mac swap (`macSteps`): old app → `<app>.kural-old`, `ditto` the
-  new one, back on failure; write access checked BEFORE quitting (`byHand` otherwise). Each step goes to
+  unexpectedly") and the new one sometimes didn't start. Mac swap: `extension/lib/mac-swap.sh` (`kural_swap NEW APP`, shared
+  by `macSteps`, which pastes the file's text into its script, and `install.sh`; `kural_swap_dir` for `--ext`): `ditto` to
+  `<app>.kural-new`, check it's whole (`kural_app_ok`: Contents/MacOS/Kural, Electron Framework incl. Versions/Current, the
+  4 helpers; codesign only warns) BEFORE touching the old app, then old → `<app>.kural-old`, new → app, check again, only
+  then delete `.kural-old`; any failure puts the old app back, and the live app is never deleted without a checked
+  `.kural-old`. (The old swap deleted the app when `mv` failed: "Library not loaded: Electron Framework".) Free space and
+  write access are checked first; write access also BEFORE quitting (`byHand` otherwise). `test/mac-swap.test.js`. Each step goes to
   `<globalStorage>/update.log`; `lastUpdate()` at the next start reports a failure (globalState `kural.update.pending`).
   A quit vetoed by a dialog: a notification after 20 s (the script keeps waiting). The script clears
   `CachedProfilesData/*/extensions.builtin.cache` and drops ELECTRON_*/VSCODE_* env vars. `test/updates-script.test.js`
@@ -568,11 +573,38 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   error, a login), while you're away (setting `kural.notifications`: whenAway / always / off; `onScreen()` =
   `pane.view.visible` / `panel.visible` and the window's focus). One per answer (a team's at the end; none after Stop),
   one per chat at a time (toast id `kural-chat-<tabId>`), cleared when you answer or open the chat; a click shows it.
-  Shown by `_kural.osToast` (rebrand.py patch: VS Code's own native toast, an Electron Notification, so it says Kural on
-  every OS); without the patch: osascript / a PowerShell toast / notify-send (text passed as arguments), else VS Code's
-  in-window notification. macOS asks once (Allow / Don't Allow) and never tells an app it was denied: then nothing shows
-  until System Settings > Notifications > Kural allows it. The test copies share the bundle id com.kural with the real
+  Routes (`Notifier.show` returns the one used): on a Mac osascript FIRST (the Electron toast `_kural.osToast` from an
+  ad-hoc-signed app, re-signed on every install, is dropped silently while it still reports `supported`: that's why
+  notifications "didn't work"), then the toast, then VS Code's in-window notification; elsewhere the toast, then
+  notify-send / a PowerShell toast, then in-window. Every decision is logged (`notifyDecision` gives the reason);
+  "Kural: Test Notification" (`kural.testNotification`) sends one ignoring focus and says the route. osascript can't
+  report clicks: on a Mac a click doesn't open the chat. The test copies share the bundle id com.kural with the real
   app: a toast from them asks about (and changes) the real Kural's permission.
+- **Model menu headings** (`media/chat.js` `mhead`): each AI's heading has a gear (`aiSettings` → `kural.modelRouter` for
+  Auto, else `kural.account <ai>` = Kural Settings scrolled to that card, connectors open). Not-set-up AIs, Claude Code's
+  setup line and "Find & download models" are NOT in the menu (Adithya: clean menu); the Models page opens from Kural
+  Settings (`kural.findModels` → the chat's `openLocal`). Placeholder: "Ask Kural something".
+- **Connectors** (`lib/ai/connectors.js`, no vscode; Kural Settings cards): Claude = `claude mcp list|add -s user|remove`
+  (list does health checks: seconds; the mark before the status varies: ✓ ✗ × !; "claude.ai …" ones are managed on
+  claude.ai, no remove); Codex = `codex mcp list --json|add [--url]|remove`; Gemini (agy) and Ollama: none. A Claude change
+  → `chat.setupChanged()`. Names are checked (`NAME_RE`, never starting with "-"); commands are split without a shell.
+- **Usage switch points** (`lib/ai/usage-switch.js`): `kural.usageSwitch.enabled` + per AI `kural.usageSwitch.limits`
+  {claude|codex|agy: {session, weekly}} (missing → `threshold`). `over(model, settings)` uses `model.limitParts`
+  (`policy.limitParts`: Session windows vs the rest) else `limitUsed`; chat `overLimit(provider, model)`.
+- **Team offer** (`chat.bigTask`/`offerTeam`): Auto mode, one agent, router `classify` says complex (≥ 0.8) edit/other →
+  `teamOffer` card above the box, 15 s (`KURAL_TEAM_OFFER_SECONDS` for tests), answer `teamOfferAnswer`; uses
+  `routingJobs` so Stop cancels it. `bigTask` is checked synchronously first (an await on every send broke fork's
+  stop-before-dispatch timing). **Haiku for well-defined work**: `routingRequest.wellDefined` ("Build it") → `need = 1`
+  in `select` (not Intelligence; a checkpoint still escalates); team prompts start developers with Agent `model: "haiku"`
+  (checked with real Claude Code). `test/team-offer.test.js`, `test/haiku-build.test.js`.
+- **Workspace Color** (`lib/workspace-color.js`, `rebrand.py` `add_workspace_color_item`): six `activityBar*` keys in
+  `workbench.colorCustomizations` + `kural.workspaceColor`, Workspace target, merged; Remove deletes only keys still equal
+  to what Kural wrote. The right-click item is a bundle patch: VS Code builds that menu in
+  `getActivityBarContextMenuActions()` (not a MenuId), the patch pushes one action before its final `return s.push(...)`;
+  found by shape, a miss gives `::warning::` (the command stays in the Command Palette). Verified to apply on VSCodium
+  1.135 (codium.lock); a real click not yet checked. Needs a full `./install.sh` (not `--ext`).
+- **Tests and the built app**: tests that read the built workbench use `test/workbench.js` (`KURAL_WORKBENCH`, the repo's
+  build folders, /Applications/Kural.app) and skip without one. Never hardcode a path on someone's computer.
 - **Moods** (`prompts.js` `MOODS` + setting `kural.chat.moods`, edited in Kural Settings → Moods): your own moods are read
   from user settings only (`inspect().globalValue`: a project's settings can't inject instructions); editing one
   restarts idle chats with the new text. Built-in moods can be removed (Adithya, Default too): `kural.chat.hiddenMoods`,

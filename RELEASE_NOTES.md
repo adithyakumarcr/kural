@@ -1,3 +1,31 @@
+## Not released yet
+
+- **A cleaner model menu.** A gear beside each AI's name opens its settings (Auto: the Model Router). AIs you haven't
+  set up, Claude Code's setup and "Find & download models" are no longer in the menu; "On this computer" shows once you
+  have a model that can chat. The chat box just says "Ask Kural something", in a lighter color.
+- **Connectors in Kural Settings.** The Claude and ChatGPT (Codex) cards list their connectors with each one's status,
+  and you can add one (a command or a web address) or remove one. Claude's card also has "Use my Claude Code setup" and
+  Reload. Gemini can't take connectors in Kural yet.
+- **Switch points for Session and Weekly, per AI.** Kural Settings → AI Usage → "Switch AI near a limit" turns it on;
+  each AI's card says when to move the chat elsewhere: "the Session limit is 70 % used, or a Weekly limit is 70 %
+  used" (Gemini: Weekly only). The old single number is the default for both.
+- **AI Usage shows Session and Weekly first.** Every limit is always visible; only the tokens are folded under "Tokens".
+- **Find & download models** moved to Kural Settings → Your own model (also "Kural: Find and Download Models").
+- **Auto mode offers more agents for a big task.** "This looks like a big task. Use 3 agents?" above the box; no answer
+  in 15 seconds goes on with one agent.
+- **Haiku builds agreed plans.** In Auto (Balance and Cost), "Build it" goes to a light model such as Haiku; a step
+  that keeps failing moves up again. In a Claude team, the developers start on Haiku and the Tester keeps your model.
+- **Workspace Color.** Right-click the activity bar → "Workspace Color..." (or "Kural: Workspace Color..."): each
+  workspace keeps its own activity bar color, saved in its settings.
+- **Fixed: no notification when a task finished, on the Mac.** macOS silently dropped Kural's own notifications (each
+  install is re-signed, so macOS sees a new app). Kural now uses the Mac's own notification command first (it shows as
+  Script Editor). New command "Kural: Test Notification"; Kural's log says why a notification was or wasn't sent.
+- **Fixed: a Mac update or install could leave Kural unable to start** ("Library not loaded: Electron Framework"). The
+  new app is now copied next to the old one and checked (Electron Framework, the four helper apps) before anything is
+  replaced; the old app stays until the new one is in place and checked.
+- **Tests no longer need Kural at a fixed place.** Tests that read the built workbench find it in the build folder or
+  through `KURAL_WORKBENCH`, and skip when there is none.
+
 ## What's new in 1.1.0-alpha.8
 
 - **Add text from the chat to your message.** Select part of an answer (or of a message you sent) and click **Add to

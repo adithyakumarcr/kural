@@ -39,17 +39,20 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
-  beside it: it goes into your message as a quote, and the AI gets the whole selected text. Model menu (bottom of the chat): Claude's Opus/Sonnet/Haiku (with a Claude model,
-  Claude's line also shows its Claude Code setup: "10 connectors · 30 skills", click for each connector, and a reload
-  button), Google Gemini and
-  ChatGPT (Codex) models, or a model on this computer; intensity Low to Max (for Gemini it picks the model's thinking
+  beside it: it goes into your message as a quote, and the AI gets the whole selected text. Model menu (bottom of the chat): Auto (Model Router), Claude's Opus/Sonnet/Haiku, Google Gemini and
+  ChatGPT (Codex) models (only the AIs you've set up), or a model on this computer (once you have one that can chat).
+  The gear beside each name opens its settings: Auto's opens the Model Router; Claude's, Gemini's, ChatGPT's and your
+  own model's open Kural Settings at that AI's card (connectors, when to switch away near a limit); intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you
   step by step and checks what you know first; and your own: "Add your own mood…" at the end of the moods opens Kural
   Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
   there; built-in moods you don't use (Default too) can be removed there with their ×, and Restore brings one back; the
   menu keeps at least one, and a new chat starts with the first mood left; a changed mood or mode applies from the next
   message); Multiple agents (Claude, ChatGPT and Gemini: a project
-  team led by a PM, or a discussion; Kural shares Codex/Gemini agents' reports between phases). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
+  team led by a PM, or a discussion; Kural shares Codex/Gemini agents' reports between phases; with Claude the
+  developers start on Haiku, since the plan is agreed by then, and the Tester keeps your model). In Auto mode with
+  one agent, a big task shows "This looks like a big task. Use 3 agents?" above the box: Use 3 agents turns the team on;
+  One agent (or no answer within 15 s) goes on alone, and "One agent" isn't asked again in that chat. The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
   this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and Kural-managed teams always do
@@ -62,8 +65,10 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Notifications: when an answer is done or needs you (a command or file to allow, a question, a plan to build, an
   error, a login), a system notification names the chat ("Fix the login is done"); click it to go there. By default only
   while you're not looking (Kural's window not in front, or that chat not on screen); setting kural.notifications:
-  whenAway, always, off. A team's answer notifies once, at the end; Stop doesn't. macOS asks once whether Kural may send
-  notifications; if you chose Don't Allow: System Settings > Notifications > Kural. While any chat works, the Mac
+  whenAway, always, off. A team's answer notifies once, at the end; Stop doesn't. On a Mac the notification comes from
+  the system's own notification command and shows as Script Editor; if none shows: System Settings > Notifications,
+  allow Script Editor and Kural, and turn Focus / Do Not Disturb off. "Kural: Test Notification" sends one now and says
+  how it was sent; Kural's log says why each notification was or wasn't sent. On Ubuntu: notify-send (libnotify-bin). While any chat works, the Mac
   doesn't go to sleep by itself (the screen may turn off; closing the lid still sleeps it; macOS only; setting
   kural.chat.keepAwake). Hover a message you sent: Edit (change it and send again: it replaces that message and everything after it; asks
   whether the code goes back too) and Restore code (the files the AI changed after that message go back as they were;
@@ -99,8 +104,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Agent mode; Claude and Codex models, not Gemini or a model on this computer). Click the device's chip
   for a terminal on it. Command Palette "Kural: Devices": terminal, link to the chat, set up again (after reinstalling
   the device: asks the password once more), forget its host key, remove (also takes Kural's key off the device).
-- Your own models: model menu, "Find & download models" (Ollama's models that can use tools, sized for this
-  computer). They work offline.
+- Your own models: Kural Settings → Your own model → "Find & download models…" (or "Kural: Find and Download
+  Models"): Ollama's models that can use tools, sized for this computer. They work offline and show in the model menu
+  once one can chat.
 - Search & Ask (left side bar, magnifier icon), two tabs. Search (Ctrl+Shift+F, Replace Ctrl+Shift+H): find and
   replace in the project's files, everything VS Code's own Search did (Kural hides that one): Match Case, Whole Word,
   Regular Expression, Preserve Case, files to include/exclude (the ... under the box), open editors only, as you type,
@@ -112,7 +118,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review red/green, Accept or Reject.
 - Model Router (Auto in the model menu, like Cursor's): Balance, Cost (saves your usage limits: lightest model that can
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
-  cheaper model). Per message it picks the model and the intensity, only among Claude, Google Gemini and ChatGPT (Codex)
+  cheaper model; "Build it" on an agreed plan goes to a light model such as Haiku in Balance and Cost, and a step that
+  keeps failing moves up again). Per message it picks the model and the intensity, only among Claude, Google Gemini and ChatGPT (Codex)
   models (never a model on this computer: pick those yourself), switching between those AIs with the conversation handed
   over (everything visible: requests, what was sent, answers, steps and results, files changed, plan and to-do list,
   pictures; a long conversation gets an overview sized for the next model and a complete local history file it can
@@ -155,17 +162,18 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
   The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
-- AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): one compact summary per AI, its
-  most used limit and reset time. Details expands the other limits and tokens. Session = the 5-hour limit (Claude and
-  Codex); Gemini has weekly limits.
+- AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): per AI, its Session and Weekly
+  limits with when they reset, always shown; only the tokens are under "Tokens" (click to open). Session = the 5-hour
+  limit (Claude and Codex); Gemini has weekly limits.
   The status bar shows only each AI's Session limit: the chat's AI with when it resets ("Claude Session 50% · resets
   42m"), the others short ("Codex 12%"); Gemini, which has only weekly limits, shows its name. Weekly numbers stay in
   the hover at every usage level; hover for every AI's Session and Weekly limits; orange
   from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
   the cache) and written, today, 7 days and 30 days (every Kural feature: chat, Tab Completion, Ctrl+K…).
-- Kural Settings → AI Usage: "Automatically switch AI" (off by default) and "Switch at" (70% by default, editable
-  from 1 to 99). When a reported Session or Weekly limit for the chat's model reaches it, Kural transfers the same chat
-  with its visible context to another available cloud service below the threshold. It waits for commands, edits,
+- Switching AI near a limit: Kural Settings → AI Usage → "Switch AI near a limit" (off by default) turns it on; each
+  AI's card sets its own points: "Move the chat to another AI when the Session limit is [70] % used or a Weekly limit is
+  [70] % used" (1 to 99; Gemini: Weekly only). When the chat's AI reaches one, Kural transfers the same chat
+  with its visible context to another available cloud service that's below its own points. It waits for commands, edits,
   approvals, background work and agents to finish. A paused request continues there; a completed answer switches for
   the next message. This works with a model you picked yourself and with Auto. Without a suitable service it stays put;
   usage reports can arrive after an answer, so the percentage is a switching trigger, not a hard quota cap.
@@ -178,7 +186,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a card each
   for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan, each usage limit, usage
-  page, switch account, log out, log in, set up; then AI Usage (automatic switching and its threshold), Moods
+  page, switch account, log out, log in, set up; when to switch away from it (Session and Weekly); Connectors (Claude
+  and ChatGPT: the list with each one's status, Add (a name and a command, or a web address; Claude: for all your
+  projects, like "claude mcp add -s user", and Claude starts again with it; ChatGPT: like "codex mcp add", for new
+  ChatGPT chats), remove; claude.ai's own connectors are changed on claude.ai; Claude also: "Use my Claude Code setup"
+  and Reload; Gemini: Kural can't add connectors yet); your own model: Find & download models. Then AI Usage (the switch
+  for moving chats near a limit), Moods
   (your own chat moods: add, edit, delete; remove or restore the built-in ones); then Kural's
   version and Check for updates, Get started, Tab Completion,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
@@ -189,7 +202,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   windows ended) on this computer and offers Show report / Report a bug (copies it; you paste it into the bug form).
   "Kural: Show Crash Reports" lists them.
 - Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings. It
-  installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), puts the old version back if the
+  installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), checks the new copy is whole
+  (on a Mac: the Electron Framework and helper apps) before it touches the old one, puts the old version back if the
   install fails, and says at the next start if it didn't finish. It installs only a release whose checksum list is signed
   by Kural's release key and matches the download; "Kural: Verify this installation..." checks the running version's list.
   After an update (also one installed by hand), the first start opens "What's New in Kural": the release notes of every
@@ -199,6 +213,10 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
   buttons and focus.
+- Workspace Color: right-click the activity bar (the icons on the far left) → "Workspace Color...", or "Kural: Workspace
+  Color...": pick a color (or Custom hex) and the activity bar takes it, so you can tell your workspaces apart. Each
+  workspace keeps its color in its own settings (.vscode/settings.json, or the .code-workspace file); "Remove color"
+  takes off only Kural's colors. Needs a folder open.
 - VS Code's Run and Debug side bar, Debug Console and Ports panels are hidden to keep Kural simple; the setting
   kural.showDebugViews brings them back at once. While you debug (F5), Run and Debug and the Debug Console show anyway.
 - Full guide: ${WIKI}
