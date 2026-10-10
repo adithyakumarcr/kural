@@ -41,7 +41,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
   beside it: it goes into your message as a quote, and the AI gets the whole selected text. Side chat: select text in an
   answer and press Ask (beside Add to chat) to ask a quick question about it right under the answer; a fast model answers
-  (Haiku, or the lightest Gemini/Codex model, or your own model), without tools. It's separate from the conversation (the
+  (Haiku, or the lightest Gemini model, or your own model; not ChatGPT, which can't be limited to answering), without tools. It's separate from the conversation (the
   chat's AI never sees it, it doesn't wait for or stop the main answer) and saved with the answer; follow-ups in the same
   box remember it; Add to chat under a side answer brings that Q&A into your message. Model menu (bottom of the chat): Auto (Model Router), Claude's Opus/Sonnet/Haiku, Google Gemini and
   ChatGPT (Codex) models (only the AIs you've set up), or a model on this computer (once you have one that can chat).
@@ -194,7 +194,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   account / set up. An AI's page: Connectors (Claude and ChatGPT: each with its status, Sign in when one needs it (Codex
   opens its login; Claude opens a terminal where you type /mcp), remove; "Add connector" opens a searchable list: Popular
   ones (Notion, Linear, Sentry, Atlassian, Asana, Stripe, Vercel, Supabase, Hugging Face, Context7, Cloudflare docs,
-  Playwright, GitHub, Filesystem) and the official MCP directory as you type; Add, and fill in a token or folder only if
+  Playwright, GitHub, Filesystem) and the official MCP directory as you type (those show the exact command or address
+  and ask you to confirm: nobody checked them); Add, and fill in a token or folder only if
   it asks; "Add one by hand" at the bottom takes a command or web address; ChatGPT can't use ones that need a key header
   or the older SSE kind; Claude also: "Use my Claude Code setup (plugins, skills)" and Reload; Gemini: no connectors
   yet), then "Switch to another AI near a limit". Your own model's page: Find & download models, change model, context

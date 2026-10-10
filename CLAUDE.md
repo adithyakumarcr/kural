@@ -623,7 +623,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   length. Add connector = `BUILT_IN` (offline) + registry search (`registry.modelcontextprotocol.io/v0/servers`, 6 s,
   parsed defensively; NOT checked live: blocked here; the remote addresses weren't reachable here either). `addArgs`
   builds the CLI args (Claude: name before `-e`, `-H` last because it's variadic; Codex: `--url`, `--env`, no headers, no
-  SSE). The page sends only an item id; the host looks it up (`this.items`). Sign in: Codex `codex mcp login <name>` in a
+  SSE). The page sends only an item id; the host looks it up (`this.items`). Registry data is untrusted: strict npm/pypi name
+  checks (no `user/repo`: npx would run a GitHub repo), env/header names checked and dangerous ones (LD_*, NODE_OPTIONS,
+  PATH…) refused, secrets only over https (or localhost), responses capped at 1 MB, and a registry item never adds in
+  one click (its row shows the exact command/address first). Sign in: Codex `codex mcp login <name>` in a
   terminal; Claude opens `claude` and says `/mcp`. The search box and fields are never redrawn (only the list). GitHub
   is the hosted server + token header (the npm one is deprecated). Learning: `kural.modelRouter.learn` (RouterMemory
   `enabled`), `kural.tabCompletion.learnFromActivity`; the forget commands accept `{quiet:true}`. Tests:
@@ -631,8 +634,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Side chat** (`lib/chat/side.js` no vscode, `media/side.js`; Adithya: "smaller questions and answers then and
   there"): the selection's `.quote-bar` has Ask (only text in an assistant `.answer`, not in `.side`) beside Add to chat.
   `sideAsk` → `SideChats.ask` saves `msg.side = [{id, quote, items:[{q, a, model, at, running?, error?, stopped?}]}]` and
-  runs ONE short-lived agent per question via `brain.makeAgent(brain.fastestModel(), …)` (no tools, effort low, no
-  thinking, `mode: "ask"`; Claude: `systemPrompt` + an empty cwd), streams `sideDelta`, ends with `sideState`. It is NOT
+  runs ONE short-lived agent per question via `brain.makeAgent(brain.fastestModel(prefer, ["codex"]), …)` (Codex is
+  skipped: with approval "never" its MCP servers run unprompted, so it isn't answer-only; agy runs with `--mode plan`
+  and its session-map entry is removed after (`AgyAgent.forget`); no tools, effort low, no thinking; Claude:
+  `systemPrompt` + the shared empty folder `privateTmp("side")`), streams `sideDelta`, ends with `sideState`. It is NOT
   the conversation: no turn, no `tab.status`, no notify; `journal.full()` picks fields, so handoffs and carryOver ignore
   it (a fork copies the threads). One question at a time per thread; 90 s timeout; closing the tab stops it (`stopAll`);
   `clean()` marks running ones stopped. Tests: `test/side-chat.test.js`, `test/side-page.test.js`; live:
