@@ -59,7 +59,8 @@ const setModelSource = (f, fallback) => { modelSource = f; if (fallback) localFa
 // model). The cloud AIs first, the chat's own first among them (the account you're using): Claude's Haiku, or the
 // lightest Codex / Gemini model by the Model Router's tiers ("mini", "flash", "fast and affordable"…: router/policy.js).
 // None set up: your model on this computer.
-function fastestModel(prefer = currentModel()) {
+// skip: AIs not to pick (the side chat can't use Codex: it can't be made answer-only).
+function fastestModel(prefer = currentModel(), skip = []) {
   const { traits } = require("../router/policy");
   const lightest = (id) => {
     const list = (cli[id].models || []).map((m, i) => ({ m, i, t: traits(m) }));
@@ -68,9 +69,11 @@ function fastestModel(prefer = currentModel()) {
   };
   const first = prefer ? engineOf(prefer) : null;
   for (const id of [...new Set([first, "claude", ...CLI_IDS])]) {
+    if (skip.includes(id)) continue;
     if (id === "claude" && isSetUp()) return "haiku";
     if (cli[id] && cli[id].ready && cli[id].bin) return `${id}:${lightest(id)}`;
   }
+  if (prefer && skip.includes(engineOf(prefer))) return localFallback() || null;
   return isLocal(prefer) ? prefer : localFallback() || prefer || null;
 }
 

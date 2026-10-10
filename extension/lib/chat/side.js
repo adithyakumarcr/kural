@@ -51,7 +51,8 @@ function buildPrompt({ request, answer, quote, items, question }) {
 }
 
 class SideChats {
-  // deps: makeAgent(model, opts, local, handlers) · model() the quick model · check(model) → { ok } | { why } ·
+  // deps: makeAgent(model, opts, local, handlers) · model() the quick model · mode(model) the program's mode (default "ask") ·
+  //   emptyDir() one empty folder for Claude · check(model) → { ok } | { why } ·
   //   nameOf(model) short name · isClaude(model) · localOpts(model) · textOf(segments) · cwd() · post(msg) · save()
   constructor(deps) { this.d = deps; this.runs = new Map(); }
 
@@ -87,6 +88,8 @@ class SideChats {
       if (stopped) item.stopped = true;
       else if (error) item.error = clip(squash(error), 300);
       try { run.proc && run.proc.kill(); } catch { /* already gone */ }
+      try { run.proc && run.proc.forget && run.proc.forget(); } catch { /* nothing kept */ }   // (agy's map entry)
+      if (tab.messages.indexOf(msg) < 0) { this.d.save(); return; }   // (the answer is gone: Edit cut it)
       this.d.post(reply()); this.d.save();
     };
     run.stopNow = () => end(null, true);
@@ -94,11 +97,13 @@ class SideChats {
     const request = (() => { const prev = tab.messages[p.index - 1]; return prev && prev.role === "user" ? this.d.textOf(prev.segments || []) : ""; })();
     const prompt = buildPrompt({ request, answer: answerText(msg), quote: th.quote, items: earlier, question });
     const claude = this.d.isClaude(model);
-    const opts = { name: `side ${tab.id}`, effort: "low", noThinking: true, safeMode: true, partial: true, tools: [], allowedTools: [], mode: "ask",
-      // (Claude: an empty folder, so no project files are loaded and it starts faster; the others run where the chat does.)
-      ...(claude ? { systemPrompt: SYSTEM } : { cwd: this.d.cwd(), appendSystemPrompt: SYSTEM }) };
+    const opts = { name: `side ${tab.id}`, effort: "low", noThinking: true, safeMode: true, partial: true, tools: [], allowedTools: [],
+      mode: this.d.mode ? this.d.mode(model) : "ask",
+      // (Claude: one shared empty folder, so no project files are loaded, it starts faster and no folder is made per question;
+      // the others run where the chat does.)
+      ...(claude ? { systemPrompt: SYSTEM, cwd: this.d.emptyDir ? this.d.emptyDir() : undefined } : { cwd: this.d.cwd(), appendSystemPrompt: SYSTEM }) };
     this.runs.set(key, run);
-    const push = (text) => { item.a += text; this.d.post({ type: "sideDelta", tabId: tab.id, index: tab.messages.indexOf(msg), thread: th.id, text }); };
+    const push = (text) => { item.a += text; if (tab.messages.indexOf(msg) < 0) return; this.d.post({ type: "sideDelta", tabId: tab.id, index: tab.messages.indexOf(msg), thread: th.id, text }); };
     try {
       run.proc = this.d.makeAgent(model, opts, this.d.localOpts(model), {
         onMessage: (m) => {
