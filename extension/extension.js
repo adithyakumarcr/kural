@@ -85,6 +85,7 @@ function activate(context) {
   // asked once per Claude Code version, in the background now, so the chat's first answer never waits for it.
   require("./lib/ai/claude").setFlagsStore(context.globalStorageUri.fsPath);
   if (getStarted.claudeReady) require("./lib/ai/claude").prefetchFlags(findClaude()).catch(() => {});
+  require("./lib/workspace-color").register(context);
 
   // ---------- status bar ----------
   const status = vscode.window.createStatusBarItem("kural.status", vscode.StatusBarAlignment.Right, 100);

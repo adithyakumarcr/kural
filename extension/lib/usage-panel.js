@@ -16,6 +16,13 @@ const PROVIDERS = [
   { id: "ollama", name: "Your own model" },   // (no limits: only its tokens, when it has some)
 ];
 
+// The order of one AI's limits on its panel: Session (the 5-hour one), then Weekly, then the others (Weekly (Opus),
+// Weekly (Gemini)…), each group in the order the program reported them. Stable: nothing else moves.
+function orderLimits(windows) {
+  const rank = (w) => usage.isSession(w) ? 0 : usage.limitName(w) === "Weekly" ? 1 : 2;
+  return windows.map((w, i) => ({ w, i, r: rank(w) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.w);
+}
+
 class UsagePanel {
   // account: lib/account.js (refreshUsage, and who's logged in for the plan); getStarted: is Claude set up.
   constructor(context, account, getStarted) {
@@ -42,7 +49,7 @@ class UsagePanel {
       const plan = (who && who.loggedIn && who.plan) ? (p.id === "claude" ? `Claude ${who.plan}` : who.plan) : "";
       return {
         id: p.id, name: p.name, setUp, plan, at: u ? u.at : null, page: p.page || (CLIS[p.id] && CLIS[p.id].usageUrl) || "",
-        windows: u ? (u.windows || []).map((w) => ({ name: usage.limitName(w), used: Math.round(w.usedPercent), resetsAt: w.resetsAt || null, reset: !!w.reset })) : [],
+        windows: u ? orderLimits(u.windows || []).map((w) => ({ name: usage.limitName(w), used: Math.round(w.usedPercent), resetsAt: w.resetsAt || null, reset: !!w.reset })) : [],
         tokens: u && u.tokens ? { input: u.tokens.input, output: u.tokens.output } : null,
         // Tokens read (fresh input + from cache + written to cache) and written (output): today, 7 days, 30 days.
         usage: [1, 7, 30].map((d) => usage.tokenTotals(p.id, d)),
@@ -146,31 +153,31 @@ function page(nonce, csp, codicons) {
     $("sum").textContent = "AI Usage";
     $("list").replaceChildren(...S.list.map((p) => {
       const box = el("div", "prov", el("h3", "", p.name));
-      const main = [...p.windows].sort((a, b) => b.used - a.used)[0];
-      const details = el("details", ""); details.open = expanded.has(p.id);
-      details.append(el("summary", "", "Details"));
-      details.addEventListener("toggle", () => details.open ? expanded.add(p.id) : expanded.delete(p.id));
+      // Every limit is visible, in the order the server gave them (Session, Weekly, then the others).
       for (const w of p.windows) {
         const lvl = w.used >= 95 ? "bad" : w.used >= 80 ? "warn" : "";
         const reset = w.reset ? "reset" : w.resetsAt ? "resets in " + until(w.resetsAt) : "";
         const bar = el("div", "bar " + lvl); const fill = document.createElement("span"); fill.style.width = Math.min(100, w.used) + "%"; bar.append(fill);
-        (w === main ? box : details).append(el("div", "lim",
+        box.append(el("div", "lim",
           el("div", "text", el("span", "", el("span", "name", w.name), " ", el("span", "pct " + lvl, w.used + "% used")), el("span", "muted", reset)), bar));
       }
       const [d1, d7, d30] = p.usage;
+      const details = el("details", ""); details.open = expanded.has(p.id);
+      details.append(el("summary", "", "Tokens"));
+      details.addEventListener("toggle", () => details.open ? expanded.add(p.id) : expanded.delete(p.id));
       if (d30.read || d30.written) {
         // Tokens: what the AI read (your messages, files, the conversation; most of it from the cache) and wrote.
         const row = (label, t) => el("tr", "", el("td", "muted", label), el("td", "num", tok(t.read)), el("td", "num muted", t.read ? Math.round(100 * t.cacheRead / t.read) + "%" : "–"), el("td", "num", tok(t.written)));
         details.append(el("table", "toks", el("tr", "", el("th", ""), el("th", "num", "read"), el("th", "num", "from cache"), el("th", "num", "written")),
           row("Today", d1), row("7 days", d7), row("30 days", d30)));
+        box.append(details);
       } else if (!p.windows.length && p.tokens) box.append(el("div", "lim muted", "Today: " + tok(p.tokens.input) + " tokens in, " + tok(p.tokens.output) + " out"));
       if (!p.windows.length && !p.tokens && !d30.read) box.append(el("div", "lim muted", p.id === "ollama" ? "No plan limits" : "No usage reported yet"));
+      if (p.plan) box.append(el("div", "lim muted", p.plan));
       const links = el("div", "links muted");
       if (p.at) links.append("Updated " + ago(p.at));
       if (p.page) { const a = el("a", "", "usage page"); a.onclick = () => vscode.postMessage({ type: "page", id: p.id }); if (p.at) links.append(" · "); links.append(a); }
-      if (p.plan) details.append(el("div", "muted", p.plan));
-      details.append(links);
-      box.append(details);
+      box.append(links);
       return box;
     }));
   }
@@ -182,4 +189,4 @@ function page(nonce, csp, codicons) {
 </script></body></html>`;
 }
 
-module.exports = { UsagePanel, _page: page };
+module.exports = { UsagePanel, _page: page, _orderLimits: orderLimits };
