@@ -346,6 +346,14 @@ const task=(complexity,intent='edit')=>({complexity,intent});
   for(const p of ['migrate the whole project from javascript to typescript','design the architecture for a payments platform across all services'])assert.strictEqual(classify(p).complexity,'complex',p);
   assert.strictEqual(select(models,{prompt:'whats 2+2',current:'opus',profile:'balance',historyChars:400000},{}).model,'haiku');
  });
+ await check('Auto learning can be switched off: nothing new is learned and nothing learned is used (kural.modelRouter.learn)',()=>{
+  let on=true,saved=null;const mem=new RouterMemory(()=>[],(v)=>saved=v,()=>on),p='refactor the payment module into services';
+  assert.ok(mem.record('better',{prompt:p,model:'haiku',better:'opus'}));
+  on=false;
+  assert.ok(!mem.record('good',{prompt:'write the csv export function',model:'sonnet'}));assert.strictEqual(mem.items.length,1);   // (not learned)
+  assert.deepStrictEqual(mem.advise(p).lean,{});                                                                               // (not used)
+  on=true;assert.ok(mem.advise(p).lean.opus>0);                                                                                 // (kept: back on, it's used again)
+ });
  await check('Auto learns: a model you picked instead leans similar requests its way; undone answers lean away',()=>{
   let saved=null;const mem=new RouterMemory(()=>[],(v)=>saved=v),now=Date.now();
   assert.ok(similarity(words('add a login page with tests'),words('add the login page and its tests'))>.5);

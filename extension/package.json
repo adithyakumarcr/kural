@@ -995,6 +995,11 @@
             "agy": { "type": "object", "properties": { "session": { "type": "integer", "minimum": 1, "maximum": 99 }, "weekly": { "type": "integer", "minimum": 1, "maximum": 99 } } }
           }
         },
+        "kural.modelRouter.learn": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Let Auto learn which models you prefer, from what you do after its answers (you pick another model, undo every change, or carry on). Kept on this computer, per workspace. Off: nothing new is learned and what was learned isn't used. **Kural: Forget What Model Router Learned** deletes it."
+        },
         "kural.modelRouter.profile": {
           "type": "string",
           "enum": [
