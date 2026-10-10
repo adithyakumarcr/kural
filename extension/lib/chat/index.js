@@ -1373,6 +1373,9 @@ class ChatView {
     // While it answers: into the queue (not an edit of an earlier message: that waits for the answer to end).
     if (tab.status !== "idle") { if (editIndex === null) await this.queueSend(tab, segments, contexts, attachIds, requestId); return; }
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
+    // A big task in Auto mode: more agents? (Asked before anything changes: an edit's rewind, Auto's model choice, which
+    // then knows whether a team is wanted.)
+    if (text && this.bigTask(tab, text) && (await this.offerTeam(tab, text)) === "stopped") return;
     // An earlier message edited: the chat goes back to just before it (and the code too, if you say so), then this one is
     // sent in its place.
     if (editIndex !== null && !(await this.rewindTo(tab, editIndex))) return;
@@ -1439,7 +1442,6 @@ class ChatView {
       vscode.commands.executeCommand("kural.getStarted", p.id === "ollama" ? "local" : p.id);
       return;
     }
-    if (text && this.bigTask(tab, text) && (await this.offerTeam(tab, text)) === "stopped") return;
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
@@ -1536,7 +1538,7 @@ class ChatView {
   // not offered).
   // (Checked first without waiting: a send that isn't offered anything goes on in the same step.)
   bigTask(tab, text) {
-    if (tab.mode !== "auto" || tab.team || tab.noTeamOffer || isLocal(tab.model) || !brain.providerOf(tab.model).ready()) return false;
+    if (tab.mode !== "auto" || tab.team || tab.noTeamOffer || isLocal(tab.model) || (!tab.autoRoute && !brain.providerOf(tab.model).ready())) return false;
     const task = require("../router/policy").classify(text);
     return task.complexity === "complex" && task.sizeProbs.complex >= 0.8 && ["edit", "other"].includes(task.intent);
   }
@@ -2405,7 +2407,7 @@ class ChatView {
     const tab = this.tab(this.activeId) || { id: "test", title: "Kural" };
     const route = await this.notify(tab, "done", { force: true, text: "This is a test notification." });
     const names = { toast: "Kural's own notification", os: process.platform === "darwin" ? "the Mac's notification (shown as Script Editor)" : "the system's notification command", app: "a message inside the Kural window", none: "nothing (every way failed; see Kural: Show Log)" };
-    const mac = process.platform === "darwin" ? " If nothing appeared on screen: System Settings → Notifications → allow Script Editor (and Kural), and check that Focus / Do Not Disturb is off." : "";
+    const mac = process.platform === "darwin" ? " If nothing appeared on screen: System Settings → Notifications → allow Script Editor (and Kural), and check that Focus / Do Not Disturb is off. (Clicking a Mac notification opens Script Editor, not the chat.)" : "";
     const linux = process.platform === "linux" ? " If nothing appeared: check that a notification service is running and that notify-send is installed (libnotify-bin)." : "";
     vscode.window.showInformationMessage(`Test notification sent through ${names[route] || route}.${mac}${linux}`);
   }

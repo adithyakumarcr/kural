@@ -86,7 +86,7 @@ const pick = (q, finder) => { q.selectedItems = [q.items.find(finder)]; q.handle
   });
   await check("a pick is saved with the color remembered; other customizations stay; items use icons, no emoji", async () => {
     store["workbench.colorCustomizations"] = { "editor.background": "#101010" };
-    await drive(async (q) => { q.handlers.active([q.items.find((i) => /Blue/.test(i.label))]); await tick(); pick(q, (i) => /Blue/.test(i.label)); });
+    await drive(async (q) => { q.handlers.active([q.items[0]]); q.handlers.active([q.items.find((i) => /Blue/.test(i.label))]); await tick(); pick(q, (i) => /Blue/.test(i.label)); });
     const c = store["workbench.colorCustomizations"];
     assert.strictEqual(c["editor.background"], "#101010"); assert.strictEqual(c["activityBar.background"], "#2f6fdb");
     assert.strictEqual(store["kural.workspaceColor"], "#2f6fdb");
@@ -94,14 +94,22 @@ const pick = (q, finder) => { q.selectedItems = [q.items.find(finder)]; q.handle
     assert.ok(!qp.items.some((i) => /\p{Extended_Pictographic}/u.test(i.label)));
   });
   await check("moving through the list previews; cancel puts the old settings back", async () => {
+    const writesAtOpen = writes.length;
     const before = JSON.parse(JSON.stringify(store["workbench.colorCustomizations"]));
     await drive(async (q) => {
+      q.handlers.active([q.items[0]]); await tick();   // (the list opening: its first item, not a preview)
+      assert.deepStrictEqual(writes.length, writesAtOpen, "opening writes nothing");
       q.handlers.active([q.items.find((i) => /Red/.test(i.label))]); await tick(); await tick();
       assert.strictEqual(store["workbench.colorCustomizations"]["activityBar.background"], "#c0392b", "previewed");
       q.handlers.hide();
     });
     assert.deepStrictEqual(store["workbench.colorCustomizations"], before);
     assert.strictEqual(store["kural.workspaceColor"], "#2f6fdb");
+  });
+  await check("opening the list and pressing Esc writes nothing", async () => {
+    const n = writes.length;
+    await drive(async (q) => { q.handlers.active([q.items[0]]); await tick(); q.handlers.hide(); });
+    assert.strictEqual(writes.length, n);
   });
   await check("custom hex: normalized and saved; cancelling the input changes nothing", async () => {
     inputText = "#e91";

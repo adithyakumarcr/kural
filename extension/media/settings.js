@@ -85,9 +85,13 @@
     const point = (which) => el("input", { class: "in threshold", type: "number", min: "1", max: "99", step: "1", "aria-label": `${which} switch point (% used)`,
       onchange: (e) => { const t = e.target; if (t.reportValidity() && t.value !== "") post({ type: "usageSwitch", ai: id, which, value: Number(t.value) }); } });
     C.session = point("session"); C.weekly = point("weekly");
+    // (A redraw that waited while you typed happens when you leave the field.)
+    for (const f of [C.session, C.weekly]) f.addEventListener("blur", () => setTimeout(() => { if (S && S.cardsWaiting) render(); }, 0));
     C.name = el("input", { class: "in", placeholder: "name, e.g. github", spellcheck: "false" });
+    const later = () => setTimeout(() => { if (S && S.cardsWaiting) render(); }, 0);
     C.kind = el("select", { class: "in" }, el("option", { value: "command" }, "Command"), el("option", { value: "url" }, "Web address"));
     C.value = el("input", { class: "in grow", placeholder: "npx -y @modelcontextprotocol/server-github", spellcheck: "false" });
+    for (const f of [C.name, C.value, C.kind]) f.addEventListener("blur", later);
     C.kind.addEventListener("change", () => { C.value.placeholder = C.kind.value === "url" ? "https://example.com/mcp" : "npx -y @modelcontextprotocol/server-github"; });
     C.details = el("details", { class: "conn" });
     C.details.addEventListener("toggle", () => { C.open = C.details.open; if (C.open) post({ type: "connectors", id }); });
@@ -249,7 +253,7 @@
       M.form.busy = false;
       if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
     }
-    if (m.type === "show") showSection(m.section);
+    if (m.type === "show") { shownSection = m.section; showSection(m.section); }
     if (m.type === "connectorDone" && CTL[m.id]) {
       const C = CTL[m.id];
       if (m.error) C.error = m.error;
@@ -266,13 +270,14 @@
   }
 
   // From the chat's model menu (the gear beside an AI's name): that AI's card, with its connectors open.
+  let shownSection = null;   // (the host keeps sending the section until the page says "shown": scroll once)
   function showSection(section) {
     if (!S) return;
     if (section === "moods") return showMoods();
     if (section === "usage") return showUsage();
     const card = document.getElementById("ai-" + section);
     if (!card) return;
-    if (CTL[section] || (S.connectors || {})[section]) { const C = ctl(section); C.open = true; C.details.open = true; post({ type: "connectors", id: section }); }
+    if (((S.connectors || {})[section] || {}).supported) { const C = ctl(section); C.open = true; C.details.open = true; post({ type: "connectors", id: section }); }
     card.scrollIntoView({ behavior: "smooth", block: "start" });
     post({ type: "shown" });
   }
@@ -305,6 +310,11 @@
         link("bug", "Crash reports", "what went wrong when Kural closed unexpectedly", "crashes"),
         link("book", "Kural guide", "what every feature does", "guide"),
         link("lightbulb", "Ask for a feature", "on GitHub", "feature")));
+    // Typing in an AI's settings (a switch point, a connector): leave the cards as they are until you're done. Redrawing
+    // them moved the field, which took your cursor away and saved a half-typed number ("8" of "85").
+    const typing = Object.values(CTL).some((C) => [C.session, C.weekly, C.name, C.kind, C.value].includes(document.activeElement));
+    if (typing) { S.cardsWaiting = true; return; }
+    S.cardsWaiting = false;
     top.replaceChildren(
       el("header", {},
         el("div", { class: "title" }, el("h1", {}, "Kural Settings"),
@@ -323,7 +333,8 @@
   window.addEventListener("message", (e) => {
     if (e.data.type !== "state") return;
     S = e.data; render();
-    if (S.section) showSection(S.section);   // (opened by "Add your own mood…" or a gear before the page was ready)
+    if (S.section && S.section !== shownSection) { shownSection = S.section; showSection(S.section); }
+    if (!S.section) shownSection = null;   // (opened by "Add your own mood…" or a gear before the page was ready)
   });
   setInterval(() => { if (S) render(); }, 30000);   // ("resets in", "updated … ago")
   post({ type: "ready" });
