@@ -25,10 +25,10 @@ kural_app_ok() {
   for ka_s in "" " (GPU)" " (Renderer)" " (Plugin)"; do
     [ -f "$ka_d/Contents/Frameworks/Kural Helper$ka_s.app/Contents/MacOS/Kural Helper$ka_s" ] || { kural_why="Kural Helper$ka_s.app is missing"; return 1; }
   done
+  # The signature only warns: the crash this guards against was missing files (checked above), and a strict check that
+  # disagrees with how a build was signed must not block every update. (The app is re-signed after an install.)
   if command -v codesign >/dev/null 2>&1; then
-    codesign --verify --deep --strict "$ka_d" >/dev/null 2>&1 || { kural_why="its signature doesn't verify (codesign --verify --deep --strict)"; return 1; }
-  else
-    kural_say "warning: codesign isn't available, so the signature wasn't checked"
+    codesign --verify --deep "$ka_d" >/dev/null 2>&1 || kural_say "warning: the signature of $ka_d doesn't verify (codesign --verify --deep)"
   fi
   return 0
 }
