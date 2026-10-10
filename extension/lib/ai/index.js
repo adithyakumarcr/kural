@@ -169,7 +169,7 @@ class Session {
   }
 }
 
-const localStore = () => require("../profiles/scope").dir("local-chats", "data");
+const localStore = (context) => require("../profiles/scope").dir("local-chats", "data", context && context.globalStorageUri ? context.globalStorageUri.fsPath : undefined);
 
 // "claude" | "ollama" | "codex" | "agy": which program has a chat's conversation.
 const engineOf = (model) => providerOf(model).id;

@@ -1,5 +1,8 @@
 ## Not released yet
 
+- **Profiles.** Make a personal and a work profile (or more), each with its own Claude and ChatGPT accounts, and switch
+  between them with one click in the status bar. Each profile shares chats and history with your main profile, or keeps
+  its own: you choose.
 - **A cleaner model menu.** A gear beside each AI's name opens its settings (Auto: the Model Router). AIs you haven't
   set up, Claude Code's setup and "Find & download models" are no longer in the menu; "On this computer" shows once you
   have a model that can chat. The chat box just says "Ask Kural something", in a lighter color.
