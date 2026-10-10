@@ -129,7 +129,7 @@
       for (const x of K.servers || []) kids.push(el("div", { class: "srv-row" },
         el("span", { class: "dot " + (x.ok ? "ok" : "warn") }), el("strong", {}, x.name),
         el("span", { class: "muted small ell", title: x.target }, x.target), el("span", { class: "grow" }),
-        el("span", { class: "muted small" }, x.status),
+        el("span", { class: "muted small", title: x.why || "" }, x.status),
         x.managed ? el("span", { class: "muted small", title: "Added on claude.ai: change it there" }, "on claude.ai")
           : el("button", { class: "pill-btn", title: `Remove ${x.name}`, "aria-label": `Remove ${x.name}`, disabled: K.busy,
             onclick: () => post({ type: "removeConnector", id: c.id, name: x.name, reqId: Date.now() }) }, icon("trash"))));

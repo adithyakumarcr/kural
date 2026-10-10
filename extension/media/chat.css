@@ -179,6 +179,11 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 /* Queued messages (sent while it answered, not taken in yet): above the box. */
 .queue { margin: 0 0 6px; padding: 4px 8px 5px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
 .queue.hidden { display: none; }
+.offer { margin: 0 0 6px; padding: 5px 8px; border-radius: 7px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.offer.hidden { display: none; }
+.offer-text { flex: 1 1 auto; min-width: 0; }
+.offer-left { font-size: calc(11px * var(--fs, 1)); }
 .queue-head { font-size: calc(11px * var(--fs, 1)); color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .queue-item { font-size: calc(12px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 18px; }
 /* A message you sent while it answered, taken into that answer. */

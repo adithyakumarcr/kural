@@ -48,6 +48,7 @@ const MODES = [
   { id: "ask", label: "Ask", hint: "answers only" },
 ];
 const TEAM_SIZES = [2, 3, 4, 5];
+const TEAM_OFFER_SECONDS = Number(process.env.KURAL_TEAM_OFFER_SECONDS) || 15;   // (env: tests)
 // A model on your own computer (Ollama) is saved as "ollama:<name>", e.g. "ollama:qwen3-coder:30b".
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
@@ -115,6 +116,7 @@ class ChatView {
     this.pulls = new Map();        // model downloads in progress: name -> { percent, status }
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
+    this.teamOffers = new Map();  // offer id -> answer it ("team" | "one")
     this.changes = new ChangeTracker(path.join(context.globalStorageUri.fsPath, "checkpoints"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
@@ -954,7 +956,7 @@ class ChatView {
   routingRequest(tab, text, attachments = [], contexts = []) {
     return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
       historyChars: ChatView.conversationSize(tab), context: ChatView.routingContext(contexts, attachments),
-      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto",
+      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
       team: tab.team > 1, device: !!tab.device, connectors: !!tab.ticket,
       images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
   }
@@ -1437,6 +1439,7 @@ class ChatView {
       vscode.commands.executeCommand("kural.getStarted", p.id === "ollama" ? "local" : p.id);
       return;
     }
+    if (text && this.bigTask(tab, text) && (await this.offerTeam(tab, text)) === "stopped") return;
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
@@ -1525,6 +1528,40 @@ class ChatView {
     delete tab.carryOver;
     log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
     this.save();
+  }
+
+  // Auto mode, one agent, and a big task (the router's reading of the request): Kural offers more agents for 15 s above
+  // the box (Adithya). Yes: the team turns on for this chat. No answer: this message goes on with one agent. "One agent":
+  // not offered again in this chat. Stop while it waits: nothing is sent. Returns "team", "one" or "stopped" (or null:
+  // not offered).
+  // (Checked first without waiting: a send that isn't offered anything goes on in the same step.)
+  bigTask(tab, text) {
+    if (tab.mode !== "auto" || tab.team || tab.noTeamOffer || isLocal(tab.model) || !brain.providerOf(tab.model).ready()) return false;
+    const task = require("../router/policy").classify(text);
+    return task.complexity === "complex" && task.sizeProbs.complex >= 0.8 && ["edit", "other"].includes(task.intent);
+  }
+  async offerTeam(tab, text) {
+    if (!this.bigTask(tab, text)) return null;
+    const n = TEAM_SIZES[1], id = `${tab.id}:${Date.now()}`, seconds = TEAM_OFFER_SECONDS;
+    const ctl = new AbortController(); this.routingJobs.set(tab.id, ctl);
+    tab.status = "running"; tab.routingState = "Waiting for your choice…"; this.postTabs();
+    this.post({ type: "teamOffer", tabId: tab.id, id, agents: n, seconds });
+    log(`chat ${tab.id}: a big task in Auto: offered ${n} agents`);
+    const answer = await new Promise((resolve) => {
+      const done = (v) => { clearTimeout(timer); this.teamOffers.delete(id); resolve(v); };
+      const timer = setTimeout(() => done("timeout"), seconds * 1000);
+      this.teamOffers.set(id, done);
+      ctl.signal.addEventListener("abort", () => done("stopped"));
+    });
+    if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
+    this.post({ type: "teamOfferDone", tabId: tab.id, id });
+    if (answer === "stopped" || !this.tab(tab.id)) { log(`chat ${tab.id}: stopped while offering agents`); return "stopped"; }
+    delete tab.routingState; tab.status = "idle";
+    if (answer === "team") { tab.team = n; this.afterTeamChange(tab, true); log(`chat ${tab.id}: ${n} agents (you said yes)`); return "team"; }
+    if (answer === "one") tab.noTeamOffer = true;
+    log(`chat ${tab.id}: one agent (${answer === "one" ? "you chose it" : `no answer in ${seconds} s`})`);
+    this.postTabs();
+    return "one";
   }
 
   // What the AI is told for this chat's mode, mood and team (the parts of its instructions you can change mid-chat).
@@ -2497,6 +2534,7 @@ class ChatView {
         await this.buildPlan(tab);
       } break;
       case "finishTeam": if (tab) this.finishTeam(tab); break;
+      case "teamOfferAnswer": { const f = this.teamOffers.get(m.id); if (f) f(m.use ? "team" : "one"); break; }
       case "stop": {
         const stopping = this.runtime.get(tab.id); if (stopping) { stopping.userStopped = true; delete stopping.usageHandoff; }
         const routing = this.routingJobs.get(tab.id);

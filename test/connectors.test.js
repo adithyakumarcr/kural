@@ -8,9 +8,10 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
 (async () => {
   await check("Claude's list: name, what it runs, status; claude.ai's own are marked", () => {
     const out = C.parseClaudeList("Checking MCP server health...\n\ngithub: npx -y @modelcontextprotocol/server-github - ✓ Connected\n" +
-      "claude.ai Atlassian: https://mcp.atlassian.com/v1/sse - ! Needs authentication\nbroken: node x.js - ✗ Failed to connect\n");
+      "claude.ai Atlassian: https://mcp.atlassian.com/v1/sse - ! Needs authentication\nbroken: node x.js - ✗ Failed to connect\nweb: https://x.dev/mcp (HTTP) - × Failed to connect — ERR_PROXY: 403\n");
     assert.deepStrictEqual(out.map((x) => [x.name, x.ok, x.managed, x.status]), [["github", true, "", "Connected"],
-      ["claude.ai Atlassian", false, "claude.ai", "Needs authentication"], ["broken", false, "", "Failed to connect"]]);
+      ["claude.ai Atlassian", false, "claude.ai", "Needs authentication"], ["broken", false, "", "Failed to connect"], ["web", false, "", "Failed to connect"]]);
+    assert.strictEqual(out[3].why, "ERR_PROXY: 403");
     assert.strictEqual(out[0].target, "npx -y @modelcontextprotocol/server-github");
     assert.deepStrictEqual(C.parseClaudeList("No MCP servers configured. Use `claude mcp add` to add a server."), []);
   });
