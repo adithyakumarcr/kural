@@ -11,12 +11,23 @@ const vscode = require("vscode");
 const KEYS = ["activityBar.background", "activityBar.foreground", "activityBar.inactiveForeground", "activityBar.activeBorder",
   "activityBarBadge.background", "activityBarBadge.foreground"];
 
-const COLORS = [
-  { name: "Red", hex: "#c0392b" }, { name: "Orange", hex: "#b84a00" }, { name: "Yellow", hex: "#f1c40f" },
-  { name: "Green", hex: "#25784a" }, { name: "Teal", hex: "#0b7676" }, { name: "Blue", hex: "#2f6fdb" },
-  { name: "Indigo", hex: "#4b3fb5" }, { name: "Purple", hex: "#8e44ad" }, { name: "Pink", hex: "#c2336d" },
-  { name: "Brown", hex: "#7b5238" }, { name: "Gray", hex: "#5f6b73" },
+// Two palettes of the same names, so the bar matches the theme: DARK (deep, muted: for dark themes, so the bar does not
+// glare next to the dark editor) and LIGHT (soft pastels: for light themes). Every color passes 4.5:1 with its foreground.
+const DARK = [
+  { name: "Red", hex: "#642b2b" }, { name: "Orange", hex: "#6d472c" }, { name: "Yellow", hex: "#6d5e2c" },
+  { name: "Green", hex: "#2b5a33" }, { name: "Teal", hex: "#265958" }, { name: "Blue", hex: "#2e476b" },
+  { name: "Indigo", hex: "#3b3267" }, { name: "Purple", hex: "#513465" }, { name: "Pink", hex: "#68314d" },
+  { name: "Brown", hex: "#50382b" }, { name: "Gray", hex: "#273549" },
 ];
+const LIGHT = [
+  { name: "Red", hex: "#edc0c0" }, { name: "Orange", hex: "#eacfb8" }, { name: "Yellow", hex: "#eae4b8" },
+  { name: "Green", hex: "#bfe3c5" }, { name: "Teal", hex: "#b8e0df" }, { name: "Blue", hex: "#b0cce8" },
+  { name: "Indigo", hex: "#c8caea" }, { name: "Purple", hex: "#dbc9e8" }, { name: "Pink", hex: "#edc9d8" },
+  { name: "Brown", hex: "#dbc4b3" }, { name: "Gray", hex: "#d6dfeb" },
+];
+
+// ColorThemeKind: 1 = Light, 4 = High Contrast Light; everything else is a dark theme
+const paletteFor = (kind) => (kind === 1 || kind === 4 ? LIGHT : DARK);
 
 // "#abc" / "#aabbcc" (any case) -> "#aabbcc", else null
 function normalizeHex(text) {
@@ -95,11 +106,12 @@ async function ask() {
   }
   const before = savedCustomizations();           // put back when you cancel (or pick Custom / Remove)
   const current = savedColor();
+  const palette = paletteFor(vscode.window.activeColorTheme && vscode.window.activeColorTheme.kind);
   const qp = vscode.window.createQuickPick();
   qp.title = "Workspace Color";
   qp.placeholder = "Pick a color for this workspace's activity bar";
   qp.items = [
-    ...COLORS.map((c) => ({ label: `$(circle-filled) ${c.name}`, description: c.hex === current ? `${c.hex}  (current)` : c.hex, hex: c.hex })),
+    ...palette.map((c) => ({ label: `$(circle-filled) ${c.name}`, description: c.hex === current ? `${c.hex}  (current)` : c.hex, hex: c.hex })),
     { label: "", kind: vscode.QuickPickItemKind.Separator },
     { label: "$(edit) Custom... (hex)", custom: true },
     { label: "$(close) Remove color", remove: true },
@@ -143,4 +155,4 @@ function register(context) {
   context.subscriptions.push(vscode.commands.registerCommand("kural.workspaceColor", ask));
 }
 
-module.exports = { register, ask, normalizeHex, luminance, contrast, foregroundFor, colorsFor, mergeColors, removeColors, KEYS, COLORS };
+module.exports = { register, ask, normalizeHex, luminance, contrast, foregroundFor, colorsFor, mergeColors, removeColors, paletteFor, KEYS, DARK, LIGHT };
