@@ -111,6 +111,44 @@ const item = (id) => K.BUILT_IN.find((b) => b.id === id);
     assert.match(K.addArgs("claude", { name: "X", kind: "remote", url: "ftp://x" }).error, /no usable address/);
   });
 
+  await check("registry names go through strict checks (no GitHub shortcuts, no odd variables or headers)", () => {
+    const one = (pk) => K.fromRegistryServer({ name: "io.x/y", packages: [pk] });
+    for (const id of ["user/repo", "attacker/repo", "github:a/b", "https://x.example/p.tgz", "-y", "../x", "@a/b/c", "a b"])
+      assert.strictEqual(one({ registryType: "npm", identifier: id }), null, id);
+    for (const id of ["@scope/pkg", "pkg", "pkg@1.2.3", "@scope/pkg@latest"]) assert.ok(one({ registryType: "npm", identifier: id }), id);
+    for (const id of ["user/repo", "pkg@1", "git+https://x/y", "-x"]) assert.strictEqual(one({ registryType: "pypi", identifier: id }), null, id);
+    assert.ok(one({ registryType: "pypi", identifier: "py-tools[cli]" }));
+    const env = (name) => one({ registryType: "npm", identifier: "p", environmentVariables: [{ name, isRequired: true }] });
+    for (const n of ["--scope=x", "A B", "NODE_OPTIONS", "LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "PATH", "PYTHONPATH", "HOME", "NODE_PATH", "A=B"]) assert.strictEqual(env(n), null, n);
+    assert.strictEqual(env("MY_KEY").inputs[0].env, "MY_KEY");
+    const hdr = (name, url = "https://k.example/mcp") => K.fromRegistryServer({ name: "io.x/k", remotes: [{ type: "streamable-http", url, headers: [{ name, isRequired: true }] }] });
+    for (const n of ["X\nEvil: 1", "A B", "a:b", "x".repeat(65)]) assert.strictEqual(hdr(n), null, JSON.stringify(n));
+    assert.strictEqual(hdr("X-Api-Key").inputs[0].header, "X-Api-Key");
+    assert.strictEqual(hdr("X-Api-Key", "http://k.example/mcp"), null);                     // a key over plain http
+    assert.ok(hdr("X-Api-Key", "http://localhost:3000/mcp")); assert.ok(hdr("X-Api-Key", "http://127.0.0.1/mcp"));
+    // a hand-made item (not through the parser) is checked again when adding
+    assert.match(K.addArgs("claude", { name: "E", kind: "npm", package: "p", inputs: [{ key: "k", label: "K", env: "--scope=x" }] }, { k: "v" }).error, /won't pass/);
+    assert.match(K.addArgs("claude", { name: "E", kind: "remote", url: "https://x.example/m", inputs: [{ key: "k", label: "K", header: "A\nB" }] }, { k: "v" }).error, /won't pass/);
+    assert.match(K.addArgs("claude", { name: "E", kind: "remote", url: "http://x.example/m", inputs: [{ key: "k", label: "K", header: "X-K" }] }, { k: "v" }).error, /https/);
+    assert.match(K.addArgs("claude", { name: "E", kind: "npm", package: "user/repo", from: "registry" }).error, /package name/);
+    assert.deepStrictEqual(K.addArgs("claude", { name: "E", kind: "npm", package: "p", inputs: [{ key: "k", label: "K", env: "MY_KEY" }] }, { k: "-x" }).args.slice(5, 8), ["-e", "MY_KEY=-x", "--"]);
+  });
+
+  await check("forAi says exactly what will run; the registry reader refuses a huge answer", async () => {
+    assert.strictEqual(K.forAi("claude", { name: "N", kind: "npm", package: "@a/b" }).shows, "npx -y @a/b");
+    assert.strictEqual(K.forAi("claude", { name: "N", kind: "pypi", package: "p" }).shows, "uvx p");
+    assert.strictEqual(K.forAi("claude", { name: "N", kind: "remote", url: "https://x.example/m" }).shows, "https://x.example/m");
+    const real = global.fetch, body = (n) => new Response(JSON.stringify({ servers: [], pad: "x".repeat(n) }));
+    try {
+      global.fetch = async () => body(2 << 20);
+      assert.match((await K.search("a")).note, /Couldn't reach/);
+      global.fetch = async () => { const r = body(10); Object.defineProperty(r.headers, "get", { value: () => "5000000" }); return r; };
+      assert.match((await K.search("a")).note, /Couldn't reach/);
+      global.fetch = async () => new Response(JSON.stringify({ servers: [{ name: "io.x/ok", packages: [{ registryType: "npm", identifier: "ok" }] }] }));
+      assert.deepStrictEqual((await K.search("zzzz")).items.map((x) => x.id), ["reg:io.x/ok"]);
+    } finally { global.fetch = real; }
+  });
+
   console.log(failed ? `connector-catalog: ${failed} FAILED` : "connector-catalog: ALL PASS");
   process.exitCode = failed ? 1 : 0;
 })();

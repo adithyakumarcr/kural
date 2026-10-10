@@ -213,8 +213,11 @@
   }
   // Already there: a connector with this address or package (Claude shows the address with "(HTTP)" after it).
   function isAdded(item) {
-    const url = (item.url || "").replace(/\/$/, ""), pkg = item.package || "";
-    return (connOf(CAT.ai).servers || []).some((s) => (url && s.target.includes(url)) || (pkg && s.target.includes(pkg)));
+    const norm = (u) => String(u || "").trim().replace(/\s+\((?:HTTP|SSE)\)$/i, "").replace(/\/+$/, "").toLowerCase();
+    const url = norm(item.url), pkg = (item.package || "").toLowerCase();
+    // (the address as a whole, or the package as a whole word, with or without @version: "notion" is not "notion-helper")
+    return (connOf(CAT.ai).servers || []).some((s) => (url && norm(s.target) === url)
+      || (pkg && String(s.target).toLowerCase().split(/\s+/).some((w) => w === pkg || w.startsWith(pkg + "@"))));
   }
   function fieldsFor(item) {
     if (CAT.fields[item.id]) return CAT.fields[item.id];
@@ -227,7 +230,8 @@
   }
   function startAdd(item) {
     if (CAT.adding) return;
-    if ((item.inputs || []).length && CAT.expanded !== item.id) {
+    // (Directory items are never added in one click: you see what will run first.)
+    if (((item.inputs || []).length || item.from === "registry") && CAT.expanded !== item.id) {
       CAT.expanded = item.id; renderCatalogList(true);
       const first = Object.values(fieldsFor(item))[0]; if (first && first.focus) first.focus();
     } else submitItem(item);
@@ -246,6 +250,8 @@
   function fieldsBox(item) {
     const F = fieldsFor(item);
     return el("div", { class: "cat-fields" },
+      item.from === "registry" ? el("div", { class: "muted small" }, "From the public MCP directory, not checked by Kural.") : null,
+      item.from === "registry" && item.shows ? el("code", { class: "cat-cmd" }, item.shows) : null,
       (item.inputs || []).map((i) => el("label", { class: "field" }, el("span", { class: "flabel" }, i.label),
         el("div", { class: "row" }, F[i.key],
           i.folder ? el("button", { class: "btn", onclick: () => { CAT.folder = { item: item.id, key: i.key, reqId: Date.now() }; post({ type: "pickFolder", reqId: CAT.folder.reqId }); } }, icon("folder"), " Browse") : null),
