@@ -8,13 +8,13 @@ const { execFile } = require("child_process");
 const SUPPORTED = { claude: true, codex: true };
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 
-function run(bin, args, env, timeout = 30000) {
+function run(bin, args, env, timeout = 30000, cwd = os.tmpdir()) {
   // (A .js program, like the tests' fakes, runs with Kural's own Node.)
   const js = /\.js$/i.test(bin);
   const file = js ? process.execPath : bin, all = js ? [bin, ...args] : args;
   return new Promise((resolve) => {
     try {
-      const p = execFile(file, all, { cwd: os.tmpdir(), env: { ...(env || process.env), ...(js ? { ELECTRON_RUN_AS_NODE: "1" } : {}) },
+      const p = execFile(file, all, { cwd, env: { ...(env || process.env), ...(js ? { ELECTRON_RUN_AS_NODE: "1" } : {}) },
         timeout, encoding: "utf8", windowsHide: true, maxBuffer: 1 << 20 }, (error, stdout, stderr) =>
         resolve({ ok: !error, stdout: stdout || "", stderr: stderr || "", timeout: !!(error && error.killed) }));
       if (p.stdin) { p.stdin.on("error", () => {}); p.stdin.end(); }
@@ -78,11 +78,12 @@ function addArgs(ai, c) {
 
 const firstLine = (r) => (String(r.stderr || "").trim() || String(r.stdout || "").trim()).split(/\r?\n/).filter(Boolean).slice(-1)[0] || "";
 
-async function list(ai, bin, env) {
+// cwd: the project folder (trusted only), so Claude lists its project connectors (.mcp.json) too: the ones its chats use.
+async function list(ai, bin, env, cwd) {
   if (!SUPPORTED[ai]) return { supported: false, servers: [] };
   if (!bin) return { supported: true, servers: [], error: "not installed" };
   // (Claude checks each server's health: slow with many. Codex only reads its settings.)
-  const r = ai === "claude" ? await run(bin, ["mcp", "list"], env, 60000) : await run(bin, ["mcp", "list", "--json"], env, 20000);
+  const r = ai === "claude" ? await run(bin, ["mcp", "list"], env, 60000, cwd || os.tmpdir()) : await run(bin, ["mcp", "list", "--json"], env, 20000);
   if (!r.ok) return { supported: true, servers: [], error: r.timeout ? "it took too long to answer" : firstLine(r) || "it couldn't list them" };
   const servers = ai === "claude" ? parseClaudeList(r.stdout) : parseCodexList(r.stdout);
   return servers ? { supported: true, servers } : { supported: true, servers: [], error: "its answer couldn't be read" };
@@ -96,9 +97,9 @@ async function add(ai, bin, env, c) {
   return r.ok ? { ok: true } : { error: firstLine(r) || "It couldn't add the connector." };
 }
 
-async function remove(ai, bin, env, name) {
+async function remove(ai, bin, env, name, cwd) {
   if (!SUPPORTED[ai] || !bin || !NAME_RE.test(String(name || ""))) return { error: "Kural can't remove this one." };
-  const r = await run(bin, ["mcp", "remove", name], env);
+  const r = await run(bin, ["mcp", "remove", name], env, 30000, cwd || os.tmpdir());
   return r.ok ? { ok: true } : { error: firstLine(r) || "It couldn't remove the connector." };
 }
 

@@ -107,7 +107,13 @@ async function ask() {
   // The preview writes the setting (it is how the bar changes), one write after another.
   let chain = Promise.resolve(), done = false;
   const write = (value) => { chain = chain.then(() => workbench().update("colorCustomizations", value, WS())).catch(() => {}); return chain; };
-  qp.onDidChangeActive((active) => { if (!done && active[0] && active[0].hex) write(mergeColors(before, active[0].hex)); });
+  // (The list's first item becomes active when it opens: not a preview, or opening and pressing Esc would leave a new
+  // .vscode/settings.json behind.)
+  let opened = false, previewed = false;
+  qp.onDidChangeActive((active) => {
+    if (!opened) { opened = true; if (active[0] === qp.items[0]) return; }
+    if (!done && active[0] && active[0].hex) { previewed = true; write(mergeColors(before, active[0].hex)); }
+  });
   const choice = await new Promise((resolve) => {
     qp.onDidAccept(() => { done = true; resolve(qp.selectedItems[0] || null); qp.hide(); });
     qp.onDidHide(() => { done = true; resolve(null); });
@@ -115,7 +121,7 @@ async function ask() {
   });
   qp.dispose();
   try {
-    await write(before);                          // back to how it was; the choice below saves for real
+    if (previewed) await write(before);           // back to how it was; the choice below saves for real
     if (!choice) return;
     if (choice.remove) { await clear(); return; }
     let hex = choice.hex;

@@ -3,7 +3,9 @@
 // command or file to allow, a device command, a question, a plan to build, an error, a login. Only while you're not
 // looking (setting kural.notifications "whenAway", the default: Kural's window isn't in front, or that chat isn't on
 // screen); "always"; "off". Each chat has one notification at a time (a new one replaces it), and it's taken away when
-// you answer in Kural or open that chat. Clicking it brings Kural to the front and shows the chat.
+// you answer in Kural or open that chat. Clicking it brings Kural to the front and shows the chat. (Not on a Mac, where
+// the osascript notification goes first: it can't be clicked through to Kural, replaced or taken away, and doesn't
+// bounce the Dock icon. The price of one that actually shows; see Notifier.routes.)
 //
 // How: VS Code shows a real system notification as Kural on every OS (its hostService.showToast, an Electron
 // Notification). Extensions can't reach it, so rebrand.py registers a command for it (Ross: _kural.osToast

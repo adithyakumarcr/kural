@@ -515,7 +515,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   unexpectedly") and the new one sometimes didn't start. Mac swap: `extension/lib/mac-swap.sh` (`kural_swap NEW APP`, shared
   by `macSteps`, which pastes the file's text into its script, and `install.sh`; `kural_swap_dir` for `--ext`): `ditto` to
   `<app>.kural-new`, check it's whole (`kural_app_ok`: Contents/MacOS/Kural, Electron Framework incl. Versions/Current, the
-  4 helpers; codesign only warns) BEFORE touching the old app, then old → `<app>.kural-old`, new → app, check again, only
+  4 helpers; no codesign: slow, and only files were ever missing) BEFORE touching the old app, then old → `<app>.kural-old`, new → app, check again, only
   then delete `.kural-old`; any failure puts the old app back, and the live app is never deleted without a checked
   `.kural-old`. (The old swap deleted the app when `mv` failed: "Library not loaded: Electron Framework".) Free space and
   write access are checked first; write access also BEFORE quitting (`byHand` otherwise). `test/mac-swap.test.js`. Each step goes to

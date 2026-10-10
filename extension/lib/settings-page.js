@@ -43,13 +43,19 @@ class SettingsPage {
     if (id === "claude") { const c = require("./ai/claude"); return { bin: c.findClaude(), env: c.cleanEnv() }; }
     return { bin: brain.cli && brain.cli[id] ? brain.cli[id].bin : null, env: process.env };
   }
+  // The project folder, when you trust it (Claude then lists the project's own connectors too, and starts them to check).
+  projectDir() {
+    const f = vscode.workspace.workspaceFolders;
+    return vscode.workspace.isTrusted && f && f.length && f[0].uri.scheme === "file" ? f[0].uri.fsPath : undefined;
+  }
   // List an AI's connectors (asked when its card shows; Claude checks each one, which takes a few seconds).
   async loadConnectors(id, force) {
     if (!connectors.SUPPORTED[id]) return;
     const c = this.conn[id] || (this.conn[id] = {});
     if (c.loading || (!force && c.at && Date.now() - c.at < 60000)) return;
     c.loading = true; this.push();
-    try { const { bin, env } = this.program(id); Object.assign(c, await connectors.list(id, bin, env), { at: Date.now() }); }
+    try { const { bin, env } = this.program(id); Object.assign(c, await connectors.list(id, bin, env, this.projectDir()), { at: Date.now() }); }
+    catch (e) { Object.assign(c, { servers: [], error: e.message, at: Date.now() }); }
     finally { c.loading = false; this.push(); }
   }
   // After a connector was added or removed: Claude's chats start again with it (same conversations); Codex reads its
@@ -201,8 +207,8 @@ class SettingsPage {
         let r;
         try {
           const { bin, env } = this.program(m.id);
-          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name);
-        } finally { c.busy = false; }
+          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name, this.projectDir());
+        } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
         if (this.panel) this.panel.webview.postMessage({ type: "connectorDone", id: m.id, reqId: m.reqId, error: r.error || "" });
         if (r.ok) this.afterConnectorChange(m.id); else this.push();
         break;
