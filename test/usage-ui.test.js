@@ -38,8 +38,11 @@ check("AI Usage stays compact, expands details, remembers the expansion and link
     usage: [1, 7, 30].map(() => ({ read: 200, cacheRead: 100, written: 20 })) }] };
   d.message(state);
   const provider = d.document.getElementById("list").children[0], details = provider.children.find((n) => n.tag === "details");
-  assert.strictEqual(details.open, false); assert.ok(provider.children.filter((n) => n.tag !== "details").some((n) => /Weekly.*70%/.test(n.textContent)));
-  assert.match(details.textContent, /Session.*50%/); assert.match(details.textContent, /Today.*7 days.*30 days/);
+  // Session and Weekly are always visible; only the tokens are collapsed (summary "Tokens").
+  assert.strictEqual(details.open, false); assert.strictEqual(details.children[0].textContent, "Tokens");
+  const visible = provider.children.filter((n) => n.tag !== "details").map((n) => n.textContent).join(" | ");
+  assert.match(visible, /Session.*50%/); assert.match(visible, /Weekly.*70%/); assert.match(visible, /Pro/);
+  assert.match(details.textContent, /Today.*7 days.*30 days/); assert.doesNotMatch(details.textContent, /Session|Weekly/);
   details.open = true; details.trigger("toggle"); d.message(state);
   assert.strictEqual(d.document.getElementById("list").children[0].children.find((n) => n.tag === "details").open, true);
   d.document.getElementById("acc").trigger("click"); assert.strictEqual(d.sent.at(-1).type, "accounts");
