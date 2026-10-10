@@ -28,6 +28,7 @@ const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPr
 const { profileOf, limitUsed, limitParts } = require("../router/policy");
 const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
+const { SideChats } = require("./side");
 const scope = require("../profiles/scope");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
@@ -119,6 +120,15 @@ class ChatView {
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
     this.teamOffers = new Map();  // offer id -> answer it ("team" | "one")
+    // Side chat: a quick question about part of an answer, answered under it (side.js). Not part of the conversation.
+    this.sideChats = new SideChats({
+      makeAgent: (model, opts, local, handlers) => brain.makeAgent(model, opts, local, handlers),
+      model: () => brain.fastestModel(), check: (model) => brain.usable(model), isClaude: (model) => brain.engineOf(model) === "claude",
+      nameOf: (model) => brain.engineOf(model) === "claude" ? model[0].toUpperCase() + model.slice(1) : isLocal(model) ? localName(model) : model.replace(/^[a-z]+:/, "").replace(/^default$/, brain.providerOf(model).label),
+      localOpts: (model) => isLocal(model) ? { tools: [], allowedTools: [], capabilities: [], store: brain.localStore(this.context) } : null,
+      textOf: (segments) => ChatView.textOf(segments), cwd: () => this.root() || ws.workDir(),
+      post: (msg) => this.post(msg), save: () => this.save(),
+    });
     this.changes = new ChangeTracker(scope.dir("checkpoints", "data"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
@@ -412,6 +422,7 @@ class ChatView {
     const tab = this.tab(id);
     if (!tab) return;
     const routing = this.routingJobs.get(id); if (routing) { routing.abort(); this.routingJobs.delete(id); }
+    this.sideChats.stopAll(id);
     const r = this.runtime.get(id);
     if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
@@ -564,6 +575,7 @@ class ChatView {
     // Back in the profile that holds the conversation: it can be resumed after all (the marker is ours, not an account change's).
     else if (t.profileFresh && (t.profile || "default") === scope.profileId()) { if (t.freshSession === "account") delete t.freshSession; delete t.profileFresh; }
     const roots = this.projectRoots(t);
+    SideChats.clean(t.messages);
     for (const m of t.messages) if (m.role === "assistant") {
       if (m.running) { m.running = false; m.error = m.error || "stopped"; }
       for (const b of m.blocks || []) {
@@ -676,7 +688,7 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("facts.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("facts.js")}"></script><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
     webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
     return pane;
   }
@@ -2491,6 +2503,9 @@ class ChatView {
       case "openWorkspace": this.openWorkspaceOf(m.id); break;
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
         Number.isInteger(m.editIndex) ? m.editIndex : null); break;
+      // Side chat (lib/chat/side.js): a quick question under an answer. Never a turn of the chat: no status, no journal.
+      case "sideAsk": if (tab && Number.isInteger(m.index)) this.sideChats.ask(tab, m); break;
+      case "sideStop": if (tab && typeof m.thread === "string") this.sideChats.stop(tab.id, m.thread); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;
       case "attachPick": {

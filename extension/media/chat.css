@@ -160,9 +160,38 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .pill.quote { cursor: default; max-width: calc(100% - 4px); vertical-align: bottom; }
 .pill.quote .pill-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* "Add to chat" beside text you select in the chat (chat.js placeQuoteBtn). */
-.quote-btn { position: fixed; z-index: 15; display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 6px; border: 0;
-  background: var(--accent); color: var(--on-accent); font-size: calc(11.5px * var(--fs, 1)); box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.quote-bar { position: fixed; z-index: 15; display: inline-flex; align-items: center; border-radius: 6px; overflow: hidden;
+  background: var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.quote-bar.hidden, .quote-btn.hidden { display: none; }
+.quote-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border: 0; background: transparent; color: var(--on-accent);
+  font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; }
 .quote-btn:hover { background: var(--accent-hi); }
+.quote-btn:not(.hidden) + .quote-btn { box-shadow: -1px 0 0 color-mix(in srgb, var(--on-accent) 30%, transparent); }
+/* Side chat: a small box under an answer for a quick question about a part of it (media/side.js). */
+.side { margin: 8px 0 4px; padding: 5px 8px 6px 10px; border-left: 2px solid var(--accent); border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.side-head { display: flex; align-items: flex-start; gap: 6px; }
+.side-quote { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); font-style: italic; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.side-x { flex-shrink: 0; background: none; border: 0; color: var(--muted); padding: 0 3px; border-radius: 4px; line-height: 1; }
+.side-x:hover { background: var(--hover); color: var(--vscode-foreground); }
+.side-item { margin-top: 6px; }
+.side-q { font-weight: 600; font-size: calc(12px * var(--fs, 1)); overflow-wrap: anywhere; }
+.side-a { font-size: calc(12.5px * var(--fs, 1)); margin-top: 2px; }
+.side-a > :first-child { margin-top: 0; }
+.side-a > :last-child { margin-bottom: 0; }
+.side-err { color: var(--vscode-errorForeground, #e5534b); font-size: calc(11.5px * var(--fs, 1)); margin-top: 2px; }
+.side-note { color: var(--muted); font-size: calc(11px * var(--fs, 1)); margin-top: 2px; }
+.side-foot { display: flex; align-items: center; gap: 8px; margin-top: 3px; min-height: 18px; }
+.side-model { color: var(--muted); font-size: calc(10.5px * var(--fs, 1)); opacity: .8; margin-right: auto; }
+.side-btn { background: none; border: 0; color: var(--muted); font-size: calc(11px * var(--fs, 1)); padding: 0 4px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; }
+.side-btn:hover { background: var(--hover); color: var(--vscode-foreground); }
+.side-in { width: 100%; box-sizing: border-box; margin-top: 7px; padding: 3px 7px; border-radius: 5px; font: inherit; font-size: calc(12px * var(--fs, 1));
+  color: var(--vscode-input-foreground, var(--vscode-foreground)); background: var(--vscode-input-background, transparent); border: 1px solid var(--border); outline: none; }
+.side-in:focus { border-color: var(--accent); }
+.side-row { display: inline-flex; align-items: center; gap: 5px; margin: 6px 0 2px; padding: 1px 8px; border-radius: 5px; border: 0; background: none;
+  color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); }
+.side-row:hover { background: var(--hover); color: var(--vscode-foreground); }
 .foot { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
 .pick { display: inline-flex; align-items: center; gap: 5px; background: none; border: 1px solid transparent; border-radius: 6px; padding: 1px 6px; font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pick:hover { background: var(--hover); color: var(--vscode-foreground); }
@@ -179,10 +208,13 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 /* Queued messages (sent while it answered, not taken in yet): above the box. */
 .queue { margin: 0 0 6px; padding: 4px 8px 5px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
 .queue.hidden { display: none; }
-.offer { margin: 0 0 6px; padding: 5px 8px; border-radius: 7px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+.offer { margin: 0 0 6px; padding: 5px 8px; border-radius: 7px; display: flex; flex-direction: column; gap: 4px;
   background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .offer.hidden { display: none; }
+.offer-top { display: flex; align-items: center; gap: 6px; }
 .offer-text { flex: 1 1 auto; min-width: 0; }
+.offer-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.offer-btns { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }   /* (together, at the right; they wrap as a pair) */
 .offer-left { font-size: calc(11px * var(--fs, 1)); }
 .queue-head { font-size: calc(11px * var(--fs, 1)); color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .queue-item { font-size: calc(12px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 18px; }
@@ -511,3 +543,4 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 .ctx-ring { width: 12px; height: 12px; border-radius: 50%; flex: none; background: conic-gradient(var(--accent) var(--p, 0deg), color-mix(in srgb, var(--vscode-foreground) 18%, transparent) 0); }
 .ctx-meter.high { color: var(--yellow); }
 .ctx-meter.high .ctx-ring { background: conic-gradient(var(--yellow) var(--p, 0deg), color-mix(in srgb, var(--vscode-foreground) 18%, transparent) 0); }
+.side .code-head .cb ~ .cb { display: none; }   /* (a side answer only answers: Copy stays, Insert and Apply do not) */
