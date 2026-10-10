@@ -169,7 +169,7 @@ class Account {
   async logOut(quietly = false) {
     if (!quietly) {
       const ok = await vscode.window.showWarningMessage("Log out of Claude?", {
-        modal: true, detail: "This logs out Claude Code on this computer (also in the terminal). Kural's Claude models wait until you log in again; your other models keep working." }, "Log out");
+        modal: true, detail: (scope.isMain() ? "This logs out Claude Code on this computer (also in the terminal)." : `This logs out this profile's Claude account (${this.profileName || "this profile"}); your other profiles stay logged in.`) + " Kural's Claude models wait until you log in again; your other models keep working." }, "Log out");
       if (ok !== "Log out") return false;
     }
     const bin = findClaude();
@@ -199,7 +199,7 @@ class Account {
     const C = CLIS[id];
     if (!quietly) {
       const ok = await vscode.window.showWarningMessage(`Log out of ${C.short}?`, {
-        modal: true, detail: `This logs out ${C.program} on this computer (also in the terminal). Kural stops using ${C.short} until you log in again.` }, "Log out");
+        modal: true, detail: `${scope.isMain() ? `This logs out ${C.program} on this computer (also in the terminal).` : id === "codex" ? `This logs out this profile's ${C.short} account (${this.profileName || "this profile"}); your other profiles stay logged in.` : `${C.short} uses the same account in every profile, so this logs it out in all of them.`} Kural stops using ${C.short} until you log in again.` }, "Log out");
       if (ok !== "Log out") return false;
     }
     const r = await C.logout(brain.cli[id].bin).catch((e) => ({ error: e.message }));

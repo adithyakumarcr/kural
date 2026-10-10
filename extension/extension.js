@@ -245,11 +245,21 @@ function activate(context) {
   // Profiles (status bar, left of the usage meters): a personal and a work Kural with their own Claude / ChatGPT accounts.
   // A switch reloads the window (lib/profiles/index.js).
   const profiles = new Profiles(context, profileStore, {
-    busy: () => chat.tabs.some((t) => t.status === "running"),
-    flush: () => Promise.all([chat.saveNow(), account.flush()]),
+    // A chat is busy while it answers, has agents / background commands running, or has a message waiting.
+    busy: () => chat.tabs.some((t) => { const r = chat.runtime.get(t.id); return t.status === "running" || !!(r && ((r.bg && r.bg.size) || (r.steers && r.steers.length))); }),
+    flush: () => Promise.all([chat.saveNow(), account.flush(), activity.flush()]),
     changed: (p) => { account.profileName = p.name; account.draw(); },
-    // Deleting a profile: log its Claude out first (a Mac keeps the login in the keychain, named for the folder).
-    logout: async (dir) => { const bin = findClaude(); if (bin) await require("./lib/ai/claude-checks").claudeLogout(bin, require("./lib/ai/claude").cleanEnv({ CLAUDE_CONFIG_DIR: require("path").join(dir, "claude") })); },
+    // The installed Claude Code's version, "none" when there isn't one (a Mac needs 2.1.296+ for per-folder keychain logins).
+    claudeVersion: async () => { const bin = findClaude(); if (!bin) return "none"; const v = await require("./lib/ai/claude-checks").claudeVersion(bin, require("./lib/ai/claude").cleanEnv({})); return v.version || null; },
+    // Deleting a profile: log its accounts out first (a Mac keeps Claude's login in the keychain, named for the folder).
+    // The environment names the profile's folders, so only that profile's logins are touched.
+    logout: async (dir, { claude }) => {
+      const path = require("path");
+      const bin = findClaude();
+      if (claude && bin) await require("./lib/ai/claude-checks").claudeLogout(bin, require("./lib/ai/claude").cleanEnv({ CLAUDE_CONFIG_DIR: path.join(dir, "claude") }));
+      const cx = brain.cli.codex;
+      if (cx && cx.bin) await require("./lib/ai/clis").CLIS.codex.logout(cx.bin, { CODEX_HOME: path.join(dir, "codex") });
+    },
   });
   profiles.register();
   profiles.openSetupIfNew(getStarted);

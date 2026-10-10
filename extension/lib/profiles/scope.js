@@ -40,6 +40,25 @@ function dir(name, kind, storage = state.storage) {
   return path.join(root, "profiles", state.id, name);
 }
 
+// What the AI may read in Kural's storage without asking: everything except <storage>/profiles (other profiles' logins,
+// Claude's and Codex's credential files, and chats they keep apart). Of this window's own profile only its data folders
+// (not claude/ or codex/, where the login is), plus Claude's projects and plans, which Claude Code needs. Folders are
+// listed now, so ask again for each request; "images" is always in (a model may save its first picture there).
+function storageReadRoots(storage, id = state.id, share = state.share) {
+  if (!storage) return [];
+  let names = [];
+  try { names = fs.readdirSync(storage); } catch { /* not made yet */ }
+  const out = names.filter((n) => n !== "profiles").map((n) => path.join(storage, n));
+  if (!names.includes("images")) out.push(path.join(storage, "images"));
+  const own = id !== "default" && SAFE_ID.test(id) ? path.join(storage, "profiles", id) : null;
+  if (own) {
+    try { for (const n of fs.readdirSync(own)) if (n !== "claude" && n !== "codex") out.push(path.join(own, n)); } catch { /* none yet */ }
+    out.push(path.join(own, "claude", "projects"), path.join(own, "claude", "plans"));
+    if (!names.includes("images")) out.push(path.join(own, "images"));
+  }
+  return out;
+}
+
 // Ids become folder names: nothing else gets in.
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 
@@ -57,4 +76,4 @@ function removeProfileDir(storage, id) {
   return true;
 }
 
-module.exports = { configure, profileId, isMain, key, dir, profileDir, removeProfileDir, SAFE_ID };
+module.exports = { storageReadRoots, configure, profileId, isMain, key, dir, profileDir, removeProfileDir, SAFE_ID };

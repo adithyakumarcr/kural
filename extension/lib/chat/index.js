@@ -560,7 +560,9 @@ class ChatView {
     // Claude Code and Codex keep a conversation in their account's own folder. One begun under another profile (the chat
     // is shared between profiles) can't be resumed with this profile's account: its next message starts a new
     // conversation that is handed the old one, the same as after a switch of account (tab.profile, freshSession).
-    if (t.started && !t.freshSession && ["claude", "codex"].includes(t.engine || engineOf(t.model)) && (t.profile || "default") !== scope.profileId()) t.freshSession = "account";
+    if (t.started && !t.freshSession && ["claude", "codex"].includes(t.engine || engineOf(t.model)) && (t.profile || "default") !== scope.profileId()) { t.freshSession = "account"; t.profileFresh = true; }
+    // Back in the profile that holds the conversation: it can be resumed after all (the marker is ours, not an account change's).
+    else if (t.profileFresh && (t.profile || "default") === scope.profileId()) { if (t.freshSession === "account") delete t.freshSession; delete t.profileFresh; }
     const roots = this.projectRoots(t);
     for (const m of t.messages) if (m.role === "assistant") {
       if (m.running) { m.running = false; m.error = m.error || "stopped"; }
@@ -1477,7 +1479,7 @@ class ChatView {
     }
     tab.engine = engine;
     tab.profile = scope.profileId();   // (whose account holds this conversation: see clean())
-    delete tab.freshSession;
+    delete tab.freshSession; delete tab.profileFresh;
     // Prepare the complete record before starting the provider, so its read directory is available from launch.
     let carry = "";
     try { if (tab.carryOver && !tab.started) carry = this.carryText(tab.carryOver, this.handoffRecord(tab, tab.messages.slice(0, -2))); }

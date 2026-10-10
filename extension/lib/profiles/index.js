@@ -14,7 +14,7 @@ const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
 const { ProfileStore, MAIN, MAX_NAME } = require("./store");
-const { setProfileEnv, envFor } = require("./env");
+const { setProfileEnv, envFor, claudeKeepsLoginPerFolder, MIN_KEYCHAIN_CLAUDE } = require("./env");
 const scope = require("./scope");
 const { log } = require("../ai/claude");
 
@@ -120,7 +120,18 @@ class Profiles {
   }
 
   // ---------- new ----------
+  // { found, version, ok }: is this computer's Claude Code new enough to keep each profile's login apart (a Mac's keychain)?
+  async claudeCheck() {
+    const v = this.hooks.claudeVersion ? await this.hooks.claudeVersion().catch(() => null) : null;
+    return { found: v !== undefined && v !== "none", version: v && v !== "none" ? v : null, ok: v === "none" || claudeKeepsLoginPerFolder(v) };
+  }
+
   async create() {
+    const cc = await this.claudeCheck();
+    if (!cc.ok) {
+      vscode.window.showErrorMessage(`Kural can't make a profile yet: your Claude Code${cc.version ? ` (${cc.version})` : ""} is older than ${MIN_KEYCHAIN_CLAUDE}. On a Mac, an older Claude Code keeps one login for every folder, so a profile's login would replace your main one. Update Claude Code (run "claude update" in a terminal), then try again.`, { modal: true });
+      return;
+    }
     const kind = await vscode.window.showQuickPick([
       { label: "$(person) Personal", description: "for your own projects", kind: "personal" },
       { label: "$(briefcase) Work", description: "for your job", kind: "work" }],
@@ -195,15 +206,16 @@ class Profiles {
 
   async remove(p, isActive) {
     if (isActive) { vscode.window.showInformationMessage(`"${p.name}" is in use. Switch to another profile first, then delete it.`); return; }
-    const detail = `Its Claude and ChatGPT logins are removed from this computer's Kural folder (you can log in again by making a new profile).` +
+    const cc = await this.claudeCheck();
+    const detail = `Close other Kural windows that use this profile first.\n\n` + (cc.ok ? "" : `Kural will NOT log this profile's Claude out: your Claude Code (${cc.version || "unknown version"}) is older than ${MIN_KEYCHAIN_CLAUDE} and could log your main account out instead. Log out in Claude yourself if needed.\n\n`) + `Its Claude and ChatGPT logins are removed from this computer's Kural folder (you can log in again by making a new profile).` +
       (p.share ? " Its chats are not deleted: they are shared with your main profile." : " Its own chats, History and Tab Completion's memory are deleted too.");
     const ok = await vscode.window.showWarningMessage(`Delete the profile "${p.name}"?`, { modal: true, detail }, "Delete");
     if (ok !== "Delete") return;
     const storage = this.context.globalStorageUri.fsPath;
     const dir = scope.profileDir(storage, p.id);
-    // Log out of its Claude first: on a Mac the login is in the keychain (an item named for the folder), which deleting
-    // the folder would leave behind. Best effort; the folder is deleted either way.
-    if (dir && this.hooks.logout) { try { await this.hooks.logout(dir); } catch (e) { log(`profiles: log out of ${p.id}: ${e.message}`); } }
+    // Log out of its Claude (and Codex) first: on a Mac the login is in the keychain (an item named for the folder), which
+    // deleting the folder would leave behind. Best effort; the folder is deleted either way.
+    if (dir && this.hooks.logout) { try { await this.hooks.logout(dir, { claude: cc.ok }); } catch (e) { log(`profiles: log out of ${p.id}: ${e.message}`); } }
     try { await this.store.remove(p.id); } catch (e) { vscode.window.showErrorMessage(`Kural: ${e.message}`); return; }
     try { scope.removeProfileDir(storage, p.id); } catch (e) { log(`profiles: deleting ${p.id}'s folder: ${e.message}`); }
     // Its saved records in this window's storage (the keys that end in @<id>; other folders' workspace keys are tiny and stay).
