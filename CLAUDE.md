@@ -608,7 +608,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Codex ids) per profile; data (chats, checkpoints, handoffs, images, local-chats, `kural.chat.v4`, activity, router
   memory) the main profile's when `share`, else `@<id>` / `profiles/<id>/`. `scope.dir` never returns a relative path
   (it wrote test files into the repo). `tab.profile` stamped at send; a started chat from another profile gets
-  `freshSession = "account"` (carryOver). Tests: `test/profiles.test.js` (fakes keep state in `$CLAUDE_CONFIG_DIR` /
+  `freshSession = "account"` (carryOver) with `tab.profileFresh`, both cleared back in its own profile. The AI's read
+  roots exclude `<storage>/profiles/` (`scope.storageReadRoots`): a window sees only its own profile's data folders and
+  `claude/projects|plans`, never another profile or any `claude/`/`codex/` login folder. On a Mac, New profile needs
+  Claude Code >= 2.1.296 (`MIN_KEYCHAIN_CLAUDE`: older ones may share one keychain item, so a profile login would
+  replace the main one); Delete logs out its Claude (Mac: only if new enough) and Codex (`CODEX_HOME`), then removes the
+  folder, and tells you to close other windows using it. The switch flushes `chat.saveNow()`, `account.flush()`,
+  `activity.flush()`; `busy` counts running chats, `r.bg` and `r.steers`. Tests: `test/profiles.test.js` (fakes keep state in `$CLAUDE_CONFIG_DIR` /
   `$CODEX_HOME`). Not checked live: the UI, a Mac keychain, two real accounts.
 - **Workspace Color** (`lib/workspace-color.js`, `rebrand.py` `add_workspace_color_item`): six `activityBar*` keys in
   `workbench.colorCustomizations` + `kural.workspaceColor`, Workspace target, merged; Remove deletes only keys still equal
