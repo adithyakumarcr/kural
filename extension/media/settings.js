@@ -80,10 +80,7 @@
     else {
       acts.push(settings());
       if (c.state === "set") acts.push(btn("Open Get started", "setUp", { id: c.id }, "quiet"));
-      if (c.state === "on") {
-        if (c.page) acts.push(el("button", { class: "btn quiet", onclick: () => post({ type: "usagePage", id: c.id }) }, icon("link-external"), " Usage page"));
-        acts.push(btn("Switch account", "switch", { id: c.id }, "quiet"), btn("Log out", "logOut", { id: c.id }, "quiet"));
-      }
+      // (Usage page, Switch account, Log out: at the end of the AI's own page. The overview stays short.)
     }
     return el("section", { class: "card " + (c.state === "off" ? "dim" : ""), id: "ai-" + c.id }, head, body, el("div", { class: "acts" }, acts));
   }
@@ -157,8 +154,9 @@
       el("label", { class: "check" }, switchOn, "Carry on with another AI when a limit is close"),
       el("p", { class: "muted small" }, "The same chat carries on with another AI that's set up, with everything said so far. A command or agent that's running finishes first."),
       el("div", { class: "points" + (guard.enabled ? "" : " off") },
-        c.id === "agy" ? null : el("label", { class: "row" }, "Switch when the Session limit is", C.session, "% used"),
-        el("label", { class: "row" }, c.id === "agy" ? "Switch when a Weekly limit is" : "or a Weekly limit is", C.weekly, "% used")));
+        el("div", { class: "muted small" }, "Switch when this much is used:"),
+        c.id === "agy" ? null : el("label", { class: "row" }, el("span", { class: "pl" }, "Session limit"), C.session, "%"),
+        el("label", { class: "row" }, el("span", { class: "pl" }, "Weekly limit"), C.weekly, "%")));
   }
   function localSections(c) {
     if (document.activeElement !== ctxIn) ctxIn.value = S.localContext || 32768;
@@ -175,7 +173,15 @@
     const sub = [c.who, c.plan].filter(Boolean).join(" · ");
     return el("div", { class: "sub" }, back("Kural Settings", () => go("main")),
       el("div", { class: "subhead" }, icon(ICONS[c.id] || "account"), el("h1", {}, c.name), sub ? el("span", { class: "muted" }, sub) : null),
-      c.id === "local" ? localSections(c) : [connectorsSection(c), switchSection(c)]);
+      c.id === "local" ? localSections(c) : [connectorsSection(c), switchSection(c), accountSection(c)]);
+  }
+  // The account, last on the AI's page: its usage page, switch to another account, log out.
+  function accountSection(c) {
+    if (c.state !== "on") return null;
+    return el("section", { class: "sec" }, el("div", { class: "sechead" }, el("h2", {}, "Account")),
+      el("div", { class: "acts" },
+        c.page ? el("button", { class: "btn quiet", onclick: () => post({ type: "usagePage", id: c.id }) }, icon("link-external"), " Usage page") : null,
+        btn("Switch account", "switch", { id: c.id }, "quiet"), btn("Log out", "logOut", { id: c.id }, "quiet")));
   }
 
   // ---------- Add connector: a catalog you search ----------
