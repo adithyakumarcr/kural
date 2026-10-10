@@ -15,7 +15,9 @@ const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
 const usageSwitch = require("./ai/usage-switch");
 const connectors = require("./ai/connectors");
-const { withProfileEnv } = require("./profiles/env");
+const catalog = require("./ai/connector-catalog");
+const { withProfileEnv, profileEnv } = require("./profiles/env");
+const os = require("os");
 
 // Your own moods: the user setting kural.chat.moods (never a project's).
 const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
@@ -37,6 +39,8 @@ class SettingsPage {
     this.refreshing = false;
     this.conn = {};       // ai -> { loading, servers, error, supported, at, busy, message }
     this.chat = null;     // (set by extension.js: Claude's setup is reloaded through the chat)
+    this.learning = null; // (set by extension.js: what Tab and Auto learned here, for "What Kural learns")
+    this.items = {};      // ai -> { id: catalog item } of the last search (what "Add" refers to: the page sends only an id)
   }
 
   // Each AI's program and the environment to run it in (for its connectors).
@@ -55,7 +59,14 @@ class SettingsPage {
     const c = this.conn[id] || (this.conn[id] = {});
     if (c.loading || (!force && c.at && Date.now() - c.at < 60000)) return;
     c.loading = true; this.push();
-    try { const { bin, env } = this.program(id); Object.assign(c, await connectors.list(id, bin, env, this.projectDir()), { at: Date.now() }); }
+    try {
+      const { bin, env } = this.program(id), r = await connectors.list(id, bin, env, this.projectDir());
+      // A connector just added that you sign in to: say so until it's signed in (Codex can't always tell: "unknown").
+      for (const x of r.servers || []) if ((c.fresh || {})[x.name] && !x.needsAuth && (id === "codex" ? !/o.?auth|bearer/i.test(x.auth || "") : !x.ok)) {
+        x.needsAuth = true; if (id === "codex") { x.status = "Needs sign-in"; x.ok = false; }
+      }
+      Object.assign(c, r, { at: Date.now() });
+    }
     catch (e) { Object.assign(c, { servers: [], error: e.message, at: Date.now() }); }
     finally { c.loading = false; this.push(); }
   }
@@ -71,7 +82,7 @@ class SettingsPage {
     this.gs.onChange(() => this.push());
     this.context.subscriptions.push(usage.onChange(() => this.push()),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.usageSwitch", "kural.chat.fullClaudeCodeSetup"].some((k) => e.affectsConfiguration(k))) this.push();
+        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.usageSwitch", "kural.chat.fullClaudeCodeSetup", "kural.tabCompletion.learnFromActivity", "kural.modelRouter.learn", "kural.localModels"].some((k) => e.affectsConfiguration(k))) this.push();
       }));
   }
 
@@ -141,6 +152,8 @@ class SettingsPage {
       usageSwitch: usageSwitch.options(vscode.workspace.getConfiguration("kural")),
       connectors: Object.fromEntries(["claude", ...CLI_IDS, "local"].map((id) => [id, connectors.SUPPORTED[id] ? { supported: true, ...(this.conn[id] || {}) } : { supported: false }])),
       fullSetup: vscode.workspace.getConfiguration("kural").get("chat.fullClaudeCodeSetup") !== false,
+      learn: this.learning ? this.learning() : null,
+      localContext: vscode.workspace.getConfiguration("kural").get("localModels.contextLength") || 32768,
       moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), hidden: hiddenMoods(), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
       section: this.section || null };
   }
@@ -222,6 +235,64 @@ class SettingsPage {
         break;
       case "reloadSetup": if (this.chat) this.chat.setupChanged("reload asked for"); this.loadConnectors("claude", true); break;
       case "usagePanel": vscode.commands.executeCommand("kural.showUsage"); break;
+      case "catalogSearch": {
+        const ai = connectors.SUPPORTED[m.id] ? m.id : null;
+        if (!ai) break;
+        const r = await catalog.search(m.query);
+        const map = this.items[ai] = this.items[ai] || {};
+        for (const it of r.items) map[it.id] = it;
+        const names = ((this.conn[ai] || {}).servers || []).map((x) => x.name);
+        if (this.panel) this.panel.webview.postMessage({ type: "catalogResults", id: ai, reqId: m.reqId, note: r.note, items: r.items.map((it) => catalog.forAi(ai, it)), names });
+        break;
+      }
+      case "addCatalog": {
+        const ai = m.id, c = this.conn[ai] || (this.conn[ai] = {});
+        const item = catalog.BUILT_IN.find((b) => b.id === m.item) || (this.items[ai] || {})[m.item];
+        if (c.busy || !connectors.SUPPORTED[ai]) break;
+        let r;
+        if (!item) r = { error: "Search again, then add it." };
+        else {
+          c.busy = true; c.message = "";
+          try {
+            const { bin, env } = this.program(ai);
+            // (The names already there, fresh: a name taken since the page listed them would make the program refuse.)
+            const have = (await connectors.list(ai, bin, env, this.projectDir())).servers.map((x) => x.name);
+            r = await connectors.addItem(ai, bin, env, item, m.values || {}, have);
+          } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
+        }
+        if (r.ok && item.signIn) (c.fresh = c.fresh || {})[r.name] = true;
+        if (this.panel) this.panel.webview.postMessage({ type: "catalogDone", id: ai, item: m.item, reqId: m.reqId, error: r.error || "", name: r.name || "" });
+        if (r.ok) this.afterConnectorChange(ai);
+        break;
+      }
+      case "pickFolder": {
+        const f = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, openLabel: "Choose folder",
+          defaultUri: vscode.Uri.file(os.homedir()) });
+        if (this.panel) this.panel.webview.postMessage({ type: "folder", reqId: m.reqId, path: f && f[0] ? f[0].fsPath : "" });
+        break;
+      }
+      case "openLink": open(m.url); break;
+      case "signIn": {
+        const args = connectors.signInArgs(m.id, m.name), { bin } = this.program(m.id);
+        if (!args || !bin) break;
+        const t = vscode.window.createTerminal({ name: `Sign in to ${m.name}`, shellPath: bin, shellArgs: args, cwd: os.tmpdir(), env: profileEnv() });
+        t.show();
+        break;
+      }
+      case "learn": {
+        const key = m.which === "tab" ? "tabCompletion.learnFromActivity" : m.which === "router" ? "modelRouter.learn" : null;
+        if (key) await vscode.workspace.getConfiguration("kural").update(key, !!m.on, vscode.ConfigurationTarget.Global);
+        this.push();
+        break;
+      }
+      case "forget":
+        await vscode.commands.executeCommand(m.which === "tab" ? "kural.tab.forget" : "kural.router.forget", { quiet: true });
+        this.push();
+        break;
+      case "localContext":
+        if (Number.isFinite(m.value) && m.value >= 16384) await vscode.workspace.getConfiguration("kural").update("localModels.contextLength", Math.round(m.value), vscode.ConfigurationTarget.Global);
+        this.push();
+        break;
       case "usageSwitch": {
         const c = vscode.workspace.getConfiguration("kural");
         if (typeof m.enabled === "boolean") await c.update("usageSwitch.enabled", m.enabled, vscode.ConfigurationTarget.Global);

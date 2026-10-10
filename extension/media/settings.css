@@ -42,8 +42,6 @@ h3 { font-size: 1em; font-weight: 600; margin: 0; }
 .btn[disabled] { opacity: .55; cursor: default; }
 .check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .check input { accent-color: var(--accent); margin: 0; }
-.usage-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.usage-settings > p { line-height: 1.45; }
 .threshold { width: 72px; text-align: right; }
 .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
 .link { display: flex; align-items: center; gap: 10px; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; font: inherit; color: inherit; }
@@ -85,18 +83,45 @@ textarea.in { resize: vertical; min-height: 110px; line-height: 1.45; }
 header .title { flex: 1 1 260px; }
 .update .row { flex-wrap: wrap; justify-content: flex-end; text-align: right; }
 @media (max-width: 560px) { .update { align-items: flex-start; } .update .row { justify-content: flex-start; text-align: left; } }
-/* Each AI's own settings on its card: switch points and connectors. */
-.ai-settings { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-.points { display: flex; flex-direction: column; gap: 4px; }
+/* One AI's page, the connector catalog and the by-hand form: a narrow column with a way back. */
+.sub { max-width: 640px; display: flex; flex-direction: column; gap: 10px; }
+.back { align-self: flex-start; background: none; border: 0; padding: 2px 6px 2px 0; font: inherit; color: var(--muted); cursor: pointer; border-radius: 4px; }
+.back:hover { color: var(--vscode-foreground); }
+.back .codicon { vertical-align: -3px; }
+.subhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.subhead .codicon { font-size: 1.4em; color: var(--accent-hi); align-self: center; }
+.sec { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.sec .sechead { margin: 0; min-height: 28px; }
+.sec p { margin: 0; line-height: 1.45; }
+.ok-note { color: var(--ok); }
+.hint { padding-left: 14px; }
+.quiet-opts { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
+.points { display: flex; flex-direction: column; gap: 6px; }
 .points .row { flex-wrap: wrap; }
 .points.off .row { opacity: .6; }
-.conn summary { cursor: pointer; color: var(--vscode-foreground); }
-.conn-body { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.threshold.wide { width: 110px; }
 .row.wrap { flex-wrap: wrap; }
-.srv-row { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
-.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 45%; }
+.srv-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.srv-row .ell { max-width: 50%; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
 .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); }
+.nowrap { white-space: nowrap; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-hi); cursor: pointer; text-align: left; }
+.linkbtn:hover { text-decoration: underline; }
+.in.search { width: 100%; padding: 7px 10px; }
+.cat-list { display: flex; flex-direction: column; }
+.cat-head { padding: 8px 0 4px; }
+.cat-row { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.cat-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cat-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cat-text .desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-fields { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.cat-foot { margin-top: 14px; }
 .add-conn { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.add-conn input:first-child { width: 120px; }
-.add-conn .grow { min-width: 160px; }
+.add-conn input:first-child { width: 140px; }
+.add-conn .grow { min-width: 200px; }
+/* What Kural learns. */
+.learn-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.learn-text { flex: 1 1 320px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.learn-text .small { padding-left: 22px; line-height: 1.4; }
