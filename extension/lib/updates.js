@@ -115,12 +115,16 @@ function unixScript({ pid, inside, steps, logFile, waitTicks = 66 }) {
     `if pgrep -f ${q(inside)} >/dev/null 2>&1; then log "stopping what's still running"; pkill -f ${q(inside)}; sleep 2; pkill -9 -f ${q(inside)}; sleep 1; fi`,
     steps, ""].join("\n");
 }
-// The Mac steps: the old app set aside, the new one copied in, the old one back if that fails; then start it.
+// The Mac steps: the new app is copied next to the old one and checked, then the old one is renamed aside, the new one
+// renamed in, checked again, and only then the old one deleted (extension/lib/mac-swap.sh, the same code install.sh uses;
+// pasted in here because this script runs after Kural has quit and the app is being replaced). A failure leaves the old
+// app as it was. Then start it.
+const MAC_SWAP = path.join(__dirname, "mac-swap.sh");
 function macSteps({ app, fresh, version, clear = "", open = "open" }) {
-  const old = `${app}.kural-old`;
-  return [clear, `rm -rf ${q(old)}`, `log "installing ${version}"`,
-    `if mv ${q(app)} ${q(old)} && ditto ${q(fresh)} ${q(app)}; then xattr -dr com.apple.quarantine ${q(app)} 2>/dev/null; rm -rf ${q(old)}; log "installed ${version}";`,
-    `else log "failed: couldn't put the new version in place; the old one stays"; rm -rf ${q(app)}; mv ${q(old)} ${q(app)}; fi`,
+  const lib = fs.readFileSync(MAC_SWAP, "utf8");
+  return [clear, lib, `kural_say() { log "$*"; }`, `log "installing ${version}"`,
+    `if kural_swap ${q(fresh)} ${q(app)}; then log "installed ${version}";`,
+    `else log "failed: couldn't put the new version in place; the old one stays"; fi`,
     `${open} ${q(app)} && log "started" || log "failed: couldn't start Kural"`].join("\n");
 }
 const qp = (s) => `'${String(s).replace(/'/g, "''")}'`;             // PowerShell quoting
@@ -307,7 +311,7 @@ class Updater {
       try { fs.accessSync(app, fs.constants.W_OK); fs.accessSync(path.dirname(app), fs.constants.W_OK); }
       catch { this.byHand(file, `Kural can't replace itself in ${path.dirname(app)} (no permission).`); return; }
       log(`update: replacing ${app} with ${version} after Kural quits`);
-      // The old app is set aside first and comes back if copying the new one fails: never half an app.
+      // The new app is copied and checked before the old one is touched: never half an app.
       afterQuit({ pid, inside: `${app}/Contents/`, logFile: this.updateLog, dir, steps: macSteps({ app, fresh, version, clear }) });
     } else if (process.platform === "win32") {
       const exe = process.execPath;   // …\Kural\Kural.exe
@@ -356,4 +360,4 @@ class Updater {
   }
 }
 
-module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk, unixScript, macSteps };
+module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk, unixScript, macSteps, _test: { MAC_SWAP } };

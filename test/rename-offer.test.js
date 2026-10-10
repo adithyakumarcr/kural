@@ -10,10 +10,9 @@ const T = require("../extension/lib/search/text");
 let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.stack); } };
 
-const appRoots = [process.env.KURAL_APP_ROOT, "/Applications/Kural.app/Contents/Resources/app",
-  path.join(__dirname, "..", "kural", "build", "mac", "dmg", "Kural.app", "Contents", "Resources", "app")].filter(Boolean);
-const appRoot = appRoots.find((r) => fs.existsSync(T.rgPath(r))) || (spawnSync("rg", ["--version"]).status === 0 ? "/nowhere" : null);
-if (!appRoot) { console.log("(skipped: no ripgrep here)"); process.exit(0); }
+const found = require("./workbench").findAppRoot();
+const appRoot = (found && fs.existsSync(T.rgPath(found)) ? found : null) || (spawnSync("rg", ["--version"]).status === 0 ? "/nowhere" : null);
+if (!appRoot) { console.log("(skipped: no ripgrep here; set KURAL_WORKBENCH or put rg on PATH)"); process.exit(0); }
 
 // ---------- a small project ----------
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "kural-rename-offer-"));

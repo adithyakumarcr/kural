@@ -11,11 +11,8 @@ const { spawnSync } = require("child_process");
 let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
 const root = path.join(__dirname, "..");
-const rel = path.join("Contents", "Resources", "app", "out", "vs", "workbench", "workbench.desktop.main.js");
-const candidates = [process.env.KURAL_WORKBENCH, path.join("/Applications/Kural.app", rel), path.join(root, "kural", "build", "mac", "dmg", "Kural.app", rel),
-  path.join(root, "build", "mac", "Kural.app", rel)].filter(Boolean);
-const src = candidates.find((f) => fs.existsSync(f));
-if (!src) { console.log("(skipped: no VS Code workbench file here)"); process.exit(0); }
+const src = require("./workbench").findWorkbench();
+if (!src) { console.log("(skipped: no built workbench (set KURAL_WORKBENCH))"); process.exit(0); }
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-rebrand-test-"));
