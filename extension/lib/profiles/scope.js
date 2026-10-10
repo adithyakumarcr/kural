@@ -33,7 +33,9 @@ function key(base, kind) {
 
 // A folder inside Kural's storage: "chats", "checkpoints"… (same rule as key(); storage: another storage folder than the one configured, for tests).
 function dir(name, kind, storage = state.storage) {
-  const root = storage || "";
+  // (Never a relative path: without a storage folder (tests, or before activate) that would write into whatever folder
+  // Kural was started from.)
+  const root = storage || require("os").tmpdir();
   if (isMain() || (kind === "data" && state.share)) return path.join(root, name);
   return path.join(root, "profiles", state.id, name);
 }
