@@ -9,6 +9,7 @@
 //   Codex:   ~/.codex/auth.json (or $CODEX_HOME), its id_token's name, when Codex saves its login in a file.
 
 const fs = require("fs"), os = require("os"), path = require("path");
+const { withProfileEnv } = require("../profiles/env");   // (a profile's own Claude / Codex folders)
 
 const same = (a, b) => !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 const read = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
@@ -18,7 +19,7 @@ function claims(token) {
   catch { return null; }
 }
 
-function claudeName(email, home = os.homedir(), env = process.env) {
+function claudeName(email, home = os.homedir(), env = withProfileEnv()) {
   const dir = env.CLAUDE_CONFIG_DIR || home;
   for (const f of [path.join(dir, ".claude.json"), path.join(home, ".claude.json")]) {
     const a = (read(f) || {}).oauthAccount;
@@ -32,7 +33,7 @@ function googleName(email, home = os.homedir()) {
   return c && c.name && same(c.email, email) ? String(c.name).trim() : "";
 }
 
-function codexName(email, home = os.homedir(), env = process.env) {
+function codexName(email, home = os.homedir(), env = withProfileEnv()) {
   const t = (read(path.join(env.CODEX_HOME || path.join(home, ".codex"), "auth.json")) || {}).tokens;
   const c = t && claims(t.id_token);
   return c && c.name && (!email || same(c.email, email)) ? String(c.name).trim() : "";

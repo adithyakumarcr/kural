@@ -5,6 +5,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { claudeConfigDir } = require("../profiles/env");
 
 const LIMIT = 60000; // characters; keeps requests fast
 
@@ -21,7 +22,7 @@ function mdFilesIn(dir, depth = 0) {
 }
 
 function projectInstructions(root) {
-  const files = [path.join(os.homedir(), ".claude", "CLAUDE.md")];
+  const files = [path.join(claudeConfigDir(), "CLAUDE.md")];
   if (root) {
     files.push(path.join(root, "CLAUDE.md"), path.join(root, ".claude", "CLAUDE.md"), path.join(root, "CLAUDE.local.md"));
     files.push(...mdFilesIn(path.join(root, ".claude", "rules")));

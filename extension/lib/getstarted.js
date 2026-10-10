@@ -37,9 +37,13 @@ const { CLIS, IDS: CLI_IDS } = require("./ai/clis");
 const ws = require("./workspace");
 const installer = require("./ai/install");
 
-const KEY = "kural.setup.v2";   // { claude: { bin, version, at, authSaid } | null, local: { model, at } | null,
-                                //   codex / agy: { bin, version, at, models } | null }
-const OLD_KEY = "kural.setup.v1";
+const scope = require("./profiles/scope");
+const { profileEnv } = require("./profiles/env");
+// What is set up is per profile: each has its own logins (lib/profiles/scope.js; the main profile keeps these names).
+// "kural.setup.v2" = { claude: { bin, version, at, authSaid } | null, local: { model, at } | null,
+//                      codex / agy: { bin, version, at, models } | null }
+const KEY = () => scope.key("kural.setup.v2", "account");
+const OLD = () => scope.key("kural.setup.v1", "account");
 const DOCS = "https://code.claude.com/docs/en/setup";
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -57,8 +61,8 @@ const RECOMMENDED = [
 class GetStarted {
   constructor(context) {
     this.context = context;
-    const old = context.globalState.get(OLD_KEY);
-    this.rec = context.globalState.get(KEY) || { claude: old || null, local: null };
+    const old = context.globalState.get(OLD());
+    this.rec = context.globalState.get(KEY()) || { claude: old || null, local: null };
     this.problem = null;      // what broke with Claude since its test passed
     this.panel = null;
     this.waiting = null;      // "install" | "login" | "ollama": polling until it's done
@@ -85,7 +89,7 @@ class GetStarted {
 
   onChange(f) { this.listeners.push(f); }
   changed() { vscode.commands.executeCommand("setContext", "kural.aiReady", this.ready); for (const f of this.listeners) { try { f(this.ready); } catch (e) { log(`get started: ${e.stack}`); } } this.post(); }
-  async save() { await this.context.globalState.update(KEY, this.rec); }
+  async save() { await this.context.globalState.update(KEY(), this.rec); }
 
   register() {
     vscode.commands.executeCommand("setContext", "kural.aiReady", this.ready);
@@ -425,7 +429,8 @@ class GetStarted {
 
   terminal(name, text) {
     const win = process.platform === "win32";
-    const t = vscode.window.createTerminal({ name, shellPath: win ? "powershell.exe" : undefined, location: vscode.TerminalLocation.Panel });
+    // (env: this profile's Claude / Codex folders, so logging in here logs this profile in: lib/profiles/env.js)
+    const t = vscode.window.createTerminal({ name, shellPath: win ? "powershell.exe" : undefined, env: profileEnv(), location: vscode.TerminalLocation.Panel });
     t.show();
     t.sendText(text);
   }

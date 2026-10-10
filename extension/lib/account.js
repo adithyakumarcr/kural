@@ -20,9 +20,10 @@ const usage = require("./ai/usage");
 const brain = require("./ai");
 const { CLIS, IDS: CLI_IDS } = require("./ai/clis");
 const { accountName } = require("./ai/names");
+const scope = require("./profiles/scope");
 
 const USAGE = { claude: "https://claude.ai/settings/usage", apiKey: "https://console.anthropic.com/settings/usage" };
-const SAVED = "kural.usage.v1";
+const SAVED = () => scope.key("kural.usage.v1", "account");   // (numbers describe an account: each profile has its own)
 const NAMES = { claude: "Claude", agy: "Gemini", codex: "Codex" };
 
 class Account {
@@ -55,13 +56,14 @@ class Account {
       this.update();
     });
     // The usage meter: last numbers right away (saved), new ones as the programs report them.
-    usage.restore(this.context.globalState.get(SAVED));
+    usage.restore(this.context.globalState.get(SAVED()));
     let saveTimer = null;
     this.context.subscriptions.push(usage.onChange(() => {
       this.drawMeters();
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => this.context.globalState.update(SAVED, usage.snapshot()), 2000);
+      saveTimer = setTimeout(() => this.flush(), 2000);
     }));
+    this.flush = () => { clearTimeout(saveTimer); return this.context.globalState.update(SAVED(), usage.snapshot()); };   // (also before a profile switch)
     const tick = setInterval(() => this.drawMeters(), 60 * 1000);   // ("resets in …" and windows that reset)
     const limits = setInterval(() => this.refreshUsage(false), 10 * 60 * 1000);
     this.context.subscriptions.push({ dispose: () => { clearInterval(tick); clearInterval(limits); } });
@@ -119,7 +121,8 @@ class Account {
     if (this.gs.localModel) lines.push(`Your own model: ${this.gs.localModel.slice("ollama:".length)}`);
     if (!lines.length) lines.push("Nothing set up yet");
     this.item.text = text;
-    this.item.tooltip = `${lines.join("\n")}\n\nClick for Kural Settings: accounts, usage, switch account, log out, updates`;
+    const profile = this.profileName ? `Profile: ${this.profileName}\n\n` : "";
+    this.item.tooltip = `${profile}${lines.join("\n")}\n\nClick for Kural Settings: accounts, usage, switch account, log out, updates`;
     for (const f of this.listeners) f();
   }
 
