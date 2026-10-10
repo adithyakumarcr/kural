@@ -41,6 +41,17 @@ const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").re
 const pick = (o, ...keys) => { for (const k of keys) if (o && o[k] !== undefined && o[k] !== null) return o[k]; return undefined; };
 const yes = (v) => v === true || v === "true";
 
+// What may end up in the program's arguments. The directory is public: anyone can list a server there.
+const NPM_RE = /^(@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(@[\w.-]+)?$/i;   // (no "user/repo": npx would fetch it from GitHub)
+const PYPI_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*(\[[\w,-]+\])?$/;
+const ENV_RE = /^[A-Za-z_][A-Za-z0-9_]*$/, HEADER_RE = /^[A-Za-z0-9-]{1,64}$/;
+const BAD_ENV = /^(LD_|DYLD_|PYTHON|NPM_CONFIG_|NODE_OPTIONS$|NODE_PATH$|PATH$|HOME$|SHELL$|IFS$)/i;
+const envOk = (n) => typeof n === "string" && ENV_RE.test(n) && !BAD_ENV.test(n);
+const headerOk = (n) => typeof n === "string" && HEADER_RE.test(n) && !/^-/.test(n);
+// https, or http to this computer (a key sent in a header must not travel in the clear)
+const safeUrl = (u) => /^https:\/\/[^\s/]/i.test(u) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(u);
+const needsKey = (item) => item.kind === "remote" && (item.inputs || []).some((i) => i.header || i.secret);
+
 function fromRegistryServer(raw) {
   const s = raw && raw.server && typeof raw.server === "object" ? raw.server : raw;
   if (!s || typeof s.name !== "string" || !s.name) return null;
@@ -51,21 +62,27 @@ function fromRegistryServer(raw) {
   const rank = (r) => /^streamable/i.test(r.type || "") ? 0 : /^sse$/i.test(r.type || "") ? 1 : 9;
   const remote = remotes.filter((r) => rank(r) < 9).sort((a, b) => rank(a) - rank(b))[0];
   if (remote) {
-    const inputs = (Array.isArray(remote.headers) ? remote.headers : []).filter((h) => h && h.name && yes(pick(h, "isRequired", "is_required")))
+    const req = (Array.isArray(remote.headers) ? remote.headers : []).filter((h) => h && h.name && yes(pick(h, "isRequired", "is_required")));
+    const inputs = req.filter((h) => headerOk(h.name))
       .map((h) => ({ key: "h:" + h.name, label: String(h.description || h.name).slice(0, 60), secret: yes(pick(h, "isSecret", "is_secret")) || /auth|key|token/i.test(h.name), header: h.name }));
-    return { ...base, kind: "remote", url: remote.url, transport: rank(remote) === 1 ? "sse" : "http", ...(inputs.length ? { inputs } : {}),
-      ...(inputs.length ? {} : { signIn: true }) };
+    // (A required header we can't pass safely, or a key over plain http: this server is skipped.)
+    if (inputs.length === req.length && (!inputs.length || safeUrl(remote.url)))
+      return { ...base, kind: "remote", url: remote.url, transport: rank(remote) === 1 ? "sse" : "http", ...(inputs.length ? { inputs } : {}),
+        ...(inputs.length ? {} : { signIn: true }) };
   }
   // 2. a package that runs on this computer: npm (npx), then pypi (uvx)
   const pkgs = Array.isArray(s.packages) ? s.packages : [];
   const typeOf = (p) => String(pick(p, "registryType", "registry_type", "registry_name") || "").toLowerCase();
   const idOf = (p) => String(pick(p, "identifier", "name") || "");
-  const chosen = ["npm", "pypi"].map((t) => pkgs.find((p) => typeOf(p) === t && idOf(p) && /^[@A-Za-z0-9][\w@./-]*$/.test(idOf(p)))).find(Boolean);
-  if (chosen) {
-    const inputs = (Array.isArray(pick(chosen, "environmentVariables", "environment_variables")) ? pick(chosen, "environmentVariables", "environment_variables") : [])
-      .filter((v) => v && v.name && yes(pick(v, "isRequired", "is_required")))
-      .map((v) => ({ key: "e:" + v.name, label: String(v.description || v.name).slice(0, 60), secret: yes(pick(v, "isSecret", "is_secret")), env: v.name }));
-    return { ...base, kind: typeOf(chosen), package: idOf(chosen), ...(inputs.length ? { inputs } : {}) };
+  const idRe = { npm: NPM_RE, pypi: PYPI_RE };
+  for (const t of ["npm", "pypi"]) {
+    for (const chosen of pkgs.filter((p) => typeOf(p) === t && idRe[t].test(idOf(p)))) {
+      const envs = pick(chosen, "environmentVariables", "environment_variables");
+      const req = (Array.isArray(envs) ? envs : []).filter((v) => v && v.name && yes(pick(v, "isRequired", "is_required")));
+      if (req.some((v) => !envOk(v.name))) continue;   // a required variable we won't pass: not this one
+      const inputs = req.map((v) => ({ key: "e:" + v.name, label: String(v.description || v.name).slice(0, 60), secret: yes(pick(v, "isSecret", "is_secret")), env: v.name }));
+      return { ...base, kind: t, package: idOf(chosen), ...(inputs.length ? { inputs } : {}) };
+    }
   }
   return null;   // only docker/oci or nothing usable
 }
@@ -101,12 +118,26 @@ async function search(query, fetchJson = defaultFetch) {
   } catch { return { items: builtIn, note: "Couldn't reach the connector directory." }; }
 }
 
+const MAX_BYTES = 1 << 20;   // 1 MB is far more than 20 servers need
 async function defaultFetch(url, ms) {
   const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
   try {
     const r = await fetch(url, { signal: ac.signal, headers: { accept: "application/json" } });
     if (!r.ok) throw new Error("HTTP " + r.status);
-    return await r.json();
+    if (Number(r.headers.get("content-length")) > MAX_BYTES) throw new Error("too big");
+    // (read in pieces: a server that lies about, or leaves out, the length can't make us hold more than the limit)
+    const chunks = []; let size = 0;
+    if (r.body && r.body.getReader) {
+      const rd = r.body.getReader();
+      for (;;) {
+        const { done, value } = await rd.read();
+        if (done) break;
+        size += value.length;
+        if (size > MAX_BYTES) { rd.cancel().catch(() => {}); throw new Error("too big"); }
+        chunks.push(Buffer.from(value));
+      }
+    } else { const b = Buffer.from(await r.arrayBuffer()); if (b.length > MAX_BYTES) throw new Error("too big"); chunks.push(b); }
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } finally { clearTimeout(t); }
 }
 
@@ -135,6 +166,12 @@ function addArgs(ai, item, values = {}, existing = []) {
   if (why) return { error: why };
   const inputs = item.inputs || [], vals = {};
   for (const i of inputs) {
+    if (i.env && !envOk(i.env)) return { error: "This connector asks for a setting Kural won't pass on." };
+    if (i.header && !headerOk(i.header)) return { error: "This connector asks for a header Kural won't pass on." };
+  }
+  if (needsKey(item) && !safeUrl(item.url || "")) return { error: "Kural won't send a key to an address that isn't https://." };
+  if (item.from === "registry" && item.kind !== "remote" && !(item.kind === "pypi" ? PYPI_RE : NPM_RE).test(item.package || "")) return { error: "This package name isn't one Kural will run." };
+  for (const i of inputs) {
     const v = String(values[i.key] == null ? "" : values[i.key]).trim();
     if (!v) return { error: `Fill in ${i.label.replace(/\.$/, "")}.` };
     if (/[\r\n\0]/.test(v)) return { error: `${i.label} should be on one line.` };
@@ -161,6 +198,8 @@ function addArgs(ai, item, values = {}, existing = []) {
 }
 
 // The same item with `unsupported` filled in for this AI (what the page needs).
-const forAi = (ai, item) => ({ ...item, unsupported: unsupported(ai, item) });
+// "shows": exactly what will run or be contacted (the page shows it before a connector from the directory is added).
+const shown = (item) => item.kind === "remote" ? item.url : (item.kind === "pypi" ? ["uvx", item.package] : ["npx", "-y", ...(item.args || [item.package])]).join(" ");
+const forAi = (ai, item) => ({ ...item, unsupported: unsupported(ai, item), shows: shown(item) });
 
 module.exports = { BUILT_IN, REGISTRY, search, matchBuiltIn, parseRegistry, fromRegistryServer, addArgs, connectorName, unsupported, forAi, slug };
