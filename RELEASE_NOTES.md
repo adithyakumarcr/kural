@@ -1,5 +1,17 @@
 ## Not released yet
 
+- **Side chat.** Select text in an answer and press **Ask** to ask a quick question about it right under the answer. A
+  fast model answers (Haiku, or the lightest Gemini/Codex model, or your own). It stays out of the conversation and is
+  saved with the answer; **Add to chat** brings a useful side answer into your message.
+- **A settings page per AI.** Kural Settings is a short overview; **Settings** on an AI's card (or the gear in the model
+  menu) opens that AI's page: its connectors and when to switch away from it near a limit.
+- **Add connectors without commands.** **Add connector** opens a searchable list (Notion, Linear, GitHub, Playwright and
+  more, plus the official MCP directory). Pick one, fill in a token or folder only if asked. **Sign in** for the ones
+  that need your account.
+- **What Kural learns.** Kural Settings has on/off switches for Tab Completion's learning and Auto's model learning, and
+  "Delete what it learned" for each (new setting `kural.modelRouter.learn`).
+- **Softer workspace colors.** Deep, muted shades with a dark theme and pastels with a light one.
+- The "Use 3 agents?" card is tidy in a narrow chat panel.
 - **Profiles.** Make a personal and a work profile (or more), each with its own Claude and ChatGPT accounts, and switch
   between them with one click in the status bar. Each profile shares chats and history with your main profile, or keeps
   its own: you choose.
