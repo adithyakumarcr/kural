@@ -12,6 +12,7 @@
   window.addEventListener("error", (e) => vscode.postMessage({ type: "log", message: `${e.message} (${e.filename}:${e.lineno})` }));
 
   const S = {
+    offers: {},   // tab id -> { id, agents, until }: "Use N agents?" above the box
     tabs: [], activeId: null, tab: null,
     models: [], efforts: [], modes: [], teamSizes: [2, 3, 4, 5], version: "",
     attachments: [], setups: {},
@@ -310,11 +311,12 @@
     onclick: () => sendMessage() }, icon("arrow-up"));
   // Messages you sent while it answered that it hasn't taken in yet.
   const queueEl = el("div", { class: "queue hidden" });
+  const offerEl = el("div", { class: "offer hidden", role: "status" });
   // How full this chat's context window is (a ring + "38k"), and on hover this chat's tokens (read, from cache, written).
   const ctxEl = el("button", { class: "ctx-meter hidden", "aria-label": "Open AI Usage", onclick: () => post({ type: "showUsage" }) });
   const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const editBar = el("div", { class: "edit-bar hidden" });   // "Editing an earlier message …" (startEdit)
-  const composer = el("div", { class: "composer" }, popupEl, queueEl, editBar, chipsEl, input,
+  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }), ctxEl,
       queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
@@ -976,9 +978,24 @@
     sendBtn.classList.toggle("stop", running);
     renderQueueBtn();
     renderQueue();
+    renderOffer();
     // (While it answers, Enter doesn't stop it: what you send is added to the answer at its next step, or answered next.)
     // Short (Adithya: "Ask Kural something", nothing more); the mode shows on its own button.
     input.dataset.placeholder = running ? "Add to this answer…" : "Ask Kural something";
+  }
+  function renderOffer() {
+    clearTimeout(S.offerTimer);
+    const o = S.tab && S.offers[S.tab.id];
+    offerEl.classList.toggle("hidden", !o);
+    if (!o) { offerEl.replaceChildren(); return; }
+    const left = Math.max(0, Math.ceil((o.until - Date.now()) / 1000)), tabId = S.tab.id;
+    const answer = (use) => { post({ type: "teamOfferAnswer", tabId, id: o.id, use }); delete S.offers[tabId]; renderOffer(); };
+    offerEl.replaceChildren(icon("organization"),
+      el("span", { class: "offer-text" }, `This looks like a big task. Use ${o.agents} agents?`),
+      el("span", { class: "muted offer-left" }, `one agent in ${left} s`),
+      el("button", { class: "cb primary", onclick: () => answer(true) }, `Use ${o.agents} agents`),
+      el("button", { class: "cb", onclick: () => answer(false) }, "One agent"));
+    if (left > 0) S.offerTimer = setTimeout(renderOffer, 1000);
   }
   const hasDraft = () => !isEmptyInput() || S.attachments.length > 0;
   function renderQueueBtn() { queueBtn.classList.toggle("hidden", !(S.tab && S.tab.status !== "idle" && !S.tab.visiting && hasDraft())); }
@@ -1659,6 +1676,9 @@ ${d.system}` : ""}`,
       case "showLocal": openLocal(); break;
       case "full": S.tab = m.tab; renderAll(); renderEditBar(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "openLocal": closeMenu(); openLocal(); break;
+      // Auto mode, a big task: "Use 3 agents?" for 15 s above the box; no answer = one agent.
+      case "teamOffer": S.offers[m.tabId] = { id: m.id, agents: m.agents, until: Date.now() + m.seconds * 1000 }; renderOffer(); break;
+      case "teamOfferDone": if (S.offers[m.tabId] && S.offers[m.tabId].id === m.id) delete S.offers[m.tabId]; renderOffer(); break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
       case "localModels": S.local = m; renderLocal(); if (S.menu === "model") openMenu.refresh(); break;
       case "localSearch": S.localSearch = m; S.localSearching = false; renderLocal(); break;

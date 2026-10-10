@@ -28,10 +28,11 @@ function run(bin, args, env, timeout = 30000) {
 function parseClaudeList(text) {
   const out = [];
   for (const line of String(text || "").split(/\r?\n/)) {
-    const m = /^(.+?): (.+) - (?:[✓✗!⚠]\s*)?(.+)$/.exec(line.trim());
+    // (The mark before the status varies between versions: ✓ ✗ × ! ⚠. Details after " — " go in the hover.)
+    const m = /^(.+?): (.+) - (?:[^\w\s]\s*)?(.+)$/u.exec(line.trim());
     if (!m || /^checking\b/i.test(line)) continue;
-    const name = m[1].trim(), status = m[3].trim();
-    out.push({ name, target: m[2].trim(), status, ok: /^connected$/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : "" });
+    const name = m[1].trim(), [status, ...why] = m[3].trim().split(/\s+[—–]\s+/);
+    out.push({ name, target: m[2].trim(), status, why: why.join(" — "), ok: /^connected$/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : "" });
   }
   return out;
 }

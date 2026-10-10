@@ -156,6 +156,9 @@ function select(models, request, settings, task = classify(request.prompt)) {
   const learned = request.learned && typeof request.learned === "object" ? request.learned : {};
   const lean = (m) => Math.max(-2, Math.min(2, Number(learned[m.id]) || 0));
   let need = needTier(profile, task);
+  // A well-defined task (building a plan that's been made and agreed): a light model does it (Anthropic's guidance: plan
+  // with a stronger model, hand well-defined work to Haiku). Not under Intelligence; a failing step still escalates.
+  if (request.wellDefined && profile !== "intelligence" && need > 1) { need = 1; notes.push("a well-defined task (building the agreed plan): a light model"); }
   if (request.checkpoint && current) need = Math.max(need, Math.min(3, tier(current) + 1));
   // You chose a stronger model than Auto's for requests like this one: that becomes what's needed.
   const wanted = models.filter((m) => lean(m) >= 1).map(tier);
