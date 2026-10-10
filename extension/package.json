@@ -119,6 +119,11 @@
         "category": "Kural"
       },
       {
+        "command": "kural.testNotification",
+        "title": "Test Notification",
+        "category": "Kural"
+      },
+      {
         "command": "kural.showUsage",
         "title": "Show AI Usage (limits and when they reset)",
         "icon": "$(dashboard)",
@@ -193,6 +198,11 @@
       {
         "command": "kural.reloadSetup",
         "title": "Kural: Reload Claude Code Setup (connectors, MCP, plugins)"
+      },
+      {
+        "command": "kural.workspaceColor",
+        "title": "Workspace Color...",
+        "category": "Kural"
       },
       {
         "command": "kural.checkForUpdates",
@@ -923,6 +933,12 @@
           "default": false,
           "scope": "machine",
           "markdownDescription": "Let Kural's own proxy browser open websites on the internet, not only local pages (localhost, your LAN). The proxy removes a page's security headers, so don't log in to anything there."
+        },
+        "kural.workspaceColor": {
+          "type": "string",
+          "scope": "window",
+          "default": "",
+          "markdownDescription": "The activity bar color of this workspace, set by **Kural: Workspace Color...** (right-click the activity bar). Kural uses it to know which `workbench.colorCustomizations` entries are its own."
         },
         "kural.updates.autoCheck": {
           "type": "boolean",

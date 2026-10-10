@@ -12,9 +12,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-search-test-"));
 
 function findRg() {
   if (process.env.KURAL_RG) return process.env.KURAL_RG;
-  const built = path.join(__dirname, "..", "kural", "build", "mac", "dmg", "Kural.app", "Contents", "Resources", "app");
-  const p = T.rgPath(built);
-  if (fs.existsSync(p)) return p;
+  const built = require("./workbench").findAppRoot();
+  const p = built && T.rgPath(built);
+  if (p && fs.existsSync(p)) return p;
   return spawnSync("rg", ["--version"]).status === 0 ? "rg" : null;
 }
 

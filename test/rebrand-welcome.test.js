@@ -77,11 +77,8 @@ const BARE = /(?<![/\w])VSCodium(?![\w/])/;
   });
 
   // ---------- 2. a real workbench file ----------
-  const rel = path.join("Contents", "Resources", "app", "out", "vs", "workbench", "workbench.desktop.main.js");
-  const candidates = [process.env.KURAL_WORKBENCH, path.join("/Applications/Kural.app", rel), path.join(root, "kural", "build", "mac", "dmg", "Kural.app", rel),
-    path.join(root, "build", "mac", "Kural.app", rel)].filter(Boolean);
-  const src = candidates.find((f) => fs.existsSync(f));
-  if (!src) { console.log("(real workbench file: skipped, none here)"); process.exit(fail ? 1 : 0); }
+  const src = require("./workbench").findWorkbench();
+  if (!src) { console.log("(real workbench file: skipped: no built workbench (set KURAL_WORKBENCH))"); process.exit(fail ? 1 : 0); }
   const patched = path.join(tmp, "patched.js");
   const r = py(`
 text = open(${JSON.stringify(src)}, encoding="utf-8").read()

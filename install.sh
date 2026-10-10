@@ -136,7 +136,9 @@ mac() {
     [ -d "$APPDIR" ] || die "Kural isn't installed yet. Run ./install.sh first."
     local EXT="$APPDIR/Contents/Resources/app/extensions/kural"
     # Changed files inside an app break its signature, so it's signed again (ad-hoc, like the build does).
-    replace_app "$clear; rm -rf $(qs "$EXT") && ditto $(qs "$PWD/extension") $(qs "$EXT") && codesign --force --deep --sign - $(qs "$APPDIR") 2>/dev/null; echo 'Updated the Kural extension in $APPDIR'; $start"
+    # (The extension is copied next to the old one and checked first; only then the folders are renamed: a failed copy
+    # never leaves half an extension. lib/mac-swap.sh, the same code as the app swap and the in-app updater.)
+    replace_app "$clear; . $(qs "$PWD/extension/lib/mac-swap.sh"); if kural_swap_dir $(qs "$PWD/extension") $(qs "$EXT") package.json extension.js; then codesign --force --deep --sign - $(qs "$APPDIR") 2>/dev/null; echo 'Updated the Kural extension in $APPDIR'; else echo 'The Kural extension was NOT updated (the old one is still there).'; fi; $start"
   else
     [ "$(uname -m)" = arm64 ] || die "this Mac build is for Apple Silicon (M1–M5)."
     command -v python3 >/dev/null || die "python3 is missing. Install Apple's command-line tools: xcode-select --install"
@@ -148,8 +150,9 @@ mac() {
       export PATH="$PWD/build/venv/bin:$PATH"
     fi
     ./build-mac.sh
-    # (The old app goes only after the new one is copied next to it: never half an app.)
-    replace_app "$clear; echo 'Installing into $APPDIR ...'; rm -rf $(qs "$APPDIR.new") && ditto $(qs "$PWD/build/mac/Kural.app") $(qs "$APPDIR.new") && rm -rf $(qs "$APPDIR") && mv $(qs "$APPDIR.new") $(qs "$APPDIR") && xattr -dr com.apple.quarantine $(qs "$APPDIR") 2>/dev/null; echo Done.; $start"
+    # (The new app is copied next to the old one and checked first, the old one is only renamed, never deleted before the
+    # new one is in place and checked: lib/mac-swap.sh, the same code the in-app updater uses.)
+    replace_app "$clear; . $(qs "$PWD/extension/lib/mac-swap.sh"); echo 'Installing into $APPDIR ...'; if kural_swap $(qs "$PWD/build/mac/Kural.app") $(qs "$APPDIR"); then echo Done.; else echo 'Kural was NOT updated (the old version is still there).'; fi; $start"
   fi
 }
 

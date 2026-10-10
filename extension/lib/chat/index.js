@@ -31,7 +31,7 @@ const handoffStore = require("./handoff-store");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
-const { Notifier, shouldNotify, message: notifyText } = require("./notify");
+const { Notifier, notifyDecision, message: notifyText } = require("./notify");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -127,7 +127,7 @@ class ChatView {
       toast: (o) => vscode.commands.executeCommand("_kural.osToast", o),
       clearToast: (id) => vscode.commands.executeCommand("_kural.osToastClear", { id }),
       run: (cmd, args, env) => new Promise((res) => require("child_process").execFile(cmd, args,
-        { env: { ...process.env, ...env }, timeout: 15000, windowsHide: true, cwd: os.tmpdir() }, (err) => res(!err))),
+        { env: { ...process.env, ...env }, timeout: 15000, windowsHide: true, cwd: os.tmpdir() }, (err, _o, stderr) => { if (err) log(`notify: ${cmd} failed: ${err.message}${stderr ? ` (${String(stderr).trim().slice(0, 200)})` : ""}`); res(!err); })),
       inApp: async (title, body) => (await vscode.window.showInformationMessage(`${title}. ${body}`, "Show")) === "Show",
       log, platform: process.platform,
     });
@@ -186,6 +186,7 @@ class ChatView {
       }),
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
       vscode.commands.registerCommand("kural.chat.toggle", () => this.toggle()),
+      vscode.commands.registerCommand("kural.testNotification", () => this.testNotification()),
       // Kural: Devices → "Link it to the current chat".
       vscode.commands.registerCommand("kural.chat.linkDevice", async (id) => {
         const t = this.active();
@@ -2137,6 +2138,8 @@ class ChatView {
       if (reply.error === "login") this.notify(tab, "login", { who: reply.errorWho });
       else if (reply.error) this.notify(tab, "error", { error: reply.error });
       else this.notify(tab, reply.planReady ? "plan" : "done", { text: answerText(reply) });
+    } else if (reply.error !== "stopped") {
+      log(`chat ${tab.id}: no notification: ${reply.notified ? "already notified for this answer" : queued ? "a queued message is answered next" : "carried on by another AI"}`);
     }
     this.finishTurn(tab, r);
     // Tab learns what you're working on, and which files the chat changed for it.
@@ -2337,12 +2340,25 @@ class ChatView {
   notify(tab, kind, info = {}) {
     try {
       const setting = cfg().get("notifications", "whenAway");
-      if (!shouldNotify(setting, { focused: !!(vscode.window.state && vscode.window.state.focused), onScreen: this.onScreen(tab.id) })) return;
+      // (Checked now, when the answer is done: not when it started.)
+      const focused = !!(vscode.window.state && vscode.window.state.focused);
+      const d = info.force ? { send: true, why: "test" } : notifyDecision(setting, { focused, onScreen: this.onScreen(tab.id) });
+      if (!d.send) { log(`chat ${tab.id}: no notification (${kind}): ${d.why}`); return; }
       const { title, body } = notifyText(kind, { chat: tab.title, ...info });
-      log(`chat ${tab.id}: notification: ${title}`);
-      if (!this.notifier) return;
-      this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind) }, () => this.showChat(tab.id));
+      log(`chat ${tab.id}: notification (${kind}): ${title}; ${d.why}`);
+      if (!this.notifier) { log("notify: no notifier"); return; }
+      return Promise.resolve(this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind) }, () => this.showChat(tab.id)))
+        .then((route) => { log(`chat ${tab.id}: notification route: ${route}`); return route; });
     } catch (e) { log(`chat: notification failed: ${e.message}`); }
+  }
+  // "Kural: Test Notification": one now, whatever the focus, the same way; then says which way and where to allow it.
+  async testNotification() {
+    const tab = this.tab(this.activeId) || { id: "test", title: "Kural" };
+    const route = await this.notify(tab, "done", { force: true, text: "This is a test notification." });
+    const names = { toast: "Kural's own notification", os: process.platform === "darwin" ? "the Mac's notification (shown as Script Editor)" : "the system's notification command", app: "a message inside the Kural window", none: "nothing (every way failed; see Kural: Show Log)" };
+    const mac = process.platform === "darwin" ? " If nothing appeared on screen: System Settings → Notifications → allow Script Editor (and Kural), and check that Focus / Do Not Disturb is off." : "";
+    const linux = process.platform === "linux" ? " If nothing appeared: check that a notification service is running and that notify-send is installed (libnotify-bin)." : "";
+    vscode.window.showInformationMessage(`Test notification sent through ${names[route] || route}.${mac}${linux}`);
   }
   clearNotice(id) { if (this.notifier) this.notifier.clear(`kural-chat-${id}`); }
   // Is this chat on screen: a pane shows it and that pane is visible (the side panel open, its editor in view).
