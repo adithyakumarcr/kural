@@ -349,6 +349,36 @@ def add_os_toast(text):
     return text[:end[0].start() + 1] + code + text[end[0].start() + 1:]
 
 
+# Right-click on the activity bar → "Workspace Color..." (runs the command kural.workspaceColor). Extensions can't add to that
+# menu: VS Code builds it by hand in getActivityBarContextMenuActions() (Activity Bar Position submenu, Compact/Default size,
+# then the "Hide Activity Bar" style actions; it is not a MenuId an extension could contribute to; ActivityBarPositionMenu is only the
+# submenu's contents). The item is pushed onto that list just before the function's final `return s.push(...)`. Found by the
+# function's name (a class method name, kept by the minifier) and the ICommandService id (`X=Y("commandService")`). Any miss →
+# a ::warning:: and the item is simply not there (the command palette has the command). Applying it again changes nothing.
+WSCOLOR_MARK = "/*kural-workspace-color*/"
+WSCOLOR_SERVICE = re.compile(r'(?<![\w$.])([\w$]+)=[\w$]+\("commandService"\)')
+WSCOLOR_PLAIN = re.compile(r'getActivityBarContextMenuActions\(\)\{(?:(?!getActivityBarContextMenuActions).){0,2000}?[,\s]([\w$]+)=\[new [\w$]+\("workbench\.action\.activityBar\.position"')
+
+
+def add_workspace_color_item(text):
+    if WSCOLOR_MARK in text:
+        return text
+    func = WSCOLOR_PLAIN.search(text)
+    services = WSCOLOR_SERVICE.findall(text)
+    ret = func and text.find(f"return {func.group(1)}.push(", func.end(), func.end() + 2500)
+    helper = func and re.search(r'return ' + re.escape(func.group(1)) + r'\.push\(([\w$]+)\(\{id:', text[ret:ret + 200]) if ret and ret > 0 else None
+    if not func or len(set(services)) != 1 or not helper or "this.instantiationService.invokeFunction" not in text[ret:ret + 300]:
+        print("::warning::Activity bar context menu code not found; right-click → Workspace Color... not added "
+              f"(function {bool(func)}, command service {len(set(services))}, item {bool(helper)})")
+        return text
+    lst, mk = func.group(1), helper.group(1)
+    item = (f'{WSCOLOR_MARK}{lst}.push({mk}({{id:"kural.workspaceColor",label:"Workspace Color...",'
+            f'run:()=>this.instantiationService.invokeFunction(kx=>kx.get({services[0]}).executeCommand("kural.workspaceColor"))}})),')
+    # `return s.push(a),...` → `return /*mark*/s.push(item),s.push(a),...`  (a comma expression keeps the original return value)
+    start = ret + len("return ")
+    return text[:start] + item + text[start:]
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -360,7 +390,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))
+    new = add_workspace_color_item(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))
     if new == text:
         return
     data = new.encode("utf-8")
