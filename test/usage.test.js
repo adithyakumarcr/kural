@@ -77,6 +77,20 @@ check("the AI Usage page: its rules allow no outside scripts or styles", () => {
   const html = _page("abc", "vscode-resource:", "codicons.css");
   assert.ok(/default-src 'none'/.test(html) && /script-src 'nonce-abc'/.test(html) && /font-src vscode-resource:/.test(html));
   assert.ok(!/innerHTML/.test(html));   // (everything is built from text nodes)
+  // The tokens are the collapsed part ("Tokens"); the limits and the plan are always shown.
+  assert.ok(/el\("summary", "", "Tokens"\)/.test(html) && !/"Details"/.test(html));
+});
+check("the AI Usage panel lists Session, then Weekly, then the other limits (each group as reported)", () => {
+  const { _orderLimits: order } = require("../extension/lib/usage-panel");
+  const names = (ws) => order(ws).map((w) => usage.limitName(w));
+  // Claude's windows, as the report lists them (Opus's week before the plain week).
+  usage._reset();
+  const r = usage.fromClaude({ rate_limit_info: { unifiedWindows: { seven_day_opus: { utilization: 0.1 }, seven_day: { utilization: 0.25, resetsAt: (now + 60 * min) / 1000 }, five_hour: { utilization: 0.5, resetsAt: (now + 42 * min) / 1000 } } } });
+  assert.deepStrictEqual(names(r.windows), ["Session", "Weekly", "Weekly (Opus)"]);
+  assert.deepStrictEqual(names([{ id: "seven_day_sonnet", label: "Week (Sonnet)" }, { id: "primary", label: "Session" }, { id: "seven_day", label: "Week" }]), ["Session", "Weekly", "Weekly (Sonnet)"]);
+  // Gemini: only weekly limits, in the order reported.
+  assert.deepStrictEqual(names([{ label: "Gemini", period: "week" }, { label: "Claude", period: "week" }]), ["Weekly (Gemini)", "Weekly (Claude)"]);
+  assert.deepStrictEqual(order([]), []);
 });
 
 check("tokens: Claude's result (all its models), per day, totals for today / 7 / 30 days", () => {
