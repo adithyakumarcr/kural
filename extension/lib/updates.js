@@ -13,7 +13,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 const { log } = require("./ai/claude");
-const { expectedSha, verifySignature, pickManifest } = require("./release-verify");
+const { validateAssetVersion, expectedSha, verifySignature, pickManifest } = require("./release-verify");
 const { RELEASE_PUBLIC_KEYS } = require("./release-keys");
 
 const REPO = "adithyakumarcr/kural";
@@ -121,6 +121,7 @@ function unixScript({ pid, inside, steps, logFile, waitTicks = 66 }) {
 // app as it was. Then start it.
 const MAC_SWAP = path.join(__dirname, "mac-swap.sh");
 function macSteps({ app, fresh, version, clear = "", open = "open" }) {
+  if (!parseVersion(version)) throw new Error("invalid update version");
   const lib = fs.readFileSync(MAC_SWAP, "utf8");
   return [clear, lib, `kural_say() { log "$*"; }`, `log "installing ${version}"`,
     `if kural_swap ${q(fresh)} ${q(app)}; then log "installed ${version}";`,
@@ -233,6 +234,7 @@ class Updater {
     // Only Kural's own GitHub releases, and the file must match the checksum list that Kural's release key signed.
     // GitHub's own SHA-256 comes from the same place as the file, so it only counts as an extra check: whoever could
     // replace the file on GitHub could replace that too, but not sign the list.
+    validateAssetVersion(asset && asset.name, rel.version, this.version);
     if (!downloadOk(asset)) throw new Error("the download isn't from Kural's GitHub releases");
     const manifest = await this.manifest(rel);
     if (!manifest) throw new Error("this release has no signed checksum list, so Kural won't install it automatically. Download it from the releases page and install by hand.");
@@ -267,6 +269,7 @@ class Updater {
   }
 
   async install(file, dir, version) {
+    validateAssetVersion(path.basename(file), version, this.version);
     const pid = process.ppid;   // Kural's main process (this code runs in a child of it)
     const caches = builtinCaches(this.context);
     const clear = process.platform === "win32"

@@ -196,7 +196,7 @@ class LocalAgent {
     // Reading is allowed without asking only inside the project (and its other folders, the temp folder): reading
     // your Documents or Desktop would make macOS ask about Kural, so it's your call (the chat asks you).
     const where = input && (input.file_path || input.path);
-    const outside = READS.has(u.name) && where && !within(where, [this.tools.cwd, ...(this.tools.dirs || []), os.tmpdir(), ...(this.opts.readRoots || [])]);
+    const outside = READS.has(u.name) && where && !within(where, [this.tools.cwd, ...(this.tools.dirs || []), ...(this.opts.readRoots || [])]);
     if (!this.allowed.has(u.name) || outside) {
       let ans = { allow: false, message: "Not allowed here." };
       try { if (this.h.onPermission) ans = await this.h.onPermission({ tool_name: u.name, input, tool_use_id: u.id }); } catch (e) { ans = { allow: false, message: e.message }; }

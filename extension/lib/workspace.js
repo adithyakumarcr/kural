@@ -20,22 +20,18 @@ function root() { const f = folders(); return f.length ? f[0].path : undefined; 
 let scratch = null;
 function setWorkDir(dir) { scratch = dir; }
 function workDir() {
-  const dir = scratch || path.join(require("os").tmpdir(), "kural-work");
+  const dir = scratch || require("./paths").privateTmp("work");
   try { fs.mkdirSync(dir, { recursive: true }); } catch { /* exists, or the temp folder: still usable */ }
   return dir;
 }
-// Where the AI may read (and, in Agent mode, change) files without asking: your project folders, Kural's work folder,
-// the temp folder (attachments). Reading also Kural's storage (pictures a model made). Anywhere else asks you first.
+// Implicit file access: workspace/work directory, profile images, private attachments and Claude plans.
+// Saved chats, credentials, SSH storage and other users' temp files require explicit approval.
 function aiRoots(write = false) {
-  const os = require("os");
   const store = scratch ? path.dirname(scratch) : null;
   const claude = require("./profiles/env").claudeConfigDir();   // (~/.claude, or this profile's own folder)
-  // Reading also: Claude Code's own files (long tool output it saved, its plans) and the system temp folder, where
-  // Claude Code's background agents write (on a Mac that's /tmp, not the per-user temp folder).
-  // Writing: not the temp folder (anyone's files can be there; a write there asks). Reading: yes (attachments).
-  return [...folders().map((f) => f.path), workDir(), ...(write ? [] : [os.tmpdir()]),
+  return [...folders().map((f) => f.path), workDir(), ...(write ? [] : [require("./paths").privateTmp()]),
     ...(write ? [path.join(claude, "plans")]
-      : [...require("./profiles/scope").storageReadRoots(store), path.join(claude, "projects"), path.join(claude, "plans"), process.platform === "win32" ? null : "/tmp"])].filter(Boolean);
+      : [...require("./profiles/scope").storageReadRoots(store), path.join(claude, "plans")])].filter(Boolean);
 }
 function mayUse(file, write = false) { return require("./paths").within(file, aiRoots(write)); }
 function extraDirs() { return folders().slice(1).map((f) => f.path); }

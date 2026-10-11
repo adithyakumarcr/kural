@@ -18,6 +18,13 @@ const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 //   without asking (ws.aiRoots). granted: files and folders you attached (and the handoff file). cwd: the project
 //   folder (what "outside" means for rm). notice: the program only tells, it doesn't wait (agy): never a card.
 function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false }) {
+  // Enforce read-only modes here, even after a live transition or a provider sends an unexpected call.
+  if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite"].includes(tool)))
+    return { deny: true, message: `${mode} mode cannot run commands or change files.` };
+  const fileInput = input.file_path || input.notebook_path || input.path;
+  if (fileInput) input = { ...input, ...(input.file_path ? { file_path: require("path").resolve(cwd, require("../paths").expand(input.file_path)) } : {}),
+    ...(input.notebook_path ? { notebook_path: require("path").resolve(cwd, require("../paths").expand(input.notebook_path)) } : {}),
+    ...(input.path ? { path: require("path").resolve(cwd, require("../paths").expand(input.path)) } : {}) };
   if (EDIT_TOOLS.has(tool)) {
     const file = input.file_path || input.notebook_path;
     // Inside your project (or Kural's own work folder): no asking, that's what Agent mode is for. Anywhere else

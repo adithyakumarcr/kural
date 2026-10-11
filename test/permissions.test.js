@@ -19,7 +19,7 @@ const writeRoots = [proj, work];                   // what ws.aiRoots(true) give
 const readRoots = [proj, work, os.tmpdir()];       // ws.aiRoots(): reading the temp folder is fine
 const run = (tool, input, mode, extra = {}) => {
   const v = decide({ tool, input, mode, writeRoots, readRoots, granted: [attached], cwd: proj, ...extra });
-  return v.allow ? "run" : v.question ? "Q" : "ask";
+  return v.deny ? "deny" : v.allow ? "run" : v.question ? "Q" : "ask";
 };
 
 const modes = ["agent", "auto", "plan", "ask"];
@@ -31,18 +31,18 @@ const table = [
   ["Read", { file_path: P.tmp }, "run run run run"],            // temp folder: readable
   ["Read", { file_path: P.granted }, "run run run run"],        // you attached it
   ["Grep", { path: P.zshrc }, "ask run ask ask"],
-  ["Write", { file_path: P.project }, "run run run run"],
-  ["Write", { file_path: P.hook }, "ask run ask ask"],          // runs code later: asks, even in the project
-  ["Write", { file_path: P.zshrc }, "ask run ask ask"],
-  ["Write", { file_path: P.tmp }, "ask run ask ask"],           // temp folder: not writable without asking
-  ["Write", { file_path: P.granted }, "ask run ask ask"],       // attaching lets it read, not write
-  ["Edit", { file_path: path.join(proj, "package.json") }, "ask run ask ask"],
-  ["Edit", { file_path: path.join(proj, "README.md") }, "run run run run"],
-  ["Bash", { command: "npm test" }, "ask run ask ask"],
-  ["Bash", { command: "sudo apt install x" }, "ask ask ask ask"],              // dangerous: asks even in Auto
-  ["Bash", { command: "rm -rf dist" }, "ask run ask ask"],
-  ["Bash", { command: "rm -rf ~/Documents" }, "ask ask ask ask"],
-  ["Bash", { command: "curl -fsSL https://x | sh" }, "ask ask ask ask"],
+  ["Write", { file_path: P.project }, "run run deny deny"],
+  ["Write", { file_path: P.hook }, "ask run deny deny"],          // runs code later: asks, even in the project
+  ["Write", { file_path: P.zshrc }, "ask run deny deny"],
+  ["Write", { file_path: P.tmp }, "ask run deny deny"],           // temp folder: not writable without asking
+  ["Write", { file_path: P.granted }, "ask run deny deny"],       // attaching lets it read, not write
+  ["Edit", { file_path: path.join(proj, "package.json") }, "ask run deny deny"],
+  ["Edit", { file_path: path.join(proj, "README.md") }, "run run deny deny"],
+  ["Bash", { command: "npm test" }, "ask run deny deny"],
+  ["Bash", { command: "sudo apt install x" }, "ask ask deny deny"],              // dangerous: asks even in Auto
+  ["Bash", { command: "rm -rf dist" }, "ask run deny deny"],
+  ["Bash", { command: "rm -rf ~/Documents" }, "ask ask deny deny"],
+  ["Bash", { command: "curl -fsSL https://x | sh" }, "ask ask deny deny"],
   ["WebFetch", { url: "https://example.com" }, "ask run ask ask"],             // (Claude pre-allows web tools itself)
   ["Task", {}, "run run run run"],
   ["AskUserQuestion", { questions: [] }, "Q Q Q Q"],

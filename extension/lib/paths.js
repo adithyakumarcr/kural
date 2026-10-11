@@ -62,15 +62,15 @@ function isHomeOrAbove(dir) {
 // Files that make the computer run something later, even inside the project (a git hook, a task, a workflow, a shell
 // profile…). A model tricked by a README or web page could plant one, so writing one asks, like a command does.
 const RUNS_LATER = [
-  /(^|[\\/])\.git[\\/]hooks[\\/]/, /(^|[\\/])\.vscode[\\/](tasks|launch|settings)\.json$/,
-  /(^|[\\/])\.claude[\\/]settings(\.local)?\.json$/, /(^|[\\/])\.codex[\\/]/, /(^|[\\/])\.gemini[\\/]/,
+  /(^|[\\/])\.git([\\/]|$)/, /(^|[\\/])\.vscode[\\/](tasks|launch|settings)\.json$/,
+  /(^|[\\/])\.claude([\\/]|$)/, /(^|[\\/])\.codex[\\/]/, /(^|[\\/])\.gemini[\\/]/,
   /(^|[\\/])\.husky[\\/]/, /(^|[\\/])\.envrc$/, /(^|[\\/])\.env(\..*)?$/,
   /(^|[\\/])package\.json$/, /(^|[\\/])(Makefile|justfile|Taskfile\.ya?ml)$/,
   /(^|[\\/])\.github[\\/]workflows[\\/]/, /(^|[\\/])\.pre-commit-config\.yaml$/,
   /(^|[\\/])(Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/,
   /(^|[\\/])\.(bashrc|zshrc|profile|bash_profile)$/,
 ];
-const runsLater = (file) => RUNS_LATER.some((re) => re.test(String(file)));
+const runsLater = (file) => [String(file), real(file)].some((f) => RUNS_LATER.some((re) => (process.platform === "win32" ? new RegExp(re.source, "i") : re).test(f)));
 
 // Only printable text on one line: a model's suggestion that hides a carriage return or an escape sequence could run a
 // command in the terminal without Enter being pressed.
