@@ -14,6 +14,7 @@ const { versionLabel } = require("./version");
 const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
 const usageSwitch = require("./ai/usage-switch");
+const connectors = require("./ai/connectors");
 
 // Your own moods: the user setting kural.chat.moods (never a project's).
 const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
@@ -33,6 +34,35 @@ class SettingsPage {
     this.panel = null;
     this.checking = false;
     this.refreshing = false;
+    this.conn = {};       // ai -> { loading, servers, error, supported, at, busy, message }
+    this.chat = null;     // (set by extension.js: Claude's setup is reloaded through the chat)
+  }
+
+  // Each AI's program and the environment to run it in (for its connectors).
+  program(id) {
+    if (id === "claude") { const c = require("./ai/claude"); return { bin: c.findClaude(), env: c.cleanEnv() }; }
+    return { bin: brain.cli && brain.cli[id] ? brain.cli[id].bin : null, env: process.env };
+  }
+  // The project folder, when you trust it (Claude then lists the project's own connectors too, and starts them to check).
+  projectDir() {
+    const f = vscode.workspace.workspaceFolders;
+    return vscode.workspace.isTrusted && f && f.length && f[0].uri.scheme === "file" ? f[0].uri.fsPath : undefined;
+  }
+  // List an AI's connectors (asked when its card shows; Claude checks each one, which takes a few seconds).
+  async loadConnectors(id, force) {
+    if (!connectors.SUPPORTED[id]) return;
+    const c = this.conn[id] || (this.conn[id] = {});
+    if (c.loading || (!force && c.at && Date.now() - c.at < 60000)) return;
+    c.loading = true; this.push();
+    try { const { bin, env } = this.program(id); Object.assign(c, await connectors.list(id, bin, env, this.projectDir()), { at: Date.now() }); }
+    catch (e) { Object.assign(c, { servers: [], error: e.message, at: Date.now() }); }
+    finally { c.loading = false; this.push(); }
+  }
+  // After a connector was added or removed: Claude's chats start again with it (same conversations); Codex reads its
+  // settings when it starts, so the next Codex chat has it.
+  afterConnectorChange(id) {
+    if (id === "claude" && this.chat) this.chat.setupChanged("connectors changed");
+    this.loadConnectors(id, true);
   }
 
   register() {
@@ -40,7 +70,7 @@ class SettingsPage {
     this.gs.onChange(() => this.push());
     this.context.subscriptions.push(usage.onChange(() => this.push()),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.usageSwitch"].some((k) => e.affectsConfiguration(k))) this.push();
+        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.usageSwitch", "kural.chat.fullClaudeCodeSetup"].some((k) => e.affectsConfiguration(k))) this.push();
       }));
   }
 
@@ -108,6 +138,8 @@ class SettingsPage {
       version: versionLabel(this.context.extensionPath, this.context.extension.packageJSON.version),
       autoUpdates: vscode.workspace.getConfiguration("kural").get("updates.autoCheck") !== false,
       usageSwitch: usageSwitch.options(vscode.workspace.getConfiguration("kural")),
+      connectors: Object.fromEntries(["claude", ...CLI_IDS, "local"].map((id) => [id, connectors.SUPPORTED[id] ? { supported: true, ...(this.conn[id] || {}) } : { supported: false }])),
+      fullSetup: vscode.workspace.getConfiguration("kural").get("chat.fullClaudeCodeSetup") !== false,
       moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), hidden: hiddenMoods(), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
       section: this.section || null };
   }
@@ -166,12 +198,38 @@ class SettingsPage {
       case "getStarted": this.gs.open(); break;
       case "tab": vscode.commands.executeCommand("kural.tabPanel.focus"); break;
       case "router": vscode.commands.executeCommand("kural.modelRouter"); break;
+      case "findModels": vscode.commands.executeCommand("kural.findModels"); break;
+      case "connectors": await this.loadConnectors(m.id, !!m.force); break;
+      case "addConnector": case "removeConnector": {
+        const c = this.conn[m.id] || (this.conn[m.id] = {});
+        if (c.busy) break;
+        c.busy = true; c.message = ""; this.push();
+        let r;
+        try {
+          const { bin, env } = this.program(m.id);
+          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name, this.projectDir());
+        } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
+        if (this.panel) this.panel.webview.postMessage({ type: "connectorDone", id: m.id, reqId: m.reqId, error: r.error || "" });
+        if (r.ok) this.afterConnectorChange(m.id); else this.push();
+        break;
+      }
+      case "fullSetup":
+        await vscode.workspace.getConfiguration("kural").update("chat.fullClaudeCodeSetup", !!m.on, vscode.ConfigurationTarget.Global);
+        if (this.chat) this.chat.setupChanged(m.on ? "switched to your full setup" : "switched to the minimal setup");
+        this.push();
+        break;
+      case "reloadSetup": if (this.chat) this.chat.setupChanged("reload asked for"); this.loadConnectors("claude", true); break;
       case "usagePanel": vscode.commands.executeCommand("kural.showUsage"); break;
       case "usageSwitch": {
         const c = vscode.workspace.getConfiguration("kural");
         if (typeof m.enabled === "boolean") await c.update("usageSwitch.enabled", m.enabled, vscode.ConfigurationTarget.Global);
         if (typeof m.threshold === "number" && Number.isInteger(m.threshold) && m.threshold >= 1 && m.threshold <= 99)
           await c.update("usageSwitch.threshold", m.threshold, vscode.ConfigurationTarget.Global);
+        // One AI's switch point: { ai, which: "session" | "weekly", value }.
+        if (usageSwitch.AIS.includes(m.ai) && ["session", "weekly"].includes(m.which) && Number.isInteger(m.value) && m.value >= 1 && m.value <= 99) {
+          const i = c.inspect("usageSwitch.limits"), now = i && i.globalValue && typeof i.globalValue === "object" ? i.globalValue : {};
+          await c.update("usageSwitch.limits", { ...now, [m.ai]: { ...(now[m.ai] || {}), [m.which]: m.value } }, vscode.ConfigurationTarget.Global);
+        }
         this.push();
         break;
       }

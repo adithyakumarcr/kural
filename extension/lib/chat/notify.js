@@ -3,14 +3,16 @@
 // command or file to allow, a device command, a question, a plan to build, an error, a login. Only while you're not
 // looking (setting kural.notifications "whenAway", the default: Kural's window isn't in front, or that chat isn't on
 // screen); "always"; "off". Each chat has one notification at a time (a new one replaces it), and it's taken away when
-// you answer in Kural or open that chat. Clicking it brings Kural to the front and shows the chat.
+// you answer in Kural or open that chat. Clicking it brings Kural to the front and shows the chat. (Not on a Mac, where
+// the osascript notification goes first: it can't be clicked through to Kural, replaced or taken away, and doesn't
+// bounce the Dock icon. The price of one that actually shows; see Notifier.routes.)
 //
 // How: VS Code shows a real system notification as Kural on every OS (its hostService.showToast, an Electron
 // Notification). Extensions can't reach it, so rebrand.py registers a command for it (Ross: _kural.osToast
 // { title, body, id, attention } → { clicked, supported }, and _kural.osToastClear { id }). On a build without that
 // command, or a system without notifications (Linux with no notification service): the OS's own way (macOS osascript,
 // shown as Script Editor; Windows a PowerShell toast; Linux notify-send), else Kural's notification inside the window.
-// No vscode here: the editor's parts come in (see Notifier).
+// On a Mac the OS's own way goes first (see Notifier.routes). No vscode here: the editor's parts come in (see Notifier).
 
 const SETTINGS = ["whenAway", "always", "off"];
 
@@ -19,6 +21,16 @@ function shouldNotify(setting, { focused, onScreen }) {
   const s = SETTINGS.includes(setting) ? setting : "whenAway";
   if (s === "off") return false;
   return s === "always" || !focused || !onScreen;
+}
+
+// Same as shouldNotify, with the reason in words (for Kural's log).
+function notifyDecision(setting, { focused, onScreen }) {
+  const s = SETTINGS.includes(setting) ? setting : "whenAway";
+  if (s === "off") return { send: false, why: "setting is off" };
+  if (s === "always") return { send: true, why: "setting is always" };
+  if (!focused) return { send: true, why: "Kural's window is not in front" };
+  if (!onScreen) return { send: true, why: "that chat is not on screen" };
+  return { send: false, why: "Kural's window is in front and that chat is on screen" };
 }
 
 // Markdown to one short plain line (an answer's first sentence for the notification).
@@ -84,36 +96,64 @@ function fallbackCommand(platform, title, body) {
 //   inApp(title, body) → Promise<boolean>     (Kural's notification inside the window: true = "Show" clicked)
 //   log(text), platform }
 class Notifier {
-  constructor(editor) { this.e = editor; this.native = null; /* null: not known yet */ }
+  constructor(editor) { this.e = editor; this.native = null; /* null: not known yet */ this.toastWaitMs = 800; }
 
   async ready() {
     if (this.native === null) { try { this.native = !!(await this.e.hasToast()); } catch { this.native = false; } }
     return this.native;
   }
 
-  // Shows it; onClick() when you click it. Never throws, never waits for you (a toast stays until you act on it).
-  show({ id, title, body, attention = true }, onClick) {
-    const clicked = () => { if (onClick) { try { onClick(); } catch (e) { this.e.log(`notify: ${e.message}`); } } };
-    return this.ready().then((native) => {
-      if (!native) return this.fallback(title, body, onClick);
-      // (Not awaited: it settles only when you click or close it.)
-      Promise.resolve().then(() => this.e.toast({ id, title, body, attention })).then((r) => {
-        if (r && r.supported === false) return this.fallback(title, body, onClick);   // no notifications on this system
-        if (r && r.clicked) clicked();
-      }, (err) => { this.e.log(`notify: ${err && err.message}; the OS's own way instead`); return this.fallback(title, body, onClick); });
-    }).catch((e) => this.e.log(`notify: ${e.message}`));
+  // The order to try. On a Mac the OS's own way (osascript) comes first: Electron's notification from an ad-hoc-signed app
+  // (every install is re-signed, so macOS sees a new app) is dropped silently while the call still says "supported",
+  // so no fallback would ever run. osascript always shows (as Script Editor). Elsewhere Kural's own toast comes first.
+  routes() { return this.e.platform === "darwin" ? ["os", "toast", "app"] : ["toast", "os", "app"]; }
+
+  // Shows it; onClick() when you click it (only the toast and in-window routes can tell). Never throws, never waits for
+  // you. Resolves with the route used: "toast" | "os" | "app" | "none" (so the log and "Test Notification" can say).
+  async show({ id, title, body, attention = true }, onClick) {
+    const log = (t) => { try { this.e.log(t); } catch { /* the log is optional */ } };
+    try {
+      for (const route of this.routes()) {
+        if (route === "toast") {
+          if (!(await this.ready())) { log("notify: no _kural.osToast in this build"); continue; }
+          if (await this.tryToast({ id, title, body, attention }, onClick, log)) { log("notify: sent by Kural's own toast"); return "toast"; }
+        } else if (route === "os") {
+          if (await this.osWay(title, body, log)) return "os";
+        } else if (route === "app") {
+          Promise.resolve().then(() => this.e.inApp(`Kural: ${title}`, body)).then((shown) => { if (shown && onClick) { try { onClick(); } catch (e) { log(`notify: ${e.message}`); } } }, () => {});
+          log("notify: shown inside the window");
+          return "app";
+        }
+      }
+    } catch (e) { log(`notify: ${e.message}`); }
+    return "none";
   }
 
-  async fallback(title, body, onClick) {
+  // The toast settles only when you click or close it, so wait briefly: an early "unsupported" or error = not shown.
+  tryToast(o, onClick, log) {
+    return new Promise((resolve) => {
+      let done = false;
+      const end = (ok) => { if (!done) { done = true; resolve(ok); } };
+      const timer = setTimeout(() => end(true), this.toastWaitMs);
+      Promise.resolve().then(() => this.e.toast(o)).then((r) => {
+        if (r && r.supported === false) { log("notify: this system has no notifications for Kural's toast"); clearTimeout(timer); end(false); return; }
+        if (r && r.clicked && onClick) { try { onClick(); } catch (e) { log(`notify: ${e.message}`); } }
+        end(true);
+      }, (err) => { log(`notify: toast failed: ${err && err.message}`); clearTimeout(timer); end(false); });
+    });
+  }
+
+  async osWay(title, body, log) {
     const cmd = fallbackCommand(this.e.platform, `Kural: ${title}`, body);
+    if (!cmd) { log(`notify: no OS notification command for ${this.e.platform}`); return false; }
     let sent = false;
-    if (cmd) { try { sent = await this.e.run(cmd[0], cmd[1], cmd[2]); } catch { sent = false; } }
-    if (sent) return;
-    try { if (await this.e.inApp(`Kural: ${title}`, body) && onClick) onClick(); } catch { /* nothing more to try */ }
+    try { sent = await this.e.run(cmd[0], cmd[1], cmd[2]); } catch (e) { log(`notify: ${cmd[0]} threw: ${e.message}`); }
+    log(sent ? `notify: sent by ${cmd[0]}` : `notify: ${cmd[0]} failed`);
+    return sent;
   }
 
   // Takes a chat's notification away (you answered in Kural, or opened that chat).
   clear(id) { if (this.native) Promise.resolve().then(() => this.e.clearToast(id)).catch(() => {}); }
 }
 
-module.exports = { SETTINGS, shouldNotify, plainLine, message, fallbackCommand, Notifier };
+module.exports = { SETTINGS, shouldNotify, notifyDecision, plainLine, message, fallbackCommand, Notifier };

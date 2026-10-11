@@ -8,12 +8,13 @@ Usage*) shows a compact summary for each AI: its most used limit, a bar and when
 ```
 Claude
 Session 50% used          resets in 42 min
-Details
+Weekly 20% used           resets in 4 days
+Tokens
 ```
 
-**Session** is the short limit, 5 hours long (Claude's and Codex's); **Weekly** is the week's. Google Gemini (its
-weekly limits, one per model family: "Weekly (Gemini)") and ChatGPT (Codex) (Session and Weekly) are shown the same
-way. **Details** expands its other limits, plan, usage page and token history. **Refresh** asks each program now
+**Session** is the short limit, 5 hours long (Claude's and Codex's); **Weekly** is the week's. Each AI's Session and
+Weekly limits are always shown, with when they reset. Google Gemini has only weekly limits (one per model family:
+"Weekly (Gemini)"). Only the token table is collapsed: click **Tokens** to open it. **Refresh** asks each program now
 (for Claude, one tiny request); **Settings** opens the automatic switching controls.
 
 **The status bar** (bottom right) shows only each AI's **Session** limit: the AI your chat is using in words, the
@@ -26,7 +27,7 @@ others short. Hover it for everything: every AI's Session and Weekly limits and 
 | `Claude Session 10% · resets 42m` with a warning color | a Weekly limit is near its limit; hover for its percentage and reset time |
 | `Gemini` | Google Gemini has only weekly limits: hover for its usage |
 
-**Tokens.** Under **Details**, how many tokens it read and wrote today, in the last 7 days and the last 30 days.
+**Tokens.** Under **Tokens**, how many tokens it read and wrote today, in the last 7 days and the last 30 days.
 "Read" is everything sent to the model (your messages, files, the conversation so far), with how much of it came from
 the cache (re-sent text the provider keeps for a few minutes: much cheaper); "written" is what the model produced. It
 counts every Kural feature (chat, Tab Completion, Ctrl+K, commit messages), kept for 35 days. A model on your computer shows
@@ -36,19 +37,22 @@ It turns orange from 80 % and red from 95 %. Click it for the AI Usage panel. Th
 themselves: Claude Code sends them with every answer (so they update while you work), Codex when Kural asks (every 10
 minutes), Gemini from its `/usage`.
 
-### Automatic usage switching
+### Switching AI near a limit
 
-In **Kural Settings → AI Usage**, turn on **Automatically switch AI** and set **Switch at**. It is off by default;
-the initial threshold is **70%**, editable from **1% to 99%**.
+In **Kural Settings → AI Usage**, turn on **Switch AI near a limit**. It is off by default.
 
-When a reported Session or Weekly limit for the current model reaches your threshold, Kural moves the **same chat**
-to another service you have set up that is below it. This works with a model picked by hand and with **Auto**.
+Then each AI's card sets its own switch points: "Move the chat to another AI when the Session limit is [70] % used or
+a Weekly limit is [70] % used". Each is editable from **1% to 99%**, and the default is **70%**. Gemini has a Weekly
+point only.
+
+When a reported Session or Weekly limit for the current model reaches its point, Kural moves the **same chat**
+to another service you have set up that is below its points. This works with a model picked by hand and with **Auto**.
 Messages, attached context, tool results, changes, answered questions and the plan go along. A paused request continues
 on the next service; a completed answer switches before the next message. Active tools, approvals, background tasks
 and agents finish before the handoff. The new service must support the chat's attachments, team or linked device.
 
 If none can take over, the chat stays with its current service. Providers may report usage only after a request, so
-the threshold is a switching trigger and cannot guarantee that usage stops at exactly that percentage. Turning it
+the points are a switching trigger and cannot guarantee that usage stops at exactly that percentage. Turning the switch
 off keeps your current model choice; **Auto** retains its existing routing and usage-limit recovery.
 
 ## Account
@@ -61,12 +65,16 @@ ChatGPT (Codex) and your own model:
 
 - **Who's logged in**: email, plan, organization.
 - **Usage**: the meter's numbers; and **Usage page**, which opens the provider's own usage page in your browser.
+- **Switch points**: when to move a chat to another AI near a limit (Session and Weekly, see above).
+- **Connectors** (Claude and ChatGPT (Codex)): the list with each one's status; **Add** and remove. For Claude, the
+  **Use my Claude Code setup** checkbox and **Reload** are there too. See [[Chat]] and [[Google Gemini and ChatGPT]].
 - **Switch account**: logs out, then starts the login again; log in with the other account. Kural checks the new login
   with a test request and carries on.
 - **Log out**: logs that program out on this computer (also in the terminal). Its models wait until you log in again;
   the others keep working.
 - **Log in** (when you're logged out), or **Set up** (when you haven't yet).
-- **Your own model**: which model on this computer is set up, or set one up.
+- **Your own model**: which model on this computer is set up, or set one up; **Find & download models…** (see
+  [[Your Own Model]]).
 - **Get started**, **Check for updates**, **Kural guide** (this wiki), **Ask for a feature**.
 - **Moods**: the chat's moods. The four built-in ones, and your own: **Add a mood** (name, a one-line hint,
   instructions for the AI), with tips on what works best and examples to start from; **Edit** and delete them. See
@@ -102,14 +110,16 @@ Kural's release key). A release without that list is not installed automatically
 Updates include test versions (alpha, beta, rc). Installing:
 
 - **Ubuntu**: asks for your password, installs the new `.deb`, restarts Kural.
-- **Mac**: replaces Kural.app after Kural has fully closed, then starts it again.
+- **Mac**: replaces Kural.app after Kural has fully closed, then starts it again. The new app is first copied next to
+  the old one, and checked whole (the Electron Framework and the four helper apps) before anything is replaced. The old
+  app stays in place until the new one is there and checked; if anything fails, the old Kural stays.
 - **Windows**: runs the new setup after Kural has fully closed, then starts it again.
 
 Fully closed: Kural and every helper it started. Replacing the app while any part of it still ran made Kural crash on
 the way out and sometimes not start again. If something keeps Kural open (an unsaved file, a running task), Kural says
-so; the update finishes when you close it. On a Mac the old app is set aside first and comes back if the new one can't
-be put in place, and Kural checks first that it may replace itself (an app installed by another user of the Mac can't
-be: Kural shows the download to install by hand). What the install did is written to `update.log` in Kural's storage;
+so; the update finishes when you close it. On a Mac, Kural checks first that it may replace itself (an app installed
+by another user of the Mac can't be: Kural shows the download to install by hand), and the old app goes back if the
+new one can't be put in place. What the install did is written to `update.log` in Kural's storage;
 if it didn't finish, Kural says so at the next start.
 
 ## Crash reports

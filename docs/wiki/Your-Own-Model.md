@@ -7,11 +7,13 @@ before running commands, and you keep or undo each change, like with Claude.
 ## Set it up
 
 - **Get started** → **Your own model**: Ollama, a model, a test. See [[Getting Started]].
-- Or in the chat's model menu: **Find & download models…** searches Ollama's library. It lists only models that can
+- **Kural Settings → Your own model → Find & download models…** (also under **More** → **Find & download models**, or
+  the Command Palette: **Kural: Find and Download Models**) searches Ollama's library. It lists only models that can
   chat and use tools (the chat needs tools) and that run on your computer (no cloud-only models), shows how much memory
   each size needs compared to yours, and downloads with a progress bar. You can also use or delete models you have.
 
-Then pick the model under **On this computer** in the model menu. You need Ollama 0.8 or newer.
+Then pick the model under **On this computer** in the model menu. That section shows once you have a model that can
+chat. You need Ollama 0.8 or newer.
 
 ## Which model?
 

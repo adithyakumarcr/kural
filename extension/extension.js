@@ -85,6 +85,7 @@ function activate(context) {
   // asked once per Claude Code version, in the background now, so the chat's first answer never waits for it.
   require("./lib/ai/claude").setFlagsStore(context.globalStorageUri.fsPath);
   if (getStarted.claudeReady) require("./lib/ai/claude").prefetchFlags(findClaude()).catch(() => {});
+  require("./lib/workspace-color").register(context);
 
   // ---------- status bar ----------
   const status = vscode.window.createStatusBarItem("kural.status", vscode.StatusBarAlignment.Right, 100);
@@ -231,6 +232,7 @@ function activate(context) {
   account.register();
   // Kural Settings (an editor tab): what the Account menu had. The person icon and "Kural: Settings" open it.
   account.page = new SettingsPage(context, account, getStarted);
+  account.page.chat = chat;
   account.page.register();
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
