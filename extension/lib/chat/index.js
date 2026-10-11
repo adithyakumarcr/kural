@@ -91,6 +91,13 @@ const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / te
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => Math.random().toString(36).slice(2, 9);
 const valid = (list, v) => list.some((x) => x.id === v);
+// The kural.chat.mode setting for new chats. Auto (commands run without asking) only from YOUR settings: a project's
+// .vscode/settings.json can't turn it on for you (APP-8).
+function settingMode() {
+  const m = cfg().get("chat.mode"), i = cfg().inspect ? cfg().inspect("chat.mode") : null;
+  if (m === "auto") return i && i.globalValue === "auto" ? "auto" : "agent";
+  return valid(MODES, m) ? m : "agent";
+}
 
 // Messages meant only for the pane you're using (see ChatView.post).
 const ONE_PANE = new Set(["full", "attached", "pasted", "insertPill", "focus", "showHistory", "flash"]);
@@ -260,7 +267,7 @@ class ChatView {
       model: this.usableModel(validModel(last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet")),
       autoRoute: !!last.autoRoute, routingProfile: profileOf(last.routingProfile || cfg().get("modelRouter.profile")),
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
-      mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
+      mode: valid(MODES, last.mode) ? last.mode : settingMode(),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
       mood: valid(allMoods(), last.mood) ? last.mood : firstMood(),
       roles: Array.isArray(last.roles) ? last.roles.filter((r) => valid(ROLES, r)) : [],
@@ -2952,4 +2959,4 @@ function elementNote(e) {
   return lines.join("\n");
 }
 
-module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, teamPrompt, FRIENDS, ROLES, MOOD_PROMPTS, toolDetail } };
+module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, teamPrompt, FRIENDS, ROLES, MOOD_PROMPTS, toolDetail, settingMode } };
