@@ -228,8 +228,16 @@ jobs:
           if (-not (Test-Path "$dir\Kural.exe")) { throw "Kural.exe not installed" }
           $env:ELECTRON_RUN_AS_NODE = '1'
           try {
-            & "$dir\Kural.exe" -e 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)'
-            if ($LASTEXITCODE -ne 0) { throw "Patched Electron runtime check failed" }
+            $probe = "$env:RUNNER_TEMP\electron-runtime-check.js"
+            # GUI-subsystem executables do not reliably populate LASTEXITCODE. Wait for the actual process.
+            Set-Content -LiteralPath $probe -Value 'process.exit(7)' -Encoding utf8
+            $p = Start-Process -FilePath "$dir\Kural.exe" -ArgumentList ('"' + $probe + '"') -Wait -PassThru
+            if ($p.ExitCode -ne 7) { throw "Runtime probe did not propagate a failing exit code" }
+            Set-Content -LiteralPath $probe -Value 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)' -Encoding utf8
+            $p = Start-Process -FilePath "$dir\Kural.exe" -ArgumentList ('"' + $probe + '"') -Wait -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\electron-runtime.log" -RedirectStandardError "$env:RUNNER_TEMP\electron-runtime.err"
+            Get-Content "$env:RUNNER_TEMP\electron-runtime.log"
+            Get-Content "$env:RUNNER_TEMP\electron-runtime.err"
+            if ($p.ExitCode -ne 0) { throw "Patched Electron runtime check failed ($($p.ExitCode))" }
           } finally { Remove-Item Env:ELECTRON_RUN_AS_NODE }
           & "$dir\bin\kural.cmd" --version
           if ($LASTEXITCODE -ne 0) { throw "kural --version failed" }
