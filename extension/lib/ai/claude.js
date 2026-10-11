@@ -17,6 +17,7 @@ const crypto = require("crypto");
 
 const { initLog, log } = require("../log");   // (re-exported below: older code imports log from here)
 const usage = require("./usage");
+const { profileEnv } = require("../profiles/env");
 
 const LOGIN_RE = /not logged in|log ?in|invalid api key|api key|oauth|credential|401/i;
 
@@ -103,7 +104,9 @@ function cleanEnv(extra) {
     if (k === "CLAUDECODE" || (k.startsWith("CLAUDE_CODE_") && !/^CLAUDE_CODE_(OAUTH_TOKEN|USE_|SKIP_|CLIENT_|API_KEY)/.test(k))) delete env[k];
   }
   env.DISABLE_AUTOUPDATER = "1"; // our background processes shouldn't update Claude Code
-  return { ...env, ...extra };
+  // The profile's own Claude Code folder (its login lives there): lib/profiles/env.js. Every place that starts claude
+  // gets its environment from here, so none of them can use the wrong account.
+  return { ...env, ...profileEnv(), ...extra };
 }
 
 const newSessionId = () => crypto.randomUUID();

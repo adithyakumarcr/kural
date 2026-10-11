@@ -12,6 +12,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { diffLines } = require("../edit/diff");
 const { within } = require("../paths");
+const { claudeConfigDir } = require("../profiles/env");
 
 const SCHEME = "kural-before";
 const MAX_DISK = 10 * 1024 * 1024;   // a bigger file's snapshot stays in memory only
@@ -25,7 +26,7 @@ const hash = (text) => text == null ? null : crypto.createHash("sha1").update(te
 // still counts.
 function inProject(file, roots) {
   if (!file || !path.isAbsolute(String(file))) return false;
-  const away = [path.join(os.homedir(), ".claude"), os.tmpdir(), ...(process.platform === "win32" ? [] : ["/tmp"])];
+  const away = [path.join(os.homedir(), ".claude"), claudeConfigDir(), os.tmpdir(), ...(process.platform === "win32" ? [] : ["/tmp"])];
   return (roots || []).filter(Boolean).some((r) => within(file, [r]) && !away.some((a) => within(file, [a]) && !within(r, [a])));
 }
 

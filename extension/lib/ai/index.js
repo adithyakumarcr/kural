@@ -28,7 +28,10 @@ const setCli = (id, info) => {
   if (id === "agy" && Array.isArray(cli[id].models)) cli[id].models = require("./agy").groupModels(cli[id].models);
 };
 let cliStore = null;
-const setStore = (dir) => { cliStore = dir; };
+const cliStores = {};
+// dir: where the Codex / Gemini conversation ids are kept; byCli: another folder for one of them. A profile with its
+// own Codex account needs its own ids (a Codex conversation lives in that account's folder); Gemini's are the same everywhere.
+const setStore = (dir, byCli) => { cliStore = dir; Object.assign(cliStores, byCli || {}); };
 
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
@@ -56,7 +59,8 @@ const setModelSource = (f, fallback) => { modelSource = f; if (fallback) localFa
 // model). The cloud AIs first, the chat's own first among them (the account you're using): Claude's Haiku, or the
 // lightest Codex / Gemini model by the Model Router's tiers ("mini", "flash", "fast and affordable"…: router/policy.js).
 // None set up: your model on this computer.
-function fastestModel(prefer = currentModel()) {
+// skip: AIs not to pick (the side chat can't use Codex: it can't be made answer-only).
+function fastestModel(prefer = currentModel(), skip = []) {
   const { traits } = require("../router/policy");
   const lightest = (id) => {
     const list = (cli[id].models || []).map((m, i) => ({ m, i, t: traits(m) }));
@@ -65,9 +69,11 @@ function fastestModel(prefer = currentModel()) {
   };
   const first = prefer ? engineOf(prefer) : null;
   for (const id of [...new Set([first, "claude", ...CLI_IDS])]) {
+    if (skip.includes(id)) continue;
     if (id === "claude" && isSetUp()) return "haiku";
     if (cli[id] && cli[id].ready && cli[id].bin) return `${id}:${lightest(id)}`;
   }
+  if (prefer && skip.includes(engineOf(prefer))) return localFallback() || null;
   return isLocal(prefer) ? prefer : localFallback() || prefer || null;
 }
 
@@ -85,7 +91,7 @@ function cliAgent(id, model, opts, handlers) {
   const json = opts.jsonSchema ? `\n\nAnswer with only one JSON object (no other text, no code fence) that matches this JSON schema: ${JSON.stringify(opts.jsonSchema)}` : "";
   const options = { name: opts.name, bin: c.bin, model: cliModel(model), models: c.models, effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
     cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs, appendSystemPrompt: (opts.appendSystemPrompt || "") + json,
-    mcpServers: opts.mcpServers, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
+    mcpServers: opts.mcpServers, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStores[id] || cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
   if (opts.teamConfig) return new (require("../chat/team-agent").TeamAgent)({ ...options, teamConfig: opts.teamConfig }, handlers,
     (o, h) => new CLIS[id].Agent(o, h));
   return new CLIS[id].Agent(options, handlers);
@@ -166,7 +172,7 @@ class Session {
   }
 }
 
-const localStore = (context) => path.join(context.globalStorageUri.fsPath, "local-chats");
+const localStore = (context) => require("../profiles/scope").dir("local-chats", "data", context && context.globalStorageUri ? context.globalStorageUri.fsPath : undefined);
 
 // "claude" | "ollama" | "codex" | "agy": which program has a chat's conversation.
 const engineOf = (model) => providerOf(model).id;

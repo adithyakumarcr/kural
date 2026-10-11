@@ -597,7 +597,53 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   stop-before-dispatch timing). **Haiku for well-defined work**: `routingRequest.wellDefined` ("Build it") → `need = 1`
   in `select` (not Intelligence; a checkpoint still escalates); team prompts start developers with Agent `model: "haiku"`
   (checked with real Claude Code). `test/team-offer.test.js`, `test/haiku-build.test.js`.
-- **Workspace Color** (`lib/workspace-color.js`, `rebrand.py` `add_workspace_color_item`): six `activityBar*` keys in
+- **Profiles** (`lib/profiles/`: `store.js` list/rules, `env.js` env, `scope.js` keys and folders, no vscode; `index.js`
+  UI). globalState `kural.profiles.v1` = `{active, list:[{id,name,kind,share}]}`; profile `default` ("Personal") is
+  today's Kural, with today's keys and folders. Others give Claude Code `CLAUDE_CONFIG_DIR=<globalStorage>/profiles/<id>/claude`
+  and Codex `CODEX_HOME=<…>/codex` (Claude Code's Mac keychain item name includes a hash of that folder: read from the
+  2.1.296 binary, not checked on a Mac). agy and Ollama are shared. `applyActive(context)` runs FIRST in `activate()`;
+  `cleanEnv()`, codex.js (run + app server), Get started / Ctrl+Esc terminals and settings connectors merge
+  `profileEnv()`: any new place that starts claude or codex must too. Switching = save `active`, `chat.saveNow()`,
+  reload the window. `scope.key/dir(base, "account"|"data")`: account state (`kural.setup.v2`, `kural.usage.v1`,
+  Codex ids) per profile; data (chats, checkpoints, handoffs, images, local-chats, `kural.chat.v4`, activity, router
+  memory) the main profile's when `share`, else `@<id>` / `profiles/<id>/`. `scope.dir` never returns a relative path
+  (it wrote test files into the repo). `tab.profile` stamped at send; a started chat from another profile gets
+  `freshSession = "account"` (carryOver) with `tab.profileFresh`, both cleared back in its own profile. The AI's read
+  roots exclude `<storage>/profiles/` (`scope.storageReadRoots`): a window sees only its own profile's data folders and
+  `claude/projects|plans`, never another profile or any `claude/`/`codex/` login folder. On a Mac, New profile needs
+  Claude Code >= 2.1.296 (`MIN_KEYCHAIN_CLAUDE`: older ones may share one keychain item, so a profile login would
+  replace the main one); Delete logs out its Claude (Mac: only if new enough) and Codex (`CODEX_HOME`), then removes the
+  folder, and tells you to close other windows using it. The switch flushes `chat.saveNow()`, `account.flush()`,
+  `activity.flush()`; `busy` counts running chats, `r.bg` and `r.steers`. Tests: `test/profiles.test.js` (fakes keep state in `$CLAUDE_CONFIG_DIR` /
+  `$CODEX_HOME`). Not checked live: a Mac keychain, two real accounts. (The UI was clicked through in a Linux build.)
+- **Settings pages and the connector catalog** (`media/settings.js` views main | ai | catalog | manual;
+  `lib/ai/connector-catalog.js`, no vscode). Adithya: minimal, linear journeys. The overview has cards (Settings button),
+  Moods, "What Kural learns", More. The chat's gear (`kural.account <ai>`) opens that AI's page: connectors (list, remove,
+  Sign in), Claude's setup checkbox, the usage-switch toggle with Session/Weekly points; local has Find models and context
+  length. Add connector = `BUILT_IN` (offline) + registry search (`registry.modelcontextprotocol.io/v0/servers`, 6 s,
+  parsed defensively; NOT checked live: blocked here; the remote addresses weren't reachable here either). `addArgs`
+  builds the CLI args (Claude: name before `-e`, `-H` last because it's variadic; Codex: `--url`, `--env`, no headers, no
+  SSE). The page sends only an item id; the host looks it up (`this.items`). Registry data is untrusted: strict npm/pypi name
+  checks (no `user/repo`: npx would run a GitHub repo), env/header names checked and dangerous ones (LD_*, NODE_OPTIONS,
+  PATH…) refused, secrets only over https (or localhost), responses capped at 1 MB, and a registry item never adds in
+  one click (its row shows the exact command/address first). Sign in: Codex `codex mcp login <name>` in a
+  terminal; Claude opens `claude` and says `/mcp`. The search box and fields are never redrawn (only the list). GitHub
+  is the hosted server + token header (the npm one is deprecated). Learning: `kural.modelRouter.learn` (RouterMemory
+  `enabled`), `kural.tabCompletion.learnFromActivity`; the forget commands accept `{quiet:true}`. Tests:
+  `connector-catalog.test.js`, `usage-ui.test.js`.
+- **Side chat** (`lib/chat/side.js` no vscode, `media/side.js`; Adithya: "smaller questions and answers then and
+  there"): the selection's `.quote-bar` has Ask (only text in an assistant `.answer`, not in `.side`) beside Add to chat.
+  `sideAsk` → `SideChats.ask` saves `msg.side = [{id, quote, items:[{q, a, model, at, running?, error?, stopped?}]}]` and
+  runs ONE short-lived agent per question via `brain.makeAgent(brain.fastestModel(prefer, ["codex"]), …)` (Codex is
+  skipped: with approval "never" its MCP servers run unprompted, so it isn't answer-only; agy runs with `--mode plan`
+  and its session-map entry is removed after (`AgyAgent.forget`); no tools, effort low, no thinking; Claude:
+  `systemPrompt` + the shared empty folder `privateTmp("side")`), streams `sideDelta`, ends with `sideState`. It is NOT
+  the conversation: no turn, no `tab.status`, no notify; `journal.full()` picks fields, so handoffs and carryOver ignore
+  it (a fork copies the threads). One question at a time per thread; 90 s timeout; closing the tab stops it (`stopAll`);
+  `clean()` marks running ones stopped. Tests: `test/side-chat.test.js`, `test/side-page.test.js`; live:
+  `node test/side-chat.live.js` (real Haiku, ~2 s).
+- **Workspace Color** (`lib/workspace-color.js`, `rebrand.py` `add_workspace_color_item`): palettes `DARK` (deep, muted)
+  and `LIGHT` (pastel) by `activeColorTheme.kind` (Adithya: not too bright); six `activityBar*` keys in
   `workbench.colorCustomizations` + `kural.workspaceColor`, Workspace target, merged; Remove deletes only keys still equal
   to what Kural wrote. The right-click item is a bundle patch: VS Code builds that menu in
   `getActivityBarContextMenuActions()` (not a MenuId), the patch pushes one action before its final `return s.push(...)`;

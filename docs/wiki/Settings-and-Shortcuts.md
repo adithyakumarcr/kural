@@ -36,9 +36,10 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.chat.didYouKnow` | on | a short "Did you know?" tip under an answer while it's being worked on |
 | `kural.chat.moods` | (none) | your own chat moods (name, hint, instructions); edit them in Kural Settings → Moods |
 | `kural.chat.hiddenMoods` | (none) | built-in moods (Default, Explorer, Critic, Learn) removed from the chat's model menu; remove or restore them in Kural Settings → Moods |
-| `kural.usageSwitch.enabled` | off | move the same chat to another available AI when its reported usage reaches the AI's switch points; turn on in Kural Settings → AI Usage ("Switch AI near a limit") |
+| `kural.usageSwitch.enabled` | off | move the same chat to another available AI when its reported usage reaches the AI's switch points; one switch for all AIs, shown on every AI's page in Kural Settings ("Switch to another AI near a limit") |
 | `kural.usageSwitch.threshold` | 70 | the switch point (1–99 %) for an AI without its own points; applies to Session and Weekly limits |
-| `kural.usageSwitch.limits` | (empty) | each AI's own switch points, `{ "claude": { "session": 80, "weekly": 90 }, "codex": {…}, "agy": {…} }`; set on each AI's card in Kural Settings. A missing one uses `kural.usageSwitch.threshold` |
+| `kural.usageSwitch.limits` | (empty) | each AI's own switch points, `{ "claude": { "session": 80, "weekly": 90 }, "codex": {…}, "agy": {…} }`; set on each AI's page in Kural Settings. A missing one uses `kural.usageSwitch.threshold` |
+| `kural.modelRouter.learn` | on | Auto learns which models you prefer from what you do after answers (Kural Settings → What Kural learns) |
 | `kural.fontSize` | 0 | text size in the chat and Ask panels (0 = the editor's size) |
 | `kural.tabCompletion.*` | | see [[Tab Completion]] |
 | `kural.localModels.contextLength` | 32768 | how much a model on your computer can look at once |
@@ -60,7 +61,7 @@ light/dark mode.
 Give each project its own color on the activity bar (the icons on the far left), so you can tell your windows apart.
 Right-click the activity bar → **Workspace Color...**, or Command Palette → **Kural: Workspace Color...**. Pick one of
 the colors, or **Custom** for a hex code. The activity bar changes as you move through the list; **Esc** puts the old
-color back. Needs a folder open.
+color back. The colors are soft: deep, muted shades with a dark theme, pastels with a light one. Needs a folder open.
 
 The color is saved in the workspace's own settings (`.vscode/settings.json`, or the `.code-workspace` file): the
 activity bar keys in `workbench.colorCustomizations`, and `kural.workspaceColor`. **Remove color** takes off only
