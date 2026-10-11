@@ -19,6 +19,9 @@ const vscode = require("vscode");
 const { execFile } = require("child_process");
 const { log } = require("../ai/claude");
 const { isHomeOrAbove, hasControl, within } = require("../paths");
+const { SECRET } = require("./activity");
+// What the log may show of a typed or suggested line: never one that looks like it holds a password or key (APP-12).
+const shown = (s, n = 120) => { const t = String(s || ""); return SECRET.test(t) ? `[${t.length} characters hidden: looks secret]` : t.slice(0, n); };
 
 const DIFF_CHARS = 3500;
 
@@ -322,12 +325,12 @@ function terminalTab(context, session, local, activity = null, commitSession = n
       const t0 = Date.now();
       let line = "", engine = "";
       try { [line, engine] = await suggest(terminal, typed, mine.cts.token); } catch (e) { log(`terminal tab: ${e.message}`); }
-      if (mine.cts.token.isCancellationRequested) { log(`terminal tab: "${typed.slice(0, 60)}" dropped (you typed on)`); return; }
+      if (mine.cts.token.isCancellationRequested) { log(`terminal tab: "${shown(typed, 60)}" dropped (you typed on)`); return; }
       cache.set(typed, line || "");
       if (cache.size > 200) cache.delete(cache.keys().next().value);
       if (job === mine) job = null;
-      if (!line) { log(`terminal tab: no suggestion for "${typed.slice(0, 60)}" (${engine || "no engine"})`); return; }
-      log(`terminal tab: "${line}" after ${Date.now() - t0} ms (${engine})`);
+      if (!line) { log(`terminal tab: no suggestion for "${shown(typed, 60)}" (${engine || "no engine"})`); return; }
+      log(`terminal tab: "${shown(line)}" after ${Date.now() - t0} ms (${engine})`);
       // Still on that line, in that terminal: show it.
       if (latest === typed && vscode.window.activeTerminal === terminal) vscode.commands.executeCommand("workbench.action.terminal.triggerSuggest");
     }, pause);
@@ -345,4 +348,4 @@ function terminalTab(context, session, local, activity = null, commitSession = n
   log("terminal tab: ready");
 }
 
-module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT, _test: { suggestionItem, gitContext, claudePrompt, plainWords, tidyIntent, intentPrompt } };
+module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT, _test: { suggestionItem, gitContext, claudePrompt, plainWords, tidyIntent, intentPrompt, shown } };

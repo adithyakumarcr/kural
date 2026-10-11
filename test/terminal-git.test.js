@@ -10,7 +10,7 @@ const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "kural-tgit-")
 const project = path.join(tmp, "project"), outside = path.join(tmp, "downloads");
 const vscode = { workspace: { isTrusted: true, workspaceFolders: [{ name: "project", uri: { scheme: "file", fsPath: project } }], getConfiguration: () => ({ get: (_, d) => d }) } };
 Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
-const { _test: { gitContext } } = require("../extension/lib/tab/terminal");
+const { _test: { gitContext, shown } } = require("../extension/lib/tab/terminal");
 
 let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } };
@@ -35,6 +35,11 @@ function crafted(dir) {
 }
 
 (async () => {
+  await check("the log never shows a typed line that looks secret (APP-12)", () => {
+    assert.strictEqual(shown("git status"), "git status");
+    for (const s of ["export API_KEY=abc123", "mysql -u root -phunter2", "curl -H 'Authorization: Bearer x' u", "echo ghp_" + "a".repeat(36)])
+      assert.match(shown(s), /^\[\d+ characters hidden: looks secret\]$/, s);
+  });
   if (!hasGit || process.platform === "win32") { console.log("SKIP no git / shell hooks on Windows"); return; }
   await check("a repository outside the workspace folders: git isn't run at all", async () => {
     const fired = crafted(outside);
