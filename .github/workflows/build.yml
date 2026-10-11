@@ -150,18 +150,19 @@ jobs:
     outputs:
       signed: ${{ steps.build.outputs.signed }}
     # Code signing (Windows SmartScreen's "Windows protected your PC"): set these in Settings → Secrets and variables →
-    # Actions once there's a certificate (docs/windows-signing.md). Without them the build is unsigned, as before.
+    # Actions once there's a certificate (docs/windows-signing.md). Only v* tag pushes receive real signing
+    # credentials. PR, main and manual builds stay unsigned; the disposable signing check still runs.
     env:
-      KURAL_SIGN_STORETYPE: ${{ secrets.WINDOWS_SIGN_STORETYPE }}
-      KURAL_SIGN_KEYSTORE: ${{ secrets.WINDOWS_SIGN_KEYSTORE }}
-      KURAL_SIGN_STOREPASS: ${{ secrets.WINDOWS_SIGN_STOREPASS }}
-      KURAL_SIGN_ALIAS: ${{ secrets.WINDOWS_SIGN_ALIAS }}
-      KURAL_SIGN_KEYPASS: ${{ secrets.WINDOWS_SIGN_KEYPASS }}
-      KURAL_SIGN_TSA: ${{ secrets.WINDOWS_SIGN_TSA }}
-      SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      KURAL_SIGN_STORETYPE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_STORETYPE || '' }}
+      KURAL_SIGN_KEYSTORE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_KEYSTORE || '' }}
+      KURAL_SIGN_STOREPASS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_STOREPASS || '' }}
+      KURAL_SIGN_ALIAS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_ALIAS || '' }}
+      KURAL_SIGN_KEYPASS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_KEYPASS || '' }}
+      KURAL_SIGN_TSA: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_TSA || '' }}
+      SIGN_PFX_BASE64: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_PFX_BASE64 || '' }}
+      AZURE_TENANT_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_TENANT_ID || '' }}
+      AZURE_CLIENT_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_CLIENT_ID || '' }}
+      AZURE_CLIENT_SECRET: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_CLIENT_SECRET || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
