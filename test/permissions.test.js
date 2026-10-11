@@ -100,5 +100,16 @@ assert.strictEqual(modeRow("Write", { file_path: P.project }, { guard }), "run r
 assert.strictEqual(modeRow("Bash", { command: "ls", cwd: base }), "ask ask deny deny");
 assert.strictEqual(modeRow("Bash", { command: "ls", cwd: proj }), "ask run deny deny");
 
+// AGENT-3: files that run something later (git settings, editor/container settings, AI instructions, MCP servers, build
+// and test files) ask in Agent mode, also when only the case or a Windows spelling differs; Auto doesn't ask.
+for (const f of [".git/config", ".gitattributes", ".gitmodules", ".git/info/attributes", ".vscode/extensions.json", ".devcontainer/devcontainer.json",
+  "x.code-workspace", ".mcp.json", "CLAUDE.md", "CLAUDE.local.md", ".claude/skills/x/SKILL.md", ".claude/commands/c.md", ".npmrc", "pyproject.toml",
+  "setup.py", "conftest.py", "Gemfile", "build.gradle", "pom.xml", "build.rs", ".tool-versions", ".GIT/hooks/pre-commit", ".VSCODE/tasks.json",
+  "Package.json", ".git./config", "package.json::$DATA", "GIT~1/config"]) {
+  assert.strictEqual(run("Write", { file_path: path.join(proj, f) }, "agent"), "ask", `${f} must ask in Agent mode`);
+  assert.strictEqual(run("Edit", { file_path: f }, "agent"), "ask", `${f} (relative to the project) must ask in Agent mode`);
+  assert.strictEqual(run("Write", { file_path: path.join(proj, f) }, "auto"), "run", `${f}: Auto doesn't ask`);
+}
+
 fs.rmSync(base, { recursive: true, force: true });
 console.log(`permissions: ${rows} table cells + special cases ok`);

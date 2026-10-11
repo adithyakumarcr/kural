@@ -68,9 +68,26 @@ const RUNS_LATER = [
   /(^|[\\/])package\.json$/, /(^|[\\/])(Makefile|justfile|Taskfile\.ya?ml)$/,
   /(^|[\\/])\.github[\\/]workflows[\\/]/, /(^|[\\/])\.pre-commit-config\.yaml$/,
   /(^|[\\/])(Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/,
-  /(^|[\\/])\.(bashrc|zshrc|profile|bash_profile)$/,
+  /(^|[\\/])\.(bashrc|zshrc|profile|bash_profile|bash_login|zshenv|zprofile|zlogin)$/, /(^|[\\/])\.config[\\/]fish[\\/]/,
+  // Git settings that run programs (filters, diff drivers, submodule commands), editor/container settings that start
+  // tasks or install extensions, AI instructions and MCP servers the next session obeys or starts.
+  /(^|[\\/])\.git(attributes|modules)$/, /(^|[\\/])\.vscode[\\/]/, /(^|[\\/])\.devcontainer([\\/]|\.json$)/, /\.code-workspace$/,
+  /(^|[\\/])\.mcp\.json$/, /(^|[\\/])(CLAUDE|CLAUDE\.local|AGENTS|GEMINI)\.md$/,
+  // Build and test files that run code when you build, install or test: npm/yarn/pnpm, Python, Ruby, Gradle/Maven, Rust,
+  // tool version managers.
+  /(^|[\\/])\.(npmrc|yarnrc(\.ya?ml)?|pnpmfile\.c?js)$/, /(^|[\\/])(pyproject\.toml|setup\.py|setup\.cfg|conftest\.py|tox\.ini|noxfile\.py)$/,
+  /(^|[\\/])(Gemfile|Rakefile)$/, /(^|[\\/])(build|settings)\.gradle(\.kts)?$/, /(^|[\\/])(gradlew(\.bat)?|pom\.xml)$/,
+  /(^|[\\/])(build\.rs|Cargo\.toml)$/, /(^|[\\/])\.cargo[\\/]config(\.toml)?$/, /(^|[\\/])\.(tool-versions|mise\.toml)$/,
 ];
-const runsLater = (file) => [String(file), real(file)].some((f) => RUNS_LATER.some((re) => (process.platform === "win32" ? new RegExp(re.source, "i") : re).test(f)));
+// A path as Windows (and a Mac, for the case) reads it: letters in any case, a name's trailing dots and spaces dropped
+// (".git." is ".git"), an NTFS stream suffix dropped (".git::$INDEX_ALLOCATION", "package.json::$DATA"). Checked on
+// every system: a file that only looks like one of these on Linux asks once more, which is harmless.
+const winForm = (f) => String(f).split(/([\\/])/).map((part, i) => i % 2 ? part
+  : part.replace(/^(?![a-z]:$)([^:]*):.*$/i, "$1").replace(/(?<=[^. ])[. ]+$/, "")).join("");
+// An 8.3 short name ("GIT~1", "PACKAG~1.JSO") can stand for any of these on Windows: it asks too.
+const SHORT_NAME = /(^|[\\/])[^\\/~]{1,6}~\d+(\.[^\\/.]{0,3})?([\\/]|$)/;
+const runsLater = (file) => [String(file), real(file)].some((f) => SHORT_NAME.test(f) ||
+  [f, winForm(f)].some((g) => RUNS_LATER.some((re) => new RegExp(re.source, "i").test(g))));
 
 // Only printable text on one line: a model's suggestion that hides a carriage return or an escape sequence could run a
 // command in the terminal without Enter being pressed.
