@@ -28,6 +28,8 @@ const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPr
 const { profileOf, limitUsed, limitParts } = require("../router/policy");
 const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
+const { SideChats } = require("./side");
+const scope = require("../profiles/scope");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
@@ -81,7 +83,8 @@ const IDLE_STOP_MS = 10 * 60 * 1000;
 const MAX_IDLE_WARM = 2;
 
 const MAX_INLINE = 60000;       // files bigger than this are read by Claude instead of pasted in
-const STORE_KEY = "kural.chat.v4";
+const STORE_BASE = "kural.chat.v4";   // open tabs, per window (a profile that doesn't share has its own: lib/profiles/scope.js)
+const storeKey = () => scope.key(STORE_BASE, "data");
 const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / team, for new tabs
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
@@ -108,7 +111,7 @@ class ChatView {
     this._activeId = null;       // the side panel's tab before the panel exists
     this.tabs = [];              // open tabs; see newTab() for the shape
     // Every chat from every workspace, in full (History). this.here: which workspace this window is.
-    this.archive = new ChatArchive(path.join(context.globalStorageUri.fsPath, "chats"));
+    this.archive = new ChatArchive(scope.dir("chats", "data"));   // (a profile that shares: the main profile's; else its own)
     this.here = ChatView.workspaceInfo();
     // Models on your own computer (Ollama): the same address as Tab's local model.
     this.ollama = new Ollama(() => cfg().get("tabCompletion.ollamaUrl"));
@@ -117,7 +120,18 @@ class ChatView {
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
     this.teamOffers = new Map();  // offer id -> answer it ("team" | "one")
-    this.changes = new ChangeTracker(path.join(context.globalStorageUri.fsPath, "checkpoints"));
+    // Side chat: a quick question about part of an answer, answered under it (side.js). Not part of the conversation.
+    this.sideChats = new SideChats({
+      makeAgent: (model, opts, local, handlers) => brain.makeAgent(model, opts, local, handlers),
+      model: () => brain.fastestModel(undefined, ["codex"]),   // (Codex can run read-only commands, loads your MCP servers and searches the web: not answer-only)
+      mode: (model) => brain.engineOf(model) === "agy" ? "plan" : "ask",   // (agy: its read-only mode; its default was never checked)
+      emptyDir: () => privateTmp("side"), check: (model) => brain.usable(model), isClaude: (model) => brain.engineOf(model) === "claude",
+      nameOf: (model) => brain.engineOf(model) === "claude" ? model[0].toUpperCase() + model.slice(1) : isLocal(model) ? localName(model) : model.replace(/^[a-z]+:/, "").replace(/^default$/, brain.providerOf(model).label),
+      localOpts: (model) => isLocal(model) ? { tools: [], allowedTools: [], capabilities: [], store: brain.localStore(this.context) } : null,
+      textOf: (segments) => ChatView.textOf(segments), cwd: () => this.root() || ws.workDir(),
+      post: (msg) => this.post(msg), save: () => this.save(),
+    });
+    this.changes = new ChangeTracker(scope.dir("checkpoints", "data"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
     this.lastEditor = vscode.window.activeTextEditor;
@@ -234,7 +248,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
+      { dispose: () => { this.sideChats.stopAll(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -410,6 +424,7 @@ class ChatView {
     const tab = this.tab(id);
     if (!tab) return;
     const routing = this.routingJobs.get(id); if (routing) { routing.abort(); this.routingJobs.delete(id); }
+    this.sideChats.stopAll(id);
     const r = this.runtime.get(id);
     if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
@@ -555,7 +570,14 @@ class ChatView {
   clean(t) {
     this.fix(t);
     t.status = "idle"; t.pendingModel = false; delete t.worktree; delete t.closedAt;
+    // Claude Code and Codex keep a conversation in their account's own folder. One begun under another profile (the chat
+    // is shared between profiles) can't be resumed with this profile's account: its next message starts a new
+    // conversation that is handed the old one, the same as after a switch of account (tab.profile, freshSession).
+    if (t.started && !t.freshSession && ["claude", "codex"].includes(t.engine || engineOf(t.model)) && (t.profile || "default") !== scope.profileId()) { t.freshSession = "account"; t.profileFresh = true; }
+    // Back in the profile that holds the conversation: it can be resumed after all (the marker is ours, not an account change's).
+    else if (t.profileFresh && (t.profile || "default") === scope.profileId()) { if (t.freshSession === "account") delete t.freshSession; delete t.profileFresh; }
     const roots = this.projectRoots(t);
+    SideChats.clean(t.messages);
     for (const m of t.messages) if (m.role === "assistant") {
       if (m.running) { m.running = false; m.error = m.error || "stopped"; }
       for (const b of m.blocks || []) {
@@ -576,7 +598,7 @@ class ChatView {
   }
 
   load() {
-    const saved = this.context.workspaceState.get(STORE_KEY) || this.context.workspaceState.get("kural.chat.v3");
+    const saved = this.context.workspaceState.get(storeKey()) || (scope.isMain() ? this.context.workspaceState.get("kural.chat.v3") : undefined);
     const clean = (t) => this.clean(t);
     // Closed chats used to be kept per workspace (up to 100): move them into the shared History once.
     if (saved && Array.isArray(saved.history) && saved.history.length) {
@@ -601,19 +623,23 @@ class ChatView {
 
   save() {
     clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      // Keep the last ~150 KB of each conversation (60 KB for closed ones) so this stays quick.
-      const trim = (t, max) => {
-        let msgs = t.messages, size = JSON.stringify(msgs).length;
-        while (size > max && msgs.length > 2) { msgs = msgs.slice(2); size = JSON.stringify(msgs).length; }
-        return { ...t, messages: msgs, status: "idle" };
-      };
-      for (const t of this.tabs) if (t.messages.length) this.archive.save(t, this.card(t));   // History: in full
-      this.context.workspaceState.update(STORE_KEY, {
-        tabs: this.tabs.map((t) => trim(t, 150000)),
-        activeId: this.side() ? this.side().activeId : this._activeId, splitIds: this.panes.filter((p) => p.kind === "editor").map((p) => p.activeId),
-      });
-    }, 800);
+    this.saveTimer = setTimeout(() => this.saveNow(), 800);
+  }
+
+  // Save now (before the window reloads for another profile: the open tabs go to this profile's key). Resolves when saved.
+  saveNow() {
+    clearTimeout(this.saveTimer);
+    // Keep the last ~150 KB of each conversation (60 KB for closed ones) so this stays quick.
+    const trim = (t, max) => {
+      let msgs = t.messages, size = JSON.stringify(msgs).length;
+      while (size > max && msgs.length > 2) { msgs = msgs.slice(2); size = JSON.stringify(msgs).length; }
+      return { ...t, messages: msgs, status: "idle" };
+    };
+    for (const t of this.tabs) if (t.messages.length) this.archive.save(t, this.card(t));   // History: in full
+    return this.context.workspaceState.update(storeKey(), {
+      tabs: this.tabs.map((t) => trim(t, 150000)),
+      activeId: this.side() ? this.side().activeId : this._activeId, splitIds: this.panes.filter((p) => p.kind === "editor").map((p) => p.activeId),
+    });
   }
 
   // ---------- the panel ----------
@@ -646,7 +672,7 @@ class ChatView {
   // A picture a model made (Ollama image models): saved as a file in Kural's storage, shown in the answer.
   saveImage(data, mime) {
     const ext = { "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" }[mime] || "png";
-    const dir = path.join(this.context.globalStorageUri.fsPath, "images");
+    const dir = scope.dir("images", "data");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `${Date.now()}-${shortId()}.${ext}`);
     fs.writeFileSync(file, Buffer.from(data, "base64"));
@@ -664,7 +690,7 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("facts.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("facts.js")}"></script><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
     webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
     return pane;
   }
@@ -920,6 +946,7 @@ class ChatView {
         (since.length ? `\n\nYou changed ${since.join(", ")} yourself since then: those edits go too.` : "") +
         "\n\nWhat commands changed (installs, generated files) isn't undone. The conversation stays." }, "Restore Code");
     if (go !== "Restore Code") return;
+    this.sideChats.stopAll(tab.id);
     const { restored, missing } = await this.restoreCode(tab, index);
     this.redraw(tab);
     this.save();
@@ -941,6 +968,7 @@ class ChatView {
       if (!go) return false;
       if (go === "Restore Code") await this.restoreCode(tab, index);
     }
+    this.sideChats.stopAll(tab.id);
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
     this.endDevice(old);
@@ -1466,7 +1494,8 @@ class ChatView {
       this.endDevice(old);
     }
     tab.engine = engine;
-    delete tab.freshSession;
+    tab.profile = scope.profileId();   // (whose account holds this conversation: see clean())
+    delete tab.freshSession; delete tab.profileFresh;
     // Prepare the complete record before starting the provider, so its read directory is available from launch.
     let carry = "";
     try { if (tab.carryOver && !tab.started) carry = this.carryText(tab.carryOver, this.handoffRecord(tab, tab.messages.slice(0, -2))); }
@@ -1594,7 +1623,7 @@ class ChatView {
   // ---------- carrying the conversation over (another AI, a new session) ----------
   handoffDir(tab) {
     const storage = this.context && this.context.globalStorageUri && this.context.globalStorageUri.fsPath;
-    return handoffStore.directory(storage ? path.join(storage, "handoffs") : privateTmp("handoffs"), tab.id);
+    return handoffStore.directory(storage ? scope.dir("handoffs", "data", storage) : privateTmp("handoffs"), tab.id);
   }
 
   // The inline overview fits the receiving model. Omitted details remain in a private, readable local file, which is
@@ -2478,6 +2507,9 @@ class ChatView {
       case "openWorkspace": this.openWorkspaceOf(m.id); break;
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
         Number.isInteger(m.editIndex) ? m.editIndex : null); break;
+      // Side chat (lib/chat/side.js): a quick question under an answer. Never a turn of the chat: no status, no journal.
+      case "sideAsk": if (tab && Number.isInteger(m.index)) this.sideChats.ask(tab, m); break;
+      case "sideStop": if (tab && typeof m.thread === "string") this.sideChats.stop(tab.id, m.thread); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;
       case "attachPick": {

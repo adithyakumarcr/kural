@@ -9,9 +9,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
+const { claudeConfigDir } = require("../profiles/env");
 
 const home = os.homedir();
-const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
 
 function stamp(p) {
   try { const st = fs.statSync(p); return `${st.mtimeMs}:${st.size}`; } catch { return "-"; }
@@ -40,6 +40,7 @@ function mcpPart(file, folders) {
 }
 
 function signature(folders) {
+  const claudeDir = claudeConfigDir(home);   // (a profile's own folder, else CLAUDE_CONFIG_DIR, else ~/.claude)
   const parts = [
     mcpPart(path.join(home, ".claude.json"), folders),
     mcpPart(path.join(claudeDir, ".claude.json"), folders),

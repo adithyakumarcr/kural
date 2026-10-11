@@ -15,7 +15,7 @@ Tokens
 **Session** is the short limit, 5 hours long (Claude's and Codex's); **Weekly** is the week's. Each AI's Session and
 Weekly limits are always shown, with when they reset. Google Gemini has only weekly limits (one per model family:
 "Weekly (Gemini)"). Only the token table is collapsed: click **Tokens** to open it. **Refresh** asks each program now
-(for Claude, one tiny request); **Settings** opens the automatic switching controls.
+(for Claude, one tiny request); **Settings** opens the AI accounts in Kural Settings, with the automatic switching controls.
 
 **The status bar** (bottom right) shows only each AI's **Session** limit: the AI your chat is using in words, the
 others short. Hover it for everything: every AI's Session and Weekly limits and when each resets.
@@ -39,9 +39,10 @@ minutes), Gemini from its `/usage`.
 
 ### Switching AI near a limit
 
-In **Kural Settings → AI Usage**, turn on **Switch AI near a limit**. It is off by default.
+On each AI's page in **Kural Settings** (**Settings** on its card, or the gear in the model menu), turn on **Switch to
+another AI near a limit**. It is off by default.
 
-Then each AI's card sets its own switch points: "Move the chat to another AI when the Session limit is [70] % used or
+Then that AI's page sets its own switch points: "Move the chat to another AI when the Session limit is [70] % used or
 a Weekly limit is [70] % used". Each is editable from **1% to 99%**, and the default is **70%**. Gemini has a Weekly
 point only.
 
@@ -60,21 +61,29 @@ off keeps your current model choice; **Auto** retains its existing routing and u
 The person icon next to it shows the name on the account the chat's AI uses (for example "Peasant Adithya"); hover
 for who's logged in where. (The name comes from what Claude Code, Gemini or Codex saved on your computer at login, and
 only when it belongs to the same account; otherwise the email shows.) Click it for **Kural Settings**, an
-editor tab (also the Chat panel's **...** menu, or **Kural: Settings**). It has a card each for Claude, Google Gemini,
-ChatGPT (Codex) and your own model:
+editor tab (also the Chat panel's **...** menu, or **Kural: Settings**). It is a short overview: a card each for Claude,
+Google Gemini, ChatGPT (Codex) and your own model:
 
 - **Who's logged in**: email, plan, organization.
 - **Usage**: the meter's numbers; and **Usage page**, which opens the provider's own usage page in your browser.
-- **Switch points**: when to move a chat to another AI near a limit (Session and Weekly, see above).
-- **Connectors** (Claude and ChatGPT (Codex)): the list with each one's status; **Add** and remove. For Claude, the
-  **Use my Claude Code setup** checkbox and **Reload** are there too. See [[Chat]] and [[Google Gemini and ChatGPT]].
+- **Settings**: opens that AI's own page. The model menu's gear opens the same page.
+- **Log in / log out / switch account / set up**, as below.
+
+Each AI's page has:
+
+- **Connectors** (Claude and ChatGPT (Codex)): the list with each one's status, **Sign in** when one needs it, and remove.
+  **Add connector** opens a searchable list (Popular ones and the official MCP directory). For Claude, the **Use my
+  Claude Code setup** checkbox and **Reload** are there too. See [[Chat]] and [[Google Gemini and ChatGPT]].
+- **Switch to another AI near a limit**: when to move a chat to another AI (Session and Weekly, see above).
+- **Your own model** (on its page): **Find & download models…** (see [[Your Own Model]]), change model, context length.
+
+The card's other actions:
+
 - **Switch account**: logs out, then starts the login again; log in with the other account. Kural checks the new login
   with a test request and carries on.
 - **Log out**: logs that program out on this computer (also in the terminal). Its models wait until you log in again;
   the others keep working.
 - **Log in** (when you're logged out), or **Set up** (when you haven't yet).
-- **Your own model**: which model on this computer is set up, or set one up; **Find & download models…** (see
-  [[Your Own Model]]).
 - **Get started**, **Check for updates**, **Kural guide** (this wiki), **Ask for a feature**.
 - **Moods**: the chat's moods. The four built-in ones, and your own: **Add a mood** (name, a one-line hint,
   instructions for the AI), with tips on what works best and examples to start from; **Edit** and delete them. See
@@ -88,6 +97,12 @@ ChatGPT (Codex) and your own model:
 
 Kural asks the programs who's logged in (`claude auth status`, Codex's account info, Antigravity's `/model`); it never
 reads your login itself. Also in the Chat panel's **…** menu, or Command Palette → **Kural: Account**.
+
+## What Kural learns
+
+Kural Settings → **What Kural learns**: **Tab Completion learns from your work** (off by default) and **Auto learns
+which models you prefer** (on by default). Switch either off, or press **Delete what it learned** (it asks once, on the
+same row). Both stay on this computer.
 
 ## Updates
 
@@ -137,3 +152,25 @@ report on your computer and says so (**Show report**, **Report a bug**). It come
 **Report a bug** copies the report and opens the bug form: paste it there (check it first: it has file paths from your
 computer). Nothing is sent by Kural itself. All reports: **Kural: Show Crash Reports** or **Crash reports** in Kural
 Settings.
+
+## Profiles (personal and work)
+
+A profile is a separate set of AI accounts: one for your own projects and one for your job, each logged in to a
+different Claude or ChatGPT account.
+
+- The status bar shows the current profile (an icon and its name). Click it to switch, make a new one, or manage them.
+  **Kural: Switch Profile…**, **New Profile…** and **Manage Profiles…** are in the Command Palette too.
+- Switching reloads the window, so every program starts again with the other account. If a chat is still answering,
+  Kural asks first. Other open Kural windows keep their profile until you reload them.
+- **New profile:** choose Personal or Work, give it a name, and choose whether it shares chats. A new profile has no
+  logins yet, so Get started opens and you log in to its Claude and ChatGPT accounts there.
+- **Share or keep separate:** a sharing profile shows the same chats, History, open tabs and Tab Completion memory as
+  your main profile; a separate one has its own. Change it in Manage profiles. Logins and usage numbers are always
+  separate. A shared chat started under one account continues under the other as a new conversation, with the earlier
+  messages handed over.
+- **On a Mac** a new profile needs Claude Code 2.1.296 or newer (run `claude update`): older versions keep one login
+  for the whole computer.
+- **Same in every profile:** Google Gemini (it has no setting for a second account) and models on your computer.
+- **Manage profiles:** rename, share or stop sharing, delete (not the main profile, not the one in use). Deleting removes
+  its logins, and its own chats if it didn't share.
+- If `CLAUDE_CODE_OAUTH_TOKEN` or an API key is set in your environment, every profile uses it.

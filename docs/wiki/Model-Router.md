@@ -34,7 +34,7 @@ Older settings and chats saying Balanced, Speed or Quality keep working (they me
 
 **The cost of switching.** Another model starts without the prompt cache, and another AI needs the whole conversation handed over, so the current model and AI win close calls, more so the longer the chat (up to 80 % of a limit). They never win against what the task needs, or against a lighter model that's enough: a complex request still leaves a light model, and a quick question still leaves Opus.
 
-**What you did before.** Auto learns from what you do after its answers, per workspace (like Tab Completion learns): you **carry on** with your next message (it was fine), you **pick another model** right after (that one suits such requests better: it leans similar requests its way, and a stronger model you chose raises the level needed), or you **undo every change** of the answer (that model didn't manage it). Similar requests share enough words; older lessons fade over months. **Kural: Forget What Model Router Learned (This Workspace)** clears it.
+**What you did before.** Auto learns from what you do after its answers, per workspace (like Tab Completion learns): you **carry on** with your next message (it was fine), you **pick another model** right after (that one suits such requests better: it leans similar requests its way, and a stronger model you chose raises the level needed), or you **undo every change** of the answer (that model didn't manage it). Similar requests share enough words; older lessons fade over months. **Kural: Forget What Model Router Learned (This Workspace)** clears it. Learning can be switched off in Kural Settings → What Kural learns (setting `kural.modelRouter.learn`), and deleted there.
 
 ## What reads your requests
 

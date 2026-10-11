@@ -17,6 +17,8 @@
 // Tab's own requests to the AI you use.
 // No vscode here (tests run without it): extension.js and chat.js feed it events.
 
+// (a profile that doesn't share its data has its own: lib/profiles/scope.js)
+const KEY = () => require("../profiles/scope").key("kural.activity.v1", "data");
 const MAX_WORK = 40, MAX_ACCEPTED = 30, MAX_COMMANDS = 100;
 const RECENT_WORK_MS = 3 * 60 * 60 * 1000;   // "your current task" = chat/Ctrl+K work in the last 3 hours
 // Never kept: anything that looks like a password or key. One regex; its pieces catch:
@@ -37,7 +39,7 @@ class Activity {
     this.store = store;
     this.enabled = enabled;
     this.now = now;
-    const saved = (store && store.get("kural.activity.v1")) || {};
+    const saved = (store && store.get(KEY())) || {};
     this.work = saved.work || [];           // [{ t, source, ask, files: [rel] }]
     this.accepted = saved.accepted || [];   // [{ t, file, lang, before, text }]
     this.commands = saved.commands || {};   // line -> { n, t }
@@ -49,15 +51,22 @@ class Activity {
     if (!this.store || this.saveTimer) return;
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.store.update("kural.activity.v1", { work: this.work, accepted: this.accepted, commands: this.commands });
+      this.store.update(KEY(), { work: this.work, accepted: this.accepted, commands: this.commands });
       if (this.onChange) this.onChange();   // e.g. the Tab panel's counts
     }, 2000);
     if (this.saveTimer.unref) this.saveTimer.unref();
   }
 
+  // Save now (before the window reloads for another profile: the 2 s wait would be lost).
+  flush() {
+    if (!this.store || !this.saveTimer) return;
+    clearTimeout(this.saveTimer); this.saveTimer = null;
+    return this.store.update(KEY(), { work: this.work, accepted: this.accepted, commands: this.commands });
+  }
+
   forget() {
     this.work = []; this.accepted = []; this.commands = {}; this.edits.clear();
-    if (this.store) this.store.update("kural.activity.v1", undefined);
+    if (this.store) this.store.update(KEY(), undefined);
   }
 
   // Anything saved from before (to offer deleting it when learning is off).

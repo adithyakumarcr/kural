@@ -120,6 +120,15 @@ function chat(opts = {}) {
     c.a.kill();
   });
 
+  await check("a side question's map entry can be forgotten (forget), other chats keep theirs", async () => {
+    const a = chat({ resume: undefined, sessionId: "side-1", mode: "plan" });
+    a.a.start(); await a.ask("hi");
+    const read = () => JSON.parse(fs.readFileSync(path.join(store, "agy-sessions.json"), "utf8"));
+    assert.ok(read()["side-1"]);
+    a.a.kill(); a.a.forget();
+    assert.ok(!read()["side-1"]); assert.ok(read()["gone"] || Object.keys(read()).length >= 1);
+  });
+
   await check("one-shot answers (Ask, commit messages) and Get started's test", async () => {
     assert.match(await agy.askAgy(BIN, { prompt: "name this commit", cwd: project }), /You said: name this commit/);
     const t = await agy.agyTest(BIN, { cwd: project });
