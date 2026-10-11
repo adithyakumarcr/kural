@@ -57,7 +57,7 @@ Raw validation logs, scanner JSON and local environment snapshots are retained i
 
 The final follow-up changes audit Markdown only; it records the above results and owner approval requirements.
 
-## Electron runtime follow-up — 2026-10-11
+## Electron runtime implementation — interim verification
 
 SEC-009 is now **PARTIALLY FIXED / NATIVE VALIDATION PENDING**. All three packaging scripts replace the complete Electron runtime distribution with official **42.11.12** archives, independently pinned by SHA-256 in `vendor/electron-runtime.json`. VSCodium application code stays on 1.135.06055. The patch retains the vendor fuse wire `101100011`, Linux sandbox permissions and macOS bundle identities. Existing platform signing happens after replacement. Unknown vendor versions, changed fuses, checksum mismatches and unsafe ZIP paths/links fail the build. There is no claim that checksums constitute platform signing or notarization.
 
@@ -70,3 +70,14 @@ SEC-012 remains **OPEN**. A checksum-verified real Antigravity CLI 1.3.3 was obt
 Reviewer scope: **added** pinned runtime archives/installer, security regression tests, native runtime version/ABI checks and SBOM archive provenance; **replaced** Electron 42.8.1 runtime bytes during packaging; **removed** no editor or provider functionality. Public alpha.8 binaries are unchanged until a separately approved release ships. Overall recommendation remains **NO-GO**, including open Gemini enforcement, signing/repository protection requirements and incomplete broader acceptance.
 
 Validation update: local full suite **80/83 files PASS, exit1**; bench-memory process lookup, device socket EPERM and updater helper-liveness fail in this host. CI test job and CodeQL passed on `1f4f2de`; the Linux build exposed Python 3.10 incompatibility in `hashlib.file_digest`, corrected in `75be8b2` with a streaming hash and regression. Complete macOS dependency frameworks are also replaced, with bundle-identity regression coverage. Final fresh native CI is required.
+
+## Final Electron remediation verification
+
+Runtime commits:
+
+- `1f4f2de0236c7da780918fcea444fdafa6169cf6`: coherent checksum-pinned Electron 42.11.12 runtime replacement, native version/ABI checks and archive/fuse tests.
+- `75be8b21858205b9589e0f359fab36ca817f5a6d`: Python 3.10-compatible streaming hash with regression.
+- `c346902c08e51360634a9ec862c85fbb8197b087`: all macOS dependency frameworks replaced; identity regression and build documentation.
+- `d7a6987929793c69df2fa9a47915446cc488b33d`: waited Windows process and exit-7 negative control. **Final validated code revision.**
+
+[Build 38131185955](https://github.com/adithyakumarcr/kural/actions/runs/38131185955) / [CodeQL 38131185998](https://github.com/adithyakumarcr/kural/actions/runs/38131185998) PASS; all 83 test files and supported-target build/install/runtime/startup checks; release SKIPPED. Final follow-up is Markdown-only, including `GEMINI_ADAPTER_REQUIREMENTS.md`. Full local patch and redacted raw logs are retained privately. Published binaries, main and production settings were not changed.
