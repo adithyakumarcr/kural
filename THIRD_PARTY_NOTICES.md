@@ -40,3 +40,7 @@ app's own `LICENSE.electron.txt` and `LICENSES.chromium.html` (next to the progr
 The icon font in `media/codicons/` is [Codicons](https://github.com/microsoft/vscode-codicons), copyright Microsoft
 Corporation, licensed under Creative Commons Attribution 4.0 (icons) and MIT (code). The license texts are in
 `media/codicons/LICENSE-icons` and `media/codicons/LICENSE-code`.
+
+## shell-quote
+
+The packaged shell-quote dependency is upgraded to upstream 1.11.0 under the MIT license. The complete upstream package, including LICENSE and README, is retained in vendor/shell-quote and copied into the packaged application. Archive integrity and per-file hashes are recorded in vendor/runtime-dependencies.json.

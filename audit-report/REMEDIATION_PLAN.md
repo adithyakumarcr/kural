@@ -26,8 +26,8 @@ Estimates are engineering planning estimates, not measured completion times; sig
 | BUG-002 | High | Undo corrupts non-UTF-8 file bytes | FIXED | 0.5–2 days | node test/audit-data.test.js |
 | BUG-003 | Medium | Split UTF-8 stdout chunks corrupt model output | FIXED | 0.5–2 days | node test/audit-data.test.js |
 | BUG-004 | Medium | Failed Undo deletion reports success | FIXED | 0.5–2 days | node test/audit-data.test.js |
-| DEP-001 | Medium | Published SBOM omits most bundled runtime components | DEFERRED | 1–3 days | Compare SBOM against artifact inventory, and ensure Electron/shell-quote/runtime versions included. |
-| DEP-002 | High | Bundled shell-quote 1.10.0 has a published injection advisory | DEFERRED | 1–2 days | Run upstream quotation regression and integration tests of reachable callers. |
+| DEP-001 | Medium | Published SBOM omits most bundled runtime components | PARTIALLY FIXED | 1–3 days | Compare SBOM against artifact inventory, and ensure Electron/shell-quote/runtime versions included. |
+| DEP-002 | High | Bundled shell-quote 1.10.0 has a published injection advisory | FIXED (library; callers unestablished) | 1–2 days | Run upstream quotation regression and integration tests of reachable callers. |
 | REL-001 | Medium | Published Windows installer lacks embedded Authenticode | DEFERRED | 1–3 days | Get-AuthenticodeSignature and native install/uninstall validation. |
 | REL-002 | Medium | Published macOS executables use ad-hoc signatures | DEFERRED | 2–4 days | codesign --verify --deep --strict; spctl assessment; stapler validate; fresh quarantined install. |
 
@@ -46,3 +46,9 @@ No real production/data destruction needed for follow-up: use disposable VMs, sy
 ## Evidence availability
 
 Raw validation logs, scanner JSON and local environment snapshots are retained in the private audit handoff and are not published in this PR. References to `evidence/` identify those retained files. Reviewers can reproduce the code-level checks with the committed `test/audit-*.test.js` files. See the PR description for the latest 79/81 test-file result and its limitations.
+
+## Follow-up implementation
+
+Packaged shell-quote is now 1.11.0 with integrity checks and regression coverage. Packaged manifest inventories and mandatory platform merge are implemented; native/bundle inventory enrichment remains. Windows secrets now exist only in the gated build step. Native CI on commit 34b7d92fc976ec648e00d90ba13765146251c305 passed the complete test job and macOS/Windows/Ubuntu 22.04/24.04 build/install/startup checks. These results precede this follow-up and must be repeated on its new head.
+
+Owner action still required: effective main/tag protection and protected signing environment, Windows certificate, Apple Developer ID/notarization credentials. Source changes/push/PR updates are authorized; merging, release publishing and production settings changes are not performed. Gemini enforcement and vendor Electron upgrade remain engineering blockers, not resolved by documentation.

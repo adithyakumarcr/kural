@@ -65,3 +65,5 @@ Repository signing secrets should ultimately move to a protected release environ
 
 After merging and completing release checks, push the version tag: the Windows job's log says `sign-win: signed …` for
 each file, and the **Signed** step of the Windows check shows each file as `Valid`.
+
+Publisher credentials are scoped to the Windows build step and require a release-tag push. Checkout, tool setup, dependency installation, and the disposable signing test receive no publisher credentials. A separate protected signing environment/job remains necessary before treating the release pipeline as fully hardened.

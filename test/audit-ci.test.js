@@ -18,3 +18,8 @@ for (const secret of expected) {
 }
 assert.ok(windows.includes('./scripts/sign-win-check.sh'), 'retain disposable signing verification on PR builds');
 console.log('audit-ci: all ten publisher credential bindings are release-push-only; disposable signing check retained PASS');
+
+const buildPosition = windows.indexOf('        id: build');
+assert(windows.indexOf('secrets.') > buildPosition, 'publisher credentials must only be in the build step');
+assert(!windows.slice(0, windows.indexOf('    steps:')).includes('secrets.'), 'no job-wide publisher credentials');
+assert(workflow.includes('node scripts/sbom-release.js dist'), 'release requires packaged platform inventories');

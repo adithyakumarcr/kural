@@ -37,6 +37,7 @@ sed -i -e "s#/usr/share/codium#/usr/share/$NAME#" \
 # 2–3. Names, data folders, built-in extensions (Kural + Claudemeter), Git's Ctrl+K
 #      shortcuts moved, auto-update off. Shared with the macOS and Windows builds.
 python3 scripts/rebrand.py "$A/resources/app" linux
+python3 scripts/sbom.py "dist/kural-${VER%%+*}-linux-x64.cdx.json" --app-root "$A/resources/app" --platform linux-x64
 
 # 4. Desktop menu entries, icon, shell completions, mime
 rm -f "$R"/usr/share/applications/codium*.desktop "$R/usr/share/pixmaps/vscodium.png" "$R/usr/share/appdata/codium.appdata.xml"

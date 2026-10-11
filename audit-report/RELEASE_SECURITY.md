@@ -67,3 +67,7 @@ Final DEB produced from patched extension with existing vendor pin and unchanged
 ## Evidence availability
 
 Raw validation logs, scanner JSON and local environment snapshots are retained in the private audit handoff and are not published in this PR. References to `evidence/` identify those retained files. Reviewers can reproduce the code-level checks with the committed `test/audit-*.test.js` files. See the PR description for the latest 79/81 test-file result and its limitations.
+
+## Follow-up changes
+
+Publisher credentials have moved from Windows job-wide environment into the release-push-gated build step. The disposable signing check remains credential-free. Packaged per-platform SBOMs are uploaded with their artifacts; release generation requires all three, validates version/platform/scope, and hashes the platform inventory references before signing the checksum list. Separate protected signing, effective tag protection, Authenticode certificates, Developer ID and notarization remain owner/release follow-ups.

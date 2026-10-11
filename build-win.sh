@@ -23,6 +23,7 @@ unzip -q "$SRC" -d "$APP"
 
 echo "Rebranding ..."
 python3 scripts/rebrand.py "$APP/resources/app" win
+python3 scripts/sbom.py "dist/kural-$VER-windows-x64.cdx.json" --app-root "$APP/resources/app" --platform windows-x64
 python3 scripts/make-icons.py "$WORK/icons" >/dev/null
 
 # The program itself: Kural.exe with the Kural icon and name

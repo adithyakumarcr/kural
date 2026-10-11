@@ -44,3 +44,9 @@ On security-fixes/agent-permissions-and-release-integrity after the workflow gua
 ## Evidence availability
 
 Raw validation logs, scanner JSON and local environment snapshots are retained in the private audit handoff and are not published in this PR. References to `evidence/` identify those retained files. Reviewers can reproduce the code-level checks with the committed `test/audit-*.test.js` files. See the PR description for the latest 79/81 test-file result and its limitations.
+
+## Additional remediation
+
+Current tracked status: **13 FIXED, 2 PARTIALLY FIXED, 5 DEFERRED** (20 total). DEP-002 is fixed at the bundled library level; DEP-001 now has staged per-platform inventories and fail-closed release merging, with native/bundle enrichment still outstanding. SEC-010 additionally limits publisher credentials to the Windows build step; isolated protected signing remains outstanding. Native CI on the previous PR head passed the test job and all supported build/install/startup jobs; the follow-up must pass its own fresh run. Release recommendation remains **NO-GO**, particularly for the unresolved Gemini approval boundary and affected Electron runtime. No release or settings operation has been performed.
+
+Validation of this follow-up: Linux DEB rebuild PASS; all eleven shipped shell-quote files match the pinned SHA-256 values; generated inventory has 112 components and explicitly records Electron 42.8.1. Runtime dependency and SBOM regressions PASS, actionlint 1.7.12 PASS, shell/JS/Python syntax checks and git diff --check PASS. Gitleaks rerun exit1: the same two synthetic signing-test/activity-fixture matches, no newly reported secrets. OSV shell-quote 1.11.0 query returned zero advisories. Native CI for these new changes is pending.
