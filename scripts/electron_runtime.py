@@ -138,13 +138,21 @@ def install(app_root, platform, archive=None):
         if mac:
             # Retain each VSCodium bundle identity; replace its executable and the complete framework.
             helpers = []
+            frameworks = []
+            for name in ('Electron Framework.framework', 'Mantle.framework', 'ReactiveObjC.framework', 'Squirrel.framework'):
+                new = source / 'Frameworks' / name
+                old = app_root / 'Contents/Frameworks' / name
+                if not new.is_dir() or not old.is_dir() or old.is_symlink():
+                    raise ValueError('Missing expected Electron framework')
+                frameworks.append((new, old))
             for suffix in ('', ' (GPU)', ' (Plugin)', ' (Renderer)'):
                 old = app_root / f'Contents/Frameworks/VSCodium Helper{suffix}.app/Contents/MacOS/VSCodium Helper{suffix}'
                 new = source / f'Frameworks/Electron Helper{suffix}.app/Contents/MacOS/Electron Helper{suffix}'
                 if not old.is_file() or not new.is_file():
                     raise ValueError('Missing expected Electron helper')
                 helpers.append((new, old))
-            replace(source / 'Frameworks/Electron Framework.framework', app_root / 'Contents/Frameworks/Electron Framework.framework')
+            for new, old in frameworks:
+                replace(new, old)
             replace(source / 'MacOS/Electron', app_root / 'Contents/MacOS/VSCodium')
             for new, old in helpers:
                 replace(new, old)

@@ -13,6 +13,52 @@ spec.loader.exec_module(d)
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_mac_frameworks_and_bundle_identity(self):
+        original = d.ROOT
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            app = root / 'Vendor.app'
+            manifest = app / 'Contents/Resources/app/package.json'
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(json.dumps({'devDependencies': {'electron': '42.8.1'}}))
+            wire = d.SENTINEL + bytes([1, 9]) + b'101100011'
+            files = {}
+            for name in ('Electron Framework.framework', 'Mantle.framework', 'ReactiveObjC.framework', 'Squirrel.framework'):
+                relative = f'Frameworks/{name}/Versions/A/{name[:-10]}'
+                old = app / 'Contents' / relative
+                old.parent.mkdir(parents=True)
+                old.write_bytes(wire + b'old' if name.startswith('Electron') else b'old')
+                files[f'Electron.app/Contents/{relative}'] = wire + b'new' if name.startswith('Electron') else b'new'
+            main = app / 'Contents/MacOS/VSCodium'
+            main.parent.mkdir(parents=True); main.write_bytes(b'old')
+            files['Electron.app/Contents/MacOS/Electron'] = b'new'
+            for suffix in ('', ' (GPU)', ' (Plugin)', ' (Renderer)'):
+                old = app / f'Contents/Frameworks/VSCodium Helper{suffix}.app/Contents'
+                (old / 'MacOS').mkdir(parents=True)
+                (old / f'MacOS/VSCodium Helper{suffix}').write_bytes(b'old')
+                (old / 'Info.plist').write_bytes(b'vendor identity')
+                files[f'Electron.app/Contents/Frameworks/Electron Helper{suffix}.app/Contents/MacOS/Electron Helper{suffix}'] = b'new'
+            (app / 'Contents/Info.plist').write_bytes(b'vendor main identity')
+            archive = root / 'mac.zip'
+            with zipfile.ZipFile(archive, 'w') as z:
+                for name, data in files.items(): z.writestr(name, data)
+            (root / 'vendor').mkdir()
+            pin = {'version': '42.11.12', 'replaces': '42.8.1', 'fuses': '101100011',
+                   'platforms': {'darwin-arm64': hashlib.sha256(archive.read_bytes()).hexdigest()}}
+            (root / 'vendor/electron-runtime.json').write_text(json.dumps(pin))
+            d.ROOT = root
+            try:
+                d.install(app, 'darwin-arm64', archive)
+                self.assertEqual((app / 'Contents/Info.plist').read_bytes(), b'vendor main identity')
+                for name in ('Mantle', 'ReactiveObjC', 'Squirrel'):
+                    self.assertEqual((app / f'Contents/Frameworks/{name}.framework/Versions/A/{name}').read_bytes(), b'new')
+                for suffix in ('', ' (GPU)', ' (Plugin)', ' (Renderer)'):
+                    helper = app / f'Contents/Frameworks/VSCodium Helper{suffix}.app/Contents'
+                    self.assertEqual((helper / 'Info.plist').read_bytes(), b'vendor identity')
+                    self.assertEqual((helper / f'MacOS/VSCodium Helper{suffix}').read_bytes(), b'new')
+            finally:
+                d.ROOT = original
+
     def test_python310_hashing(self):
         # Ubuntu 22.04 ships Python 3.10, before hashlib.file_digest was introduced.
         with tempfile.TemporaryDirectory() as temp:
