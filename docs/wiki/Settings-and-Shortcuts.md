@@ -29,15 +29,16 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.chat.model` | sonnet | model for your very first chat (later chats use what you picked last) |
 | `kural.chat.intensity` | medium | intensity for your very first chat |
 | `kural.chat.mode` | agent | mode for your very first chat |
-| `kural.chat.fullClaudeCodeSetup` | on | the chat uses your whole Claude Code setup (connectors, MCP servers, plugins, skills, hooks) |
-| `kural.notifications` | whenAway | a system notification when a chat's answer is done or needs you: `whenAway` (Kural's window isn't in front, or that chat isn't on screen), `always`, `off`. macOS asks once whether Kural may send notifications (if you chose Don't Allow: System Settings → Notifications → Kural) |
+| `kural.chat.fullClaudeCodeSetup` | on | the chat uses your whole Claude Code setup (connectors, MCP servers, plugins, skills, hooks); the checkbox is on the Claude card in Kural Settings |
+| `kural.notifications` | whenAway | a system notification when a chat's answer is done or needs you: `whenAway` (Kural's window isn't in front, or that chat isn't on screen), `always`, `off`. On a Mac it shows as Script Editor: allow Script Editor and Kural in System Settings → Notifications. **Kural: Test Notification** sends one now |
 | `kural.chat.keepAwake` | on | while a chat is working, the Mac doesn't go to sleep by itself (the screen may still turn off; the lid still sleeps it). macOS only |
 | `kural.welcomeWhenEmpty` | on | closing the last editor tab opens the Welcome page (not when that tab was Welcome itself) |
 | `kural.chat.didYouKnow` | on | a short "Did you know?" tip under an answer while it's being worked on |
 | `kural.chat.moods` | (none) | your own chat moods (name, hint, instructions); edit them in Kural Settings → Moods |
 | `kural.chat.hiddenMoods` | (none) | built-in moods (Default, Explorer, Critic, Learn) removed from the chat's model menu; remove or restore them in Kural Settings → Moods |
-| `kural.usageSwitch.enabled` | off | automatically move the same chat to another available AI when its reported usage reaches your threshold; edit in Kural Settings → AI Usage |
-| `kural.usageSwitch.threshold` | 70 | percentage used that triggers switching (1–99); applies to Session and relevant Weekly limits |
+| `kural.usageSwitch.enabled` | off | move the same chat to another available AI when its reported usage reaches the AI's switch points; turn on in Kural Settings → AI Usage ("Switch AI near a limit") |
+| `kural.usageSwitch.threshold` | 70 | the switch point (1–99 %) for an AI without its own points; applies to Session and Weekly limits |
+| `kural.usageSwitch.limits` | (empty) | each AI's own switch points, `{ "claude": { "session": 80, "weekly": 90 }, "codex": {…}, "agy": {…} }`; set on each AI's card in Kural Settings. A missing one uses `kural.usageSwitch.threshold` |
 | `kural.fontSize` | 0 | text size in the chat and Ask panels (0 = the editor's size) |
 | `kural.tabCompletion.*` | | see [[Tab Completion]] |
 | `kural.localModels.contextLength` | 32768 | how much a model on your computer can look at once |
@@ -53,3 +54,14 @@ Modern / Light Modern): code in many colors (keywords, strings, functions, types
 VS Code's Dark+ / Light+), and purple, Kural's color, only for buttons, the active tab, focus and links. Code in chat
 answers is colored the same way. Every text color has at least 4.5:1 contrast with its background. With *Window › Auto Detect Color Scheme* on, Kural follows your computer's
 light/dark mode.
+
+## Workspace Color
+
+Give each project its own color on the activity bar (the icons on the far left), so you can tell your windows apart.
+Right-click the activity bar → **Workspace Color...**, or Command Palette → **Kural: Workspace Color...**. Pick one of
+the colors, or **Custom** for a hex code. The activity bar changes as you move through the list; **Esc** puts the old
+color back. Needs a folder open.
+
+The color is saved in the workspace's own settings (`.vscode/settings.json`, or the `.code-workspace` file): the
+activity bar keys in `workbench.colorCustomizations`, and `kural.workspaceColor`. **Remove color** takes off only
+Kural's colors; your own color settings stay. (Like the Peacock extension, but only for the activity bar.)

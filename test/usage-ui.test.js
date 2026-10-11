@@ -38,26 +38,35 @@ check("AI Usage stays compact, expands details, remembers the expansion and link
     usage: [1, 7, 30].map(() => ({ read: 200, cacheRead: 100, written: 20 })) }] };
   d.message(state);
   const provider = d.document.getElementById("list").children[0], details = provider.children.find((n) => n.tag === "details");
-  assert.strictEqual(details.open, false); assert.ok(provider.children.filter((n) => n.tag !== "details").some((n) => /Weekly.*70%/.test(n.textContent)));
-  assert.match(details.textContent, /Session.*50%/); assert.match(details.textContent, /Today.*7 days.*30 days/);
+  // Session and Weekly are always visible; only the tokens are collapsed (summary "Tokens").
+  assert.strictEqual(details.open, false); assert.strictEqual(details.children[0].textContent, "Tokens");
+  const visible = provider.children.filter((n) => n.tag !== "details").map((n) => n.textContent).join(" | ");
+  assert.match(visible, /Session.*50%/); assert.match(visible, /Weekly.*70%/); assert.match(visible, /Pro/);
+  assert.match(details.textContent, /Today.*7 days.*30 days/); assert.doesNotMatch(details.textContent, /Session|Weekly/);
   details.open = true; details.trigger("toggle"); d.message(state);
   assert.strictEqual(d.document.getElementById("list").children[0].children.find((n) => n.tag === "details").open, true);
   d.document.getElementById("acc").trigger("click"); assert.strictEqual(d.sent.at(-1).type, "accounts");
 });
-check("settings accept an editable threshold and toggle; refreshes preserve a value being edited", () => {
+check("settings: a switch for the whole thing, Session and Weekly points on each AI's card; a refresh keeps a value being edited", () => {
   const d = dom(); d.node("div").id = "app";
   d.run(fs.readFileSync(path.join(__dirname, "../extension/media/settings.js"), "utf8"));
-  const state = { type: "state", cards: [], moods: { mine: [], builtIn: [], examples: [], limits: {} }, version: "test", usageSwitch: { enabled: false, threshold: 70 } };
+  const card = (id, name) => ({ id, name, state: "on", who: "me", windows: [], tokens: null });
+  const state = { type: "state", cards: [card("claude", "Claude"), card("agy", "Google Gemini")], moods: { mine: [], builtIn: [], examples: [], limits: {} }, version: "test",
+    usageSwitch: { enabled: false, threshold: 70, limits: { claude: { session: 80, weekly: 90 }, codex: { session: 70, weekly: 70 }, agy: { session: 70, weekly: 60 } } },
+    connectors: { claude: { supported: true, servers: [{ name: "github", target: "npx gh", status: "Connected", ok: true }] }, agy: { supported: false } }, fullSetup: true };
   d.message(state);
-  const section = d.document.getElementById("usage"); assert.match(section.textContent, /AI Usage.*Automatically switch AI.*Switch at/);
-  const threshold = d.nodes.find((n) => n.tag === "input" && n.type === "number"), toggle = d.nodes.find((n) => n.tag === "input" && n.type === "checkbox");
-  assert.strictEqual(Number(threshold.value), 70); assert.strictEqual(toggle.checked, false);
-  toggle.checked = true; toggle.trigger("change"); assert.deepStrictEqual(d.sent.at(-1), { type: "usageSwitch", enabled: true });
-  threshold.value = "83"; threshold.trigger("change"); assert.deepStrictEqual(d.sent.at(-1), { type: "usageSwitch", threshold: 83 });
-  const count = d.sent.length; threshold.value = "101"; threshold.trigger("change"); assert.strictEqual(d.sent.length, count);
-  threshold.value = ""; threshold.trigger("change"); assert.strictEqual(d.sent.length, count);
-  threshold.value = "81"; threshold.focus(); d.message(state); assert.strictEqual(threshold.value, "81");
-  d.document.activeElement = null; d.message({ ...state, section: "usage" }); assert.ok(section.scrolled); assert.strictEqual(d.document.activeElement, toggle);
+  const section = d.document.getElementById("usage"); assert.match(section.textContent, /AI Usage.*Switch AI near a limit/);
+  const numbers = d.nodes.filter((n) => n.tag === "input" && n.type === "number");
+  const [cs, cw, gs, gw] = numbers;   // Claude's session, weekly; Gemini's (its session isn't shown)
+  assert.deepStrictEqual([cs.value, cw.value, gw.value].map(Number), [80, 90, 60]);
+  const gem = d.document.getElementById("ai-agy").textContent;
+  assert.doesNotMatch(gem, /Session limit is/); assert.match(gem, /a Weekly limit is/); assert.match(gem, /can't add connectors to Google Gemini/);
+  assert.match(d.document.getElementById("ai-claude").textContent, /Session limit is.*Weekly limit is.*Connectors.*github/);
+  cw.value = "85"; cw.trigger("change"); assert.deepStrictEqual(d.sent.at(-1), { type: "usageSwitch", ai: "claude", which: "weekly", value: 85 });
+  const count = d.sent.length; cs.value = "101"; cs.trigger("change"); assert.strictEqual(d.sent.length, count);
+  cs.value = "81"; cs.focus(); d.message(state); assert.strictEqual(cs.value, "81");
+  d.message({ ...state, section: "claude" }); assert.ok(d.document.getElementById("ai-claude").scrolled); assert.deepStrictEqual(d.sent.find((m) => m.type === "connectors"), { type: "connectors", id: "claude" });
+  void gs;
 });
 check("the context meter shows consumed and in-context tokens, and recommended files are absent", () => {
   const source = fs.readFileSync(path.join(__dirname, "../extension/media/chat.js"), "utf8");

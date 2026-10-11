@@ -25,13 +25,13 @@ const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt } = require("
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
-const { profileOf, limitUsed } = require("../router/policy");
+const { profileOf, limitUsed, limitParts } = require("../router/policy");
 const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
-const { Notifier, shouldNotify, message: notifyText } = require("./notify");
+const { Notifier, notifyDecision, message: notifyText } = require("./notify");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -48,6 +48,7 @@ const MODES = [
   { id: "ask", label: "Ask", hint: "answers only" },
 ];
 const TEAM_SIZES = [2, 3, 4, 5];
+const TEAM_OFFER_SECONDS = Number(process.env.KURAL_TEAM_OFFER_SECONDS) || 15;   // (env: tests)
 // A model on your own computer (Ollama) is saved as "ollama:<name>", e.g. "ollama:qwen3-coder:30b".
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
@@ -115,6 +116,7 @@ class ChatView {
     this.pulls = new Map();        // model downloads in progress: name -> { percent, status }
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
+    this.teamOffers = new Map();  // offer id -> answer it ("team" | "one")
     this.changes = new ChangeTracker(path.join(context.globalStorageUri.fsPath, "checkpoints"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
@@ -127,7 +129,7 @@ class ChatView {
       toast: (o) => vscode.commands.executeCommand("_kural.osToast", o),
       clearToast: (id) => vscode.commands.executeCommand("_kural.osToastClear", { id }),
       run: (cmd, args, env) => new Promise((res) => require("child_process").execFile(cmd, args,
-        { env: { ...process.env, ...env }, timeout: 15000, windowsHide: true, cwd: os.tmpdir() }, (err) => res(!err))),
+        { env: { ...process.env, ...env }, timeout: 15000, windowsHide: true, cwd: os.tmpdir() }, (err, _o, stderr) => { if (err) log(`notify: ${cmd} failed: ${err.message}${stderr ? ` (${String(stderr).trim().slice(0, 200)})` : ""}`); res(!err); })),
       inApp: async (title, body) => (await vscode.window.showInformationMessage(`${title}. ${body}`, "Show")) === "Show",
       log, platform: process.platform,
     });
@@ -186,6 +188,13 @@ class ChatView {
       }),
       vscode.commands.registerCommand("kural.chat.open", () => this.open()),
       vscode.commands.registerCommand("kural.chat.toggle", () => this.toggle()),
+      vscode.commands.registerCommand("kural.testNotification", () => this.testNotification()),
+      // Kural Settings → Your own model → "Find & download models…": the chat's Models page (it was in the model menu).
+      vscode.commands.registerCommand("kural.findModels", async () => {
+        await this.reveal();
+        const p = this.side();
+        if (p) this.postTo(p, { type: "openLocal" }); else this.post({ type: "openLocal" });
+      }),
       // Kural: Devices → "Link it to the current chat".
       vscode.commands.registerCommand("kural.chat.linkDevice", async (id) => {
         const t = this.active();
@@ -947,7 +956,7 @@ class ChatView {
   routingRequest(tab, text, attachments = [], contexts = []) {
     return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
       historyChars: ChatView.conversationSize(tab), context: ChatView.routingContext(contexts, attachments),
-      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto",
+      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
       team: tab.team > 1, device: !!tab.device, connectors: !!tab.ticket,
       images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
   }
@@ -1364,6 +1373,9 @@ class ChatView {
     // While it answers: into the queue (not an edit of an earlier message: that waits for the answer to end).
     if (tab.status !== "idle") { if (editIndex === null) await this.queueSend(tab, segments, contexts, attachIds, requestId); return; }
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
+    // A big task in Auto mode: more agents? (Asked before anything changes: an edit's rewind, Auto's model choice, which
+    // then knows whether a team is wanted.)
+    if (text && this.bigTask(tab, text) && (await this.offerTeam(tab, text)) === "stopped") return;
     // An earlier message edited: the chat goes back to just before it (and the code too, if you say so), then this one is
     // sent in its place.
     if (editIndex !== null && !(await this.rewindTo(tab, editIndex))) return;
@@ -1400,7 +1412,7 @@ class ChatView {
         let changesProvider = engineOf(routed.model) !== here;
         const tooBig = () => journal.handoff(tab.messages).length > this.handoffBudget(routed.model);
         const missing = () => previousMedia.some((a) => !a.path || !fs.existsSync(a.path));
-        if (changesProvider && tab.messages.length && this.limitOf(here, previous) < (guard.enabled ? guard.threshold : 80) && (missing() || tooBig())) {
+        if (changesProvider && tab.messages.length && !(guard.enabled ? this.overLimit(here, previous) : this.limitOf(here, previous) >= 80) && (missing() || tooBig())) {
           const why = missing() ? "an earlier attachment is gone" : "the conversation is too long to hand over whole";
           // (On a model on this computer there's no "same AI" for Auto: that one stays.)
           const again = here === "ollama" ? { error: "local" }
@@ -1520,6 +1532,40 @@ class ChatView {
     this.save();
   }
 
+  // Auto mode, one agent, and a big task (the router's reading of the request): Kural offers more agents for 15 s above
+  // the box (Adithya). Yes: the team turns on for this chat. No answer: this message goes on with one agent. "One agent":
+  // not offered again in this chat. Stop while it waits: nothing is sent. Returns "team", "one" or "stopped" (or null:
+  // not offered).
+  // (Checked first without waiting: a send that isn't offered anything goes on in the same step.)
+  bigTask(tab, text) {
+    if (tab.mode !== "auto" || tab.team || tab.noTeamOffer || isLocal(tab.model) || (!tab.autoRoute && !brain.providerOf(tab.model).ready())) return false;
+    const task = require("../router/policy").classify(text);
+    return task.complexity === "complex" && task.sizeProbs.complex >= 0.8 && ["edit", "other"].includes(task.intent);
+  }
+  async offerTeam(tab, text) {
+    if (!this.bigTask(tab, text)) return null;
+    const n = TEAM_SIZES[1], id = `${tab.id}:${Date.now()}`, seconds = TEAM_OFFER_SECONDS;
+    const ctl = new AbortController(); this.routingJobs.set(tab.id, ctl);
+    tab.status = "running"; tab.routingState = "Waiting for your choice…"; this.postTabs();
+    this.post({ type: "teamOffer", tabId: tab.id, id, agents: n, seconds });
+    log(`chat ${tab.id}: a big task in Auto: offered ${n} agents`);
+    const answer = await new Promise((resolve) => {
+      const done = (v) => { clearTimeout(timer); this.teamOffers.delete(id); resolve(v); };
+      const timer = setTimeout(() => done("timeout"), seconds * 1000);
+      this.teamOffers.set(id, done);
+      ctl.signal.addEventListener("abort", () => done("stopped"));
+    });
+    if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
+    this.post({ type: "teamOfferDone", tabId: tab.id, id });
+    if (answer === "stopped" || !this.tab(tab.id)) { log(`chat ${tab.id}: stopped while offering agents`); return "stopped"; }
+    delete tab.routingState; tab.status = "idle";
+    if (answer === "team") { tab.team = n; this.afterTeamChange(tab, true); log(`chat ${tab.id}: ${n} agents (you said yes)`); return "team"; }
+    if (answer === "one") tab.noTeamOffer = true;
+    log(`chat ${tab.id}: one agent (${answer === "one" ? "you chose it" : `no answer in ${seconds} s`})`);
+    this.postTabs();
+    return "one";
+  }
+
   // What the AI is told for this chat's mode, mood and team (the parts of its instructions you can change mid-chat).
   instructionsOf(tab) {
     const team = this.teamSize(tab);
@@ -1593,12 +1639,18 @@ class ChatView {
   }
 
   usageOptions() { return require("../ai/usage-switch").options(cfg()); }
+  // Has this AI reached one of your switch points (its Session or Weekly limit, Kural Settings)?
+  overLimit(provider, model) {
+    let parts = null;
+    try { parts = limitParts({ id: model || "" }, usageHub.current(provider)); } catch { /* no report yet */ }
+    return !!require("../ai/usage-switch").over({ providerId: provider, limitUsed: this.limitOf(provider, model), ...(parts ? { limitParts: parts } : {}) }, this.usageOptions());
+  }
 
   async usageChoice(tab, text = this.lastAsk(tab), attached = [], contexts = []) {
     const guard = this.usageOptions();
-    if (!guard.enabled || this.limitOf(engineOf(tab.model), tab.model) < guard.threshold) return null;
+    if (!guard.enabled || !this.overLimit(engineOf(tab.model), tab.model)) return null;
     const models = this.router && this.router.availableModels ? await this.router.availableModels() : this.routerModels().map((m) =>
-      ({ ...m, limitUsed: this.limitOf(m.providerId, m.id) }));
+      ({ ...m, limitUsed: this.limitOf(m.providerId, m.id), ...(() => { try { const p = limitParts(m, usageHub.current(m.providerId)); return p ? { limitParts: p } : {}; } catch { return {}; } })() }));
     return require("../ai/usage-switch").choose(models,
       this.routingRequest(tab, text, [...journal.attachmentsOf(tab.messages), ...attached], contexts), guard);
   }
@@ -1677,7 +1729,7 @@ class ChatView {
     if (ctl.signal.aborted || (previous && previous.userStopped) || (usageChoice && !this.usageOptions().enabled) ||
       (this.usageOptions().enabled && previous && previous.bg && previous.bg.size) ||
       !routed || routed.error || engineOf(routed.model) === from || !brain.providerOf(routed.model).ready() || !enabled() || tab.status !== "idle" ||
-      this.limitOf(engineOf(routed.model), routed.model) >= (this.usageOptions().enabled ? this.usageOptions().threshold : 98)) return false;
+      (this.usageOptions().enabled ? this.overLimit(engineOf(routed.model), routed.model) : this.limitOf(engineOf(routed.model), routed.model) >= 98)) return false;
     let record;
     try { record = this.handoffRecord(tab, tab.messages, routed.model); }
     catch (e) { log(`chat ${tab.id}: couldn't preserve its complete conversation for a handoff: ${e.message}`); return false; }
@@ -2137,6 +2189,8 @@ class ChatView {
       if (reply.error === "login") this.notify(tab, "login", { who: reply.errorWho });
       else if (reply.error) this.notify(tab, "error", { error: reply.error });
       else this.notify(tab, reply.planReady ? "plan" : "done", { text: answerText(reply) });
+    } else if (reply.error !== "stopped") {
+      log(`chat ${tab.id}: no notification: ${reply.notified ? "already notified for this answer" : queued ? "a queued message is answered next" : "carried on by another AI"}`);
     }
     this.finishTurn(tab, r);
     // Tab learns what you're working on, and which files the chat changed for it.
@@ -2337,12 +2391,25 @@ class ChatView {
   notify(tab, kind, info = {}) {
     try {
       const setting = cfg().get("notifications", "whenAway");
-      if (!shouldNotify(setting, { focused: !!(vscode.window.state && vscode.window.state.focused), onScreen: this.onScreen(tab.id) })) return;
+      // (Checked now, when the answer is done: not when it started.)
+      const focused = !!(vscode.window.state && vscode.window.state.focused);
+      const d = info.force ? { send: true, why: "test" } : notifyDecision(setting, { focused, onScreen: this.onScreen(tab.id) });
+      if (!d.send) { log(`chat ${tab.id}: no notification (${kind}): ${d.why}`); return; }
       const { title, body } = notifyText(kind, { chat: tab.title, ...info });
-      log(`chat ${tab.id}: notification: ${title}`);
-      if (!this.notifier) return;
-      this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind) }, () => this.showChat(tab.id));
+      log(`chat ${tab.id}: notification (${kind}): ${title}; ${d.why}`);
+      if (!this.notifier) { log("notify: no notifier"); return; }
+      return Promise.resolve(this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind) }, () => this.showChat(tab.id)))
+        .then((route) => { log(`chat ${tab.id}: notification route: ${route}`); return route; });
     } catch (e) { log(`chat: notification failed: ${e.message}`); }
+  }
+  // "Kural: Test Notification": one now, whatever the focus, the same way; then says which way and where to allow it.
+  async testNotification() {
+    const tab = this.tab(this.activeId) || { id: "test", title: "Kural" };
+    const route = await this.notify(tab, "done", { force: true, text: "This is a test notification." });
+    const names = { toast: "Kural's own notification", os: process.platform === "darwin" ? "the Mac's notification (shown as Script Editor)" : "the system's notification command", app: "a message inside the Kural window", none: "nothing (every way failed; see Kural: Show Log)" };
+    const mac = process.platform === "darwin" ? " If nothing appeared on screen: System Settings → Notifications → allow Script Editor (and Kural), and check that Focus / Do Not Disturb is off. (Clicking a Mac notification opens Script Editor, not the chat.)" : "";
+    const linux = process.platform === "linux" ? " If nothing appeared: check that a notification service is running and that notify-send is installed (libnotify-bin)." : "";
+    vscode.window.showInformationMessage(`Test notification sent through ${names[route] || route}.${mac}${linux}`);
   }
   clearNotice(id) { if (this.notifier) this.notifier.clear(`kural-chat-${id}`); }
   // Is this chat on screen: a pane shows it and that pane is visible (the side panel open, its editor in view).
@@ -2469,6 +2536,7 @@ class ChatView {
         await this.buildPlan(tab);
       } break;
       case "finishTeam": if (tab) this.finishTeam(tab); break;
+      case "teamOfferAnswer": { const f = this.teamOffers.get(m.id); if (f) f(m.use ? "team" : "one"); break; }
       case "stop": {
         const stopping = this.runtime.get(tab.id); if (stopping) { stopping.userStopped = true; delete stopping.usageHandoff; }
         const routing = this.routingJobs.get(tab.id);
@@ -2517,6 +2585,11 @@ class ChatView {
         break;
       }
       case "routerPanel": vscode.commands.executeCommand("kural.modelRouter"); break;
+      // The gear beside an AI's name in the model menu: its settings (Kural Settings on its card; Auto: the Model Router).
+      case "aiSettings":
+        if (m.ai === "router") vscode.commands.executeCommand("kural.modelRouter");
+        else if (["claude", "codex", "agy", "local"].includes(m.ai)) vscode.commands.executeCommand("kural.account", m.ai);
+        break;
       case "showUsage": vscode.commands.executeCommand("kural.showUsage"); break;
       case "setEffort": if (valid(EFFORTS, m.effort)) {
         tab.effort = m.effort; tab.effortPinned = !!tab.autoRoute; this.remember(tab); this.postTabs(); this.save();

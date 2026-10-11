@@ -8,7 +8,7 @@ request. The lead is always the **Project Manager**; you pick the other roles:
 | **Project Manager** (the lead) | | Gets the requirements from you, asks when something is unclear, runs the team, reports back |
 | **Researcher** | Rachel | Searches online and in the code, proposes a plan |
 | **Architect** | Ross | Studies your project's architecture, picks the solution, splits the work into parts |
-| **Developers** | Monica, Chandler, Joey | Build the approved plan, each their own part (the PM starts 1–3) |
+| **Developers** | Monica, Chandler, Joey | Build the approved plan, each their own part (the PM starts 1–3). With Claude they run on Haiku: the plan is agreed by then, so it's faster and saves usage |
 | **Tester** | Phoebe | Checks every piece of code: quality, tests, edge cases |
 
 Any combination works. Then pick how they work:
@@ -18,6 +18,14 @@ Any combination works. Then pick how they work:
   With only a Researcher and/or an Architect, the plan is the result.
 - **Discuss & decide**: each agent forms its own view first, then they argue it out and agree. The answer shows
   everyone's final position and any disagreement left.
+
+With Claude, the Tester keeps your model. In a team without roles, the lead starts well-defined mechanical parts on
+Haiku too.
+
+**A big task in Auto.** In **Auto** mode with one agent, a big task shows "This looks like a big task. Use 3 agents?"
+above the chat box, with **Use 3 agents**, **One agent** and a countdown. **Use 3 agents** turns the team on. **One
+agent**, or no answer within 15 seconds, goes on with one agent, and Kural doesn't ask again in that chat. Stop while it
+waits sends nothing.
 
 You see reports in the answer as agents finish each phase, with an activity card for each agent. Claude agents can
 also post to each other while they work. Codex and Gemini agents receive their teammates' reports between phases.

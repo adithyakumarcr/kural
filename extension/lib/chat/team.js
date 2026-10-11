@@ -94,7 +94,9 @@ function teamPrompt(n, roles = [], style = "split") {
   if (roles.length) return projectPrompt(team);
   return `\n\nYou lead a team of ${n} agents: ${team.map(who).join("; ")}. Your goal is to finish the user's task ` +
     `as FAST as possible by working in parallel. Split it into parts (by file or feature), so two agents never edit ` +
-    `the same file. Start all of them at once: ${starts(team)}Then add a complete, self-contained description of its part (files, goal, constraints).\n` +
+    `the same file. Start all of them at once: ${starts(team)}Then add a complete, self-contained description of its part (files, goal, constraints). ` +
+    `For a part that is well-defined and mechanical (following an existing pattern, a rename, tests for a clear spec), ` +
+    `start that agent with model "haiku": faster, and it saves the user's usage; keep your model for parts that need judgment.\n` +
     `${BOARD} Agents should use them whenever their work depends on each other — agree on shared names and interfaces, ask ` +
     `a question and wait for the answer, tell others when something they need is ready. You can use them too, as "lead".\n` +
     `Refer to the agents by name. Don't do their parts yourself. While they work, don't post progress updates; reply ` +
@@ -141,7 +143,9 @@ function projectPrompt(team) {
     out.push(`${step++}. Build. Decide how many developers the work needs: 1 for a small or tightly connected change, 2 or 3 ` +
       `only when it splits into independent parts. Never two developers on the same file. Use the names in this order: ` +
       `${devs.map((m) => m.name).join(", ")}. Start the developers${tester ? ` and ${tester.name}` : ``} in ONE message, ` +
-      `subagent_type "general-purpose". Begin each Task prompt with its brief, word for word (leave out the developers you ` +
+      `subagent_type "general-purpose". Start each developer with model "haiku": the plan is agreed and each part is ` +
+      `well-defined, so Haiku builds it fast and saves the user's usage${tester ? ` (${tester.name} keeps your model)` : ``}; only ` +
+      `a part that needs real design decisions gets your model. Begin each Task prompt with its brief, word for word (leave out the developers you ` +
       `don't start, also in the briefs' team lists):\n${devTeam.map((m) => `- ${m.name}: ${brief(m, devTeam)}`).join("\n")}\n` +
       `Then add the approved plan, that agent's part (files, goal, constraints), and these rules, word for word: ` +
       (tester

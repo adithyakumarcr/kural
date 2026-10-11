@@ -1,6 +1,6 @@
 const path = require("path");
 const { LocalRouterClient,abortError,HELPERS } = require("./client");
-const { profileOf,eligible,classify,select,contextWithinBudget,lexicalRank,limitUsed } = require("./policy");
+const { profileOf,eligible,classify,select,contextWithinBudget,lexicalRank,limitUsed,limitParts } = require("./policy");
 const { performance } = require("perf_hooks");
 const { createHash } = require("crypto");
 const { excludedModel } = require("../ai/model-policy");
@@ -32,8 +32,8 @@ class ModelRouter {
   }
   async availableModels() {
     return (await this.models()).map((m)=>{
-      let used=null;try { used=limitUsed(m,this.usageOf(m.providerId)); } catch { /* no report yet */ }
-      return {...m,observedTaskMs:this.taskMedian(m.id),...(Number.isFinite(used)?{limitUsed:used}:{})};
+      let used=null,parts=null;try { const r=this.usageOf(m.providerId);used=limitUsed(m,r);parts=limitParts(m,r); } catch { /* no report yet */ }
+      return {...m,observedTaskMs:this.taskMedian(m.id),...(Number.isFinite(used)?{limitUsed:used}:{}),...(parts?{limitParts:parts}:{})};
     });
   }
   taskMedian(id) { const v=[...(this.tasks.get(id)||[])].sort((a,b)=>a-b);return v.length?v[Math.floor(v.length/2)]:null; }

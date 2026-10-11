@@ -48,12 +48,17 @@ function fixture() {
 
 (async () => {
   await check("switching is opt-in; the percentage is numeric and bounded", () => {
-    assert.deepStrictEqual(guard.options(config), { enabled: false, threshold: 70 });
+    const same = (n) => ({ claude: { session: n, weekly: n }, codex: { session: n, weekly: n }, agy: { session: n, weekly: n } });
+    assert.deepStrictEqual(guard.options(config), { enabled: false, threshold: 70, limits: same(70) });
     values["usageSwitch.enabled"] = true;
     for (const [n, expected] of [[75, 75], [72.8, 73], [0, 1], [200, 99], [NaN, 70], ["80", 70]]) {
       values["usageSwitch.threshold"] = n;
-      assert.deepStrictEqual(guard.options(config), { enabled: true, threshold: expected });
+      assert.deepStrictEqual(guard.options(config), { enabled: true, threshold: expected, limits: same(expected) });
     }
+    // Each AI's own points; a missing or bad one is the old single number.
+    values["usageSwitch.threshold"] = 70;
+    values["usageSwitch.limits"] = { claude: { session: 85, weekly: 60.4 }, codex: { session: "x" }, agy: null };
+    assert.deepStrictEqual(guard.options(config).limits, { claude: { session: 85, weekly: 60 }, codex: { session: 70, weekly: 70 }, agy: { session: 70, weekly: 70 } });
   });
   await check("at the threshold, pick a ready cloud service below it; disabled, unknown and full cases stay put", () => {
     const req = { current: "sonnet", prompt: "Explain the code", profile: "balance", mode: "ask" };
@@ -99,7 +104,21 @@ function fixture() {
   await check("Auto also observes the optional threshold", () => {
     report("claude", 75); report("codex", 20);
     const choice = select(rated(), { current: "sonnet", prompt: "Review the code", historyChars: 1000000 }, { profile: "balance", usageSwitch: opts });
-    assert.strictEqual(choice.model, "codex:gpt-test"); assert.match(choice.reason, /70% usage threshold/);
+    assert.strictEqual(choice.model, "codex:gpt-test"); assert.match(choice.reason, /below your usage switch points/);
+  });
+  await check("Session and Weekly have their own switch points, per AI", () => {
+    const settings = { enabled: true, threshold: 70, limits: { claude: { session: 90, weekly: 50 }, codex: { session: 70, weekly: 70 }, agy: { session: 70, weekly: 70 } } };
+    const req = { current: "sonnet", prompt: "Explain the code", profile: "balance", mode: "ask" };
+    const parts = (session, weekly) => models.map((m) => ({ ...m, limitParts: m.providerId === "claude" ? { session, weekly } : { session: 5, weekly: 5 } }));
+    assert.strictEqual(guard.choose(parts(85, 40), req, settings), null);                      // under both
+    assert.match(guard.choose(parts(91, 40), req, settings).reason, /Session limit is 91% used \(you switch at 90%\)/);
+    assert.match(guard.choose(parts(10, 55), req, settings).reason, /Weekly limit is 55% used \(you switch at 50%\)/);
+    // The policy splits a report into the two.
+    usage.report("claude", { windows: [{ id: "five_hour", label: "Session", usedPercent: 30 }, { id: "seven_day", label: "Week", usedPercent: 64 },
+      { id: "seven_day_opus", label: "Week (Opus)", usedPercent: 99 }] });
+    assert.deepStrictEqual(require("../extension/lib/router/policy").limitParts(models[0], usage.current("claude")), { session: 30, weekly: 64 });
+    usage.report("agy", { windows: [{ id: "gemini", label: "Gemini", usedPercent: 12, period: "week" }] });
+    assert.deepStrictEqual(require("../extension/lib/router/policy").limitParts(models[2], usage.current("agy")), { session: null, weekly: 12 });
   });
   await check("a manually chosen model transfers the same chat and complete visible task to the next service", async () => {
     values["usageSwitch.enabled"] = true; report("claude", 70); report("codex", 10);
