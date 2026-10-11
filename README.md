@@ -398,7 +398,10 @@ No GitHub needed: one command builds Kural from the code in this folder and inst
                         # Codex and Antigravity logged out, macOS permissions for Kural reset; asks first
 ```
 
-The first build downloads VSCodium once (about 250 MB, kept in `downloads/`). After that, a build takes about a
+The first build downloads VSCodium and the platform's patched Electron runtime (about 120–150 MB extra,
+cached in `downloads/`). Builds verify the VSCodium pins in `codium.lock` and the Electron 42.11.12 pins in
+`vendor/electron-runtime.json`; a mismatch stops the build. The runtime replacement keeps the editor core,
+bundle identities and vendor security fuses. After that, a build takes about a
 minute. On a Mac you need Apple's command-line tools once (`xcode-select --install`). `install.sh` sets up
 everything else itself. After `--ext` on Ubuntu, reload the window (**Developer: Reload Window**). On a Mac,
 Kural restarts.
