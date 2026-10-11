@@ -26,6 +26,7 @@ echo "Building $TITLE ..."
 # 1. Move the app folder and rename the executables
 mv "$R/usr/share/codium" "$R/usr/share/$NAME"
 A="$R/usr/share/$NAME"
+python3 scripts/electron_runtime.py "$A" linux-x64
 mv "$A/codium" "$A/$NAME"
 mv "$A/bin/codium" "$A/bin/$NAME"
 rm -f "$A/bin/codium-tunnel"

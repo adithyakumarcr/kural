@@ -1,0 +1,10 @@
+{
+  "version": "42.11.12",
+  "replaces": "42.8.1",
+  "fuses": "101100011",
+  "platforms": {
+    "linux-x64": "1f17c115389c6395ce4b19b29ee2ec4be2208257514d61e269f1c0a7323bd45d",
+    "darwin-arm64": "ef1b36456da7e5d0460bf7524ea76424373002d54120449c889d1dde9d7fccbc",
+    "win32-x64": "031a8d77b6e8884779be06a25342bf352ad2548fef3f9140ef6f65bbb640851d"
+  }
+}

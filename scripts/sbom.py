@@ -43,9 +43,11 @@ def build(app_root=None, platform=None):
         electron = app.get('devDependencies', {}).get('electron')
         if electron and re.fullmatch(r'\d+\.\d+\.\d+', electron):
             components.append(dict(type='framework', name='Electron', version=electron, **{'bom-ref': 'electron'},
-                purl=f'pkg:github/electron/electron@{electron}', properties=[{'name': 'kural:version-source', 'value': 'vendor-package-manifest'}]))
+                purl=f'pkg:github/electron/electron@{electron}', properties=[{'name': 'kural:version-source', 'value': 'checksum-pinned-runtime' if app.get('kuralRuntime') else 'vendor-package-manifest'}]))
+            if app.get('kuralRuntime'):
+                components[-1]['hashes'] = [{'alg': 'SHA-256', 'content': app['kuralRuntime']['sha256']}]
     properties = [{'name': 'kural:inventory-scope', 'value': 'packaged-application-manifests' if app_root else 'source-only'},
-                  {'name': 'kural:inventory-limitations', 'value': 'Native binaries and JavaScript without manifests require separate analysis; Electron version is vendor-declared'}]
+                  {'name': 'kural:inventory-limitations', 'value': 'Native binaries and JavaScript without manifests require separate analysis; Electron archive digest is recorded when replaced'}]
     if platform:
         properties.append({'name': 'kural:platform', 'value': platform})
     return dict(bomFormat='CycloneDX', specVersion='1.5', version=1,

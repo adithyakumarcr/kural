@@ -20,6 +20,7 @@ fi
 ./scripts/check-codium.sh "$(basename "$SRC")" "$SRC" || exit 1   # (also a file left from an earlier run)
 rm -rf "$WORK" && mkdir -p "$APP"
 unzip -q "$SRC" -d "$APP"
+python3 scripts/electron_runtime.py "$APP" win32-x64
 
 echo "Rebranding ..."
 python3 scripts/rebrand.py "$APP/resources/app" win
