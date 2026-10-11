@@ -46,16 +46,11 @@ function dir(name, kind, storage = state.storage) {
 // listed now, so ask again for each request; "images" is always in (a model may save its first picture there).
 function storageReadRoots(storage, id = state.id, share = state.share) {
   if (!storage) return [];
-  let names = [];
-  try { names = fs.readdirSync(storage); } catch { /* not made yet */ }
-  const out = names.filter((n) => n !== "profiles").map((n) => path.join(storage, n));
-  if (!names.includes("images")) out.push(path.join(storage, "images"));
+  // Saved chats, checkpoints and SSH credentials are private. A chat's exact handoff file
+  // is explicitly granted by its host; it does not need access to everybody else's history.
+  const out = share || id === "default" ? [path.join(storage, "images")] : [];
   const own = id !== "default" && SAFE_ID.test(id) ? path.join(storage, "profiles", id) : null;
-  if (own) {
-    try { for (const n of fs.readdirSync(own)) if (n !== "claude" && n !== "codex") out.push(path.join(own, n)); } catch { /* none yet */ }
-    out.push(path.join(own, "claude", "projects"), path.join(own, "claude", "plans"));
-    if (!names.includes("images")) out.push(path.join(own, "images"));
-  }
+  if (own) out.push(path.join(own, "images"));
   return out;
 }
 

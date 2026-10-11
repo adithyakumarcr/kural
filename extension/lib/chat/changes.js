@@ -11,7 +11,7 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { diffLines } = require("../edit/diff");
-const { within } = require("../paths");
+const { within, real } = require("../paths");
 const { claudeConfigDir } = require("../profiles/env");
 
 const SCHEME = "kural-before";
@@ -33,7 +33,7 @@ function inProject(file, roots) {
 class ChangeTracker {
   constructor(dir = null) {
     this.dir = dir;
-    this.snapshots = new Map(); // id -> { file, content (null = file didn't exist) }
+    this.snapshots = new Map(); // id -> { file, content + bytes (null = file didn't exist) }
     this.emitter = new vscode.EventEmitter();
     if (dir) setTimeout(() => this.cleanup(), 30000);
   }
@@ -68,13 +68,16 @@ class ChangeTracker {
   // Called just before Claude edits `file`. Returns the snapshot id for this turn.
   snapshot(turn, file) {
     if (turn.snaps[file]) return;
-    let content = null;
-    try { content = fs.readFileSync(file, "utf8"); } catch { /* new file */ }
+    let bytes = null;
+    try { bytes = fs.readFileSync(file); } catch (e) { if (e.code !== "ENOENT") throw e; }
+    const content = bytes == null ? null : bytes.toString("utf8");
+    const raw = bytes == null ? null : bytes.toString("base64");
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    this.snapshots.set(id, { file, content });
+    const target = real(file);
+    this.snapshots.set(id, { file, content, raw, target });
     turn.snaps[file] = id;
-    if (this.dir && (content == null || content.length <= MAX_DISK)) {
-      try { fs.mkdirSync(this.dir, { recursive: true }); fs.writeFileSync(this.diskFile(id), JSON.stringify({ file, content })); } catch { /* memory only */ }
+    if (this.dir && (bytes == null || bytes.length <= MAX_DISK)) {
+      try { fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 }); fs.writeFileSync(this.diskFile(id), JSON.stringify({ file, content, raw, target }), { mode: 0o600 }); } catch { /* memory only */ }
     }
   }
 
@@ -84,15 +87,16 @@ class ChangeTracker {
     for (const [file, id] of Object.entries(turn.snaps)) {
       const snap = this.get(id);
       if (!snap) continue;
-      let now = null;
-      try { now = fs.readFileSync(file, "utf8"); } catch { /* deleted */ }
-      if (snap.content === now) continue;
+      let nowBytes = null;
+      try { nowBytes = fs.readFileSync(file); } catch (e) { if (e.code !== "ENOENT") throw e; }
+      const now = nowBytes == null ? null : nowBytes.toString("utf8");
+      if (snap.raw !== undefined ? snap.raw === (nowBytes == null ? null : nowBytes.toString("base64")) : snap.content === now) continue;
       const ops = diffLines((snap.content || "").split("\n"), (now || "").split("\n"));
       out.push({
         id, file, rel: require("../workspace").label(file),
         added: ops.filter((o) => o.op === "add").length, removed: ops.filter((o) => o.op === "del").length,
         created: snap.content == null, deleted: now == null, state: "pending",
-        after: hash(now),   // the file as the AI left it: a later rollback can tell whether you changed it since
+        after: hash(nowBytes),   // the file as the AI left it: a later rollback can tell whether you changed it since
       });
     }
     return out;
@@ -108,9 +112,12 @@ class ChangeTracker {
   async undo(id) {
     const s = this.get(id);
     if (!s) return false;
+    // A repository may replace the path with a symlink after the checkpoint was taken.
+    // Refuse redirected restores rather than overwrite a private file outside the original target.
+    if (real(s.file) !== (s.target || path.resolve(s.file))) throw new Error("The checkpoint path now points somewhere else; no file was restored.");
     const uri = vscode.Uri.file(s.file);
-    if (s.content == null) await vscode.workspace.fs.delete(uri, { useTrash: true }).then(undefined, () => {});
-    else await vscode.workspace.fs.writeFile(uri, Buffer.from(s.content, "utf8"));
+    if (s.content == null) await vscode.workspace.fs.delete(uri, { useTrash: true }).catch((e) => { if (e.code !== "ENOENT" && e.code !== "FileNotFound") throw e; });
+    else await vscode.workspace.fs.writeFile(uri, s.raw !== undefined ? Buffer.from(s.raw, "base64") : Buffer.from(s.content, "utf8"));
     // If the file is open with no unsaved edits, it reloads by itself.
     return true;
   }
@@ -121,7 +128,7 @@ class ChangeTracker {
   // Whether `file` is still as the AI left it (after = its hash then).
   unchangedSince(file, after) {
     let now = null;
-    try { now = fs.readFileSync(file, "utf8"); } catch { /* deleted */ }
+    try { now = fs.readFileSync(file); } catch { /* deleted */ }
     return hash(now) === after;
   }
 }

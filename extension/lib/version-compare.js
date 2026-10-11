@@ -3,8 +3,8 @@
 
 // "1.2.0-beta.2" → { nums: [1,2,0], pre: ["beta", 2] }
 function parseVersion(v) {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(String(v || "").trim());
-  if (!m) return null;
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(String(v || "").trim());
+  if (!m || m.slice(1, 4).some((x) => !Number.isSafeInteger(Number(x)))) return null;
   return { nums: [+m[1], +m[2], +m[3]], pre: m[4] ? m[4].split(".").map((x) => /^\d+$/.test(x) ? +x : x) : [] };
 }
 

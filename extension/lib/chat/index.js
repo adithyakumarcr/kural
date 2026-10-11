@@ -1153,11 +1153,12 @@ class ChatView {
   }
 
   startProc(tab, fresh = false) {
+    if (vscode.workspace.isTrusted === false) return null;
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); }
     this.endDevice(old);
     const full = fullSetup();
-    const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
+    const instr = full ? { text: "", files: [] } : projectInstructions(this.root(), vscode.workspace.isTrusted !== false);
     const editing = tab.mode === "agent" || tab.mode === "auto";
     const team = this.teamSize(tab);
     const nativeTeam = team && isClaude(tab.model);
@@ -1189,7 +1190,7 @@ class ChatView {
       addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
-      tools, allowedTools: [...WEB_TOOLS,...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
       mcpServers: nativeTeam || dev ? { ...(nativeTeam ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
         ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
@@ -1271,6 +1272,10 @@ class ChatView {
     const live = (x) => x && !x.stale && x.proc && !x.proc.exited && x.turn && x.turn.dispatched && (x.turn.reply.running || (x.steers || []).length);
     if (!live(r)) { this.post({ type: "flash", text: "Kural is still starting the answer: send it in a moment" }); return; }
     if (!r.proc.echoes) { this.post({ type: "flash", text: "To send a message while it answers, update Claude Code (claude update)" }); return; }
+    if (vscode.workspace.isTrusted === false) {
+      vscode.window.showWarningMessage("Trust this workspace before using Kural AI. Repository files and provider setup may execute code.");
+      return;
+    }
     let text = ChatView.textOf(segments).trim();
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     const built = await this.buildPrompt(text, contexts);
@@ -1395,6 +1400,10 @@ class ChatView {
   }
 
   async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null) {
+    if (vscode.workspace.isTrusted === false) {
+      vscode.window.showWarningMessage("Trust this workspace before using Kural AI. Repository files and provider setup may execute code.");
+      return;
+    }
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
     if (tab.visiting) return;   // (a chat from another workspace: read only)
@@ -2280,6 +2289,11 @@ class ChatView {
   async onPermission(tab, r, req) {
     const turn = r.turn;
     const input = req.input || {};
+    if (vscode.workspace.isTrusted === false) return { allow: false, message: "Workspace trust is required." };
+    const verdict = decide({ tool: req.tool_name, input, mode: tab.mode, allowAll: tab.allowAll, allowAllDevice: tab.allowAllDevice, device: tab.device,
+      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice });
+    if (verdict.deny) return { allow: false, message: verdict.message };
+    const prepareEdit = async () => {
     if (EDIT_TOOLS.has(req.tool_name)) {
       const file = input.file_path || input.notebook_path;
       if (file && turn) {
@@ -2293,10 +2307,10 @@ class ChatView {
         if (inProject(abs, this.projectRoots(tab))) this.changes.snapshot(turn, abs);
       }
     }
+    };
     // Run at once or ask: permission-policy.js decides (its test is the table of every case).
-    const verdict = decide({ tool: req.tool_name, input, mode: tab.mode, allowAll: tab.allowAll, allowAllDevice: tab.allowAllDevice, device: tab.device,
-      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice });
-    if (verdict.allow) return { allow: true };
+
+    if (verdict.allow) { await prepareEdit(); return { allow: true }; }
     if (verdict.question) return this.askUser(tab, r, req);
     const risky = verdict.risky;
     // Agent mode: running commands asks you first.
@@ -2312,6 +2326,7 @@ class ChatView {
     this.notify(tab, "permission", { tool: req.tool_name, detail: block.detail, where: block.where });
     const allow = await new Promise((resolve) => r.perms.set(pid, resolve));
     this.clearNotice(tab.id);
+    if (allow) await prepareEdit();
     block.state = allow ? "allowed" : "denied";
     // (After Stop the answer is already over: don't flip the tab back to "running".)
     if (turn && turn.reply.running) tab.status = "running";
@@ -2345,7 +2360,7 @@ class ChatView {
     const editing = (x) => x === "agent" || x === "auto";
     // Gemini (Antigravity) can't be asked: what it may do is fixed when it starts, so every mode applies from the next message.
     if (engineOf(tab.model) === "agy") this.post({ type: "flash", text: "Gemini: the new mode applies from your next message" });
-    else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" ? "Plan" : tab.mode === "ask" ? "Ask" : "Editing"} mode applies from your next message` });
+    else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" || tab.mode === "ask" ? "Read-only permissions apply now; tools refresh" : "Editing tools become available"} from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });
   }

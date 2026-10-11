@@ -119,7 +119,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Ask (Ctrl+Alt+A): describe what you're looking for in plain words; Kural lists the exact places. Ask always uses the
   fastest model you have (Claude's Haiku, or the lightest Gemini or Codex model; your own model if that's all), not the
   chat's model; each result list shows which. An empty box shows no results (in both tabs).
-- Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review red/green, Accept or Reject.
+- Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review a read-only red/green diff, Accept or Reject. The original file changes only on Accept.
 - Model Router (Auto in the model menu, like Cursor's): Balance, Cost (saves your usage limits: lightest model that can
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
   cheaper model; "Build it" on an agreed plan goes to a light model such as Haiku in Balance and Cost, and a step that
@@ -185,8 +185,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Inside the project it doesn't ask, except for files that run code later (git hooks, .vscode/tasks.json, package.json,
   .env, Makefile, Dockerfile, workflows, shell profiles) and the temp folder (Agent mode still asks before commands). Kural never looks through Desktop,
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
-- In a folder you haven't trusted (VS Code's Restricted Mode), its settings can't pick programs or modes for Kural, and
-  its Claude Code setup (hooks, MCP servers) isn't loaded.
+- Trust a workspace before using Kural AI; Kural is unavailable in Restricted Mode. Ask and Plan reject mutating
+  requests handled by Kural's permission policy. Provider-native reads are not confined by this policy. Gemini's
+  edit notices cannot wait for Kural approval; use a separately isolated account for untrusted content.
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a short
   overview. A card each for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan,
@@ -249,7 +250,7 @@ About Kural (when the user asks about Kural itself): a code editor (VSCodium, so
 work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
 that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
 Ask; @ mentions a file; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
-Fork from here; the clock button has every chat); Ctrl+K edits selected code in place; Tab Completion; plain words in
+Fork from here; the clock button has every chat); Ctrl+K proposes changes to selected code in a read-only diff; Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Kural's browser; devices over SSH; the Model Router (Auto);
 Kural Settings (accounts, usage switching, moods, updates). Agent teams work with Claude, ChatGPT and Gemini; Jira
 tickets and Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and

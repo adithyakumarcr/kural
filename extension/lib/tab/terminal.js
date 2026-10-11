@@ -54,7 +54,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function run(cmd, args, cwd, timeout = 1500) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, timeout, maxBuffer: 4 * 1024 * 1024 }, (err, out) => resolve(err ? "" : String(out)));
+    execFile(cmd, cmd === "git" ? ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "diff.external=", ...args.slice(0, 1), ...(args[0] === "diff" ? ["--no-ext-diff", "--no-textconv"] : []), ...args.slice(1)] : args, { cwd, timeout, maxBuffer: 4 * 1024 * 1024 }, (err, out) => resolve(err ? "" : String(out)));
   });
 }
 
@@ -62,6 +62,7 @@ function run(cmd, args, cwd, timeout = 1500) {
 // For a commit also: when the last commit was and which files changed (to pick your activity since then).
 const gitCache = new Map();   // cwd + kind -> { at, text, since, files }
 async function gitContext(cwd, wantDiff) {
+  if (vscode.workspace.isTrusted === false) return { at: Date.now(), text: "", since: 0, files: [] };
   const key = `${cwd}|${wantDiff}`;
   const hit = gitCache.get(key);
   if (hit && Date.now() - hit.at < 4000) return hit;

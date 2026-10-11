@@ -306,9 +306,9 @@ added the low stock check`, and Kural suggests the command (`git push origin HEA
 
 ### Inline edit (Ctrl+K)
 
-Select code, press **Ctrl+K**, and say what to change. Then review the change in place and keep it
+Select code, press **Ctrl+K**, and say what to change. Then review the proposed change in a read-only diff and keep it
 (**Ctrl+Enter**) or reject it (**Ctrl+Shift+Backspace**); on a Mac, Cmd instead of Ctrl. With nothing selected, Ctrl+K
-writes new code at the cursor.
+proposes new code at the cursor. The original buffer stays unchanged until you accept, including with Auto Save enabled.
 
 ![Ctrl+K: select code, say what to change, review the green lines, accept](docs/screenshots/inline-edit.gif)
 
@@ -336,9 +336,11 @@ writes new code at the cursor.
 - **Light on memory.** Kural's Claude helpers start when they're first needed and stop after a few idle minutes, and a
   chat you haven't looked at for a while stops its Claude Code process until you come back to it
   ([measurements](docs/benchmarks/memory-2026-10-08.md)).
-- **Asks before leaving your project.** The AI reads and changes your project's files freely; a file anywhere else gets
-  a "Read this file?" / "Change this file?" card first. Kural never looks through Desktop, Documents, Downloads, Music
-  or Photos by itself, so a Mac doesn't ask you about them.
+- **Workspace trust and permissions.** Trust the workspace before using Kural AI. In Ask and Plan, Kural rejects
+  mutating tool requests handled by its permission policy. In Agent, executable configuration changes and outside
+  files require approval; Claude web searches and fetches also require approval. Auto and Allow all intentionally
+  grant broader access. Provider-native reads and Gemini's edit notices are not a filesystem sandbox; Gemini cannot
+  wait for Kural approval cards. Use these providers only with trusted repositories and separately isolated accounts.
 - **Account** (person icon in the status bar). For Claude, Google Gemini and ChatGPT (Codex): who you're logged in as and your
   plan, the usage page, switch account, log out; and check for updates.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the

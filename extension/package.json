@@ -22,8 +22,8 @@
   ],
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": "limited",
-      "description": "In a folder you haven't trusted, Kural ignores that folder's settings for which programs to run and how much the AI may do on its own, and doesn't load the folder's Claude Code setup (hooks, MCP servers).",
+      "supported": false,
+      "description": "Trust the workspace before using Kural AI. Repository instructions and provider integrations can read files and execute code.",
       "restrictedConfigurations": [
         "kural.claudePath",
         "kural.codexPath",

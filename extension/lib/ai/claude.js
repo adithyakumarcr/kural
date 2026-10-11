@@ -9,6 +9,7 @@
 //  - Starting `claude` costs 1–3 s, so processes are started ahead of time and reused.
 
 const vscode = require("vscode");
+const { StringDecoder } = require("string_decoder");
 const { spawn, spawnSync, execFile } = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -228,6 +229,7 @@ class ClaudeProcess {
     this.h = handlers;
     this.proc = null;
     this.buf = "";
+    this.decoder = new StringDecoder("utf8");
     this.stderr = "";
     this.exited = false;
     this.pending = new Map();   // our control requests waiting for an answer
@@ -277,6 +279,7 @@ class ClaudeProcess {
     log(`${o.name}: started claude (pid ${this.proc.pid}, ${o.model}${o.effort ? "/" + o.effort : ""}${o.resume ? ", resuming" : ""})`);
 
     this.proc.stdout.on("data", (d) => this.onData(d));
+    this.proc.stderr.setEncoding("utf8");
     this.proc.stderr.on("data", (d) => {
       this.stderr += d;
       for (const line of String(d).split(/\r?\n/)) if (line.trim()) log(`${o.name}: [claude] ${line.trim().slice(0, 300)}`);
@@ -292,7 +295,7 @@ class ClaudeProcess {
   }
 
   onData(d) {
-    this.buf += d;
+    this.buf += typeof d === "string" ? d : this.decoder.write(d);
     let i;
     while ((i = this.buf.indexOf("\n")) >= 0) {
       const line = this.buf.slice(0, i).replace(/\r$/, "");
