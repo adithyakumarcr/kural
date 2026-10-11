@@ -49,3 +49,10 @@ The original source-only patch above contains the first investigation fixes. The
 ## Evidence availability
 
 Raw validation logs, scanner JSON and local environment snapshots are retained in the private audit handoff and are not published in this PR. References to `evidence/` identify those retained files. Reviewers can reproduce the code-level checks with the committed `test/audit-*.test.js` files. See the PR description for the latest 79/81 test-file result and its limitations.
+
+## Additional dependency remediation
+
+- `39846146055280720a35d1c06d27215863d69b3e`: verified/pinned shell-quote 1.11.0; staged inventories on all targets; release inventory completeness checks; Windows build-step credential scope; tests/docs.
+- `b4c03486781d6427682ca47716efe71bd725fe34`: rebranding dependency fixture and executable packaging modes; full local validation outcomes. This is the code revision validated by successful native CI runs.
+
+The final follow-up changes audit Markdown only; it records the above results and owner approval requirements.

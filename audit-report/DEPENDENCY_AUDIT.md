@@ -41,10 +41,10 @@ Authoritative references: [Electron preload advisory](https://github.com/electro
 - Expected: Release SBOM describes actual packaged dependencies and versions.
 - Actual: Electron, Chromium and most bundled dependencies omitted.
 - Impact: Scanner coverage and consumers ability to assess runtime CVEs are substantially reduced.
-- Remediation: Generate SBOM from final staging tree on each platform and enrich native/bundled dependencies; include digests and provenance. Audit adds a partial artifact-derived SBOM, not a production pipeline fix.
+- Remediation: Generate SBOM from final staging tree on each platform and enrich native/bundled dependencies; include digests and provenance. PR #61 now implements staged per-platform manifest inventories and fail-closed release merging; native/bundle enrichment remains.
 - Regression / verification requirement: `Compare SBOM against artifact inventory, and ensure Electron/shell-quote/runtime versions included.`.
 - Verification: Evidence confirms the stated code/configuration/version/artifact fact; remediation verification is incomplete. No installed-system exploit claimed.
-- Remediation status / change reference: **DEFERRED**; No production/source upgrade or infrastructure change applied; follow-up in REMEDIATION_PLAN.md.
+- Remediation status / change reference: **PARTIALLY FIXED**; code commits 3984614 and b4c0348. Manifest inventory verified; native/bundle closure remains.
 ### DEP-002 — Bundled shell-quote 1.10.0 has a published injection advisory
 
 - Severity / confidence / classification: **High / High / CONFIRMED**.
@@ -56,10 +56,10 @@ Authoritative references: [Electron preload advisory](https://github.com/electro
 - Expected: Reject line terminators following comment tokens.
 - Actual: Bundled library generates a new shell command line.
 - Impact: Library flaw and affected version confirmed; attacker-controlled token composition in Kural/upstream call sites remains SUSPECTED.
-- Remediation: Upgrade through compatible vendor build to shell-quote >=1.11.0; trace reachable quote() usages before assigning app exploit CVSS.
+- Remediation: Packaged shell-quote replaced with hash-verified upstream 1.11.0; trace reachable quote() usages before assigning app exploit CVSS.
 - Regression / verification requirement: `Run upstream quotation regression and integration tests of reachable callers.`.
-- Verification: Evidence confirms the stated code/configuration/version/artifact fact; remediation verification is incomplete. No installed-system exploit claimed.
-- Remediation status / change reference: **DEFERRED**; No production/source upgrade or infrastructure change applied; follow-up in REMEDIATION_PLAN.md.
+- Verification: Evidence confirms the stated code/configuration/version/artifact fact; the original quotation failure is rejected by the replacement and rebuilt Linux DEB contains exact pinned bytes. No installed-system exploit claimed.
+- Remediation status / change reference: **FIXED at library level**; code commits 3984614 and b4c0348. Existing published installations are unaffected until a new validated release is installed.
 ## SBOM deliverables
 
 kural-source.cdx.json reflects existing generator. kural-linux-artifact.cdx.json is an audit-derived CycloneDX 1.5 inventory of identified release package manifests and measured runtimes. It does not claim complete bundled/native dependency closure or license/provenance resolution. Generate authoritative per-platform SBOMs from final packaging trees before release.
@@ -81,3 +81,9 @@ Validation of this follow-up: Linux DEB rebuild PASS; all eleven shipped shell-q
 Full local follow-up suite: 76/82 files passed, exit1. Failures: agy.test.js and codex.test.js (fake-provider timing assertions), bench-memory.test.js (process lookup), devices.test.js (socket EPERM), rebrand-welcome.test.js (new required dependency missing from synthetic fixture), updates-script.test.js (helper liveness). The rebranding fixture is corrected and its direct rerun PASS; remaining failures require rerun/native CI and have not been waived. The strengthened runtime-dependency regression also passes its direct rerun.
 
 Whitespace check clarification: Kural-authored changes pass `git diff --cached --check -- . ":!vendor"`. The unmodified upstream MIT license has trailing spaces, so the all-files check reports those retained vendor lines; upstream bytes and integrity pins are preserved.
+
+## Verified follow-up code revision
+
+Application/build code revision: `b4c03486781d6427682ca47716efe71bd725fe34` (dependency change `39846146055280720a35d1c06d27215863d69b3e`). [Build run 38125659529](https://github.com/adithyakumarcr/kural/actions/runs/38125659529) completed successfully: full test job, Linux build, macOS DMG/startup, Windows build/install/startup, Ubuntu 22.04 and 24.04 install/startup. Release job was skipped. [CodeQL run 38125659585](https://github.com/adithyakumarcr/kural/actions/runs/38125659585) PASS. These are executed automated checks, not full platform acceptance or proof of security. The intermediate 3984614 build failed; b4c0348 corrected the rebranding dependency fixture and executable packaging modes.
+
+Local full-run result remains 76/82 (exit1); corrected rebranding fixture and provider timing failures passed direct reruns. Process-inventory, socket and helper-liveness local failures remain documented. A CycloneDX schema validation attempt could not run because Python jsonschema is unavailable; structural regression tests passed, so formal schema validation is not claimed. The final report update changes Markdown only; code validation is bound to the above SHA.
