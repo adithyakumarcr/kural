@@ -90,6 +90,7 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y ./dist/kural_*_amd64.deb
       - name: Start it
         run: |
+          ELECTRON_RUN_AS_NODE=1 /usr/share/kural/kural -e 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)'
           kural --version
           grep -q '"nameLong": "Kural Code Editor"' /usr/share/kural/resources/app/product.json
           test -f /usr/share/kural/resources/app/extensions/kural/package.json
@@ -136,6 +137,7 @@ jobs:
           mount | grep -qF "$MP" && { echo "::error::Could not detach $MP"; hdiutil info; exit 1; }
           APP="$RUNNER_TEMP/Kural.app"
           codesign --verify --deep --strict "$APP"
+          ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/Kural" -e 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)'
           "$APP/Contents/Resources/app/bin/kural" --version
           # The real window, not just the command line: it must still run after 25 s with its helper processes.
           # (Electron finds its helpers by the app's name; a wrong name makes it quit at once.)
@@ -224,6 +226,11 @@ jobs:
           Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S'
           $dir = "$env:LOCALAPPDATA\Programs\Kural"
           if (-not (Test-Path "$dir\Kural.exe")) { throw "Kural.exe not installed" }
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          try {
+            & "$dir\Kural.exe" -e 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)'
+            if ($LASTEXITCODE -ne 0) { throw "Patched Electron runtime check failed" }
+          } finally { Remove-Item Env:ELECTRON_RUN_AS_NODE }
           & "$dir\bin\kural.cmd" --version
           if ($LASTEXITCODE -ne 0) { throw "kural --version failed" }
           # The real window: still running after 25 s, with its helper processes
