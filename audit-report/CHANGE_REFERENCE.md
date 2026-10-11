@@ -81,3 +81,13 @@ Runtime commits:
 - `d7a6987929793c69df2fa9a47915446cc488b33d`: waited Windows process and exit-7 negative control. **Final validated code revision.**
 
 [Build 38131185955](https://github.com/adithyakumarcr/kural/actions/runs/38131185955) / [CodeQL 38131185998](https://github.com/adithyakumarcr/kural/actions/runs/38131185998) PASS; all 83 test files and supported-target build/install/runtime/startup checks; release SKIPPED. Final follow-up is Markdown-only, including `GEMINI_ADAPTER_REQUIREMENTS.md`. Full local patch and redacted raw logs are retained privately. Published binaries, main and production settings were not changed.
+
+
+## SEC-012 hook gate
+
+Commit `297944cf5850c3e3cf814ccc05e7aa2d25dadfb0` (branch `sec61`, on top of `857f352`). Status: **IMPLEMENTED, NOT VERIFIED against the real CLI**.
+
+- **Added:** `extension/lib/ai/agy-gate.js` (hook program), `extension/lib/ai/agy-gate-host.js` (installer, socket host, registry, `isGateFile`), `test/agy-gate.test.js`, `scripts/verify-agy-gate.sh` (owner-run real-CLI acceptance).
+- **Replaced:** the fire-and-forget `onPermission({notice: true})` in `AgyAgent.onTool` with `gateDecide` (waiting) and `gateMissed` (detection); the "Gemini can't ask" Agent-mode note wording.
+- **Changed:** `extension/lib/ai/agy.js`, `extension/lib/chat/permission-policy.js` (`unclassified`, `guard`, Browser, Bash `cwd`), `extension/lib/chat/index.js` (gate requests bound to mode/running answer, `revokeGate` on mode change), `extension/lib/ai/danger.js`, `extension/lib/paths.js`, `extension/extension.js` (stop host on deactivate), `scripts/from-scratch.sh` (remove the hook entry), `test/fake-agy.js` (runs hooks), `test/agy.test.js`, `test/permissions.test.js`, `test/from-scratch.test.js`, `test/handoff-fakes.test.js` and `test/team-agent.test.js` (temporary HOME), `CLAUDE.md`, `README.md`, `RELEASE_NOTES.md`, `extension/lib/chat/guide.js`, `docs/wiki/Chat.md`, `docs/wiki/Google-Gemini-and-ChatGPT.md`.
+- **Removed:** no provider or tool functionality; Gemini's tools and modes are unchanged.
