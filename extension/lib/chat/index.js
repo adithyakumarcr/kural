@@ -1659,7 +1659,7 @@ class ChatView {
     if (c.retry) return wrapped("", `That's our conversation so far. ${c.retry} stopped in the middle of my last request (above) because it reached its usage limit: carry that request on from where it got to. Steps marked complete happened already; check the files before you change them.`);
     if (c.account) return wrapped("", "That's our conversation so far (before I switched accounts). Carry on from it.");
     if (c.model) return wrapped("", "That's our conversation so far (with another model). Carry on from it.");
-    return wrapped(` workspace="${String(c.from || "").replace(/"/g, "'")}"`, "That's our earlier conversation, from another workspace. Carry on from it here.");
+    return wrapped(` workspace="${String(c.from || "").replace(/"/g, "'").replace(/[<>\r\n]/g, " ")}"`, "That's our earlier conversation, from another workspace. Carry on from it here.");
   }
 
   // How many characters of conversation record the next model gets: the router's handoff setting (120,000 by default);
