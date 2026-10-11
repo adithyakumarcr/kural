@@ -597,6 +597,25 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   stop-before-dispatch timing). **Haiku for well-defined work**: `routingRequest.wellDefined` ("Build it") → `need = 1`
   in `select` (not Intelligence; a checkpoint still escalates); team prompts start developers with Agent `model: "haiku"`
   (checked with real Claude Code). `test/team-offer.test.js`, `test/haiku-build.test.js`.
+- **Profiles** (`lib/profiles/`: `store.js` list/rules, `env.js` env, `scope.js` keys and folders, no vscode; `index.js`
+  UI). globalState `kural.profiles.v1` = `{active, list:[{id,name,kind,share}]}`; profile `default` ("Personal") is
+  today's Kural, with today's keys and folders. Others give Claude Code `CLAUDE_CONFIG_DIR=<globalStorage>/profiles/<id>/claude`
+  and Codex `CODEX_HOME=<…>/codex` (Claude Code's Mac keychain item name includes a hash of that folder: read from the
+  2.1.296 binary, not checked on a Mac). agy and Ollama are shared. `applyActive(context)` runs FIRST in `activate()`;
+  `cleanEnv()`, codex.js (run + app server), Get started / Ctrl+Esc terminals and settings connectors merge
+  `profileEnv()`: any new place that starts claude or codex must too. Switching = save `active`, `chat.saveNow()`,
+  reload the window. `scope.key/dir(base, "account"|"data")`: account state (`kural.setup.v2`, `kural.usage.v1`,
+  Codex ids) per profile; data (chats, checkpoints, handoffs, images, local-chats, `kural.chat.v4`, activity, router
+  memory) the main profile's when `share`, else `@<id>` / `profiles/<id>/`. `scope.dir` never returns a relative path
+  (it wrote test files into the repo). `tab.profile` stamped at send; a started chat from another profile gets
+  `freshSession = "account"` (carryOver) with `tab.profileFresh`, both cleared back in its own profile. The AI's read
+  roots exclude `<storage>/profiles/` (`scope.storageReadRoots`): a window sees only its own profile's data folders and
+  `claude/projects|plans`, never another profile or any `claude/`/`codex/` login folder. On a Mac, New profile needs
+  Claude Code >= 2.1.296 (`MIN_KEYCHAIN_CLAUDE`: older ones may share one keychain item, so a profile login would
+  replace the main one); Delete logs out its Claude (Mac: only if new enough) and Codex (`CODEX_HOME`), then removes the
+  folder, and tells you to close other windows using it. The switch flushes `chat.saveNow()`, `account.flush()`,
+  `activity.flush()`; `busy` counts running chats, `r.bg` and `r.steers`. Tests: `test/profiles.test.js` (fakes keep state in `$CLAUDE_CONFIG_DIR` /
+  `$CODEX_HOME`). Not checked live: the UI, a Mac keychain, two real accounts.
 - **Workspace Color** (`lib/workspace-color.js`, `rebrand.py` `add_workspace_color_item`): six `activityBar*` keys in
   `workbench.colorCustomizations` + `kural.workspaceColor`, Workspace target, merged; Remove deletes only keys still equal
   to what Kural wrote. The right-click item is a bundle patch: VS Code builds that menu in

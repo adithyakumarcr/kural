@@ -35,6 +35,9 @@ const settingsIO = require("./lib/settings-io");
 const { CrashLog } = require("./lib/crash");
 const { StayAwake } = require("./lib/chat/awake");
 const welcome = require("./lib/welcome");
+const { Profiles, applyActive } = require("./lib/profiles");
+const scope = require("./lib/profiles/scope");
+const { profileEnv } = require("./lib/profiles/env");
 const usageHub = require("./lib/ai/usage");
 const brain = require("./lib/ai");
 const ws = require("./lib/workspace");
@@ -54,6 +57,7 @@ function openClaudeCode() {
     shellPath: win ? "powershell.exe" : undefined,
     // No folder open: Kural's work folder, never your home folder (Claude Code looks through the folder it starts in).
     cwd: ws.root() || ws.workDir(),
+    env: profileEnv(),   // (this profile's Claude login: lib/profiles/env.js)
     location: { viewColumn: vscode.ViewColumn.Beside },
   });
   t.show();
@@ -63,6 +67,9 @@ function openClaudeCode() {
 let crashLog = null;
 function activate(context) {
   initLog(context);
+  // Which profile this window runs as (lib/profiles): first, before anything starts Claude or Codex or reads chats, because
+  // the profile decides which logins those programs use and where chats are kept.
+  const profileStore = applyActive(context);
   // Crash reports: what went wrong when Kural last closed unexpectedly (lib/crash), and errors in Kural's own code.
   crashLog = new CrashLog(context);
   crashLog.start();
@@ -75,7 +82,8 @@ function activate(context) {
   // Before anything uses Claude: is Claude Code installed, logged in, and does a test request work?
   // AI work without a project open happens in Kural's own folder, never in your home folder (see workspace.js).
   require("./lib/workspace").setWorkDir(require("path").join(context.globalStorageUri.fsPath, "work"));
-  brain.setStore(require("path").join(context.globalStorageUri.fsPath, "cli-chats"));   // (Codex / Gemini conversation ids)
+  // (Codex / Gemini conversation ids. Codex's belong to the profile's Codex account; Gemini's are the same in every profile.)
+  brain.setStore(require("path").join(context.globalStorageUri.fsPath, "cli-chats"), { codex: scope.dir("cli-chats", "account") });
   require("./lib/ai/codex").setLog(log);
   require("./lib/ai/agy").setLog(log);
   getStarted = new GetStarted(context);
@@ -215,7 +223,7 @@ function activate(context) {
   // Auto steers away from an AI close to its usage limit (lib/ai/usage.js) and learns from what you do after its
   // answers, per workspace (lib/router/learn.js).
   router.usageOf = (provider) => usageHub.current(provider);
-  router.memory = new RouterMemory(() => context.workspaceState.get("kural.router.memory.v1"), (v) => context.workspaceState.update("kural.router.memory.v1", v));
+  router.memory = new RouterMemory(() => context.workspaceState.get(scope.key("kural.router.memory.v1", "data")), (v) => context.workspaceState.update(scope.key("kural.router.memory.v1", "data"), v));
   chat.router = router;
   new RouterPanel(context, router).register();
   chat.postLocal().catch(() => {});
@@ -234,6 +242,28 @@ function activate(context) {
   account.page = new SettingsPage(context, account, getStarted);
   account.page.chat = chat;
   account.page.register();
+  // Profiles (status bar, left of the usage meters): a personal and a work Kural with their own Claude / ChatGPT accounts.
+  // A switch reloads the window (lib/profiles/index.js).
+  const profiles = new Profiles(context, profileStore, {
+    // A chat is busy while it answers, has agents / background commands running, or has a message waiting.
+    busy: () => chat.tabs.some((t) => { const r = chat.runtime.get(t.id); return t.status === "running" || !!(r && ((r.bg && r.bg.size) || (r.steers && r.steers.length))); }),
+    flush: () => Promise.all([chat.saveNow(), account.flush(), activity.flush()]),
+    changed: (p) => { account.profileName = p.name; account.draw(); },
+    // The installed Claude Code's version, "none" when there isn't one (a Mac needs 2.1.296+ for per-folder keychain logins).
+    claudeVersion: async () => { const bin = findClaude(); if (!bin) return "none"; const v = await require("./lib/ai/claude-checks").claudeVersion(bin, require("./lib/ai/claude").cleanEnv({})); return v.version || null; },
+    // Deleting a profile: log its accounts out first (a Mac keeps Claude's login in the keychain, named for the folder).
+    // The environment names the profile's folders, so only that profile's logins are touched.
+    logout: async (dir, { claude }) => {
+      const path = require("path");
+      const bin = findClaude();
+      if (claude && bin) await require("./lib/ai/claude-checks").claudeLogout(bin, require("./lib/ai/claude").cleanEnv({ CLAUDE_CONFIG_DIR: path.join(dir, "claude") }));
+      const cx = brain.cli.codex;
+      if (cx && cx.bin) await require("./lib/ai/clis").CLIS.codex.logout(cx.bin, { CODEX_HOME: path.join(dir, "codex") });
+    },
+  });
+  profiles.register();
+  profiles.openSetupIfNew(getStarted);
+
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
   chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)

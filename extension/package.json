@@ -140,6 +140,21 @@
         "icon": "$(settings-gear)"
       },
       {
+        "command": "kural.profiles.switch",
+        "title": "Switch Profile…",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.profiles.new",
+        "title": "New Profile…",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.profiles.manage",
+        "title": "Manage Profiles…",
+        "category": "Kural"
+      },
+      {
         "command": "kural.devices",
         "title": "Devices (SSH): Terminal, Link to Chat, Password, Remove",
         "category": "Kural",

@@ -137,3 +137,25 @@ report on your computer and says so (**Show report**, **Report a bug**). It come
 **Report a bug** copies the report and opens the bug form: paste it there (check it first: it has file paths from your
 computer). Nothing is sent by Kural itself. All reports: **Kural: Show Crash Reports** or **Crash reports** in Kural
 Settings.
+
+## Profiles (personal and work)
+
+A profile is a separate set of AI accounts: one for your own projects and one for your job, each logged in to a
+different Claude or ChatGPT account.
+
+- The status bar shows the current profile (an icon and its name). Click it to switch, make a new one, or manage them.
+  **Kural: Switch Profile…**, **New Profile…** and **Manage Profiles…** are in the Command Palette too.
+- Switching reloads the window, so every program starts again with the other account. If a chat is still answering,
+  Kural asks first. Other open Kural windows keep their profile until you reload them.
+- **New profile:** choose Personal or Work, give it a name, and choose whether it shares chats. A new profile has no
+  logins yet, so Get started opens and you log in to its Claude and ChatGPT accounts there.
+- **Share or keep separate:** a sharing profile shows the same chats, History, open tabs and Tab Completion memory as
+  your main profile; a separate one has its own. Change it in Manage profiles. Logins and usage numbers are always
+  separate. A shared chat started under one account continues under the other as a new conversation, with the earlier
+  messages handed over.
+- **On a Mac** a new profile needs Claude Code 2.1.296 or newer (run `claude update`): older versions keep one login
+  for the whole computer.
+- **Same in every profile:** Google Gemini (it has no setting for a second account) and models on your computer.
+- **Manage profiles:** rename, share or stop sharing, delete (not the main profile, not the one in use). Deleting removes
+  its logins, and its own chats if it didn't share.
+- If `CLAUDE_CODE_OAUTH_TOKEN` or an API key is set in your environment, every profile uses it.

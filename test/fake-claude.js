@@ -9,7 +9,8 @@
 // `auth logout` switches the state file to "loggedout". `auth login` waits 3 s, then switches the state file to "ok" (like finishing the login in the browser).
 // Use it in Kural: setting "kural.claudePath": "/path/to/test/fake-claude.js".
 const fs = require("fs"), os = require("os"), path = require("path");
-const file = process.env.FAKE_CLAUDE_FILE || path.join(os.tmpdir(), "kural-fake-claude-state");
+// (With CLAUDE_CONFIG_DIR set, like a Kural profile's own Claude folder, the state is kept in that folder: separate logins.)
+const file = process.env.FAKE_CLAUDE_FILE || (process.env.CLAUDE_CONFIG_DIR ? path.join(process.env.CLAUDE_CONFIG_DIR, "fake-claude-state") : path.join(os.tmpdir(), "kural-fake-claude-state"));
 const read = () => { try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; } };
 const state = process.env.FAKE_CLAUDE_STATE || read() || "ok";
 const args = process.argv.slice(2);
