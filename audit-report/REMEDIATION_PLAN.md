@@ -21,7 +21,7 @@ Estimates are engineering planning estimates, not measured completion times; sig
 | SEC-009 | High | Bundled Electron falls within published security advisory ranges | FIXED | 2–5 days | Record versions in all rebuilt artifacts; verify applicable advisory scenarios on isolated native hosts. |
 | SEC-010 | High | Windows signing secrets available to same-repository PR build code | PARTIALLY FIXED | 1–2 days | Credential-free PR build; protected signed release canary; confirm secret scopes without exposing values. |
 | SEC-011 | Medium | Main and release tags lack effective merge/release protection | DEFERRED | 0.5 day | Requery effective rules for main/tag refs and exercise a denied change in a disposable repository. |
-| SEC-012 | High | Gemini edit notices cannot enforce Kural approval decisions | DEFERRED | 3–7 days | Fake and real CLI tests must prove denial prevents mutation, snapshot completes first, and mode changes/handoffs retain restrictions. |
+| SEC-012 | High | Gemini edit notices cannot enforce Kural approval decisions | IMPLEMENTED, NOT VERIFIED (real CLI) | 3–7 days | Fake and real CLI tests must prove denial prevents mutation, snapshot completes first, and mode changes/handoffs retain restrictions. |
 | BUG-001 | High | Auto Save can persist unreviewed Ctrl+K code | FIXED | 0.5–2 days | node test/audit-review.test.js |
 | BUG-002 | High | Undo corrupts non-UTF-8 file bytes | FIXED | 0.5–2 days | node test/audit-data.test.js |
 | BUG-003 | Medium | Split UTF-8 stdout chunks corrupt model output | FIXED | 0.5–2 days | node test/audit-data.test.js |
@@ -89,3 +89,14 @@ Validation update: local full suite **80/83 files PASS, exit1**; bench-memory pr
 ## Final Electron remediation verification
 
 SEC-009 is **FIXED in candidate builds**: d7a6987 and [Build 38131185955](https://github.com/adithyakumarcr/kural/actions/runs/38131185955) / [CodeQL 38131185998](https://github.com/adithyakumarcr/kural/actions/runs/38131185998) PASS. Current tracked status: **14 FIXED, 2 PARTIALLY FIXED, 4 DEFERRED**. Remaining engineering priority is SEC-012, detailed in `GEMINI_ADAPTER_REQUIREMENTS.md`; synthetic denial callbacks still do not prevent provider execution. Owner-controlled protection/signing requirements remain. Native smoke passes do not close broader acceptance or dependency inventory. No additional source-code clearance is required, but paid API calls, production settings, credentials, merge and publication are outside performed work. See `RELEASE_READINESS.md` for full result.
+
+
+## SEC-012 implementation (hook gate)
+
+Implemented in `297944cf5850c3e3cf814ccc05e7aa2d25dadfb0`: Kural-owned `PreToolUse` hook + waiting gate + existing permission policy (details and the open questions in GEMINI_ADAPTER_REQUIREMENTS.md). Remaining work before closure, in order:
+1. Owner runs `scripts/verify-agy-gate.sh` on a Mac (and Linux/Windows if possible) with a logged-in agy; record `agy --version`, hook runs, environment inheritance, raw hook input and the four marker results.
+2. If hooks do not run in `--print`/stream-json mode or under `--dangerously-skip-permissions`, or agy ignores `deny`: Kural's `gateMissed` will stop Gemini after the fact; change the adapter (e.g. drop skip-permissions in Auto, or the SDK policy interface) before closing.
+3. If hooks do not inherit the environment and `conversationId` differs in casing, adjust `agy-gate.js` `parseCall`.
+4. If a hook allow overrides agy's own accept-edits refusal, consider letting Agent mode run commands through the gate (like Claude).
+5. Windows: verify the `.cmd` launcher, quoting in `hooks.json`, and the named-pipe ACL; macOS socket path length.
+Estimated effort after verification: 0.5–2 days depending on answers.

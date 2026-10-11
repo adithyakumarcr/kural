@@ -1,5 +1,9 @@
 ## Not released yet
 
+- **Gemini asks before it acts.** Kural adds an approval gate to Google Antigravity's own hooks (an entry "kural-gate" in
+  `~/.gemini/antigravity-cli/hooks.json`; your own entries stay). Gemini then waits for Kural before each tool call: the
+  same cards and rules as Claude, also in Auto for risky commands. Your own `agy` in a terminal isn't affected. Not yet
+  confirmed with the real Antigravity program (`scripts/verify-agy-gate.sh` checks it).
 - **Side chat.** Select text in an answer and press **Ask** to ask a quick question about it right under the answer. A
   fast model answers (Haiku, or the lightest Gemini model, or your own). It stays out of the conversation and is
   saved with the answer; **Add to chat** brings a useful side answer into your message.

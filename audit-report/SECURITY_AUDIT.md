@@ -208,12 +208,12 @@ Most severe prompt-injection routes are automatic instruction ingestion, private
 - Remediation: Adopt an approval-capable protocol or isolate provider with enforced filesystem/process policy. A feature-level restriction requires a reviewed product decision; documentation is not a fix.
 - Regression / verification requirement: `Fake and real CLI tests must prove denial prevents mutation, snapshot completes first, and mode changes/handoffs retain restrictions.`.
 - Verification: Evidence confirms the stated code/configuration/version/artifact fact; remediation verification is incomplete. No installed-system exploit claimed.
-- Remediation status / change reference: **DEFERRED**; No production/source upgrade or infrastructure change applied; follow-up in REMEDIATION_PLAN.md.
+- Remediation status / change reference: **IMPLEMENTED, NOT VERIFIED against the real CLI** (`297944cf5850c3e3cf814ccc05e7aa2d25dadfb0`): Kural-owned `PreToolUse` hook gate; see GEMINI_ADAPTER_REQUIREMENTS.md. Not FIXED until `scripts/verify-agy-gate.sh` passes against the real agy.
 ## Scope checks and residual risk
 
 - Reproductions use synthetic files, temporary workspaces and harmless marker hooks; no credential exfiltration or destructive production testing occurred.
 - Real Claude/Codex/Gemini/Ollama sessions and adversarial handoffs were NOT TESTED. A passing host-policy test only covers callbacks actually received. Provider-native reads, CLI/MCP hooks, credentials inherited in environment and external tools can have broader access.
-- Gemini snapshot notifications do not wait; retained as SEC-012, not closed by documentation.
+- Gemini approvals now go through a waiting hook gate (SEC-012 IMPLEMENTED, NOT VERIFIED against the real CLI); not closed by fake-CLI tests.
 - Browser local-development TLS relaxation/header removal is intentional code behavior, not a verified exploit. Local proxy cross-origin/navigation and SSRF scenarios require isolated network integration testing. XSS/CSP, webview-message validation and external URL handling received selected static review, not exhaustive DOM fuzzing.
 - Device token scoping and approval logic received static and mocked tests; live Unix-socket integration failed EPERM here. Windows named-pipe ACL/native SSH behavior NOT TESTED.
 - No custom SQL query path was identified; SQL injection NOT APPLICABLE to reviewed extension paths. Bundled SQLite/native C++ memory-corruption review NOT TESTED.
@@ -257,3 +257,8 @@ Validation update: local full suite **80/83 files PASS, exit1**; bench-memory pr
 ## Final Electron remediation verification
 
 SEC-009 is **FIXED in candidate builds** on `d7a6987929793c69df2fa9a47915446cc488b33d`: all native installed runtime logs report Electron 42.11.12 / ABI 146; runtime regressions and build/install/startup smoke checks pass. [Build 38131185955](https://github.com/adithyakumarcr/kural/actions/runs/38131185955) / [CodeQL 38131185998](https://github.com/adithyakumarcr/kural/actions/runs/38131185998) PASS. Published alpha.8 remains affected. SEC-012 remains **OPEN**; the synthetic callback reproduction confirms no waiting/denial transmission, without testing real provider execution. See `GEMINI_ADAPTER_REQUIREMENTS.md`. Current count: 14 FIXED, 2 PARTIALLY FIXED, 4 DEFERRED. Full scope, environments and untested areas are in `RELEASE_READINESS.md`; overall NO-GO remains.
+
+
+## SEC-012 hook gate — implementation status
+
+**SEC-012: IMPLEMENTED, NOT VERIFIED against the real CLI.** Commit `297944cf5850c3e3cf814ccc05e7aa2d25dadfb0` installs a Kural-owned Antigravity `PreToolUse` hook (global `~/.gemini/antigravity-cli/hooks.json`, entry `kural-gate`) whose gate program waits for Kural's existing permission policy over a private, token-authenticated socket and fails closed. agy is not started when the hook cannot be installed. A changing tool that completes without an approval stops agy. All checks used a stand-in CLI (`test/fake-agy.js`) and temporary homes; no real agy run, login or model request. Severity unchanged until the owner runs `scripts/verify-agy-gate.sh` and the denial-before-mutation, skip-permissions, environment-inheritance and output-format questions in GEMINI_ADAPTER_REQUIREMENTS.md are answered. SEC-007's host-side Ask/Plan enforcement now also covers Gemini tool calls that reach the gate (unknown tools and browser actions denied in Ask/Plan). Current count: 14 FIXED, 2 PARTIALLY FIXED, 3 DEFERRED, 1 IMPLEMENTED / NOT VERIFIED.
