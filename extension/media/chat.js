@@ -450,8 +450,10 @@
 
   function rerender(i) {
     const old = listEl.querySelector(`[data-i="${i}"]`);
+    const typing = side.focused();   // (a question being typed in a side chat keeps its cursor)
     const node = messageNode(S.tab.messages[i], i);
     if (old) old.replaceWith(node); else listEl.append(node);
+    side.refocus(typing);
     follow();
   }
 
@@ -624,6 +626,7 @@
         el("span", { class: "spacer" }),
         el("button", { class: "cb primary solid big", disabled: S.tab.status !== "idle", onclick: () => post({ type: "buildPlan", tabId: S.tab.id, msgIndex: i }) }, "Build it")]));
     if (m.changes && m.changes.length) out.append(changesNode(m, i));
+    side.nodes(m, i).forEach((n) => out.append(n));   // side chats: quick questions about parts of this answer
     if (!m.running && m.ms && last) out.append(el("div", { class: "meta" }, `${(m.ms / 1000).toFixed(1)} s`));
     if (!m.running && !S.tab.visiting) out.append(el("div", { class: "answer-actions" }, forkButton(i)));
     return el("div", { class: "msg assistant", "data-i": i }, out);
@@ -990,11 +993,13 @@
     if (!o) { offerEl.replaceChildren(); return; }
     const left = Math.max(0, Math.ceil((o.until - Date.now()) / 1000)), tabId = S.tab.id;
     const answer = (use) => { post({ type: "teamOfferAnswer", tabId, id: o.id, use }); delete S.offers[tabId]; renderOffer(); };
-    offerEl.replaceChildren(icon("organization"),
-      el("span", { class: "offer-text" }, `This looks like a big task. Use ${o.agents} agents?`),
-      el("span", { class: "muted offer-left" }, `one agent in ${left} s`),
-      el("button", { class: "cb primary", onclick: () => answer(true) }, `Use ${o.agents} agents`),
-      el("button", { class: "cb", onclick: () => answer(false) }, "One agent"));
+    // Two rows: the question; then the countdown on the left and the two buttons together on the right.
+    offerEl.replaceChildren(
+      el("div", { class: "offer-top" }, icon("organization"), el("span", { class: "offer-text" }, `This looks like a big task. Use ${o.agents} agents?`)),
+      el("div", { class: "offer-bottom" }, el("span", { class: "muted offer-left" }, `One agent in ${left} s`),
+        el("span", { class: "offer-btns" },
+          el("button", { class: "cb primary", onclick: () => answer(true) }, `Use ${o.agents} agents`),
+          el("button", { class: "cb", onclick: () => answer(false) }, "One agent"))));
     if (left > 0) S.offerTimer = setTimeout(renderOffer, 1000);
   }
   const hasDraft = () => !isEmptyInput() || S.attachments.length > 0;
@@ -1095,37 +1100,62 @@
   // Select text in the chat (an answer, or a message you sent) and "Add to chat" puts it into your message as a quote
   // pill; what it says goes to the AI with your message (buildPrompt in lib/chat/index.js).
   const MAX_QUOTE = 8000;   // (a selection of the whole chat would otherwise be saved with every message)
-  const quoteBtn = el("button", { class: "quote-btn hidden", title: "Add the selected text to your message",
+  const quoteBtn = el("button", { class: "quote-btn", title: "Add the selected text to your message",
     onmousedown: (e) => e.preventDefault(),   // (a click would clear the selection before it's read)
     onclick: () => addQuote() }, icon("quote"), " Add to chat");
-  app.append(quoteBtn);
+  // "Ask" opens a side chat under the answer the text is in (only for text in an answer, not in your own message or in a side chat).
+  const askBtn = el("button", { class: "quote-btn hidden", title: "Ask a quick question about the selected text, right under the answer",
+    onmousedown: (e) => e.preventDefault(), onclick: () => askAbout() }, icon("comment-discussion"), " Ask");
+  const quoteBar = el("div", { class: "quote-bar hidden" }, askBtn, quoteBtn);
+  app.append(quoteBar);
   function chatSelection() {
     const sel = getSelection();
     if (!sel.rangeCount || sel.isCollapsed) return null;
     const r = sel.getRangeAt(0), text = sel.toString().trim();
     return text && listEl.contains(r.commonAncestorContainer) ? { r, text } : null;
   }
+  // The answer (message index) a selection lies in, if it can be asked about.
+  function askTarget(s) {
+    const a = s.r.commonAncestorContainer, node = a.nodeType === 1 ? a : a.parentElement;
+    const msg = node && node.closest ? node.closest(".msg.assistant") : null;
+    if (!msg || node.closest(".side") || !node.closest(".answer")) return -1;
+    const i = Number(msg.getAttribute("data-i"));
+    return Number.isInteger(i) && S.tab.messages[i] && S.tab.messages[i].role === "assistant" ? i : -1;
+  }
   function placeQuoteBtn() {
     const s = S.tab && !S.tab.visiting ? chatSelection() : null;
-    if (!s) { quoteBtn.classList.add("hidden"); return; }
+    if (!s) { quoteBar.classList.add("hidden"); return; }
     const rects = s.r.getClientRects(), at = rects[rects.length - 1] || s.r.getBoundingClientRect();
-    quoteBtn.classList.remove("hidden");
-    const w = quoteBtn.offsetWidth, h = quoteBtn.offsetHeight, box = listEl.getBoundingClientRect();
+    askBtn.classList.toggle("hidden", askTarget(s) < 0);
+    quoteBar.classList.remove("hidden");
+    const w = quoteBar.offsetWidth, h = quoteBar.offsetHeight, box = listEl.getBoundingClientRect();
     // Under the selection's last line; above it when that's off the bottom of the chat.
     const top = at.bottom + 6 + h <= box.bottom ? at.bottom + 6 : Math.max(box.top + 4, at.top - h - 6);
-    quoteBtn.style.top = `${top}px`;
-    quoteBtn.style.left = `${Math.max(6, Math.min(at.right - w, window.innerWidth - w - 6))}px`;
+    quoteBar.style.top = `${top}px`;
+    quoteBar.style.left = `${Math.max(6, Math.min(at.right - w, window.innerWidth - w - 6))}px`;
   }
   function addQuote() {
     const s = chatSelection();
-    quoteBtn.classList.add("hidden");
+    quoteBar.classList.add("hidden");
     if (!s) return;
     const text = s.text.length > MAX_QUOTE ? `${s.text.slice(0, MAX_QUOTE)}…` : s.text, line = text.replace(/\s+/g, " ");
     insertPill({ kind: "quote", text, label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line });
   }
+  function askAbout() {
+    const s = chatSelection(), i = s ? askTarget(s) : -1;
+    quoteBar.classList.add("hidden");
+    if (i < 0) return;
+    const text = s.text;
+    getSelection().removeAllRanges();
+    side.start(i, text);
+  }
   document.addEventListener("mouseup", () => setTimeout(placeQuoteBtn, 0));   // (after the click has set the selection)
-  document.addEventListener("selectionchange", () => { if (!quoteBtn.classList.contains("hidden") && !chatSelection()) quoteBtn.classList.add("hidden"); });
-  listEl.addEventListener("scroll", () => quoteBtn.classList.add("hidden"));
+  document.addEventListener("selectionchange", () => { if (!quoteBar.classList.contains("hidden") && !chatSelection()) quoteBar.classList.add("hidden"); });
+  listEl.addEventListener("scroll", () => quoteBar.classList.add("hidden"));
+  // Side chat: a quick question under an answer (media/side.js). "Add to chat" under a side answer joins it to your message as a quote.
+  const side = window.KURAL_SIDE({ el, icon, markdown, post, tab: () => S.tab, rerender: (i) => rerender(i), root: () => listEl,
+    addToChat: ({ text, label }) => { const line = label.replace(/\s+/g, " "), t = text.length > MAX_QUOTE ? `${text.slice(0, MAX_QUOTE)}…` : text;
+      insertPill({ kind: "quote", text: t, label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line }); input.focus(); } });
 
   // --- @ mentions ---
 
@@ -1746,6 +1776,8 @@ ${d.system}` : ""}`,
       case "questionState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) { b.state = m.state; b.answers = m.answers; } scheduleRerender(i); } } break;
       case "permState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) b.state = m.state; scheduleRerender(i); } } break;
       case "patch": if (mine) { const i = m.index != null ? m.index : lastAssistant(); if (i >= 0) { Object.assign(S.tab.messages[i], m.msg); rerender(i); } renderFoot(); } break;
+      case "sideDelta": if (mine) side.delta(m); break;
+      case "sideState": if (mine) side.set(m); break;
       case "allowAll": break;
       case "files": S.files = m.files; if (S.popup) renderPopup(); break;
       case "pics": S.pics = m.pics; break;

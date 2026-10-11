@@ -49,7 +49,7 @@ your next message, because which tools the model has is fixed when it starts.
   the next model and a complete local record it can read for earlier details. Switching an AI's account carries that
   record over too.
 - **The gear.** Each section heading in the menu (Auto · Model Router, Claude, Google Gemini, ChatGPT (Codex), On this
-  computer) has a gear button. Auto's opens the Model Router panel; the others open Kural Settings at that AI's card
+  computer) has a gear button. Auto's opens the Model Router panel; the others open that AI's page in Kural Settings
   (its connectors, its switch points near a limit, its login). There is no "Configure Model Router…" item any more: use
   the gear.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
@@ -90,6 +90,19 @@ your next message, because which tools the model has is fixed when it starts.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
 - The composer shows only context you choose. Attach a file with **@** or **+ → Add files**; opening it does not attach it.
+
+## Side chat
+
+Select text in an answer and press **Ask**. A small box opens right under that answer with your selection quoted. Type a
+question and press Enter: a fast model answers in the box (Haiku, or the lightest Gemini model, or your own
+model if that is all you have). Ask more in the same box and it remembers the side conversation.
+
+- It is separate from the chat: the chat's AI never sees it, it is not a turn, and you can ask while the main answer is
+  still running.
+- Esc or the cross closes the box. With questions in it, it folds into one line, "Side chat · 2 questions", that opens
+  again. It is saved with the answer.
+- It only answers: no tools, no changes to your files. Stop ends an answer that is running.
+- **Add to chat** under a side answer puts that question and answer into your message as a quote.
 
 ## In the answer
 
@@ -212,15 +225,19 @@ commits, with the chat's model. Edit it if you like and commit as usual.
 ## Your Claude Code setup
 
 With a Claude model, the chat uses your whole Claude Code setup: MCP servers, connectors, plugins, skills, hooks and
-`CLAUDE.md` files. You manage it in **Kural Settings → Claude card → Connectors**:
+`CLAUDE.md` files. You manage the connectors in Kural, not in a terminal:
 
-- The list shows each connector with its status.
-- **Add**: a name, then a command or a web address. It's added for all your projects (like `claude mcp add -s user`).
-  Claude starts again with it, and your chats continue.
-- **Remove**: the trash icon. Connectors from claude.ai are changed on claude.ai.
-- **Use my Claude Code setup (connectors, plugins, skills)**: the checkbox (setting `kural.chat.fullClaudeCodeSetup`).
-  Off = a faster, minimal setup.
-- **Reload** starts Claude again.
+1. **Kural Settings → Settings** on the Claude card (or the gear beside Claude in the model menu). That opens Claude's page.
+2. **Connectors → Add connector.** Search, or pick one from Popular.
+3. **Add.** Fill in a token or a folder only if it asks. A result from the public MCP directory (not one of the Popular ones) first shows the exact
+   command or address it will run, since nobody checked it: add it only if you trust it.
+4. **Sign in**, if the connector needs your account. A terminal opens: type `/mcp`, pick the connector, then Authenticate.
+
+Connectors are added for all your projects, and your chats continue. **Add one by hand** at the bottom of the list takes a
+command or a web address. **Remove** is the trash icon; connectors from claude.ai are changed on claude.ai.
+
+Small options on Claude's page: **Use my Claude Code setup (connectors, plugins, skills)** is the checkbox (setting
+`kural.chat.fullClaudeCodeSetup`); off = a faster, minimal setup. **Reload** starts Claude again.
 
 The model menu no longer shows the setup. The full Claude Code terminal is one shortcut away: **Ctrl+Esc**.
 
