@@ -33,11 +33,11 @@ Estimates are engineering planning estimates, not measured completion times; sig
 
 ## Release order and ownership
 
-1. Review local patch and run full suite on unrestricted CI/native Linux. Resolve the three existing fixture failures before declaring suite green.
-2. Upgrade vendor runtime coherently across three pins; recheck Electron >=42.10.0 and bundled shell-quote; trace advisory applicability.
+1. Review local patch and run full suite on unrestricted CI/native Linux. Record local failures separately from representative CI; the complete CI test job passes on code commit b4c0348.
+2. Upgrade vendor runtime coherently across three pins; recheck Electron >=42.10.0; packaged shell-quote is now 1.11.0; trace advisory applicability.
 3. Resolve Gemini enforced-approval/snapshot limitations with an approval-capable adapter or isolated process policy; test handoffs/mode transitions on real CLI. Documentation does not close SEC-012.
 4. Minimal tag-push-only workflow guard approved/applied; protect main, release tags and signing environments and separate the signer as the remaining owner follow-up.
-5. Generate per-artifact SBOM and verify source provenance; configure Windows publisher and macOS Developer ID/notarization.
+5. Enrich the implemented per-artifact manifest SBOM with native/bundled dependencies and verify source provenance; configure Windows publisher and macOS Developer ID/notarization.
 6. Native installer/updater/recovery/uninstall tests plus first-launch, offline/failure, GUI review and profile credentials; retain user-data backups in disposable test accounts.
 7. Measure actual startup/idle/long-run resources. Publish only a new version after release approval, never replace alpha.8 silently.
 
@@ -52,3 +52,22 @@ Raw validation logs, scanner JSON and local environment snapshots are retained i
 Packaged shell-quote is now 1.11.0 with integrity checks and regression coverage. Packaged manifest inventories and mandatory platform merge are implemented; native/bundle inventory enrichment remains. Windows secrets now exist only in the gated build step. Native CI on commit 34b7d92fc976ec648e00d90ba13765146251c305 passed the complete test job and macOS/Windows/Ubuntu 22.04/24.04 build/install/startup checks. These results precede this follow-up and must be repeated on its new head.
 
 Owner action still required: effective main/tag protection and protected signing environment, Windows certificate, Apple Developer ID/notarization credentials. Source changes/push/PR updates are authorized; merging, release publishing and production settings changes are not performed. Gemini enforcement and vendor Electron upgrade remain engineering blockers, not resolved by documentation.
+
+### Proposed owner settings (not applied)
+
+- Main: require a pull request, at least one independent review, dismiss stale approvals, block force-push/deletion, and require the verified GitHub Actions checks `test`, `macos`, `linux-check (ubuntu-22.04)`, `linux-check (ubuntu-24.04)`, `windows-check`, and `analyze`. Choose reviewers/bypass policy before applying; a sole maintainer cannot independently approve their own PR.
+- Release tags (`v*`): restrict creation to the release maintainer process and prohibit update/deletion except documented emergency access. Keep the existing requirement that tags match the application version and are on main.
+- Signing: create a protected environment with an owner-selected reviewer and release-tag restrictions; move publisher credentials into it after an isolated signing job is implemented and validated. Moving secrets alone would leave the current build without them.
+- Signing credentials: provision Windows Authenticode and Apple Developer ID/notarization through protected secret storage. No real credential values belong in reports or source.
+
+The effective main-rules API was queried again on 2026-10-11 and returned an empty list. These settings and credential operations require owner access/approval under the original production-change restriction. Code/workflow remediation remains authorized.
+
+### Gemini adapter constraint
+
+The [official headless protocol](https://antigravity.google/docs/cli/headless/) documents that control-request/control-response stream events terminate the session and workspace file writes can be auto-allowed. This supports retaining SEC-012 as open: the current tool notices cannot become a reliable approval gate by returning a decision or killing the process afterwards. The real `agy` CLI is unavailable in this audit host. A hook/SDK adapter or cross-platform process confinement requires capability-specific integration and real-provider permission tests before closure; no paid calls were made.
+
+## Verified follow-up code revision
+
+Application/build code revision: `b4c03486781d6427682ca47716efe71bd725fe34` (dependency change `39846146055280720a35d1c06d27215863d69b3e`). [Build run 38125659529](https://github.com/adithyakumarcr/kural/actions/runs/38125659529) completed successfully: full test job, Linux build, macOS DMG/startup, Windows build/install/startup, Ubuntu 22.04 and 24.04 install/startup. Release job was skipped. [CodeQL run 38125659585](https://github.com/adithyakumarcr/kural/actions/runs/38125659585) PASS. These are executed automated checks, not full platform acceptance or proof of security. The intermediate 3984614 build failed; b4c0348 corrected the rebranding dependency fixture and executable packaging modes.
+
+Local full-run result remains 76/82 (exit1); corrected rebranding fixture and provider timing failures passed direct reruns. Process-inventory, socket and helper-liveness local failures remain documented. A CycloneDX schema validation attempt could not run because Python jsonschema is unavailable; structural regression tests passed, so formal schema validation is not claimed. The final report update changes Markdown only; code validation is bound to the above SHA.

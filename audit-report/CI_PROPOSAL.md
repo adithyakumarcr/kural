@@ -26,3 +26,5 @@ CI_CREDENTIAL_GUARD.patch changes only Windows job signing/Azure secret expressi
 ## Evidence availability
 
 Raw validation logs, scanner JSON and local environment snapshots are retained in the private audit handoff and are not published in this PR. References to `evidence/` identify those retained files. Reviewers can reproduce the code-level checks with the committed `test/audit-*.test.js` files. See the PR description for the latest 79/81 test-file result and its limitations.
+
+Follow-up: publisher secrets are additionally scoped to the gated Windows build step. Packaged inventories are required on all three builds and merged before signed checksum generation. Full tests/CodeQL/platform build/startup checks pass on b4c0348. Protected signer isolation and main/tag/environment settings remain owner follow-up; the concrete proposal is in REMEDIATION_PLAN.md.

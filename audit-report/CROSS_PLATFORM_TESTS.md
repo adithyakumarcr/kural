@@ -14,14 +14,14 @@ Environment: Ubuntu 24.04.3 x86_64 container; Node 24.19.0, npm 11.9.0, Python 3
 
 ## Test matrix
 
-PASS only denotes the specific executed check. Linux container is not a complete desktop or installer environment. All native OS acceptance rows remain NOT TESTED.
+PASS only denotes the specific executed check. Linux container is not a complete desktop or installer environment. Native build/install/startup smoke checks subsequently passed as recorded below; broader acceptance remains NOT TESTED.
 
 | Check | macOS arm64 | Ubuntu x64 | Windows x64 |
 | --- | --- | --- | --- |
 | Published artifact hashes vs verified signed manifest | PASS (DMG+ZIP) | PASS (DEB) | PASS (EXE+ZIP) |
 | Static archive metadata inspection | PASS (ZIP) | PASS (DEB) | PASS (ZIP+PE header) |
-| Native package build | NOT TESTED | PASS (DEB rebuild, container) | NOT TESTED |
-| Native installation/startup/first launch | NOT TESTED | NOT TESTED | NOT TESTED |
+| Package build | PASS (macOS arm64 CI) | PASS (DEB/container + CI) | PASS (cross-build CI) |
+| Native installation/startup smoke | PASS (arm64 CI) | PASS (22.04 + 24.04 CI) | PASS (windows-latest CI) |
 | OS publisher signing readiness | FAIL (ad-hoc CodeDirectory) | NOT APPLICABLE (individual DEB platform signing) | FAIL (empty installer certificate table) |
 | Gatekeeper/quarantine/notarization | NOT TESTED | NOT APPLICABLE | NOT APPLICABLE |
 | Defender/SmartScreen/UAC/registry | NOT APPLICABLE | NOT APPLICABLE | NOT TESTED |
@@ -45,3 +45,9 @@ Raw validation logs, scanner JSON and local environment snapshots are retained i
 ## Native CI follow-up (2026-10-11)
 
 [Build run 38124450582](https://github.com/adithyakumarcr/kural/actions/runs/38124450582), commit 34b7d92fc976ec648e00d90ba13765146251c305: test job PASS; macOS build/ad-hoc signature/DMG copy/startup PASS; Windows build/install/startup PASS; Ubuntu 22.04 and 24.04 install/startup PASS. CodeQL run 38124450589 PASS. The earlier table describes the initial local investigation; these narrowly scoped checks supersede its NOT TESTED build/startup rows. Gatekeeper notarization, real provider authentication, update interruptions, uninstall/data preservation and long-run stability remain NOT TESTED. The new dependency/inventory changes require a fresh CI run before inheriting these results.
+
+## Verified follow-up code revision
+
+Application/build code revision: `b4c03486781d6427682ca47716efe71bd725fe34` (dependency change `39846146055280720a35d1c06d27215863d69b3e`). [Build run 38125659529](https://github.com/adithyakumarcr/kural/actions/runs/38125659529) completed successfully: full test job, Linux build, macOS DMG/startup, Windows build/install/startup, Ubuntu 22.04 and 24.04 install/startup. Release job was skipped. [CodeQL run 38125659585](https://github.com/adithyakumarcr/kural/actions/runs/38125659585) PASS. These are executed automated checks, not full platform acceptance or proof of security. The intermediate 3984614 build failed; b4c0348 corrected the rebranding dependency fixture and executable packaging modes.
+
+Local full-run result remains 76/82 (exit1); corrected rebranding fixture and provider timing failures passed direct reruns. Process-inventory, socket and helper-liveness local failures remain documented. A CycloneDX schema validation attempt could not run because Python jsonschema is unavailable; structural regression tests passed, so formal schema validation is not claimed. The final report update changes Markdown only; code validation is bound to the above SHA.

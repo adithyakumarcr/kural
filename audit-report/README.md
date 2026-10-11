@@ -1,7 +1,9 @@
 # Security audit review guide
 
-This PR contains twelve locally verified application fixes and a partial CI credential-isolation fix, plus the eight required audit reports. Start with RELEASE_READINESS.md, SECURITY_AUDIT.md and BUG_REPORT.md. CHANGE_REFERENCE.md identifies the two implementation commits; CI_PROPOSAL.md distinguishes the applied guard from deferred signer isolation.
+PR #61 tracks 20 findings: 13 FIXED, 2 PARTIALLY FIXED and 5 DEFERRED. Start with RELEASE_READINESS.md, SECURITY_AUDIT.md, BUG_REPORT.md and DEPENDENCY_AUDIT.md. CHANGE_REFERENCE.md identifies implementation revisions; REMEDIATION_PLAN.md gives the concrete owner settings proposal and unresolved engineering work.
 
-The latest npm test run passed 79/81 test files. Device Unix-socket tests fail with EPERM and updater helper-liveness assertions fail in the audit container. All six added regression files pass. Linux DEB build/packaged-content checks and workflow actionlint passed. Native macOS/Windows and desktop installer/provider acceptance remain untested. Release recommendation remains NO-GO.
+Latest code head b4c0348 passes the full CI test job, CodeQL, macOS DMG/startup, Windows installer/startup and Ubuntu 22.04/24.04 installer/startup checks. The local full run was 76/82; rebranding/provider fixtures passed direct reruns, with environment-sensitive process/socket/helper failures retained. Linux DEB byte verification, dependency/inventory regressions and actionlint pass. Broad provider, updater/recovery, uninstall/data-preservation and performance acceptance remain incomplete.
 
-Raw logs, scanner JSON, local environment snapshots and binary archives are deliberately kept out of this public PR. They remain in the private audit handoff; references in the reports identify that evidence. No release binaries or credentials are included.
+Release recommendation remains NO-GO: affected Electron, Gemini approval enforcement and protected signing/release configuration remain open. Existing released artifacts have not been replaced. No merge, release, credential rotation or production settings operation was performed.
+
+Raw logs, scanner JSON, environment snapshots and archives remain in the private audit handoff. This public PR contains reviewable source, tests, pinned upstream dependency contents and Markdown reports.
