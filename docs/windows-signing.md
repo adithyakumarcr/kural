@@ -16,7 +16,7 @@ certificate as people download and run it without trouble. Since 2024 an EV cert
 
 ## What's ready in the build
 
-Nothing to change in the code once you have a certificate: add it as repository secrets and the next build is signed.
+Nothing to change in the code once you have a certificate: add it as repository secrets and the next `v*` tag-push release build is signed.
 
 - `scripts/sign-win.sh` signs with [jsign](https://github.com/ebourg/jsign) (Java; runs on Linux, where the Windows build
   is made). It signs `Kural.exe` and `bin/kural-tunnel.exe` (in `build-win.sh`), and NSIS signs the installer and its
@@ -59,5 +59,9 @@ Repository → **Settings → Secrets and variables → Actions → New reposito
 
 jsign's documentation lists what each service needs: <https://ebourg.github.io/jsign/>.
 
-Then run **Actions → Build Kural → Run workflow** (or push a tag): the Windows job's log says `sign-win: signed …` for
+Real signing credentials are available only on **pushes to `v*` release tags**. Pull requests, pushes to `main`
+and manual workflow runs build without publisher credentials; the throwaway signing check still runs.
+Repository signing secrets should ultimately move to a protected release environment with required reviewers.
+
+After merging and completing release checks, push the version tag: the Windows job's log says `sign-win: signed …` for
 each file, and the **Signed** step of the Windows check shows each file as `Valid`.
