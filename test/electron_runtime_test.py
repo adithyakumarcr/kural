@@ -13,6 +13,21 @@ spec.loader.exec_module(d)
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_python310_hashing(self):
+        # Ubuntu 22.04 ships Python 3.10, before hashlib.file_digest was introduced.
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / 'archive'
+            archive.write_bytes(b'fixture' * (1 << 18))
+            expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+            original = getattr(hashlib, 'file_digest', None)
+            if original is not None:
+                del hashlib.file_digest
+            try:
+                d.verify(archive, expected)
+            finally:
+                if original is not None:
+                    hashlib.file_digest = original
+
     def test_archive_rejection(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

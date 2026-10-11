@@ -29,9 +29,11 @@ def fuse_wire(binary):
 
 
 def verify(archive, digest):
+    actual = hashlib.sha256()
     with archive.open('rb') as stream:
-        actual = hashlib.file_digest(stream, 'sha256').hexdigest()
-    if actual != digest:
+        while block := stream.read(1 << 20):
+            actual.update(block)
+    if actual.hexdigest() != digest:
         raise ValueError('Electron archive integrity mismatch')
 
 
