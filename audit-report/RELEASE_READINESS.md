@@ -6,7 +6,7 @@ Environment: Ubuntu 24.04.3 x86_64 container; Node 24.19.0, npm 11.9.0, Python 3
 
 ## Final recommendation: NO-GO
 
-Confirmed release blockers remain: native validation of the new patched Electron runtime, Gemini cannot enforce Kural edit approvals/snapshot ordering, signing infrastructure still lacks a protected isolated signer (routine PR credential exposure now guarded), lack of effective release review/tag protection, and incomplete native release acceptance. Public alpha.8 still contains the original reproduced code. Local fixes are candidates for review; they are not deployed remediation.
+Confirmed release blockers remain: Gemini cannot enforce Kural edit approvals/snapshot ordering, signing infrastructure still lacks a protected isolated signer (routine PR credential exposure now guarded), lack of effective release review/tag protection, and incomplete native release acceptance. Public alpha.8 still contains the original reproduced code. Local fixes are candidates for review; they are not deployed remediation.
 
 ## Findings and changes
 
@@ -61,7 +61,7 @@ Application/build code revision: `b4c03486781d6427682ca47716efe71bd725fe34` (dep
 
 Local full-run result remains 76/82 (exit1); corrected rebranding fixture and provider timing failures passed direct reruns. Process-inventory, socket and helper-liveness local failures remain documented. A CycloneDX schema validation attempt could not run because Python jsonschema is unavailable; structural regression tests passed, so formal schema validation is not claimed. The final report update changes Markdown only; code validation is bound to the above SHA.
 
-## Electron runtime follow-up — 2026-10-11
+## Electron runtime implementation — interim verification
 
 SEC-009 is now **PARTIALLY FIXED / NATIVE VALIDATION PENDING**. All three packaging scripts replace the complete Electron runtime distribution with official **42.11.12** archives, independently pinned by SHA-256 in `vendor/electron-runtime.json`. VSCodium application code stays on 1.135.06055. The patch retains the vendor fuse wire `101100011`, Linux sandbox permissions and macOS bundle identities. Existing platform signing happens after replacement. Unknown vendor versions, changed fuses, checksum mismatches and unsafe ZIP paths/links fail the build. There is no claim that checksums constitute platform signing or notarization.
 
@@ -74,3 +74,17 @@ SEC-012 remains **OPEN**. A checksum-verified real Antigravity CLI 1.3.3 was obt
 Reviewer scope: **added** pinned runtime archives/installer, security regression tests, native runtime version/ABI checks and SBOM archive provenance; **replaced** Electron 42.8.1 runtime bytes during packaging; **removed** no editor or provider functionality. Public alpha.8 binaries are unchanged until a separately approved release ships. Overall recommendation remains **NO-GO**, including open Gemini enforcement, signing/repository protection requirements and incomplete broader acceptance.
 
 Validation update: local full suite **80/83 files PASS, exit1**; bench-memory process lookup, device socket EPERM and updater helper-liveness fail in this host. CI test job and CodeQL passed on `1f4f2de`; the Linux build exposed Python 3.10 incompatibility in `hashlib.file_digest`, corrected in `75be8b2` with a streaming hash and regression. Complete macOS dependency frameworks are also replaced, with bundle-identity regression coverage. Final fresh native CI is required.
+
+## Final Electron remediation verification
+
+**SEC-009: FIXED in candidate builds.** Application/build revision [`d7a6987929793c69df2fa9a47915446cc488b33d`](https://github.com/adithyakumarcr/kural/commit/d7a6987929793c69df2fa9a47915446cc488b33d). [Build run 38131185955](https://github.com/adithyakumarcr/kural/actions/runs/38131185955) PASS: all 83 test files, Linux/macOS/Windows packaging, macOS DMG/signature/startup, Ubuntu 22.04 and 24.04 installation/startup, Windows installer/runtime/startup. [CodeQL 38131185998](https://github.com/adithyakumarcr/kural/actions/runs/38131185998) PASS. Release job SKIPPED; no release published.
+
+Actual installed runtime logs on every native target report **Electron 42.11.12 / modules ABI 146**. Native environments: macOS 26.6.2 arm64, Ubuntu 22.04/24.04 x64, Windows Server 2025 x64 as a representative Windows installer environment. Native Windows 10/11, other macOS versions, update/uninstall/data preservation and broader feature/performance acceptance remain **NOT TESTED**. These are automated startup smoke checks, not a full UI inspection or proof of security.
+
+Windows verification first required correcting the GUI executable exit-status check. Final CI waits for each probe, verifies an intentional exit code 7, verifies the runtime version with exit code 0, then starts the application; the final native startup showed seven Kural processes. The Python 3.10 hash regression also passes in the Ubuntu 22.04 build. All 241 staged macOS framework files match the pinned official archive. Runtime security regression cases: four PASS. OSV: zero published advisories for Electron 42.11.12 and shell-quote 1.11.0. Gitleaks 8.30.1: exit1, the same two synthetic fixtures; no real secret reported. actionlint 1.7.12 and authored-source whitespace checks PASS.
+
+Current tracked status: **14 FIXED, 2 PARTIALLY FIXED, 4 DEFERRED** (20 findings). Earlier pending/status paragraphs are historical. Local full suite remains 80/83, exit1, with the documented container process/socket/helper-liveness failures; the complete native CI test job passes. Formal dependency closure remains partial.
+
+**SEC-012 is still OPEN.** Synthetic recheck confirms `onTool()` does not await a denying callback or transmit the denial. Real provider enforcement was not tested; no paid API calls or production credentials were used. See `GEMINI_ADAPTER_REQUIREMENTS.md` for the compatible approval-capable adapter requirements. No provider was disabled and no speculative approval patch was shipped.
+
+Overall recommendation remains **NO-GO** for open Gemini enforcement, protected signing/repository settings, production platform signing/notarization requirements and incomplete broader acceptance. Existing alpha.8 binaries retain the original affected code/runtime until a separately approved release ships. Source changes and PR updates are authorized; no merge, release, production settings change or credential rotation occurred. This final report revision changes Markdown only; code validation is bound to d7a6987.

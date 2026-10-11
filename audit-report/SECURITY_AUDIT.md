@@ -152,8 +152,8 @@ Most severe prompt-injection routes are automatic instruction ingestion, private
 ### SEC-009 — Bundled Electron falls within published security advisory ranges
 
 - Severity / confidence / classification: **High / High / CONFIRMED**.
-- Component / operating systems: `codium.lock`; macOS arm64, Ubuntu x64, Windows x64.
-- Current location: `codium.lock:1`; baseline: `codium.lock:1` (new guards may not exist in baseline; use patch for exact removed code).
+- Component / operating systems: bundled Electron runtime; macOS arm64, Ubuntu x64, Windows x64.
+- Current remediation location: `vendor/electron-runtime.json:2`; baseline: `codium.lock:1` (new guards may not exist in baseline; use patch for exact removed code).
 - Mapping: CWE-20, CWE-345; OWASP A01 Broken Access Control / A03 Injection / A06 Vulnerable and Outdated Components / A08 Software and Data Integrity, as applicable. AI findings additionally map to OWASP LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure and LLM06 Excessive Agency.
 - Root cause: VSCodium 1.135.06055 ships Electron 42.8.1 in the inspected Linux artifact.
 - Reproduction: Run embedded Electron with ELECTRON_RUN_AS_NODE=1 to record process.versions; query OSV for electron 42.8.1.
@@ -162,8 +162,8 @@ Most severe prompt-injection routes are automatic instruction ingestion, private
 - Impact: Known affected dependency is CONFIRMED. Kural exploitability of each prerequisite is not established. Untrusted browser content makes this a release gate.
 - Remediation: Upgrade compatible VSCodium to Electron >=42.10.0 (42 branch) or a supported patched newer branch; update all pinned hashes and rebuild/retest three platforms. Do not hot-patch arbitrary vendor binaries.
 - Regression / verification requirement: `Record versions in all rebuilt artifacts; verify applicable advisory scenarios on isolated native hosts.`.
-- Verification: Evidence confirms the stated code/configuration/version/artifact fact; remediation verification is incomplete. No installed-system exploit claimed.
-- Remediation status / change reference: **DEFERRED**; No production/source upgrade or infrastructure change applied; follow-up in REMEDIATION_PLAN.md.
+- Verification: Actual installed runtime version and ABI plus build/install/startup checks PASS on all supported target architectures in native CI. Four regression cases PASS. No installed-system advisory exploit claimed.
+- Remediation status / change reference: **FIXED in candidate builds**; checksum-pinned coherent Electron 42.11.12 runtime replacement and native verification on d7a6987929793c69df2fa9a47915446cc488b33d. Published alpha.8 remains affected.
 ### SEC-010 — Windows signing secrets available to same-repository PR build code
 
 - Severity / confidence / classification: **High / High / CONFIRMED**.
@@ -240,7 +240,7 @@ Application/build code revision: `b4c03486781d6427682ca47716efe71bd725fe34` (dep
 
 Local full-run result remains 76/82 (exit1); corrected rebranding fixture and provider timing failures passed direct reruns. Process-inventory, socket and helper-liveness local failures remain documented. A CycloneDX schema validation attempt could not run because Python jsonschema is unavailable; structural regression tests passed, so formal schema validation is not claimed. The final report update changes Markdown only; code validation is bound to the above SHA.
 
-## Electron runtime follow-up — 2026-10-11
+## Electron runtime implementation — interim verification
 
 SEC-009 is now **PARTIALLY FIXED / NATIVE VALIDATION PENDING**. All three packaging scripts replace the complete Electron runtime distribution with official **42.11.12** archives, independently pinned by SHA-256 in `vendor/electron-runtime.json`. VSCodium application code stays on 1.135.06055. The patch retains the vendor fuse wire `101100011`, Linux sandbox permissions and macOS bundle identities. Existing platform signing happens after replacement. Unknown vendor versions, changed fuses, checksum mismatches and unsafe ZIP paths/links fail the build. There is no claim that checksums constitute platform signing or notarization.
 
@@ -253,3 +253,7 @@ SEC-012 remains **OPEN**. A checksum-verified real Antigravity CLI 1.3.3 was obt
 Reviewer scope: **added** pinned runtime archives/installer, security regression tests, native runtime version/ABI checks and SBOM archive provenance; **replaced** Electron 42.8.1 runtime bytes during packaging; **removed** no editor or provider functionality. Public alpha.8 binaries are unchanged until a separately approved release ships. Overall recommendation remains **NO-GO**, including open Gemini enforcement, signing/repository protection requirements and incomplete broader acceptance.
 
 Validation update: local full suite **80/83 files PASS, exit1**; bench-memory process lookup, device socket EPERM and updater helper-liveness fail in this host. CI test job and CodeQL passed on `1f4f2de`; the Linux build exposed Python 3.10 incompatibility in `hashlib.file_digest`, corrected in `75be8b2` with a streaming hash and regression. Complete macOS dependency frameworks are also replaced, with bundle-identity regression coverage. Final fresh native CI is required.
+
+## Final Electron remediation verification
+
+SEC-009 is **FIXED in candidate builds** on `d7a6987929793c69df2fa9a47915446cc488b33d`: all native installed runtime logs report Electron 42.11.12 / ABI 146; runtime regressions and build/install/startup smoke checks pass. [Build 38131185955](https://github.com/adithyakumarcr/kural/actions/runs/38131185955) / [CodeQL 38131185998](https://github.com/adithyakumarcr/kural/actions/runs/38131185998) PASS. Published alpha.8 remains affected. SEC-012 remains **OPEN**; the synthetic callback reproduction confirms no waiting/denial transmission, without testing real provider execution. See `GEMINI_ADAPTER_REQUIREMENTS.md`. Current count: 14 FIXED, 2 PARTIALLY FIXED, 4 DEFERRED. Full scope, environments and untested areas are in `RELEASE_READINESS.md`; overall NO-GO remains.

@@ -18,7 +18,7 @@ Environment: Ubuntu 24.04.3 x86_64 container; Node 24.19.0, npm 11.9.0, Python 3
 - [x] 10 CI review/proposal: reviewed existing workflow/settings, proposed fix; approved minimal credential guard applied/tested; long-term pipeline/settings remain deferred.
 - [x] 11 Findings: classification/evidence/location/status in reports and findings.json.
 - [x] 12 Reports: eight required reports plus evidence, SBOMs, patch and handoff.
-- [ ] 13 Remediation: 13 FIXED, 2 PARTIALLY FIXED, 5 DEFERRED; full CI tests and all-platform packaging/startup checks PASS; broad acceptance incomplete.
+- [ ] 13 Remediation: 14 FIXED, 2 PARTIALLY FIXED, 4 DEFERRED; full CI tests and all-platform packaging/startup checks PASS; broad acceptance incomplete.
 
 No helper agents were needed or launched. Work did not pause on unavailable helper infrastructure. Resume: retain branch/base and patch; run native tests, fix vendor/provider/pipeline blockers, then recompute GO status. All partial phases are explicit; this checklist does not claim a comprehensive finished security assurance.
 
@@ -37,7 +37,7 @@ Application/build code revision: `b4c03486781d6427682ca47716efe71bd725fe34` (dep
 
 Local full-run result remains 76/82 (exit1); corrected rebranding fixture and provider timing failures passed direct reruns. Process-inventory, socket and helper-liveness local failures remain documented. A CycloneDX schema validation attempt could not run because Python jsonschema is unavailable; structural regression tests passed, so formal schema validation is not claimed. The final report update changes Markdown only; code validation is bound to the above SHA.
 
-## Electron runtime follow-up — 2026-10-11
+## Electron runtime implementation — interim verification
 
 SEC-009 is now **PARTIALLY FIXED / NATIVE VALIDATION PENDING**. All three packaging scripts replace the complete Electron runtime distribution with official **42.11.12** archives, independently pinned by SHA-256 in `vendor/electron-runtime.json`. VSCodium application code stays on 1.135.06055. The patch retains the vendor fuse wire `101100011`, Linux sandbox permissions and macOS bundle identities. Existing platform signing happens after replacement. Unknown vendor versions, changed fuses, checksum mismatches and unsafe ZIP paths/links fail the build. There is no claim that checksums constitute platform signing or notarization.
 
@@ -50,3 +50,7 @@ SEC-012 remains **OPEN**. A checksum-verified real Antigravity CLI 1.3.3 was obt
 Reviewer scope: **added** pinned runtime archives/installer, security regression tests, native runtime version/ABI checks and SBOM archive provenance; **replaced** Electron 42.8.1 runtime bytes during packaging; **removed** no editor or provider functionality. Public alpha.8 binaries are unchanged until a separately approved release ships. Overall recommendation remains **NO-GO**, including open Gemini enforcement, signing/repository protection requirements and incomplete broader acceptance.
 
 Validation update: local full suite **80/83 files PASS, exit1**; bench-memory process lookup, device socket EPERM and updater helper-liveness fail in this host. CI test job and CodeQL passed on `1f4f2de`; the Linux build exposed Python 3.10 incompatibility in `hashlib.file_digest`, corrected in `75be8b2` with a streaming hash and regression. Complete macOS dependency frameworks are also replaced, with bundle-identity regression coverage. Final fresh native CI is required.
+
+## Final Electron remediation verification
+
+Final application/build verification revision: d7a6987929793c69df2fa9a47915446cc488b33d. [Build 38131185955](https://github.com/adithyakumarcr/kural/actions/runs/38131185955) / [CodeQL 38131185998](https://github.com/adithyakumarcr/kural/actions/runs/38131185998) PASS: all 83 CI test files and supported platform build/install/runtime/startup smoke jobs; release SKIPPED. Current status: **14 FIXED, 2 PARTIALLY FIXED, 4 DEFERRED**. Gemini remains OPEN with a current synthetic reproduction and concrete adapter requirements. Local 80/83 container result remains documented. Broader acceptance, full dependency closure and owner production configuration are unfinished. No paid APIs, release publication or production change occurred. Final follow-up changes Markdown only; code validation is bound to d7a6987.
