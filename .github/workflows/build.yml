@@ -69,7 +69,12 @@ jobs:
       - name: Quick extension update (./install.sh --ext)
         run: ./install.sh --ext && test -f /usr/share/kural/resources/app/extensions/kural/lib/edit/code-reply.js
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with: { name: linux, path: dist/*.deb, if-no-files-found: error }
+        with:
+          name: linux
+          path: |
+            dist/*.deb
+            dist/kural-*-linux-x64.cdx.json
+          if-no-files-found: error
 
   linux-check:
     needs: linux
@@ -141,7 +146,12 @@ jobs:
             ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null; exit 1; }
           pkill -x Kural || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with: { name: macos, path: "dist/Kural-*-macos-*", if-no-files-found: error }
+        with:
+          name: macos
+          path: |
+            dist/Kural-*-macos-*
+            dist/kural-*-macos-arm64.cdx.json
+          if-no-files-found: error
 
   # ---------- Windows ----------
   windows:
@@ -152,17 +162,6 @@ jobs:
     # Code signing (Windows SmartScreen's "Windows protected your PC"): set these in Settings → Secrets and variables →
     # Actions once there's a certificate (docs/windows-signing.md). Only v* tag pushes receive real signing
     # credentials. PR, main and manual builds stay unsigned; the disposable signing check still runs.
-    env:
-      KURAL_SIGN_STORETYPE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_STORETYPE || '' }}
-      KURAL_SIGN_KEYSTORE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_KEYSTORE || '' }}
-      KURAL_SIGN_STOREPASS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_STOREPASS || '' }}
-      KURAL_SIGN_ALIAS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_ALIAS || '' }}
-      KURAL_SIGN_KEYPASS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_KEYPASS || '' }}
-      KURAL_SIGN_TSA: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_TSA || '' }}
-      SIGN_PFX_BASE64: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_PFX_BASE64 || '' }}
-      AZURE_TENANT_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_TENANT_ID || '' }}
-      AZURE_CLIENT_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_CLIENT_ID || '' }}
-      AZURE_CLIENT_SECRET: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_CLIENT_SECRET || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -179,6 +178,17 @@ jobs:
       - run: ./scripts/sign-win-check.sh
       - name: Build (signed when a certificate is set up)
         id: build
+        env:
+          KURAL_SIGN_STORETYPE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_STORETYPE || '' }}
+          KURAL_SIGN_KEYSTORE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_KEYSTORE || '' }}
+          KURAL_SIGN_STOREPASS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_STOREPASS || '' }}
+          KURAL_SIGN_ALIAS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_ALIAS || '' }}
+          KURAL_SIGN_KEYPASS: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_KEYPASS || '' }}
+          KURAL_SIGN_TSA: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_TSA || '' }}
+          SIGN_PFX_BASE64: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.WINDOWS_SIGN_PFX_BASE64 || '' }}
+          AZURE_TENANT_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_TENANT_ID || '' }}
+          AZURE_CLIENT_ID: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.AZURE_CLIENT_SECRET || '' }}
         run: |
           # A .pfx kept as a secret (base64): to a file only this job can read.
           if [ -n "$SIGN_PFX_BASE64" ]; then
@@ -194,7 +204,12 @@ jobs:
           ./build-win.sh
           if [ -n "$KURAL_SIGN_STORETYPE" ]; then echo "signed=true" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with: { name: windows, path: "dist/Kural-*-windows-*", if-no-files-found: error }
+        with:
+          name: windows
+          path: |
+            dist/Kural-*-windows-*
+            dist/kural-*-windows-x64.cdx.json
+          if-no-files-found: error
 
   windows-check:
     needs: windows
@@ -256,7 +271,7 @@ jobs:
           KURAL_RELEASE_PRIVATE_KEY: ${{ secrets.KURAL_RELEASE_PRIVATE_KEY }}
         run: |
           # The updater installs nothing that isn't in this list (see docs/release-signing.md)
-          node scripts/sbom.js "dist/kural-${GITHUB_REF_NAME#v}.cdx.json"   # (before the list, so the SBOM is in it)
+          node scripts/sbom-release.js dist   # refuses missing/source-only platform inventories
           (cd dist && sha256sum Kural-* kural_* kural-*.cdx.json > SHA256SUMS)
           node scripts/release-key.js sign dist/SHA256SUMS
           node scripts/release-key.js verify dist/SHA256SUMS dist/SHA256SUMS.sig

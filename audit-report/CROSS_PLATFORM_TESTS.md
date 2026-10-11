@@ -41,3 +41,7 @@ Shared JS fixes cover targets by intent; Windows regex matching preserves case-i
 ## Evidence availability
 
 Raw validation logs, scanner JSON and local environment snapshots are retained in the private audit handoff and are not published in this PR. References to `evidence/` identify those retained files. Reviewers can reproduce the code-level checks with the committed `test/audit-*.test.js` files. See the PR description for the latest 79/81 test-file result and its limitations.
+
+## Native CI follow-up (2026-10-11)
+
+[Build run 38124450582](https://github.com/adithyakumarcr/kural/actions/runs/38124450582), commit 34b7d92fc976ec648e00d90ba13765146251c305: test job PASS; macOS build/ad-hoc signature/DMG copy/startup PASS; Windows build/install/startup PASS; Ubuntu 22.04 and 24.04 install/startup PASS. CodeQL run 38124450589 PASS. The earlier table describes the initial local investigation; these narrowly scoped checks supersede its NOT TESTED build/startup rows. Gatekeeper notarization, real provider authentication, update interruptions, uninstall/data preservation and long-run stability remain NOT TESTED. The new dependency/inventory changes require a fresh CI run before inheriting these results.

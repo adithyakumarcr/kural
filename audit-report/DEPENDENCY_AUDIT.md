@@ -23,7 +23,7 @@ Authoritative references: [Electron preload advisory](https://github.com/electro
 ## Supply chain review
 
 - codium.lock pins SHA-256 for Ubuntu amd64, macOS arm64 and Windows x64 archives. Upstream Linux checksum verified during rebuild. This is integrity pinning, not a vendor-signature/provenance proof.
-- Third-party GitHub Actions in reviewed build workflow are pinned to commit SHAs. Default read-only permissions; release job separately grants contents/attestations/id-token write. PR secret exposure remains SEC-010.
+- Third-party GitHub Actions in reviewed build workflow are pinned to commit SHAs. Default read-only permissions; release job separately grants contents/attestations/id-token write. PR credential gating and build-step credential scope are implemented; protected signer isolation remains SEC-010.
 - npm audit in workflow uses `|| true`, therefore is informational; no observed comprehensive dependency/secret scanner release gate. Proposed pipeline in CI_PROPOSAL.md requires approval before editing workflows.
 - Root npm lifecycle scripts do not install third-party dependencies. Vendor manifests/lifecycle hooks are present in the repackaged app; lifecycle code was not executed by audit scanner. Third-party CLI installers/extensions and downloaded helper binaries need separate provenance testing.
 - Source lockfile reduces source-root npm dependency-confusion exposure; it says nothing about unpinned external tools/CLI updates or vendor graph maintenance.
@@ -67,3 +67,13 @@ kural-source.cdx.json reflects existing generator. kural-linux-artifact.cdx.json
 ## Evidence availability
 
 Raw validation logs, scanner JSON and local environment snapshots are retained in the private audit handoff and are not published in this PR. References to `evidence/` identify those retained files. Reviewers can reproduce the code-level checks with the committed `test/audit-*.test.js` files. See the PR description for the latest 79/81 test-file result and its limitations.
+
+## PR #61 dependency follow-up
+
+DEP-002: **FIXED at the packaged-library level**. Verified registry archive shell-quote 1.11.0 against its SHA-512 integrity; retained full upstream contents/license in `vendor/shell-quote`, with per-file SHA-256 pins. `scripts/runtime_dependencies.py` verifies pins and expected vendor versions before replacing the staged package on all three build paths. No lifecycle hooks run. Original comment-plus-newline quotation reproduces against shipped 1.10.0; 1.11.0 rejects it. `node test/runtime-dependencies.test.js` PASS. OSV query for npm shell-quote 1.11.0 returned zero advisories on 2026-10-11. Caller-level application exploitability remains unestablished. Existing published binaries remain affected until replaced by a new validated release.
+
+DEP-001: **PARTIALLY FIXED**. Per-platform packaging now inventories the staged application recursively, rejects invalid manifests, ignores symlinks and records portable manifest paths. The Linux inventory has 112 components, including vendor-declared Electron 42.8.1 and shell-quote. Release merging fails if any of the three packaged inventories is missing, mismatched, or source-only; hashes bind the referenced platform inventories. `node test/sbom.test.js` PASS. Python was already a build prerequisite; this adds no Node requirement to macOS/Linux source builds. Native binaries and bundles without manifests still require enrichment, so this does not claim a complete dependency closure.
+
+SEC-009 remains open: the latest stable VSCodium release API returned the currently pinned 1.135.06055; a bare Electron replacement would need compatibility and artifact integrity validation. No runtime replacement was applied.
+
+Validation of this follow-up: Linux DEB rebuild PASS; all eleven shipped shell-quote files match the pinned SHA-256 values; generated inventory has 112 components and explicitly records Electron 42.8.1. Runtime dependency and SBOM regressions PASS, actionlint 1.7.12 PASS, shell/JS/Python syntax checks and git diff --check PASS. Gitleaks rerun exit1: the same two synthetic signing-test/activity-fixture matches, no newly reported secrets. OSV shell-quote 1.11.0 query returned zero advisories. Native CI for these new changes is pending.
