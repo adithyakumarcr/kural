@@ -36,7 +36,8 @@ You can change the mode while an answer is running. Agent → Auto: the commands
 later ones don't ask. Dangerous commands still ask in Auto (and after "Allow all"): `sudo`, deleting outside the project
 or the whole project, `curl … | sh`, a forced push to main, `git reset --hard`, `git clean -f`, writing into `/etc`,
 `/usr` or `~/.ssh`, formatting a disk, shutting down. It's a best-effort check of the command's text, not a sandbox.
-Gemini (Antigravity) can't ask, so in Auto it doesn't get this check. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
+Gemini (Antigravity) gets this check through Kural's approval gate (a hook in Antigravity's own settings; not yet
+confirmed with the real program). Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.
 
 ## The model menu (bottom of the chat)

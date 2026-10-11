@@ -6,6 +6,9 @@ const fs = require("fs"), os = require("os"), path = require("path");
 if (process.platform === "win32") { console.log("agy: skipped on Windows (the stand-in is a script)"); process.exit(0); }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-agy-test-"));
+// (agy reads its hooks from ~/.gemini: Kural installs its approval gate there. A home of our own, never the real one.)
+process.env.HOME = process.env.USERPROFILE = path.join(tmp, "home");
+fs.mkdirSync(process.env.HOME);
 process.env.FAKE_AGY_FILE = path.join(tmp, "state");
 process.env.FAKE_AGY_LOG = path.join(tmp, "args.log");
 fs.writeFileSync(process.env.FAKE_AGY_FILE, "ok");
@@ -69,16 +72,17 @@ function chat(opts = {}) {
     assert.ok(args.includes("--disable-slash-commands"));
   });
 
-  await check("Agent mode: edits happen (the chat keeps a copy first, for Undo); commands don't, and the answer says so", async () => {
+  await check("Agent mode: edits happen after Kural's gate approved them (the chat keeps a copy first, for Undo); commands don't, and the answer says so", async () => {
     const c = first;
     assert.deepStrictEqual([lastArgs().includes("--mode"), lastArgs()[lastArgs().indexOf("--mode") + 1]], [true, "accept-edits"]);
     const r = await c.ask("edit notes");
     assert.match(fs.readFileSync(path.join(project, "notes.txt"), "utf8"), /two/);
     assert.deepStrictEqual(c.perms.map((p) => [p.tool_name, p.input.file_path]), [["Edit", path.join(project, "notes.txt")]]);
+    assert.strictEqual(c.perms[0].gate, true);   // (asked through Kural's gate, before agy changed the file)
     assert.strictEqual(c.tools().find((t) => t.name === "Edit").input.file_path, path.join(project, "notes.txt"));
     assert.match(r.result, /added a line/);
     const r2 = await c.ask("run tests");
-    assert.match(r2.result, /didn't run: `npm test`/); assert.match(r2.result, /Switch to Auto/);
+    assert.match(r2.result, /Not run in Agent mode: `npm test`/); assert.match(r2.result, /Switch to Auto/);
   });
 
   await check("Stop ends the answer at once; the next message continues the same conversation", async () => {

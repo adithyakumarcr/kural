@@ -15,9 +15,13 @@
 //   --add-dir <project> matters: without it agy works in its own scratch folder. --disable-slash-commands: a message
 //   starting with "/" would otherwise be a command (and "/usage" ends the session).
 //
-// Asking before acting: agy can't ask Kural (or anyone) in this mode; each action is allowed or not by its mode alone.
-//   Ask → agy's default (reads only)   Plan → --mode plan   Agent → --mode accept-edits (edits yes, commands no:
-//   Kural says which commands it didn't run)   Auto → --dangerously-skip-permissions (everything, like Kural's Auto).
+// Asking before acting: agy has no approval protocol in this mode, but it runs hooks. Kural installs a PreToolUse hook
+// (lib/ai/agy-gate-host.js, lib/ai/agy-gate.js) that asks Kural before EVERY tool call and waits: the same rules and
+// permission cards as Claude (gateDecide below). agy's own mode flags stay as a second, stricter layer:
+//   Ask → agy's default (reads only)   Plan → --mode plan   Agent → --mode accept-edits (agy itself doesn't run
+//   commands there: Kural says which it didn't run)   Auto → --dangerously-skip-permissions.
+// If a tool that changes something finishes without Kural's gate having been asked (hooks not running in this agy),
+// Kural stops agy and says so (gateMissed). NOT VERIFIED against the real agy yet: scripts/verify-agy-gate.sh.
 // A mode or model is fixed when agy starts: a change starts a new agy in the same conversation (--conversation).
 // Stop: SIGINT (agy ends the answer as "interrupted" and exits); the next message starts it again, same conversation.
 //
@@ -31,6 +35,8 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
 const usage = require("./usage");
+const gateHost = require("./agy-gate-host");
+const { within } = require("../paths");
 
 const IS_WIN = process.platform === "win32";
 const MIN_VERSION = "1.1.15";   // stream-json input
@@ -86,7 +92,9 @@ function run(bin, args, { timeout = 30000, cwd } = {}) {
 
 // No auto-update while Kural drives it (an update mid-answer would restart it), and never "inside Antigravity".
 function cleanEnv(extra) {
-  const env = { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: "1", ...(extra || {}) };
+  const env = { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: "1" };
+  delete env.KURAL_AGY_GATE;   // (only the chat's own agy gets its gate: below, in spawn)
+  Object.assign(env, extra || {});
   delete env.ANTIGRAVITY_AGENT; delete env.ANTIGRAVITY_CONVERSATION_ID;
   return env;
 }
@@ -326,8 +334,10 @@ const MODE_FLAGS = { ask: [], plan: ["--mode", "plan"], agent: ["--mode", "accep
 class AgyAgent {
   // opts: name, bin, model ("" = agy's own), mode, cwd, addDirs, appendSystemPrompt, sessionId / resume (Kural's id),
   //   store (folder for the Kural id → agy conversation id list), env.
-  // handlers: onMessage(msg), onPermission(req) (only to let the chat keep a copy of a file before agy changes it,
-  //   for Undo: agy doesn't wait for the answer), onExit({code, login, stderr})
+  //   gate: the approval gate's host (default: lib/ai/agy-gate-host.js's; tests give their own).
+  // handlers: onMessage(msg), onPermission(req) (Kural's gate: every tool call, mapped to Claude Code's tool names, before
+  //   agy runs it; agy waits. req.gate = true, req.gateMode = the mode agy was started for, req.unclassified = a tool Kural
+  //   doesn't know. Without it: reads in the chat's folders only, nothing else), onExit({code, login, stderr})
   constructor(opts, handlers) {
     this.opts = { ...opts };
     this.h = handlers || {};
@@ -348,6 +358,8 @@ class AgyAgent {
     this.ready = false;
     this.files = path.join(quietDir(), `files-${crypto.randomBytes(6).toString("hex")}`);   // pictures you attach
     this.usedSoFar = { input: 0, output: 0 };   // agy's usage adds up per process
+    this.gate = null;                           // this agy process's gate session (agy-gate-host.js)
+    this.gateAllowed = new Map();               // agy tool name -> approvals not yet matched by a finished tool step
   }
 
   cwd() { return this.opts.cwd || process.cwd(); }
@@ -375,11 +387,18 @@ class AgyAgent {
     this.ready = false;
     this.started = false;   // this agy said "init"
     this.stderr = "";
+    // Kural's approval gate first: no gate, no agy (it would run tools nobody approved).
+    this.closeGate();
+    const host = this.opts.gate || gateHost.host;
+    const g = host.open({ decide: (call) => this.gateDecide(call) });
+    if (!g || g.error) { this.failStart((g && g.error) || "Kural couldn't set up its approval gate for Gemini."); return; }
+    this.gate = g;
+    this.gateAllowed = new Map();
     let p;
     try {
       // Its own process group (not on Windows): agy starts helpers (a language server, MCP servers) that should stop with it.
-      p = spawn(this.opts.bin, this.args(), { cwd: this.cwd(), env: cleanEnv(this.opts.env), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
-    } catch (e) { this.failStart(e.message); return; }
+      p = spawn(this.opts.bin, this.args(), { cwd: this.cwd(), env: cleanEnv({ ...(this.opts.env || {}), KURAL_AGY_GATE: g.env }), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
+    } catch (e) { this.closeGate(); this.failStart(e.message); return; }
     this.proc = p;
     let buf = "";
     p.stdout.setEncoding("utf8");
@@ -407,7 +426,7 @@ class AgyAgent {
     const id = m.conversation_id || (m.init && m.init.conversation_id);
     // An unknown --conversation silently starts a new one: then the instructions have to come again.
     if (this.conv && id && id !== this.conv) { log(`agy: conversation ${this.conv} not found; new one ${id}`); this.primed = false; }
-    if (id) { this.conv = id; this.remember(); }
+    if (id) { this.conv = id; this.remember(); if (this.gate) this.gate.register(id); }
     if (!this.announced) {
       this.announced = true;
       this.emit({ type: "system", subtype: "init", model: (m.init && m.init.model) || this.model || "Gemini", tools: [], mcp_servers: [] });
@@ -420,7 +439,7 @@ class AgyAgent {
   failStart(why) {
     if (this.exited) return;
     const login = LOGIN_RE.test(String(why || ""));
-    const text = login ? NOT_LOGGED_IN : friendly(why);
+    const text = login ? NOT_LOGGED_IN : /approval gate/.test(String(why || "")) ? String(why) : friendly(why);
     if (this.queue.length || this.busy) { this.queue = []; this.busy = false; this.turn = null; this.emit({ type: "result", subtype: "error", is_error: true, result: text, duration_ms: 0 }); }
     this.finish({ code: login ? 1 : -1, login, stderr: login ? text : String(why || "").slice(-2000) });
   }
@@ -532,18 +551,16 @@ class AgyAgent {
     let t = this.turn.tools.get(key);
     if (!t) {
       const d = describe(info.name || s.tool_name || "tool", info.parameters || {}, this.cwd());
-      t = { id: `agy_${crypto.randomUUID()}`, name: d.name, input: d.input, done: false };
+      t = { id: `agy_${crypto.randomUUID()}`, name: d.name, input: d.input, done: false, agyName: info.name || s.tool_name || "tool", params: info.parameters || {} };
       this.turn.tools.set(key, t);
       this.closeBlock();
       this.turn.segment = "";   // the final answer is what comes after the last tool
-      // A file about to change: let the chat keep a copy first (for Undo). agy doesn't wait, so it's a best effort.
-      if ((d.name === "Edit" || d.name === "Write") && d.input.file_path && this.h.onPermission && (this.mode === "agent" || this.mode === "auto")) {
-        Promise.resolve(this.h.onPermission({ tool_name: fs.existsSync(d.input.file_path) ? "Edit" : "Write", input: { file_path: d.input.file_path }, tool_use_id: t.id, notice: true })).catch(() => {});
-      }
+      // (Only shown here. Kural's approval, and the copy of a file for Undo, happened in the gate before agy ran it.)
       this.emit({ type: "assistant", message: { role: "assistant", model: this.model || "antigravity", content: [{ type: "tool_use", id: t.id, name: t.name, input: t.input }] } });
     }
     if ((s.state === "DONE" || s.state === "ERROR") && !t.done) {
       const err = info.error && (info.error.message || info.error.type);
+      if (!err && s.state === "DONE" && this.gateMissed(t.agyName, t.params)) return;
       if (err && /permission/i.test(err)) this.turn.denied.push(t);
       const out = err ? String(err) : typeof info.output === "string" ? info.output : info.output != null ? JSON.stringify(info.output) : "Done.";
       this.toolResult(t, out.slice(0, 20000), !!err || s.state === "ERROR");
@@ -575,11 +592,11 @@ class AgyAgent {
     if (interrupted) { this.restart(); return this.endTurn({ type: "result", subtype: "error_during_execution", is_error: true, result: "Stopped." }); }
     if (r.status && r.status !== "SUCCESS") return this.endTurn({ type: "result", subtype: "error", is_error: true, result: friendly(r.error || this.stderr || r.status) });
     let said = String(r.response || "").trim() || this.turn.segment.trim() || this.turn.text.trim();
-    // Commands agy wasn't allowed to run (Agent mode): say so, and how to allow them.
+    // Commands that didn't run (agy's own Agent mode, or Kural's gate said no): say so, and how to allow them.
     const denied = this.turn.denied.filter((t) => t.name === "Bash" || /^mcp__/.test(t.name));
     if (denied.length && this.mode !== "auto") {
       const what = denied.map((t) => (t.input && t.input.command) || t.name).slice(0, 3).map((c) => `\`${String(c).slice(0, 80)}\``).join(", ");
-      const note = `\n\n(Gemini can't ask before running a command here, so in ${this.mode === "agent" ? "Agent" : this.mode === "plan" ? "Plan" : "Ask"} mode it didn't run: ${what}. Switch to Auto to let it run commands, or run them yourself.)`;
+      const note = `\n\n(Not run in ${this.mode === "agent" ? "Agent" : this.mode === "plan" ? "Plan" : "Ask"} mode: ${what}. Gemini's own Agent mode doesn't run commands, and Kural's approval gate refuses what this mode or you didn't allow. Switch to Auto to let it run commands (Kural still asks about risky ones), or run them yourself.)`;
       said += note;
       // (The chat shows the streamed text: the note goes there too.)
       this.open("text");
@@ -624,12 +641,55 @@ class AgyAgent {
 
   // Start again on the next message (same conversation): new flags apply then.
   restart() {
+    this.closeGate();
     const p = this.proc;
     this.proc = null; this.ready = false; this.usedSoFar = { input: 0, output: 0 };
     clearTimeout(this.initTimer);
     if (p) this.killProc(p);
     // Messages already waiting (sent while agy was starting, or behind a stopped answer): a new agy for them.
     if (!this.exited && this.queue.length) setImmediate(() => { if (!this.proc && !this.exited) this.spawn(); });
+  }
+
+  // ---------- Kural's approval gate ----------
+
+  closeGate() { const g = this.gate; this.gate = null; if (g) g.close(); }
+  // The chat's mode changed during an answer: nothing more is approved for this agy (it was started for the old
+  // mode); the next message starts a new one with the new mode.
+  revokeGate() { this.closeGate(); }
+
+  // One tool call agy wants to make, before it runs it (agy-gate.js waits for this). → { allow, message? }
+  async gateDecide(call) {
+    if (this.exited) return { allow: false, message: "This chat's Gemini was closed." };
+    const c = gateCall(call.tool, call.args, this.cwd());
+    let r;
+    if (c.safe) r = { allow: true };
+    else if (this.h.onPermission) {
+      try {
+        r = await this.h.onPermission({ tool_name: c.tool, input: c.input, gate: true, gateMode: this.mode, unclassified: !!c.unclassified, agy_tool: String(call.tool) });
+      } catch (e) { r = { allow: false, message: e.message }; }
+    } else {
+      // No chat behind it (Ask, Ctrl+K, commit messages, Get started's test): reading the folders it was given, nothing else.
+      const where = c.input && (c.input.file_path || c.input.path);
+      const roots = [this.cwd(), ...(this.opts.addDirs || []), this.files];
+      r = ["Read", "Grep", "Glob"].includes(c.tool) && (!where || within(where, roots)) ? { allow: true } : { allow: false, message: "Only reading is allowed here." };
+    }
+    const allow = !!(r && (r.allow === true || r.behavior === "allow"));
+    if (allow && !c.safe && changes(c.tool)) this.gateAllowed.set(call.tool, (this.gateAllowed.get(call.tool) || 0) + 1);
+    return allow ? { allow: true } : { allow: false, message: (r && r.message) || "Kural didn't approve this." };
+  }
+
+  // A tool that changes something finished, but Kural's gate never approved it: agy didn't run the hook (an agy
+  // version without hooks for this mode, or the hooks file changed). Stop agy at once; the answer says why.
+  gateMissed(name, params) {
+    const c = gateCall(name, params || {}, this.cwd());
+    if (c.safe || !changes(c.tool)) return false;
+    const n = this.gateAllowed.get(name) || 0;
+    if (n > 0) { this.gateAllowed.set(name, n - 1); return false; }
+    log(`agy: ${name} ran without Kural's approval gate; stopping agy`);
+    const note = `Kural stopped Gemini: its ${name} step finished without asking Kural's approval gate first (the hook didn't run). Nothing more runs in this answer. Check Kural's log and the Gemini page in Kural's wiki.`;
+    this.restart();
+    this.endTurn({ type: "result", subtype: "error", is_error: true, result: note });
+    return true;
   }
 
   request(req) { return Promise.resolve(req && req.subtype === "mcp_status" ? { mcpServers: [] } : {}); }
@@ -639,6 +699,7 @@ class AgyAgent {
   interrupt() {
     if (!this.busy || !this.proc) return;
     this.stopped = true;
+    this.closeGate();   // (what agy still asks after Stop: no)
     const p = this.proc;
     this.signal(p, "SIGINT");
     // If it doesn't answer in 3 s, end the answer anyway.
@@ -664,6 +725,7 @@ class AgyAgent {
   finish(info) {
     if (this.exited) return;
     this.exited = true;
+    this.closeGate();
     clearTimeout(this.initTimer);
     if (this.proc) this.killProc(this.proc);
     this.proc = null;
@@ -676,6 +738,7 @@ class AgyAgent {
   onProcessExit(p, code) {
     if (this.proc !== p) return;   // an old one, replaced on purpose
     this.proc = null;
+    this.closeGate();
     this.ready = false;
     if (this.exited) return;
     // Stopped before it said "init" (no network, not logged in, a flag it refused): starting it again would fail the
@@ -707,6 +770,50 @@ function describe(name, params, cwd) {
   if (/url|fetch|browser/.test(n)) return { name: "WebFetch", input: { url: pick(/url/i) } };
   return { name: `mcp__agy__${String(name).replace(/[^\w.-]/g, "_") || "tool"}`, input: p };
 }
+
+// What Kural's gate decides about: agy's tool call in Kural's words (Claude Code's tool names and inputs, so the chat's
+// permission-policy.js and its cards apply unchanged). Stricter than describe(): a call whose target can't be found is
+// "unclassified" (asks in Agent and Auto, refused in Ask and Plan), never "allowed because no path".
+// → { tool, input } | { tool, input, unclassified: true } | { safe: true } (changes nothing and reads nothing of yours).
+const AGY_READ = new Set(["view_file", "view_file_outline", "view_code_item", "read_file", "read_resource"]);
+const AGY_LIST = new Set(["list_dir", "list_files"]);
+const AGY_SEARCH = new Set(["grep_search", "find_by_name", "codebase_search", "search_files"]);
+const AGY_WRITE = new Set(["write_to_file", "create_file", "write_file"]);
+const AGY_EDIT = new Set(["replace_file_content", "multi_replace_file_content", "edit_file", "apply_patch"]);
+const AGY_COMMAND = new Set(["run_command", "send_command_input"]);
+const AGY_SUBAGENT = new Set(["define_subagent", "invoke_subagent", "send_message", "manage_subagents"]);
+const AGY_SAFE = new Set(["ask_question", "list_permissions", "command_status", "read_terminal", "task_boundary", "notify_user"]);
+const AGY_WEB = { search_web: "WebSearch", read_url_content: "WebFetch", view_content_chunk: "WebFetch" };
+function gateCall(name, args, cwd) {
+  const n = String(name || "").trim();
+  const p = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+  const get = (...keys) => { for (const k of keys) for (const [key, v] of Object.entries(p)) if (key.toLowerCase() === k.toLowerCase() && typeof v === "string" && v) return v; return ""; };
+  const abs = (f) => (f ? path.resolve(cwd, f.replace(/^~(?=$|[\\/])/, os.homedir())) : "");
+  const unclassified = () => ({ tool: `mcp__agy__${n.replace(/[^\w.-]/g, "_") || "tool"}`, input: p, unclassified: true });
+  const fileArg = () => get("AbsolutePath", "TargetFile", "FilePath", "File", "Path", "absolute_path", "target_file", "file_path");
+  if (AGY_SAFE.has(n)) return { safe: true };
+  if (AGY_READ.has(n)) { const f = fileArg(); return f ? { tool: "Read", input: { file_path: abs(f) } } : unclassified(); }
+  if (AGY_LIST.has(n)) return { tool: "Glob", input: { pattern: "*", path: abs(get("DirectoryPath", "Directory", "Path", "SearchPath") || ".") } };
+  if (AGY_SEARCH.has(n)) return { tool: "Grep", input: { pattern: get("Query", "Pattern", "SearchPattern"), path: abs(get("SearchPath", "SearchDirectory", "DirectoryPath", "Path") || ".") } };
+  if (AGY_WRITE.has(n)) { const f = fileArg(); return f ? { tool: "Write", input: { file_path: abs(f) } } : unclassified(); }
+  if (AGY_EDIT.has(n)) { const f = fileArg(); return f ? { tool: "Edit", input: { file_path: abs(f) } } : unclassified(); }
+  if (AGY_COMMAND.has(n)) {
+    const command = n === "run_command" ? get("CommandLine", "Command", "Cmd") : get("Input", "Text", "CommandLine");
+    if (!command) return unclassified();
+    const dir = get("Cwd", "WorkingDirectory", "Directory");
+    return { tool: "Bash", input: { command, description: "", ...(dir ? { cwd: abs(dir) } : {}) } };
+  }
+  if (AGY_SUBAGENT.has(n)) return { tool: "Task", input: { description: "Gemini helper", prompt: get("Task", "Prompt", "Message", "Instructions") } };
+  if (AGY_WEB[n]) return { tool: AGY_WEB[n], input: AGY_WEB[n] === "WebSearch" ? { query: get("Query", "Q") } : { url: get("Url", "URL", "Uri") } };
+  if (/^browser_/.test(n)) return { tool: "Browser", input: { action: n, url: get("Url", "URL") } };
+  if (n === "call_mcp_tool") {
+    const server = get("ServerName", "Server", "server_name"), tool = get("ToolName", "Tool", "tool_name", "Name");
+    return server && tool ? { tool: `mcp__${server.replace(/[^\w.-]/g, "_")}__${tool.replace(/[^\w.-]/g, "_")}`, input: p } : unclassified();
+  }
+  return unclassified();
+}
+// Tools whose approval the gate counts (gateMissed): everything that changes something or that Kural can't classify.
+const changes = (tool) => ["Write", "Edit", "Bash", "Browser"].includes(tool) || /^mcp__/.test(String(tool));
 
 // ---------- one question, one answer (Ask, Ctrl+K, commit messages) and Get started's test ----------
 
@@ -745,4 +852,4 @@ async function agyTest(bin, { cwd, model } = {}) {
 }
 
 module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginSession, hasSavedLogin, setLog,
-  NOT_LOGGED_IN, MIN_VERSION, _test: { describe, parseUsage, friendly, findLoginUrl, asksForCode } };
+  NOT_LOGGED_IN, MIN_VERSION, _test: { describe, gateCall, parseUsage, friendly, findLoginUrl, asksForCode } };

@@ -64,7 +64,7 @@ function isHomeOrAbove(dir) {
 const RUNS_LATER = [
   /(^|[\\/])\.git([\\/]|$)/, /(^|[\\/])\.vscode[\\/](tasks|launch|settings)\.json$/,
   /(^|[\\/])\.claude([\\/]|$)/, /(^|[\\/])\.codex[\\/]/, /(^|[\\/])\.gemini[\\/]/,
-  /(^|[\\/])\.husky[\\/]/, /(^|[\\/])\.envrc$/, /(^|[\\/])\.env(\..*)?$/,
+  /(^|[\\/])\.agents[\\/]/, /(^|[\\/])\.kural[\\/]/, /(^|[\\/])\.husky[\\/]/, /(^|[\\/])\.envrc$/, /(^|[\\/])\.env(\..*)?$/,
   /(^|[\\/])package\.json$/, /(^|[\\/])(Makefile|justfile|Taskfile\.ya?ml)$/,
   /(^|[\\/])\.github[\\/]workflows[\\/]/, /(^|[\\/])\.pre-commit-config\.yaml$/,
   /(^|[\\/])(Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/,

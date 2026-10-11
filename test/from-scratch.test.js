@@ -34,6 +34,8 @@ function setup() {
   fs.mkdirSync(path.join(home, ".gemini/antigravity-cli"), { recursive: true });
   fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/antigravity-oauth-token"), "{}");
   fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/settings.json"), "{}");
+  fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/hooks.json"), JSON.stringify({ mine: { PreToolUse: [] },
+    "kural-gate": { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: path.join(home, ".kural/agy-gate/kural-agy-gate") }] }] } }));
   fs.mkdirSync(path.join(tmp, "kural-abc123/attachments"), { recursive: true });
   fs.mkdirSync(path.join(home, ".ollama/models"), { recursive: true });
   return { home, tmp, bin, processLog };
@@ -64,6 +66,8 @@ check("yes, keep the programs: logged out everywhere, Kural's data gone, the res
   for (const p of [".config/Kural", ".kural", ".claude/.credentials.json", ".codex/auth.json", "tmp/kural-abc123",
     ".gemini/antigravity-cli/antigravity-oauth-token"]) assert.ok(!exists(s, p), p);
   assert.ok(exists(s, ".gemini/antigravity-cli/settings.json"));   // (its settings aren't a login)
+  // Kural's gate entry leaves with ~/.kural; your own hooks stay.
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(s.home, ".gemini/antigravity-cli/hooks.json"), "utf8")), { mine: { PreToolUse: [] } });
   for (const p of [".claude/projects", ".ollama/models", ".local/bin/claude", ".local/bin/codex", ".local/bin/agy"]) assert.ok(exists(s, p), p);
 });
 check("yes, remove the programs too: Claude Code's install and the others are gone", () => {
