@@ -58,6 +58,7 @@ const validModel = (m) => valid(MODELS, m) || ((/^ollama:./.test(m || "") || !!c
 // Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "agy" (Gemini).
 const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("../ai/clis");
 const { splitLevel } = require("../ai/agy");
+const { isGateFile } = require("../ai/agy-gate-host");
 const engineOf = (m) => brain.engineOf(m);
 // A linked device's tools need the model's program to take Kural's MCP server and ask Kural before each command:
 // Claude Code and Codex do; Kural's own engine (Ollama) has no MCP, and Gemini (Antigravity) can't ask.
@@ -2290,8 +2291,15 @@ class ChatView {
     const turn = r.turn;
     const input = req.input || {};
     if (vscode.workspace.isTrusted === false) return { allow: false, message: "Workspace trust is required." };
+    // Gemini's approval gate (lib/ai/agy-gate-host.js): only for the answer that's running, and only for the mode agy was
+    // started for (a mode change revokes the gate; the next message starts agy with the new mode).
+    if (req.gate) {
+      if (req.gateMode && req.gateMode !== tab.mode) return { allow: false, message: "The chat's mode changed; nothing more runs in this answer." };
+      if (!turn || !turn.reply.running) return { allow: false, message: "The answer was stopped." };
+    }
     const verdict = decide({ tool: req.tool_name, input, mode: tab.mode, allowAll: tab.allowAll, allowAllDevice: tab.allowAllDevice, device: tab.device,
-      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice });
+      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice,
+      unclassified: !!req.unclassified, guard: isGateFile });
     if (verdict.deny) return { allow: false, message: verdict.message };
     const prepareEdit = async () => {
     if (EDIT_TOOLS.has(req.tool_name)) {
@@ -2358,8 +2366,12 @@ class ChatView {
       }
     }
     const editing = (x) => x === "agent" || x === "auto";
-    // Gemini (Antigravity) can't be asked: what it may do is fixed when it starts, so every mode applies from the next message.
-    if (engineOf(tab.model) === "agy") this.post({ type: "flash", text: "Gemini: the new mode applies from your next message" });
+    // Gemini (Antigravity): its flags are fixed when it starts. Kural's gate stops approving anything for the agy that was
+    // started for the old mode (so a late "yes" can't count under the new one); the new mode applies from the next message.
+    if (engineOf(tab.model) === "agy") {
+      if (r && r.proc && typeof r.proc.revokeGate === "function") r.proc.revokeGate();
+      this.post({ type: "flash", text: "Gemini: nothing more runs in this answer; the new mode applies from your next message" });
+    }
     else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" || tab.mode === "ask" ? "Read-only permissions apply now; tools refresh" : "Editing tools become available"} from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });

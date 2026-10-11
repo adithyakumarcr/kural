@@ -11,6 +11,8 @@ if (process.platform === "win32") { console.log("handoff-fakes: skipped on Windo
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-handoff-"));
 const proj = path.join(tmp, "proj"); fs.mkdirSync(proj);
+// (Gemini's agy gets Kural's approval gate in ~/.gemini and ~/.kural: a home of our own, never the real one.)
+process.env.HOME = process.env.USERPROFILE = path.join(tmp, "home"); fs.mkdirSync(process.env.HOME, { recursive: true });
 process.env.FAKE_CODEX_FILE = path.join(tmp, "codex-state"); delete process.env.FAKE_CODEX_STATE;
 process.env.FAKE_AGY_FILE = path.join(tmp, "agy-state"); delete process.env.FAKE_AGY_STATE;
 process.env.FAKE_CODEX_INPUT_LOG = path.join(tmp, "codex-input.jsonl");

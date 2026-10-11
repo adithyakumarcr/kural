@@ -48,7 +48,9 @@ function words(text) {
 const WRAPPERS = new Set(["env", "command", "time", "nice", "nohup", "exec", "builtin", "stdbuf"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 const HOME = /^(~|\$home|\$\{home\})(\/|$)/i;
-const PROTECTED = [/^(~|\$home|\$\{home\})\/\.ssh(\/|$)/i, /^\/etc(\/|$)/, /^\/usr(\/|$)/, /^\/system(\/|$)/i, /^[a-z]:\\windows(\\|$)/i];
+const PROTECTED = [/^(~|\$home|\$\{home\})\/\.ssh(\/|$)/i, /^\/etc(\/|$)/, /^\/usr(\/|$)/, /^\/system(\/|$)/i, /^[a-z]:\\windows(\\|$)/i,
+  // Gemini's (Antigravity's) hooks and settings and Kural's gate launcher: changing them can switch off Kural's approval gate.
+  /(^|[\\/])\.gemini([\\/]|$)/i, /(^|[\\/])\.kural[\\/]agy-gate([\\/]|$)/i, /(^|[\\/])\.agents[\\/]hooks\.json$/i];
 const WRITERS = new Set(["cp", "mv", "rm", "ln", "tee", "touch", "mkdir", "rmdir", "install", "chmod", "chown", "dd", "truncate", "rsync", "scp", "ssh-keygen", "ssh-keyscan", "sed", "perl", "python", "python3", "node", "curl", "wget"]);
 
 // Where a path in a command really points (relative ones from `cwd`); null when it can't be known ($VAR, `cmd`).

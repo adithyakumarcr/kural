@@ -71,14 +71,27 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Old chats with `gemini:` models fall back to the default model (`validModel`). No ACP: stream-json like Claude Code (`--input-format/--output-format stream-json
   --disable-slash-commands --print-timeout 12h --add-dir <cwd>`; `--add-dir` is load-bearing). Events: `init`
   (conversation_id), `step_update` (agent_response `text_delta`; tool `tool_info.{name,parameters,output,error}`),
-  `result` (ends a turn; `usage` adds up per process). **No approvals possible**: Ask = default, Plan = `--mode plan`,
-  Agent = `--mode accept-edits` (commands soft-denied; the answer streams a note listing them), Auto =
-  `--dangerously-skip-permissions`. Mode/model are launch flags → a new agy with `--conversation <id>` (map file
+  `result` (ends a turn; `usage` adds up per process). **Approvals = Kural's hook gate (SEC-012; IMPLEMENTED, NOT
+  VERIFIED against the real agy: `scripts/verify-agy-gate.sh`)**: `lib/ai/agy-gate-host.js` (no vscode) merges a
+  `kural-gate` PreToolUse entry (matcher `*`, timeout 43200 s) into the GLOBAL `~/.gemini/antigravity-cli/hooks.json`
+  (user entries kept, `.kural-backup`, atomic; unparseable file → never overwritten, agy not started) whose command is
+  `~/.kural/agy-gate/kural-agy-gate` (0700 launcher → `ELECTRON_RUN_AS_NODE=1 <execPath> lib/ai/agy-gate.js`). Each agy
+  spawn opens a gate session (`host.open`: private socket in `privateTmp("g")`/named pipe, 32-byte token, sha256 lookup
+  + timingSafeEqual); the token goes in agy's env `KURAL_AGY_GATE` only, plus a registry file per conversation id
+  (`~/.kural/agy-gate/conversations/<sha256>.json`) in case hooks don't get agy's env. No env/registry → the gate prints
+  nothing (your own terminal agy unchanged); Kural's agy + any failure → deny (`{"decision":"deny",…,"allow_tool":false}`,
+  exit 0). `AgyAgent.gateDecide` maps agy tools (`gateCall`: run_command → Bash with `cwd`, write_to_file → Write,
+  unknown/pathless → `unclassified`) to the chat's `onPermission` (`req.gate`, `gateMode`): same `decide()` and cards as
+  Claude, checkpoint before allow. Closed on restart/Stop/exit/mode change (`revokeGate`): waiting calls get deny.
+  `gateMissed`: a changing tool that finishes without an approval → agy stopped. Mode flags stay as a second layer:
+  Ask = default, Plan = `--mode plan`, Agent = `--mode accept-edits` (commands soft-denied by agy; the answer streams a
+  note), Auto = `--dangerously-skip-permissions`. Tests: `test/agy-gate.test.js` (fake-agy runs hooks from
+  `$HOME/.gemini/…`; always a temp HOME). Mode/model are launch flags → a new agy with `--conversation <id>` (map file
   `agy-sessions.json` with the mode its instructions were sent for: an unknown id, or another mode, sends them
   again). A restart sends what's queued; an agy that exits before `init` fails the waiting message (`started`), never
   respawns in a loop. Stop = SIGINT (agy
-  exits; next message respawns). Text-only input: pictures are saved to a folder passed with `--add-dir`. Undo: a
-  best-effort `onPermission` Edit/Write when a tool step starts (agy doesn't wait). No login command: Get started
+  exits; next message respawns). Text-only input: pictures are saved to a folder passed with `--add-dir`. Undo: the
+  gate's `onPermission` snapshots before it answers allow. No login command: Get started
   (`loginTerminal`) runs agy's screen in a normal terminal (`shellPath` = agy, env from `loginSession`) and reads it
   with the proposed `onDidWriteTerminalData` (package.json `enabledApiProposals` "terminalDataWriteEvent"). Not the
   `script` program: the Mac's `script` quits at once when not started from a terminal (the screen lived < 1 s). Kural
@@ -209,8 +222,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   The AI reads/changes files without asking only inside `ws.aiRoots()` (project folders, workDir, temp; reading also
   globalStorage, `~/.claude/projects|plans`, /tmp) or what you attached (`tab.granted`); elsewhere `onPermission` shows a
   file card (Allow/Skip, no "allow all"). So Read/Grep/Glob aren't in Claude's `--allowedTools` (Claude Code reads inside
-  its folders by itself and asks for the rest); Kural's engine asks the same (`READS`); Ask refuses outside. agy can't
-  wait, so its file notices carry `notice: true` (no card). `tools.walk` never enters `isProtected` folders; terminal Tab
+  its folders by itself and asks for the rest); Kural's engine asks the same (`READS`); Ask refuses outside. agy asks
+  through its hook gate (reads outside ask too). `tools.walk` never enters `isProtected` folders; terminal Tab
   skips `git status` in a repo at home or above; the @ file list excludes them when home is open; chat pictures load
   only from the roots plus copies of attached pictures (changing `webview.options` reloads the page: don't). With no
   folder open, AI work runs in `ws.workDir()`, never `~`; shell lookups and checks run with `cwd: os.tmpdir()`, and the

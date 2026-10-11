@@ -388,6 +388,9 @@ function watchEdits(context, activity) {
   }));
 }
 
-function deactivate() { if (crashLog) crashLog.stop(); }   // (a normal close: this window's marker says so)
+function deactivate() {
+  if (crashLog) crashLog.stop();   // (a normal close: this window's marker says so)
+  try { require("./lib/ai/agy-gate-host").host.stop(); } catch { /* not started */ }   // (Gemini's gate: every waiting call is denied)
+}
 
 module.exports = { activate, deactivate };

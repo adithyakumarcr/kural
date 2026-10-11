@@ -16,17 +16,23 @@ const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 //   tool, input: the call. mode: agent / auto / plan / ask. allowAll: "Allow all" for this chat; allowAllDevice: the
 //   device it was given for. device: the chat's linked device. writeRoots / readRoots: where the AI may write / read
 //   without asking (ws.aiRoots). granted: files and folders you attached (and the handoff file). cwd: the project
-//   folder (what "outside" means for rm). notice: the program only tells, it doesn't wait (agy): never a card.
-function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false }) {
+//   folder (what "outside" means for rm). notice: the program only tells, it doesn't wait: never a card (no provider
+//   uses it any more; Gemini asks through Kural's gate). unclassified: a call Kural can't classify (Gemini's gate: an
+//   unknown tool, or one whose file couldn't be found): refused in Ask/Plan, asks in Agent and Auto. guard(file): files
+//   that keep an approval gate working (agy's hooks, Kural's launcher): writing one asks, even in Auto.
+function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false, unclassified = false, guard = null }) {
   // Enforce read-only modes here, even after a live transition or a provider sends an unexpected call.
-  if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite"].includes(tool)))
+  if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite", "Browser"].includes(tool)))
     return { deny: true, message: `${mode} mode cannot run commands or change files.` };
+  if (unclassified) return mode === "ask" || mode === "plan" ? { deny: true, message: `${mode} mode: Kural doesn't know what this tool does, so it isn't run.` }
+    : { ask: true, risky: { why: "Kural doesn't know what this tool does." } };
   const fileInput = input.file_path || input.notebook_path || input.path;
   if (fileInput) input = { ...input, ...(input.file_path ? { file_path: require("path").resolve(cwd, require("../paths").expand(input.file_path)) } : {}),
     ...(input.notebook_path ? { notebook_path: require("path").resolve(cwd, require("../paths").expand(input.notebook_path)) } : {}),
     ...(input.path ? { path: require("path").resolve(cwd, require("../paths").expand(input.path)) } : {}) };
   if (EDIT_TOOLS.has(tool)) {
     const file = input.file_path || input.notebook_path;
+    if (file && typeof guard === "function" && guard(file)) return { ask: true, risky: { why: "It changes Gemini's hook settings or Kural's approval gate." } };
     // Inside your project (or Kural's own work folder): no asking, that's what Agent mode is for. Anywhere else
     // (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks), and inside the project a file that runs code
     // later (a git hook, a task, a workflow, package.json), a write can make the computer run something later, so it
@@ -50,7 +56,10 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
   // A command that's hard to undo (sudo, rm -rf outside the project, curl | sh, a forced push to main…) asks even in
   // Auto and after "Allow all" (lib/ai/danger.js; best effort, not a sandbox). On a device "outside" can't be known,
   // so only the other rules count there.
-  const risky = tool === "Bash" || tool === "DeviceCommand" ? dangerous(input.command, onDevice ? "/" : cwd) : null;
+  let risky = tool === "Bash" || tool === "DeviceCommand" ? dangerous(input.command, onDevice ? "/" : cwd) : null;
+  // A command started in another folder (Gemini's run_command has its own Cwd): outside the project it always asks.
+  if (!risky && tool === "Bash" && input.cwd && !within(require("path").resolve(cwd, String(input.cwd)), writeRoots))
+    risky = { why: `It runs in ${input.cwd}, outside the project.` };
   if (risky) return { ask: true, risky };
   if (mode === "auto" || (onDevice ? !!device && allowAllDevice === device : allowAll)) return { allow: true };
   return { ask: true };   // Agent mode: running commands asks you first.

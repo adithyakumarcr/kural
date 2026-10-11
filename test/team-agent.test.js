@@ -3,6 +3,8 @@ const { TeamAgent, assignments } = require("../extension/lib/chat/team-agent");
 const { CodexAgent } = require("../extension/lib/ai/codex");
 const { AgyAgent } = require("../extension/lib/ai/agy");
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-team-agent-"));
+// (Gemini's agy gets Kural's approval gate in ~/.gemini and ~/.kural: a home of our own, never the real one.)
+process.env.HOME = process.env.USERPROFILE = path.join(dir, "home"); fs.mkdirSync(process.env.HOME, { recursive: true });
 let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
