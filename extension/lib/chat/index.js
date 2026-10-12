@@ -693,7 +693,7 @@ class ChatView {
     this.panes.push(pane);
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
     webview.options = { enableScripts: true, localResourceRoots: this.resourceRoots() };
-    const nonce = shortId() + shortId();
+    const nonce = require("crypto").randomBytes(16).toString("base64");
     const uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">

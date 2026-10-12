@@ -48,11 +48,13 @@ class Browser {
     if (this.onItems) await this.onItems(items);
   }
 
-  // "localhost:3000" and "3000" are http; other names (www.google.com) are https.
+  // "localhost:3000" and "3000" are http; other names (www.google.com) are https. Any other scheme (file:, vscode:,
+  // command:…; a chat link can carry one) → null: the browser opens web pages only (APP-11).
   static url(text) {
     let u = String(text || "").trim();
     if (/^\d{2,5}$/.test(u)) return `http://localhost:${u}`;
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) return u;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) return /^https?:\/\//i.test(u) ? u : null;
+    if (/^(javascript|data|vbscript|file|command|vscode[\w-]*):/i.test(u)) return null;
     return /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|\d+\.\d+\.\d+\.\d+)(:\d+)?(\/|$)/i.test(u) ? `http://${u}` : `https://${u}`;
   }
 
@@ -80,7 +82,12 @@ class Browser {
   }
 
   async open(url) {
+    const asked = url;
     url = Browser.url(url || this.context.globalState.get(LAST) || "http://localhost:3000");
+    if (!url) {
+      if (asked) { vscode.window.showWarningMessage(`Kural's browser opens only web addresses (http, https): ${String(asked).slice(0, 80)}`); return; }
+      url = "http://localhost:3000";
+    }
     this.context.globalState.update(LAST, url);
     if (await this.builtIn()) {
       await vscode.commands.executeCommand("workbench.action.browser.open", { url, openToSide: true });
@@ -96,7 +103,7 @@ class Browser {
     const p = this.panel = vscode.window.createWebviewPanel("kural.browser", "Kural Browser", { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false },
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] });
     p.iconPath = new vscode.ThemeIcon("globe");
-    const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    const nonce = require("crypto").randomBytes(16).toString("base64");
     const uri = (f) => p.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     // (frame-src: the proxy only. The page itself runs in that frame, kept apart from this one.)
     p.webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
@@ -114,6 +121,7 @@ class Browser {
     let url = String(text || "").trim();
     if (/^\d{2,5}$/.test(url)) url = `http://localhost:${url}`;
     else if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = `http://${url}`;
+    if (!/^https?:\/\//i.test(url)) { this.post({ type: "error", message: `Only web addresses (http, https) open here.` }); return; }
     let src;
     try { src = this.proxy.open(url); } catch (e) { this.post({ type: "error", message: `Can't open ${text}: ${e.message}` }); return; }
     this.context.globalState.update(LAST, url);
