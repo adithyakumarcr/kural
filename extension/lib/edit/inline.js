@@ -14,19 +14,31 @@ const EDIT_SYSTEM_PROMPT =
   "Always put the code between a <code> line and a </code> line, exactly like this:\n<code>\n    indented code here\n</code>\n" +
   "Nothing before <code> or after </code>: no explanations, no markdown fences. Each request is independent of earlier ones.";
 
+let cancelledByYou = false;   // (the last request: you pressed Cancel, so a missing answer needs no message)
 async function runWithProgress(session, title, prompt) {
+  cancelledByYou = false;
   return vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title, cancellable: true },
     (_p, token) => {
-      token.onCancellationRequested(() => { log("edit: cancelled by you"); session.stop(); });
+      token.onCancellationRequested(() => { cancelledByYou = true; log("edit: cancelled by you"); session.stop(); });
       return session.ask(prompt, token);
     });
+}
+
+// The answer had <code> tags that made no wrapper: nothing is inserted, and you are told (not a silent nothing).
+function badReply() {
+  log("edit: the reply had code tags in the wrong places; nothing inserted");
+  vscode.window.showWarningMessage("Kural: the answer was not in the expected form, so nothing was changed. Try again.");
 }
 
 function notReady(state) {
   if (state() === "login") vscode.window.showWarningMessage("Kural: log in to Claude first.", "Log in")
     .then((p) => p && vscode.commands.executeCommand("kural.login"));
   else if (state() === "missing") vscode.commands.executeCommand("kural.install");
+  else if (!cancelledByYou) {   // no answer, and not your Cancel: say so (it used to end in silence)
+    log("edit: no answer came back; nothing changed");
+    vscode.window.showWarningMessage("Kural: no answer came back, so nothing was changed. Try again (Kural: Show Log has the details).");
+  }
 }
 
 // ---------- Ctrl+K ----------
@@ -72,7 +84,9 @@ async function inlineEdit(session, review, state) {
 
   if (reply == null) { notReady(state); return; }
   if (doc.version !== version) { vscode.window.showWarningMessage("Kural: the file changed while Kural was working, so the edit was not applied. Try again."); return; }
-  await review.propose(doc, start, end, unwrap(reply), { source: "Ctrl+K", ask: instruction });
+  const code = unwrap(reply);
+  if (code == null) { badReply(); return; }
+  await review.propose(doc, start, end, code, { source: "Ctrl+K", ask: instruction });
 }
 
 // ---------- Apply (from a chat code block) ----------
@@ -104,7 +118,9 @@ async function applyCode(session, review, state, code, targetUri, ask = "") {
   // Most files end with a line break, which shows up as an empty last line. Leave it alone.
   let end = doc.lineCount;
   if (end > 1 && doc.lineAt(end - 1).text === "") end--;
-  await review.propose(doc, 0, end, unwrap(reply), { source: "chat Apply", ask });
+  const full = unwrap(reply);
+  if (full == null) { badReply(); return; }
+  await review.propose(doc, 0, end, full, { source: "chat Apply", ask });
 }
 
 module.exports = { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode };
