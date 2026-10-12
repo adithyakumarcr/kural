@@ -97,6 +97,26 @@ def replace(source, target):
         shutil.copy2(source, target)
 
 
+def check_bundles(app_root, platform, pin):
+    """The SBOM lists Electron's Chromium, Node and libraries from the pin (vendor/electron-runtime.json `bundles`).
+    Where the new runtime can run on this machine, ask it for its own versions and refuse a mismatch (DEP-001)."""
+    import platform as host, subprocess
+    here = {'Linux': 'linux-x64', 'Darwin': 'darwin-arm64'}.get(host.system())
+    if here != platform or not pin.get('bundles'):
+        print(f'Electron bundled versions: not checked here (building {platform} on {host.system()})')
+        return
+    # (Still VSCodium's names here: the build renames them afterwards.)
+    exe = app_root / ('Contents/MacOS/VSCodium' if platform == 'darwin-arm64' else 'codium')
+    out = subprocess.run([str(exe), '-p', 'JSON.stringify(process.versions)'], env={**os.environ, 'ELECTRON_RUN_AS_NODE': '1'},
+                         capture_output=True, text=True, timeout=60)
+    got = json.loads(out.stdout.strip().splitlines()[-1])
+    names = {'chromium': 'chrome', 'libuv': 'uv', 'c-ares': 'ares'}
+    wrong = {k: (v, got.get(names.get(k, k))) for k, v in pin['bundles'].items() if got.get(names.get(k, k)) != v}
+    if wrong or got.get('electron') != pin['version']:
+        raise ValueError(f'Electron bundled versions differ from vendor/electron-runtime.json: {wrong or got.get("electron")}')
+    print(f'Electron bundled versions match the pin (Chromium {got["chrome"]}, Node {got["node"]})')
+
+
 def install(app_root, platform, archive=None):
     pin = json.loads((ROOT / 'vendor/electron-runtime.json').read_text())
     app_root = Path(app_root).resolve(strict=True)
@@ -176,6 +196,7 @@ def install(app_root, platform, archive=None):
         metadata['kuralRuntime'] = dict(version=pin['version'], platform=platform,
                                         sha256=pin['platforms'][platform], source='electron/electron')
         manifest.write_text(json.dumps(metadata, indent=2) + '\n')
+    check_bundles(app_root, platform, pin)
     print(f'Installed verified Electron {pin["version"]} ({platform}); retained vendor fuses {pin["fuses"]}')
 
 

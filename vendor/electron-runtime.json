@@ -6,5 +6,21 @@
     "linux-x64": "1f17c115389c6395ce4b19b29ee2ec4be2208257514d61e269f1c0a7323bd45d",
     "darwin-arm64": "ef1b36456da7e5d0460bf7524ea76424373002d54120449c889d1dde9d7fccbc",
     "win32-x64": "031a8d77b6e8884779be06a25342bf352ad2548fef3f9140ef6f65bbb640851d"
-  }
+  },
+  "bundles": {
+    "chromium": "148.0.7778.280",
+    "node": "24.19.0",
+    "v8": "14.8.178.38-electron.0",
+    "libuv": "1.52.1",
+    "icu": "78.2",
+    "sqlite": "3.53.3",
+    "zlib": "1.3.2.1-motley",
+    "nghttp2": "1.69.0",
+    "undici": "7.29.0",
+    "brotli": "1.2.0",
+    "c-ares": "1.34.6",
+    "simdjson": "4.6.4",
+    "zstd": "1.6.0"
+  },
+  "bundlesSource": "process.versions of electron-v42.11.12-linux-x64 (ELECTRON_RUN_AS_NODE=1); checked again at each Linux/Mac build"
 }

@@ -1,9 +1,51 @@
 #!/usr/bin/env python3
 """Manifest inventory of a packaged application. Does not run hooks or follow symlinks."""
-import argparse, json, os, re
+import argparse, hashlib, json, os, re
 from pathlib import Path
 from urllib.parse import quote
 ROOT = Path(__file__).resolve().parent.parent
+
+# The whole installed app around resources/app: Electron, its libraries, helper programs (VS Code's tunnel, ripgrep...).
+def install_root(app_root):
+    p = Path(app_root).resolve()
+    if p.parts[-3:] == ('Contents', 'Resources', 'app'):
+        return p.parents[2]
+    if p.parts[-2:] == ('resources', 'app'):
+        return p.parents[1]
+    return None
+
+MAGIC = {b'\x7fELF': 'elf', b'\xcf\xfa\xed\xfe': 'mach-o', b'\xce\xfa\xed\xfe': 'mach-o', b'\xca\xfe\xba\xbe': 'mach-o-universal', b'MZ': 'pe'}
+
+def binary_format(path):
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(4)
+    except OSError:
+        return None
+    return next((v for k, v in MAGIC.items() if head.startswith(k)), None)
+
+# Every native program and library (ELF, Mach-O, PE), not following links, each with its SHA-256: what a manifest can't say.
+def natives(root):
+    if root is None:
+        return None
+    out = []
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        dirs[:] = sorted(d for d in dirs if not Path(directory, d).is_symlink())
+        for name in sorted(files):
+            f = Path(directory, name)
+            if f.is_symlink() or not f.is_file():
+                continue
+            kind = binary_format(f)
+            if not kind:
+                continue
+            h = hashlib.sha256()
+            with open(f, 'rb') as r:
+                for chunk in iter(lambda: r.read(1 << 20), b''):
+                    h.update(chunk)
+            rel = f.relative_to(root).as_posix()
+            out.append(dict(type='file', name=rel, **{'bom-ref': f'file:{rel}'}, hashes=[{'alg': 'SHA-256', 'content': h.hexdigest()}],
+                            properties=[{'name': 'kural:binary-format', 'value': kind}]))
+    return out
 
 def build(app_root=None, platform=None):
     version = json.loads((ROOT / 'extension/package.json').read_text())['version']
@@ -46,8 +88,20 @@ def build(app_root=None, platform=None):
                 purl=f'pkg:github/electron/electron@{electron}', properties=[{'name': 'kural:version-source', 'value': 'checksum-pinned-runtime' if app.get('kuralRuntime') else 'vendor-package-manifest'}]))
             if app.get('kuralRuntime'):
                 components[-1]['hashes'] = [{'alg': 'SHA-256', 'content': app['kuralRuntime']['sha256']}]
+            # What Electron itself contains (Chromium, Node, V8, ...): from the pin, checked against the running
+            # runtime at build time (scripts/electron_runtime.py check_bundles).
+            pin = json.loads((ROOT / 'vendor/electron-runtime.json').read_text())
+            if pin.get('version') == electron:
+                for lib, v in sorted(pin.get('bundles', {}).items()):
+                    purl = {'chromium': f'pkg:generic/chromium@{v}', 'node': f'pkg:github/nodejs/node@v{v}'}.get(lib, f'pkg:generic/{lib}@{quote(v, safe="")}')
+                    components.append(dict(type='library', name=lib, version=v, **{'bom-ref': f'electron:{lib}'}, purl=purl,
+                        properties=[{'name': 'kural:bundled-in', 'value': f'Electron {electron}'}]))
+    native = natives(install_root(app_root)) if app_root else None
+    if native is not None:
+        components += native
     properties = [{'name': 'kural:inventory-scope', 'value': 'packaged-application-manifests' if app_root else 'source-only'},
-                  {'name': 'kural:inventory-limitations', 'value': 'Native binaries and JavaScript without manifests require separate analysis; Electron archive digest is recorded when replaced'}]
+                  {'name': 'kural:native-inventory', 'value': 'all-native-files-hashed' if native is not None else 'none'},
+                  {'name': 'kural:inventory-limitations', 'value': "JavaScript bundled into VS Code's own files has no manifest here: it is part of the VSCodium component (see its ThirdPartyNotices.txt). Native files without a version are identified by SHA-256."}]
     if platform:
         properties.append({'name': 'kural:platform', 'value': platform})
     return dict(bomFormat='CycloneDX', specVersion='1.5', version=1,

@@ -14,6 +14,8 @@ function merge(dir, version) {
     if (bom.bomFormat !== 'CycloneDX' || bom.metadata?.component?.version !== version ||
         !props.some(p => p.name === 'kural:platform' && p.value === platform) ||
         !props.some(p => p.name === 'kural:inventory-scope' && p.value === 'packaged-application-manifests') ||
+        !props.some(p => p.name === 'kural:native-inventory' && p.value === 'all-native-files-hashed') ||
+        !bom.components?.some(c => c.type === 'file' && c.hashes?.length) ||
         !bom.components?.some(c => c['bom-ref']?.startsWith('npm:')))
       throw new Error(`Invalid packaged inventory: ${name}`);
     for (const c of bom.components) {
@@ -27,7 +29,8 @@ function merge(dir, version) {
   return { bomFormat: 'CycloneDX', specVersion: '1.5', version: 1,
     metadata: { component: { type: 'application', 'bom-ref': 'kural', name: 'Kural Code Editor', version },
       properties: [{ name: 'kural:inventory-scope', value: 'packaged-application-manifests' },
-        { name: 'kural:inventory-limitations', value: 'Native binaries and JavaScript without manifests are not a complete transitive dependency inventory' }] },
+        { name: 'kural:native-inventory', value: 'all-native-files-hashed' },
+        { name: 'kural:inventory-limitations', value: "JavaScript bundled into VS Code's own files has no manifest: it is part of the VSCodium component (ThirdPartyNotices.txt). Native files without a version are identified by SHA-256." }] },
     externalReferences: inventories, components: [...components.values()],
     dependencies: [{ ref: 'kural', dependsOn: [...components.keys()] }] };
 }
