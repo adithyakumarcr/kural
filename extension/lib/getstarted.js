@@ -176,7 +176,7 @@ class GetStarted {
     const p = vscode.window.createWebviewPanel("kural.getStarted", "Get started", vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] });
     p.iconPath = vscode.Uri.joinPath(media, "chat-icon.svg");
-    const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    const nonce = require("crypto").randomBytes(16).toString("base64");
     const uri = (f) => p.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     p.webview.html = `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${p.webview.cspSource}; font-src ${p.webview.cspSource}; script-src 'nonce-${nonce}';">

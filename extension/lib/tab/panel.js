@@ -59,7 +59,7 @@ class TabPanel {
     this.view = view;
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
     view.webview.options = { enableScripts: true, localResourceRoots: [media] };
-    const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    const nonce = require("crypto").randomBytes(16).toString("base64");
     view.webview.html = page(nonce, view.webview.cspSource, view.webview.asWebviewUri(vscode.Uri.joinPath(media, "codicons", "codicon.css")));
     view.webview.onDidReceiveMessage(async (m) => {
       const set = (k, v) => cfg().update(k, v, vscode.ConfigurationTarget.Global);

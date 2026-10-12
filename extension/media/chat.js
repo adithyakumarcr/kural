@@ -123,21 +123,26 @@
     return `<a class="link file" data-path="${esc(p)}" data-line="${line}" data-end="${end}" title="Open ${esc(p)}${line ? `:${line}` : ""}">${text}</a>`;
   }
 
+  // Each piece of HTML made here (code, picture, link) is put aside as a placeholder (\0N\0) at once, so the later rules
+  // only see text, never the HTML (they used to rewrite a picture's alt="…" and break out of the attribute). Code first:
+  // nothing inside `code` is markdown. A placeholder can't be inside an attribute (alt and addresses exclude \0).
   function inline(s) {
-    return esc(s)
-      .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^)]*&quot;)?\)/g, (_, alt, src) => imageHtml(alt, src))
+    const keep = [], put = (html) => `\u0000${keep.push(html) - 1}\u0000`;
+    const emph = (x) => x.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+    const t = esc(String(s).replace(/\u0000/g, ""))
       .replace(/`([^`]+)`/g, (_, c) => {
         const m = c.match(/^([\w./-]+\.[A-Za-z0-9]+)(?::(\d+)(?:-(\d+))?)?$/);
-        return m ? `<code class="ref" data-path="${m[1]}" data-line="${m[2] || ""}">${c}</code>` : `<code>${c}</code>`;
+        return put(m ? `<code class="ref" data-path="${m[1]}" data-line="${m[2] || ""}">${c}</code>` : `<code>${c}</code>`);
       })
-      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-      .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-      .replace(/(^|[^"])\[([^\]]+)\]\(([^)\s]+)\)/g, (_, pre, text, url) => pre + (/^https?:\/\//.test(url)
-        ? `<a class="link" data-url="${url}" title="${url}">${text}</a>` : fileLink(text, url)))
-      // A bare web address: clickable too (not inside `code`, a link or a picture made above).
-      .split(/(<code[^>]*>[\s\S]*?<\/code>|<a [^>]*>[\s\S]*?<\/a>|<img [^>]*>|<span class="img-[^>]*>[\s\S]*?<\/span>)/).map((part, i) => i % 2 ? part
-        : part.replace(/(^|[\s(>])(https?:\/\/[^\s<"]+[^\s<".,:;!?)\]'])/g, '$1<a class="link" data-url="$2">$2</a>')
-          .replace(/(^|[\s(>])(www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s<"]*[^\s<".,:;!?)\]'])?)/gi, '$1<a class="link" data-url="https://$2">$2</a>')).join("");
+      .replace(/!\[([^\]\u0000]*)\]\(([^)\s\u0000]+)(?:\s+&quot;[^)\u0000]*&quot;)?\)/g, (_, alt, src) => put(imageHtml(alt, src)))
+      .replace(/\[([^\]]+)\]\(([^)\s\u0000]+)\)/g, (_, text, url) => put(/^https?:\/\//.test(url)
+        ? `<a class="link" data-url="${url}" title="${url}">${emph(text)}</a>` : fileLink(emph(text), url)))
+      // A bare web address: clickable too (code, links and pictures are placeholders by now).
+      .replace(/(^|[\s(>*])(https?:\/\/[^\s<"\u0000]+[^\s<".,:;!?)\]'*\u0000])/g, (_, pre, u) => pre + put(`<a class="link" data-url="${u}">${u}</a>`))
+      .replace(/(^|[\s(>*])(www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s<"\u0000]*[^\s<".,:;!?)\]'*\u0000])?)/gi, (_, pre, u) => pre + put(`<a class="link" data-url="https://${u}">${u}</a>`));
+    let out = emph(t);
+    for (let i = 0; i < 4 && out.includes("\u0000"); i++) out = out.replace(/\u0000(\d+)\u0000/g, (_, n) => keep[n] || "");
+    return out;
   }
 
   // "| a | b |" → ["a", "b"]   (a "|" inside `code` doesn't split)

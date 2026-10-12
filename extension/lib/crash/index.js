@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const scan = require("./scan");
 const { log } = require("../log");
+const { writePrivate, appendPrivate } = require("../private-file");
 
 const LAST_SCAN = "kural.crash.lastScan";
 const ISSUE = "https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml";
@@ -66,9 +67,8 @@ class CrashLog {
       if (before) keep.add(before);
     }
     const text = scan.report({ markers, ips, sessions: [...keep].sort((a, b) => a.at - b.at).slice(-4), version: this.version });
-    fs.mkdirSync(this.dir, { recursive: true });
     const file = path.join(this.dir, `crash-${new Date(now).toISOString().replace(/[:.]/g, "-")}.md`);
-    fs.writeFileSync(file, text);
+    writePrivate(file, text);
     const what = [markers.length && `${markers.length} window${markers.length === 1 ? "" : "s"} closed unexpectedly`,
       ips.length && `${ips.length} macOS crash report${ips.length === 1 ? "" : "s"}`,
       crashedSessions.length && `crash lines in ${crashedSessions.length} log${crashedSessions.length === 1 ? "" : "s"}`].filter(Boolean).join(", ");
@@ -82,7 +82,7 @@ class CrashLog {
     const stack = String((e && e.stack) || e || "");
     if (!stack.includes(this.context.extensionPath)) return;   // another extension's, or VS Code's: not ours to log
     log(`error nothing caught: ${stack.split("\n").slice(0, 4).join(" | ")}`);
-    try { fs.mkdirSync(this.dir, { recursive: true }); fs.appendFileSync(path.join(this.dir, "kural-errors.log"), `${new Date().toISOString()} Kural ${this.version}\n${stack}\n\n`); } catch { /* best effort */ }
+    try { appendPrivate(path.join(this.dir, "kural-errors.log"), `${new Date().toISOString()} Kural ${this.version}\n${stack}\n\n`); } catch { /* best effort */ }
   }
 
   list() {

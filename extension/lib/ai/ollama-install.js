@@ -146,6 +146,7 @@ class OllamaInstaller {
       });
       if (this.stopped) throw new Error("stopped");
       if (code !== 0 || !fs.existsSync(path.join(stage, "Ollama.app"))) throw new Error(`unpacking Ollama failed (unzip ${code})`);
+      await this.macSigned(path.join(stage, "Ollama.app"));
       const app = path.join(dir, "Ollama.app");
       if (fs.existsSync(app)) {
         // An older Ollama: quit it first (Get started's "Update Ollama"), like Ollama's own install.sh.
@@ -159,8 +160,32 @@ class OllamaInstaller {
     } finally { fs.rmSync(stage, { recursive: true, force: true }); fs.rmSync(zip, { force: true }); }
   }
 
+  // Before a download is installed or run (APP-6): it must carry a valid code signature. Mac: codesign checks every
+  // file of the app and that it's signed with a Developer ID (a team), not ad hoc. Ollama's own Team ID isn't pinned
+  // (not confirmed here), so a validly signed app from another developer would pass; the download is https from
+  // ollama.com either way.
+  async macSigned(app) {
+    const what = [];
+    const ok = await this.exec("/usr/bin/codesign", ["--verify", "--deep", "--strict", app], (t) => what.push(t));
+    let info = "";
+    const shown = ok === 0 ? await this.exec("/usr/bin/codesign", ["-dv", "--verbose=2", app], (t) => { info += t; }) : 1;
+    const team = /TeamIdentifier=(\S+)/.exec(info);
+    if (ok !== 0 || shown !== 0 || !team || team[1] === "not" || !/Authority=Developer ID Application/.test(info))
+      throw new Error(`the downloaded Ollama.app isn't properly signed, so Kural didn't install it (${(what.join("").trim().split("\n").pop() || "no Developer ID").slice(0, 160)})`);
+    this.log(`ollama: Ollama.app signed by team ${team[1]}`);
+  }
+  async windowsSigned(file) {
+    let signer = "";
+    const code = await this.exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+      "$s = Get-AuthenticodeSignature -LiteralPath $env:KURAL_SIGNED_FILE; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject; exit 0 } else { [string]$s.Status; exit 1 }"],
+    (t) => { signer += t; }, { env: { ...process.env, KURAL_SIGNED_FILE: file } }).catch(() => 1);
+    if (code !== 0) throw new Error(`OllamaSetup.exe isn't validly signed (${signer.trim().slice(0, 120) || "no signature"}), so Kural didn't run it`);
+    this.log(`ollama: OllamaSetup.exe signed by ${signer.trim()}`);
+  }
+
   async windows() {
     const setup = await this.download("OllamaSetup.exe");
+    try { await this.windowsSigned(setup); } catch (e) { fs.rmSync(setup, { force: true }); throw e; }
     this.set({ phase: "install", percent: undefined, note: "Installing Ollama" });
     const code = await this.exec(setup, ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"]);
     fs.rmSync(setup, { force: true });
