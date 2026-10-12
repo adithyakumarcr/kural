@@ -35,7 +35,8 @@ class ChangeTracker {
     this.dir = dir;
     this.snapshots = new Map(); // id -> { file, content + bytes (null = file didn't exist) }
     this.emitter = new vscode.EventEmitter();
-    if (dir) setTimeout(() => this.cleanup(), 30000);
+    // (unref: a timer must not keep a process alive for 30 s, e.g. a test that only wants to exit)
+    if (dir) { const timer = setTimeout(() => this.cleanup(), 30000); if (timer.unref) timer.unref(); }
   }
 
   diskFile(id) { return this.dir && /^[\w-]+$/.test(id) ? path.join(this.dir, `${id}.json`) : null; }
