@@ -31,7 +31,10 @@ python3 scripts/make-icons.py "$WORK/icons" >/dev/null
 mv "$APP/VSCodium.exe" "$APP/Kural.exe"
 mv "$APP/VSCodium.VisualElementsManifest.xml" "$APP/Kural.VisualElementsManifest.xml"
 sed -i 's/VSCodium/Kural/g' "$APP/Kural.VisualElementsManifest.xml"
-[ -d scripts/node_modules/resedit ] || (cd scripts && npm install --silent --no-audit --no-fund --no-save resedit@3 >/dev/null)
+# resedit (edits the .exe) comes from package-lock.json: one exact version, checked against its recorded checksum, and
+# no package install scripts run (this job can hold the signing certificate). `npm ci` every time: a folder left from
+# an earlier build is never trusted.
+npm ci --ignore-scripts --no-audit --no-fund --silent >/dev/null
 node scripts/win-exe.js "$APP/Kural.exe" "$WORK/icons/icon.ico" "$VER"
 
 # The `kural` command-line launchers
