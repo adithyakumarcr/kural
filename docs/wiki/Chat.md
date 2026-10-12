@@ -28,7 +28,8 @@ Skip). Files you attached are fine. That keeps the AI out of your other folders,
 nothing asks.
 
 **Files that run code later ask too, even in your project** (Agent mode): git hooks, `.vscode/tasks.json`, `package.json`,
-`.env`, a Makefile, a Dockerfile, GitHub workflows and shell profiles. A page or README the AI reads could try to trick it
+`.env`, a Makefile, a Dockerfile, GitHub workflows, shell profiles, `CLAUDE.md`, `.mcp.json`, `.npmrc`, Python/Gradle/
+Maven/Cargo build files and editor settings (in any upper/lower case). A page or README the AI reads could try to trick it
 into planting one, so writing one gets a card ("This file can make your computer run something later."). The temp folder
 isn't writable without asking either.
 
@@ -37,7 +38,8 @@ later ones don't ask. Dangerous commands still ask in Auto (and after "Allow all
 or the whole project, `curl … | sh`, a forced push to main, `git reset --hard`, `git clean -f`, writing into `/etc`,
 `/usr` or `~/.ssh`, formatting a disk, shutting down. It's a best-effort check of the command's text, not a sandbox.
 Gemini (Antigravity) gets this check through Kural's approval gate (a hook in Antigravity's own settings; not yet
-confirmed with the real program). Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
+confirmed with the real program). "Allow all" lasts only for the mode, model and conversation you gave it in: a new mode, another model (also one Auto
+picks) or a handoff ends it. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.
 
 ## The model menu (bottom of the chat)

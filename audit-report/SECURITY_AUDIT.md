@@ -262,3 +262,43 @@ SEC-009 is **FIXED in candidate builds** on `d7a6987929793c69df2fa9a47915446cc48
 ## SEC-012 hook gate — implementation status
 
 **SEC-012: IMPLEMENTED, NOT VERIFIED against the real CLI.** Commit `297944cf5850c3e3cf814ccc05e7aa2d25dadfb0` installs a Kural-owned Antigravity `PreToolUse` hook (global `~/.gemini/antigravity-cli/hooks.json`, entry `kural-gate`) whose gate program waits for Kural's existing permission policy over a private, token-authenticated socket and fails closed. agy is not started when the hook cannot be installed. A changing tool that completes without an approval stops agy. All checks used a stand-in CLI (`test/fake-agy.js`) and temporary homes; no real agy run, login or model request. Severity unchanged until the owner runs `scripts/verify-agy-gate.sh` and the denial-before-mutation, skip-permissions, environment-inheritance and output-format questions in GEMINI_ADAPTER_REQUIREMENTS.md are answered. SEC-007's host-side Ask/Plan enforcement now also covers Gemini tool calls that reach the gate (unknown tools and browser actions denied in Ask/Plan). Current count: 14 FIXED, 2 PARTIALLY FIXED, 3 DEFERRED, 1 IMPLEMENTED / NOT VERIFIED.
+
+
+## Second-pass findings (AGENT / APP / REL / SUP / CI)
+
+A second audit pass (against `2814cd8`) found further issues. Each was re-checked against this branch, its PoC re-run, and the open ones fixed with regression tests (commits `9b17d98`..`55be254`, merged in `4355ff8`). Tests used stand-ins, temporary homes and synthetic data; no paid API calls, no real agy/Codex/Claude accounts.
+
+| ID | Issue | Status | Commit |
+|---|---|---|---|
+| AGENT-1 | A FIFO named CLAUDE.md / rule file blocked the extension host | PARTIAL → FIXED (links/trust already by SEC-001) | 44d85c2 |
+| AGENT-2 | Private-storage reads | ALREADY FIXED (SEC-002) | c73dcc1 |
+| AGENT-3 | Run-later files missed by case, Windows spellings and many build/AI config files | PARTIAL → FIXED | 4e5c3b3 |
+| AGENT-4 | Auto warning wrong per AI | FIXED (warning); enforcement depends on SEC-012 | 9a4b60b |
+| AGENT-5 | Codex Plan/Ask reads rely on Codex's read-only sandbox | DOCUMENTED, open | — |
+| AGENT-6 | 30 dangerous-command bypasses (piped interpreters, `find -delete`, hidden sudo, PowerShell…) | FIXED | 45a7e81 |
+| AGENT-7 | Allow all survived mode/model/session changes | FIXED | 9a4b60b |
+| AGENT-8 | Build it switched to Auto because another chat used Auto | FIXED | 9a4b60b |
+| AGENT-9 | Claude Code's own allow rules skip Kural's card with the full setup | DOCUMENTED (Auto warning), open | — |
+| AGENT-10 | Tool output could close the handoff's delimiter tags | FIXED | 262df09 |
+| AGENT-11 | Gemini team members' read-only/assigned files; gate mode mismatch | PARTIAL → FIXED | 9a4b60b |
+| AGENT-12 | Any MCP server named like Jira had its tools auto-allowed | FIXED | 5b1508f |
+| APP-1 | Terminal git context outside the workspace; repo filters ran | PARTIAL → FIXED | 22fd704 |
+| APP-3 | Settings import took program paths, terminal env, sendSequence shortcuts, Auto mode | FIXED | 47726e6 |
+| APP-4 | Settings export could include secrets | FIXED (heuristic) | 47726e6 |
+| APP-5 | Inline markdown could break out of its own HTML attributes | FIXED | 9b17d98 |
+| APP-6 | Ollama installed without a signature check | FIXED Mac/Windows (not run natively); Linux open | 07045f0 |
+| APP-7 | Proxy browser page could post Kural's own messages | FIXED page side; proxy design residual | b2d2dc8 |
+| APP-8 | Project settings could turn on Auto, auto-update, Tab learning | FIXED | 8410fad |
+| APP-9 | Connector secrets visible in process arguments | OPEN, documented | — |
+| APP-10 | Chats, session maps, crash reports world-readable | FIXED (0700/0600) | 6192638 |
+| APP-11 | Browser opened any URL scheme; weak webview nonces | FIXED | b2d2dc8 |
+| APP-12 | Terminal Tab logged typed secrets | FIXED | a98fb97 |
+| APP-13 | SSH reuse folder followed a planted symlink | FIXED | 6192638 |
+| REL-1 / REL-2 | Update replay / version injection | ALREADY FIXED (SEC-006/005) | c73dcc1 |
+| REL-3 | .deb swapped between check and `pkexec dpkg -i` | MITIGATED (private re-hashed copy); same-user race remains | f37dc98 |
+| REL-4 | Windows installer/uninstaller `RMDir /r` on any chosen folder | FIXED (checked under Wine, not real Windows) | 11acb48 |
+| REL-7 | Updater requests without time/size limits | FIXED | f37dc98 |
+| SUP-1 / SUP-2 | Unpinned resedit (signing step) and Pillow | FIXED (lockfile; hashes) | 3cbe796 |
+| CI-1 / CI-2 | = SEC-011 / SEC-010 | Owner action, unchanged | — |
+
+Residual risk: danger.js stays a best-effort text check, not a sandbox; Gemini enforcement depends on verifying SEC-012 with the real CLI; import uses a blocklist; APP-9, APP-6 Linux, REL-3's same-user race and AGENT-5/9 remain. SEC-001..012 statuses are unchanged by this pass.

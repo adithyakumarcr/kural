@@ -92,7 +92,10 @@ The card's other actions:
   install). You choose what goes in: Kural's settings (not program paths: they differ per computer), your editor settings
   and keyboard shortcuts, the extensions you installed (installed again on import), chat defaults, saved devices (names
   and addresses; no keys or passwords: each device needs **Set up again** once). Importing shows what the file has and
-  applies what you tick; shortcuts are added to yours. Also **Kural: Export Settings** / **Kural: Import Settings**.
+  applies what you tick; shortcuts are added to yours. For safety, import skips settings that choose a program, start a
+  terminal, set a proxy or turn on Auto, and shortcuts that type into the terminal; extensions are listed and install
+  only after you click Install. Export leaves out settings that look like passwords, tokens or keys; still check the
+  file before you share it. Also **Kural: Export Settings** / **Kural: Import Settings**.
 - **Crash reports**: see below.
 
 Kural asks the programs who's logged in (`claude auth status`, Codex's account info, Antigravity's `/model`); it never

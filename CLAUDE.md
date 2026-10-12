@@ -708,6 +708,19 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Moving a dragged-out chat back** (`kural.chat.moveToPanel`): editor/title button when `activeCustomEditorId ==
   kural.chatTab`; disposes the pane and activates the chat in the side panel.
 
+- **Second security pass (PR #61)**: Allow all = `grantKey`/`allowAllNow` in permission-policy.js (mode + model +
+  session), `revokeAllowAll` on mode/model change and handoff. Build it = Agent unless the chat is in Auto. The Auto
+  warning is per AI (`autoWarning`; globalState `kural.auto.warned` = `{engine: true}`). Gemini gate calls:
+  `gatedMode(chat, startedFor)` (stricter wins). Atlassian auto-allow = `SERVERS` + `READS` in lib/chat/atlassian.js.
+  journal `wrap()` neutralizes delimiter tags. `runsLater` ignores case and Windows spellings. Settings import:
+  blocklist + `settingMode()` (Auto only from user settings); `updates.autoCheck`/`learnFromActivity` are
+  `scope: application`. `lib/private-file.js` (0700/0600) for archives, session maps, crash reports. `Browser.url` =
+  http/https only; nonces `crypto.randomBytes`. Ollama: codesign / Authenticode before install. Installer:
+  `KuralDirCheck` (silent refusal = exit 2). Updates: `lib/update-net.js` (limits), `verifiedCopy()` before pkexec,
+  install.ps1 with a BOM. Build: resedit via `npm ci --ignore-scripts`, Pillow by hash (`scripts/requirements-icons.txt`).
+  Child output: `lib/utf8.js` `onText`; killing: `lib/ai/killtree.js` (SIGKILL after 2 s, `taskkill /T` on Windows).
+  `test/paths-runs-later.test.js` fails when the repo path contains `.claude/` (agent worktrees): run from elsewhere.
+
 ## Test
 - `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script, Get started checks).
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.

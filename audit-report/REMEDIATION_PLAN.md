@@ -100,3 +100,8 @@ Implemented in `297944cf5850c3e3cf814ccc05e7aa2d25dadfb0`: Kural-owned `PreToolU
 4. If a hook allow overrides agy's own accept-edits refusal, consider letting Agent mode run commands through the gate (like Claude).
 5. Windows: verify the `.cmd` launcher, quoting in `hooks.json`, and the named-pipe ACL; macOS socket path length.
 Estimated effort after verification: 0.5–2 days depending on answers.
+
+
+## Second pass: what remains
+
+Owner/infra: SEC-011 (protect main and v* tags), SEC-010 (protected signing environment), REL-001/002 (signing, notarization), SEC-012 real-CLI check. Code, not yet done: APP-9 (pass connector secrets without command-line arguments), APP-6 Linux integrity, REL-3 (a privileged step that verifies the signature, e.g. a signed apt repository), AGENT-5/9 (documented), `codex.js` tree kill. Native checks still needed: Windows installer folder check, install.ps1 BOM, `taskkill /T`, Ollama Authenticode/codesign.
