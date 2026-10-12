@@ -93,3 +93,8 @@ Overall recommendation remains **NO-GO** for open Gemini enforcement, protected 
 ## SEC-012 hook gate — readiness impact
 
 Recommendation stays **NO-GO**. SEC-012 is **IMPLEMENTED, NOT VERIFIED against the real CLI** (`297944cf5850c3e3cf814ccc05e7aa2d25dadfb0`): a Kural-owned Antigravity `PreToolUse` hook now asks Kural's permission policy before each Gemini tool call and fails closed, verified only against the stand-in CLI. Release requires the owner's real-CLI acceptance (`scripts/verify-agy-gate.sh`) in addition to the other blockers (signing/repository protection, broader native acceptance). Local `npm test`: 84/84 test files PASS (exit 0) on this container at this revision; the previously recorded bench-memory, device-socket EPERM and updater helper-liveness environment failures did not recur in this run. User-visible change: Kural writes a `kural-gate` entry into `~/.gemini/antigravity-cli/hooks.json` and a launcher into `~/.kural/agy-gate`; `scripts/from-scratch.sh` removes the entry.
+
+
+## Second-pass remediation — readiness impact
+
+Recommendation stays **NO-GO**. The second pass fixed or mitigated most AGENT/APP/REL/SUP/BUG findings (table in SECURITY_AUDIT.md and BUG_REPORT.md); local `npm test` 98/98 PASS at `4355ff8`. Several fixes for Windows and macOS (installer folder check, install.ps1 BOM, tree kill, Ollama signature checks) were not run on those systems: the Windows installer only under Wine. The original blockers are unchanged: SEC-012 real-CLI verification, SEC-010/011 and REL-001/002 owner actions, native acceptance.

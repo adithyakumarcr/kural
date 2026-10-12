@@ -100,3 +100,26 @@ Local full-run result remains 76/82 (exit1); corrected rebranding fixture and pr
 ## Runtime upgrade follow-up
 
 The Electron upgrade uncovered two implementation/harness regressions: Python 3.10 lacks `hashlib.file_digest`, and PowerShell did not provide a reliable `LASTEXITCODE` for the Windows GUI executable. Streaming SHA-256 and a waited process with an exit-7 negative control correct these failures. Both original failing platform checks now pass in native CI on d7a6987 (Build run 38131185955). These are audit implementation corrections, not additional baseline Kural finding IDs. All 83 CI test files pass; local container failures remain documented. Existing provider/UI/update/recovery coverage limitations remain.
+
+
+## Second-pass bugs
+
+| ID | Issue | Status | Commit |
+|---|---|---|---|
+| BUG-1 | Split UTF-8 garbled at 6 remaining spawn sites | FIXED (`lib/utf8.js`) | 0654497, 065fae6 |
+| BUG-2/3/4 | Undo bytes, Auto Save, hot-exit | ALREADY FIXED (BUG-002/001) | — |
+| BUG-5 | JSONC parser broke strings with `,}` and BOM files | FIXED | 47726e6 |
+| BUG-6 | Ctrl+K pasted chatter that mentioned `<code>` | FIXED | dcf48e5 |
+| BUG-7 | Get started kept "All set" after a failed re-test | FIXED | b084bf7 |
+| BUG-8 | Claude prompt files / temp folders left behind | FIXED | 065fae6 |
+| BUG-9 / BUG-10 | Crash scan used a guessed logs folder; "zoom" counted as OOM | FIXED (log layout not checked in real VS Code) | f4f0b9f |
+| BUG-11 / BUG-12 | Stop didn't end commands ignoring SIGTERM; no tree kill on Windows | FIXED (Windows not run) | 065fae6 |
+| BUG-13 | install.ps1 without BOM broke non-ASCII paths on PowerShell 5.1 | FIXED (not run on Windows) | f37dc98 |
+| BUG-14 | Failed archive writes left `.tmp` files | FIXED | f4f0b9f |
+| PERF-1 | Saving a 39 MB chat took 48.6 s | FIXED (~180 ms) | 6146aa6 |
+| PERF-2 | Large diffs used ~446 MB+ | FIXED (patience anchors) | 6146aa6 |
+| PERF-T1 | Checkpoint timer kept processes alive 30 s | FIXED | b084bf7 |
+| FLAKY-1 / FLAKY-2 | Fixed sleeps; fixed ports | FIXED | 55be254 |
+| UX-1 | Silent failures (offline update check, missing Ctrl+K answer) | FIXED | f37dc98, dcf48e5 |
+
+`codex.js` still stops with SIGTERM only (could use `killTree`).

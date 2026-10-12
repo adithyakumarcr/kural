@@ -210,7 +210,13 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (Tab Completion learning from your work, off by default; Auto learning which models you prefer, on by default; each
   with "Delete what it learned"); then Kural's version and Check for updates, Get started, Tab Completion, Profiles,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
-  editor settings, shortcuts, extensions, chat defaults, devices: no passwords or keys; you pick what to import).
+  editor settings, shortcuts, extensions, chat defaults, devices; settings that look like passwords or keys are left
+  out, but check the file before sharing it; you pick what to import. Import never takes settings that pick a program,
+  start a terminal, set a proxy or turn on Auto, nor shortcuts that type into the terminal; extensions install only
+  after you agree to the list).
+  "Allow all" in a chat counts only for that mode, model and conversation: changing the mode or model (also when Auto
+  picks another one) or a handoff ends it, and Kural asks again. "Build it" switches to Agent (Auto only if the chat
+  is already in Auto). Kural's browser opens only http/https addresses.
   Kural's log: "Kural: Show Log" (Command Palette) or Kural Settings → the log (an editor tab; Kural hides VS Code's
   Output tab; the Kural panel's title bar has no log button).
 - Crash reports: when Kural closed unexpectedly, the next start saves a report (macOS's crash reports, VS Code's logs, which
