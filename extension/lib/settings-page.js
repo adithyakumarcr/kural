@@ -15,6 +15,8 @@ const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
 const usageSwitch = require("./ai/usage-switch");
 const connectors = require("./ai/connectors");
+// Connector keys: a private folder per profile (its accounts), never on a command line (APP-9).
+const keyDir = () => require("./profiles/scope").dir("connector-keys", "account");
 const catalog = require("./ai/connector-catalog");
 const { withProfileEnv, profileEnv } = require("./profiles/env");
 const os = require("os");
@@ -222,7 +224,7 @@ class SettingsPage {
         let r;
         try {
           const { bin, env } = this.program(m.id);
-          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name, this.projectDir());
+          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name, this.projectDir(), keyDir());
         } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
         if (this.panel) this.panel.webview.postMessage({ type: "connectorDone", id: m.id, reqId: m.reqId, error: r.error || "" });
         if (r.ok) this.afterConnectorChange(m.id); else this.push();
@@ -257,7 +259,7 @@ class SettingsPage {
             const { bin, env } = this.program(ai);
             // (The names already there, fresh: a name taken since the page listed them would make the program refuse.)
             const have = (await connectors.list(ai, bin, env, this.projectDir())).servers.map((x) => x.name);
-            r = await connectors.addItem(ai, bin, env, item, m.values || {}, have);
+            r = await connectors.addItem(ai, bin, env, item, m.values || {}, have, keyDir());
           } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
         }
         if (r.ok && item.signIn) (c.fresh = c.fresh || {})[r.name] = true;
