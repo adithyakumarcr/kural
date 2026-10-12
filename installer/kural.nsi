@@ -7,6 +7,7 @@ SetCompressor /SOLID lzma
 RequestExecutionLevel user
 
 !include "MUI2.nsh"
+!include "LogicLib.nsh"
 !include "sign.nsh"   ; signed when a code signing certificate is set up (-DSIGN). (makensis reads from this folder)
 
 Name "Kural Code Editor"
@@ -22,6 +23,7 @@ BrandingText "Kural ${VERSION}"
 !define MUI_FINISHPAGE_RUN_TEXT "Start Kural"
 
 !insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE DirLeave
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
@@ -32,9 +34,70 @@ BrandingText "Kural ${VERSION}"
 
 !define UNINST "Software\Microsoft\Windows\CurrentVersion\Uninstall\Kural"
 
+; Setup and the uninstaller delete the whole install folder (RMDir /r), and that folder can be one you typed or one read
+; from the registry. So it must be Kural's own: named Kural, not your user folder or a system folder, and either
+; missing, empty, or holding Kural (Kural.exe or its uninstaller). Anything else is refused: a folder like C:\, your
+; Documents or a project folder is never wiped. DirWhy = why not ("" = fine).
+Var DirWhy
+!macro KURAL_DIR_CHECK UN
+Function ${UN}KuralDirCheck
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $DirWhy ""
+  StrCpy $0 "$INSTDIR" "" -6
+  ${If} $0 != "\Kural"
+    StrCpy $DirWhy "the folder must be named Kural, for example $LOCALAPPDATA\Programs\Kural"
+  ${ElseIf} "$INSTDIR" == "$PROFILE"
+  ${OrIf} "$INSTDIR" == "$DESKTOP"
+  ${OrIf} "$INSTDIR" == "$DOCUMENTS"
+  ${OrIf} "$INSTDIR" == "$APPDATA"
+  ${OrIf} "$INSTDIR" == "$LOCALAPPDATA"
+  ${OrIf} "$INSTDIR" == "$WINDIR"
+  ${OrIf} "$INSTDIR" == "$TEMP"
+    StrCpy $DirWhy "that's a Windows or user folder"
+  ${ElseIf} ${FileExists} "$INSTDIR\*.*"
+  ${AndIfNot} ${FileExists} "$INSTDIR\Kural.exe"
+  ${AndIfNot} ${FileExists} "$INSTDIR\Uninstall Kural.exe"
+    ; It exists but holds no Kural: fine only when it's empty.
+    FindFirst $1 $0 "$INSTDIR\*.*"
+    ${DoWhile} $0 != ""
+      ${If} $0 != "."
+      ${AndIf} $0 != ".."
+        StrCpy $DirWhy "the folder already has other files in it; choose an empty folder"
+        ${Break}
+      ${EndIf}
+      FindNext $1 $0
+    ${Loop}
+    FindClose $1
+  ${EndIf}
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+!macroend
+!insertmacro KURAL_DIR_CHECK ""
+!insertmacro KURAL_DIR_CHECK "un."
+
+; The folder page: say why and stay on the page.
+Function DirLeave
+  Call KuralDirCheck
+  ${If} $DirWhy != ""
+    MessageBox MB_ICONEXCLAMATION|MB_OK "Kural can't be installed in $INSTDIR: $DirWhy."
+    Abort
+  ${EndIf}
+FunctionEnd
+
 Section "Kural (required)" SecMain
   SectionIn RO
-  ; An older Kural in this folder is replaced (your settings live elsewhere and are kept).
+  ; An older Kural in this folder is replaced (your settings live elsewhere and are kept). Checked again here: a silent
+  ; install (/S, the in-app updater) skips the folder page.
+  Call KuralDirCheck
+  ${If} $DirWhy != ""
+    MessageBox MB_ICONSTOP|MB_OK "Kural can't be installed in $INSTDIR: $DirWhy." /SD IDOK
+    SetErrorLevel 2
+    Abort
+  ${EndIf}
   RMDir /r "$INSTDIR"
   SetOutPath "$INSTDIR"
   File /r "${SRC}\*.*"
@@ -83,5 +146,13 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Kural"
   DeleteRegKey HKCU "${UNINST}"
   DeleteRegKey HKCU "Software\Kural"
-  RMDir /r "$INSTDIR"
+  ; Only Kural's own folder is deleted as a whole; otherwise just the uninstaller (and the folder, if that left it empty).
+  Call un.KuralDirCheck
+  ${If} $DirWhy == ""
+    RMDir /r "$INSTDIR"
+  ${Else}
+    Delete "$INSTDIR\Uninstall Kural.exe"
+    RMDir "$INSTDIR"
+    MessageBox MB_ICONEXCLAMATION|MB_OK "Kural didn't delete $INSTDIR ($DirWhy). Delete Kural's files there yourself." /SD IDOK
+  ${EndIf}
 SectionEnd
