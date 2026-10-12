@@ -26,6 +26,18 @@ const MAX_OUT = 200 * 1024;      // what a command may print before Kural cuts i
 // 'it''s' quoting for the device's shell (devices run Linux: POSIX sh).
 const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
 // A path for the device's shell: quoted, but a leading ~/ still means the home folder (models often write ~/x).
+// The shared /tmp: someone else could make our fixed-name folder first, or a link there. Use it only if it's a real
+// folder (not a link), ours, and nobody else may enter it.
+function privateDir(dir) {
+  try { fs.mkdirSync(dir, { mode: 0o700 }); } catch (e) { if (e.code !== "EEXIST") return false; }
+  try {
+    const st = fs.lstatSync(dir);
+    if (!st.isDirectory() || st.isSymbolicLink()) return false;
+    if (process.getuid && st.uid !== process.getuid()) return false;
+    if (st.mode & 0o077) fs.chmodSync(dir, 0o700);
+    return (fs.lstatSync(dir).mode & 0o077) === 0;
+  } catch { return false; }
+}
 const qp = (p) => { p = String(p); return p === "~" ? '"$HOME"' : p.startsWith("~/") ? `"$HOME"/${q(p.slice(2))}` : q(p); };
 
 class Ssh {
@@ -42,7 +54,7 @@ class Ssh {
     this.keygen = process.env.KURAL_SSH_KEYGEN || (near && fs.existsSync(near) ? near : IS_WIN ? "ssh-keygen.exe" : "ssh-keygen");
     // A short folder for reused connections: macOS allows at most 104 characters for their socket path.
     this.controlDir = IS_WIN ? null : path.join("/tmp", `kural-ssh-${process.getuid ? process.getuid() : "u"}`);
-    if (this.controlDir) { try { fs.mkdirSync(this.controlDir, { recursive: true, mode: 0o700 }); fs.chmodSync(this.controlDir, 0o700); } catch { this.controlDir = null; } }
+    if (this.controlDir && !privateDir(this.controlDir)) this.controlDir = null;   // no reuse then (APP-13)
   }
 
   writeAskpass() {
@@ -215,4 +227,4 @@ function explain(r) {
   return e.split("\n").filter(Boolean).slice(-2).join(" ") || `ssh stopped (exit code ${r.code}).`;
 }
 
-module.exports = { Ssh, explain, q, qp };
+module.exports = { Ssh, explain, q, qp, privateDir };

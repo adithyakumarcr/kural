@@ -32,6 +32,7 @@ const fs = require("fs");
 const os = require("os");
 const { privateTmp } = require("../paths");
 const path = require("path");
+const { writePrivate } = require("../private-file");
 const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
 const usage = require("./usage");
@@ -455,8 +456,7 @@ class AgyAgent {
       try { all = JSON.parse(fs.readFileSync(f, "utf8")); } catch { /* first one */ }
       all[this.sessionId] = { agy: this.conv, mode: this.primedMode || (all[this.sessionId] || {}).mode, cwd: this.cwd(), at: Date.now() };
       const keep = Object.entries(all).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, 500);
-      fs.mkdirSync(path.dirname(f), { recursive: true });
-      fs.writeFileSync(f, JSON.stringify(Object.fromEntries(keep)));
+      writePrivate(f, JSON.stringify(Object.fromEntries(keep)));
     } catch { /* best effort */ }
   }
 
@@ -468,7 +468,7 @@ class AgyAgent {
       const all = JSON.parse(fs.readFileSync(f, "utf8"));
       if (!(this.sessionId in all)) return;
       delete all[this.sessionId];
-      fs.writeFileSync(f, JSON.stringify(all));
+      writePrivate(f, JSON.stringify(all));
     } catch { /* no file, nothing to forget */ }
   }
 
