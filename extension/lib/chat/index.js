@@ -66,7 +66,7 @@ const deviceOk = (m) => ["claude", "codex"].includes(engineOf(m));
 const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
 
-const { decide, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
+const { decide, gatedMode, grantKey, allowAllNow, autoWarning, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
 // Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
 const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
@@ -1639,6 +1639,7 @@ class ChatView {
   // The inline overview fits the receiving model. Omitted details remain in a private, readable local file, which is
   // replaced on the next handoff and deleted with the chat. A failed save stops the handoff instead of losing details.
   handoffRecord(tab, messages, model = tab.model) {
+    this.revokeAllowAll(tab);   // (another AI or a new conversation: "Allow all" was given to the old one)
     const budget = this.handoffBudget(model), whole = journal.handoff(messages);
     if (whole.length <= budget) {
       // An edit/fork can shorten a previously large chat. Its old record must not expose the discarded future turns.
@@ -1818,11 +1819,13 @@ class ChatView {
     this.save();
   }
 
-  // "Build it" under a plan: switch to Agent (or Auto, if you last used it) and carry the plan out.
+  // "Build it" under a plan: switch to Agent and carry the plan out. Auto only when this chat is already in Auto: a plan
+  // (shaped by whatever the AI read) must not start running commands unasked because another chat once used Auto.
   async buildPlan(tab) {
     if (tab.status !== "idle") return;
-    const last = this.context.globalState.get(LAST_KEY) || {};
-    tab.mode = last.buildMode === "auto" ? "auto" : "agent";
+    const was = tab.mode;
+    tab.mode = tab.mode === "auto" ? "auto" : "agent";
+    if (tab.mode !== was) this.revokeAllowAll(tab);
     this.postTabs();
     await this.send(tab, [{ t: "text", v: BUILD_TEXT }], []);
   }
@@ -2293,11 +2296,14 @@ class ChatView {
     if (vscode.workspace.isTrusted === false) return { allow: false, message: "Workspace trust is required." };
     // Gemini's approval gate (lib/ai/agy-gate-host.js): only for the answer that's running, and only for the mode agy was
     // started for (a mode change revokes the gate; the next message starts agy with the new mode).
+    // (A team's planner or reviewer runs its agy in Plan or Ask while the chat is in Agent: decided in its own, stricter mode.)
+    let mode = tab.mode;
     if (req.gate) {
-      if (req.gateMode && req.gateMode !== tab.mode) return { allow: false, message: "The chat's mode changed; nothing more runs in this answer." };
+      mode = gatedMode(tab.mode, req.gateMode);
+      if (!mode) return { allow: false, message: "The chat's mode changed; nothing more runs in this answer." };
       if (!turn || !turn.reply.running) return { allow: false, message: "The answer was stopped." };
     }
-    const verdict = decide({ tool: req.tool_name, input, mode: tab.mode, allowAll: tab.allowAll, allowAllDevice: tab.allowAllDevice, device: tab.device,
+    const verdict = decide({ tool: req.tool_name, input, mode, allowAll: allowAllNow(tab), allowAllDevice: tab.allowAllDevice, device: tab.device,
       writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice,
       unclassified: !!req.unclassified, guard: isGateFile });
     if (verdict.deny) return { allow: false, message: verdict.message };
@@ -2341,6 +2347,13 @@ class ChatView {
     this.post({ type: "permState", tabId: tab.id, pid, state: block.state });
     this.postTabs(); this.save();
     return allow ? { allow: true } : { allow: false, message: "The user chose not to run this. Continue without it or ask them." };
+  }
+
+  // "Allow all" ends (a mode or model change, a handoff). A device's own "Allow all" (allowAllDevice) ends with its link.
+  revokeAllowAll(tab) {
+    if (!tab.allowAll && !tab.allowAllFor) return;
+    tab.allowAll = false; delete tab.allowAllFor;
+    log(`chat ${tab.id}: "Allow all" ended (mode, model or conversation changed)`);
   }
 
   // A command or a file write on the linked device: your mode decides, like a command here. (Reads just happen.)
@@ -2622,6 +2635,7 @@ class ChatView {
         if (tab.autoRoute && m.model !== was && tab.status === "idle") this.routerFeedback(tab, "better", m.model);
         tab.autoRoute = false;
         tab.model = m.model;
+        if (m.model !== was) this.revokeAllowAll(tab);
         const r = this.runtime.get(tab.id);
         if (engineOf(m.model) !== engineOf(was) || isLocal(m.model)) {
           // To another program (Claude Code, Codex, Gemini, Kural's own engine), which doesn't have this conversation:
@@ -2656,16 +2670,18 @@ class ChatView {
         else this.post({ type: "flash", text: "Intensity applies from your next message" });   // set when Claude starts
       } break;
       case "setMode": if (valid(MODES, m.mode)) {
-        // The first switch to Auto ever: say what it means, once.
-        if (m.mode === "auto" && tab.mode !== "auto" && !this.context.globalState.get(AUTO_WARNED)) {
-          const pick = await vscode.window.showWarningMessage("Auto mode runs commands and edits files without asking. Dangerous commands (sudo, deleting outside the project, a forced push to main…) still ask.",
-            { modal: true }, "Use Auto");
+        // The first switch to Auto with this AI: say what it means, once per AI (what still asks differs: autoWarning).
+        // (Older versions saved `true`: that covered every AI but Gemini, whose gate is new.)
+        const engine = engineOf(tab.model), warned = this.context.globalState.get(AUTO_WARNED);
+        const seen = warned === true ? { claude: true, codex: true, ollama: true } : (warned && typeof warned === "object" ? warned : {});
+        if (m.mode === "auto" && tab.mode !== "auto" && !seen[engine]) {
+          const pick = await vscode.window.showWarningMessage(autoWarning(engine, isClaude(tab.model) && fullSetup()), { modal: true }, "Use Auto");
           if (pick !== "Use Auto") { this.postTabs(); break; }   // (the page goes back to the mode the tab has)
-          await this.context.globalState.update(AUTO_WARNED, true);
+          await this.context.globalState.update(AUTO_WARNED, { ...seen, [engine]: true });
         }
         const was = tab.mode;
         tab.mode = m.mode; this.remember(tab);
-        if (m.mode === "agent" || m.mode === "auto") this.context.globalState.update(LAST_KEY, { ...this.context.globalState.get(LAST_KEY), buildMode: m.mode });
+        if (m.mode !== was) this.revokeAllowAll(tab);
         if (tab.status !== "idle") this.modeChangedMidAnswer(tab, was);
         this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab);
       } break;
@@ -2691,7 +2707,8 @@ class ChatView {
         if (m.always) {
           const b = r && r.turn && r.turn.reply.blocks.find((x) => x.k === "perm" && x.pid === m.pid);
           if (b && b.where) tab.allowAllDevice = tab.device;   // only this device, only while it's linked
-          else { tab.allowAll = true; this.post({ type: "allowAll", tabId: tab.id }); }
+          // (For this mode, model and conversation only: allowAllNow() in permission-policy.js.)
+          else { tab.allowAll = true; tab.allowAllFor = grantKey(tab); this.post({ type: "allowAll", tabId: tab.id }); }
         }
         const res = r && r.perms.get(m.pid);
         if (res) { r.perms.delete(m.pid); res(!!m.allow); }
