@@ -9,7 +9,11 @@
   - A project's settings can no longer turn on Auto, automatic updates or Tab's learning.
   - Terminal Tab reads git only inside your project, without running the repository's own programs.
   - Kural's chats, crash reports and session files are private to you on Mac and Linux.
-  - Kural installs Ollama only when the download is properly signed (Mac and Windows).
+  - Kural installs Ollama only when the download is properly signed (Mac and Windows); on Linux Ollama's installer comes
+    only from Ollama and goes straight to the password window, never through a file.
+  - A connector's token is kept in a private file (Mac, Linux), never on a command line or in Claude's own settings.
+  - Ubuntu updates are checked once more by the administrator step itself before installing.
+  - The list of what's inside Kural (SBOM) now includes every native file and Electron's Chromium and Node versions.
   - The Windows installer and uninstaller only ever delete Kural's own folder.
   - Updates have time and size limits; offline, it says "no connection".
 - **Fixes:** Tamil and other non-English text no longer gets garbled in search, devices and setup checks; Stop really

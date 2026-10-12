@@ -302,3 +302,15 @@ A second audit pass (against `2814cd8`) found further issues. Each was re-checke
 | CI-1 / CI-2 | = SEC-011 / SEC-010 | Owner action, unchanged | — |
 
 Residual risk: danger.js stays a best-effort text check, not a sandbox; Gemini enforcement depends on verifying SEC-012 with the real CLI; import uses a blocklist; APP-9, APP-6 Linux, REL-3's same-user race and AGENT-5/9 remain. SEC-001..012 statuses are unchanged by this pass.
+
+
+## Third pass: remaining code findings
+
+| ID | Status | Commit | Evidence |
+|---|---|---|---|
+| APP-9 | FIXED on Mac/Linux; Windows unchanged (other users can't read command lines there) | f9498b4 | Real Claude Code 2.1.296: a web connector added by Kural's code connected and received `Authorization` through `headersHelper`; the key was not in `.claude.json`. A local connector got its variable through the `sh` wrapper; Codex 0.160 stores the wrapper as given. `test/connector-keys.test.js`. |
+| REL-3 | FIXED (root-side check) | 971799d | `pkexec /bin/sh install-deb.sh FILE SHA`: root copies to `/var/tmp/kural-install.*` (0700), checks SHA-256 and package name, installs that copy. Tested with a stand-in dpkg (`test/install-deb.test.js`); no real pkexec window. |
+| APP-6 (Linux) | MITIGATED: Ollama publishes no Linux signature | 4ff201a | install.sh only from ollama.com or github.com/ollama/ollama, must look like Ollama's installer, piped to `pkexec /bin/sh -s` (no file to swap). The real script (from GitHub) passes the check; ollama.com was not reachable from the test machine. |
+| DEP-001 | FIXED | 098b198 | Every native file of the install hashed (60 on an installed Linux build); Electron's Chromium 148.0.7778.280 / Node 24.19.0 / libraries read from the pinned archive (hash matched) and re-checked against the running runtime at Linux/Mac builds; release merge refuses inventories without the native list. |
+
+Owner decision (2026-10-12): no paid code-signing certificates. REL-001 (Windows Authenticode) and REL-002 (macOS Developer ID / notarization) are **ACCEPTED RISK** for alpha releases: users see SmartScreen / Gatekeeper warnings, and macOS keychain prompts may return after updates. Release integrity rests on Kural's own signed checksum list (SEC-005/006), not on platform signatures.

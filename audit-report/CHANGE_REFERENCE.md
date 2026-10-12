@@ -96,3 +96,8 @@ Commit `297944cf5850c3e3cf814ccc05e7aa2d25dadfb0` (branch `sec61`, on top of `85
 ## Second-pass remediation
 
 Branch `sec61` on top of `f2372f3`; merge `4355ff8` joins four branches (`fix2-agent`, `fix2-app`, `fix2-release`, `fix2-bugs`; one conflict in `lib/chat/archive.js`, both changes kept). Commits: 45a7e81, 4e5c3b3, 44d85c2, 5b1508f, 262df09, 9a4b60b (agent boundary); 9b17d98, 47726e6, 8410fad, 22fd704, a98fb97, b2d2dc8, 6192638, 07045f0 (app); 11acb48, 3cbe796, f37dc98 (release/supply); 0654497, 065fae6, dcf48e5, b084bf7, f4f0b9f, 6146aa6, 55be254 (bugs/perf/tests). New files: `lib/private-file.js`, `lib/update-net.js`, `lib/utf8.js`, `lib/ai/killtree.js`, `lib/chat/trim.js`, `scripts/requirements-icons.txt` and 14 test files. Local `npm test`: all 98 test files PASS (exit 0) at `4355ff8`.
+
+
+## Third pass
+
+Commits on `sec61`: f9498b4 (APP-9), 971799d (REL-3), 4ff201a (APP-6 Linux), 098b198 (DEP-001). New: `extension/lib/install-deb.sh`, `test/connector-keys.test.js`, `test/install-deb.test.js`; `vendor/electron-runtime.json` gained `bundles`. Local `npm test`: 100/100 test files PASS.

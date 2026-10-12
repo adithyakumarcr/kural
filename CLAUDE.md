@@ -720,6 +720,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   install.ps1 with a BOM. Build: resedit via `npm ci --ignore-scripts`, Pillow by hash (`scripts/requirements-icons.txt`).
   Child output: `lib/utf8.js` `onText`; killing: `lib/ai/killtree.js` (SIGKILL after 2 s, `taskkill /T` on Windows).
   `test/paths-runs-later.test.js` fails when the repo path contains `.claude/` (agent worktrees): run from elsewhere.
+  Connector keys (APP-9): `addArgs(..., {keyDir})` → a 0600 file in `scope.dir("connector-keys", "account")`; Claude web
+  connectors `mcp add-json` with `headersHelper: cat '<file>'`, local ones `sh -c '. "$0"; exec "$@"' <file> <cmd>`
+  (`unwrapTarget`/`unwrapArgs` hide the wrapper on the page); Windows keeps `-e`/`-H`. Checked with Claude Code 2.1.296
+  and Codex 0.160. Ubuntu update: `pkexec /bin/sh lib/install-deb.sh FILE SHA` (root copies, re-hashes, checks the
+  package is kural; exit 5/6 = refused). Ollama on Linux: install.sh only from ollama.com or github.com/ollama/ollama
+  (`fromOllama`, `checkInstallScript`), piped to `pkexec /bin/sh -s`. SBOM: `natives()` hashes every ELF/Mach-O/PE of the
+  install; `vendor/electron-runtime.json` `bundles` (Chromium, Node…) is checked against the running runtime by
+  `electron_runtime.py check_bundles` on Linux/Mac builds: update it with each Electron bump
+  (`ELECTRON_RUN_AS_NODE=1 ./electron -p 'JSON.stringify(process.versions)'`).
 
 ## Test
 - `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script, Get started checks).
