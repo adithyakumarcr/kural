@@ -21,9 +21,9 @@ const SEARCH_HTML = `<ul>
 </ul>`;
 
 (async () => {
-  const f = fake.start(11461);
-  const ol = new Ollama(() => "http://127.0.0.1:11461/");
-  await new Promise((r) => setTimeout(r, 100));
+  const f = fake.start(0);
+  await f.ready;
+  const ol = new Ollama(() => `http://127.0.0.1:${f.port}/`);
 
   await check("status: running, new enough for the chat", async () => {
     assert.deepStrictEqual(await ol.status(), { running: true, version: "0.15.2", ok: true });

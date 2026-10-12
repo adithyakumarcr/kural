@@ -56,8 +56,9 @@ function start(port = 11435, { version = "0.15.2", log = () => {} } = {}) {
       json({ error: "not found" }, 404);
     });
   });
-  server.listen(port, "127.0.0.1");
-  return { server, requests, created, models, close: () => server.close() };
+  // port 0 = any free port (tests: fixed ports collide when two runs overlap); `await f.ready`, then read `f.port`.
+  const ready = new Promise((res) => server.listen(port, "127.0.0.1", res));
+  return { server, requests, created, models, ready, get port() { const a = server.address(); return a && a.port; }, close: () => server.close() };
 }
 
 // Ollama's own chat API (what Kural's engine uses), scripted.
