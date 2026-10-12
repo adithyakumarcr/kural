@@ -13,7 +13,8 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 const { log } = require("./ai/claude");
-const { validateAssetVersion, expectedSha, verifySignature, pickManifest } = require("./release-verify");
+const { validateAssetVersion, expectedSha, verifySignature, pickManifest, verifiedCopy } = require("./release-verify");
+const { LIMITS, fetchLimited, readCapped, getText, downloadTo, isOffline } = require("./update-net");
 const { RELEASE_PUBLIC_KEYS } = require("./release-keys");
 
 const REPO = "adithyakumarcr/kural";
@@ -42,25 +43,20 @@ function newestRelease(releases) {
   return best && { ...best, version: best.tag_name.replace(/^v/, "") };
 }
 
-async function download(url, file, progress, token) {
+// Downloads with a time and size limit (lib/update-net.js); at most the size GitHub lists for the file. Cancel: false.
+async function download(url, file, progress, token, expectedSize) {
   const ctl = new AbortController();
   const sub = token && token.onCancellationRequested(() => ctl.abort());
+  let shown = 0;
   try {
-    const res = await fetch(url, { signal: ctl.signal, headers: { "User-Agent": "Kural" } });
-    if (!res.ok) throw new Error(`download failed (${res.status})`);
-    const total = +res.headers.get("content-length") || 0;
-    const out = fs.createWriteStream(file);
-    const reader = res.body.getReader();
-    let got = 0, shown = 0;
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      got += value.length;
-      if (!out.write(value)) await new Promise((r) => out.once("drain", r));
+    await downloadTo(url, file, { cancel: ctl.signal, expectedSize, headers: { "User-Agent": "Kural" }, onProgress: (got, total) => {
       const pct = total ? Math.floor((100 * got) / total) : 0;
       if (pct > shown) { progress.report({ increment: pct - shown, message: `${Math.round(got / 1e6)} of ${Math.round(total / 1e6)} MB` }); shown = pct; }
-    }
-    await new Promise((r, j) => out.end((e) => (e ? j(e) : r())));
+    } });
+    return true;
+  } catch (e) {
+    if (ctl.signal.aborted) return false;   // you pressed Cancel
+    throw e;
   } finally { if (sub) sub.dispose(); }
 }
 
@@ -86,14 +82,7 @@ function afterQuit({ pid, inside, steps, logFile, dir }) {
   for (const [k, v] of Object.entries(process.env)) if (!/^(ELECTRON_|VSCODE_|KURAL_RAW)/.test(k)) env[k] = v;
   if (process.platform === "win32") {
     const script = path.join(dir, "install.ps1");
-    fs.writeFileSync(script, [
-      `function Log($m) { Add-Content -Path ${qp(logFile)} -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }`,
-      `Log "waiting for Kural (pid ${pid}) to quit"`,
-      `Wait-Process -Id ${pid} -ErrorAction SilentlyContinue`,
-      // Everything else running from Kural's folder: up to 20 s, then it's stopped.
-      `$left = Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith(${qp(inside)}, [System.StringComparison]::OrdinalIgnoreCase) }`,
-      `if ($left) { $left | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue; Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith(${qp(inside)}, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue }`,
-      steps, ""].join("\r\n"));
+    fs.writeFileSync(script, winScript({ pid, inside, steps, logFile }));
     spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, stdio: "ignore", windowsHide: true, env }).unref();
   } else {
     // (A file, not sh -c: the app's path is in the script, and "pgrep -f <app>" would otherwise find the script itself.)
@@ -101,6 +90,20 @@ function afterQuit({ pid, inside, steps, logFile, dir }) {
     fs.writeFileSync(script, unixScript({ pid, inside, steps, logFile }), { mode: 0o700 });
     spawn("/bin/sh", [script], { detached: true, stdio: "ignore", env }).unref();
   }
+}
+
+// The Windows script (PowerShell).
+function winScript({ pid, inside, steps, logFile }) {
+  // With a byte order mark: Windows PowerShell 5.1 reads a script without one in the old ANSI code page, which breaks
+  // folder names with other letters (C:\Users\Zoë\…, Tamil, Chinese…).
+  return "\uFEFF" + [
+    `function Log($m) { Add-Content -Path ${qp(logFile)} -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $m) }`,
+    `Log "waiting for Kural (pid ${pid}) to quit"`,
+    `Wait-Process -Id ${pid} -ErrorAction SilentlyContinue`,
+    // Everything else running from Kural's folder: up to 20 s, then it's stopped.
+    `$left = Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith(${qp(inside)}, [System.StringComparison]::OrdinalIgnoreCase) }`,
+    `if ($left) { $left | Wait-Process -Timeout 20 -ErrorAction SilentlyContinue; Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith(${qp(inside)}, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue }`,
+    steps, ""].join("\r\n");
 }
 
 const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;           // sh quoting
@@ -155,6 +158,10 @@ class Updater {
   }
 
   failed(e) {
+    if (isOffline(e)) {   // (fetch's own words, "fetch failed", say nothing useful)
+      vscode.window.showWarningMessage(e.duringDownload ? "Couldn't download the update: no connection. Try again later." : "Couldn't check for updates: no connection.");
+      return;
+    }
     vscode.window.showErrorMessage(`Kural couldn't update: ${e.message}`, "Open releases page")
       .then((p) => p && vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${REPO}/releases`)));
   }
@@ -178,9 +185,9 @@ class Updater {
   }
 
   async releases() {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Kural" } });
+    const res = await fetchLimited(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { ms: LIMITS.list.ms, headers: { Accept: "application/vnd.github+json", "User-Agent": "Kural" } });
     if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-    return res.json();
+    return JSON.parse((await readCapped(res, LIMITS.list.bytes)).toString("utf8"));
   }
 
   async run(quiet = false) {
@@ -222,11 +229,8 @@ class Updater {
   async manifest(rel) {
     const m = pickManifest(rel.assets);
     if (!m || !downloadOk(m.sums) || !downloadOk(m.sig)) return null;
-    const text = async (a) => {
-      const res = await fetch(a.browser_download_url, { headers: { "User-Agent": "Kural" } });
-      if (!res.ok) throw new Error(`download failed (${res.status})`);
-      return res.text();
-    };
+    // (Small files: 64 KB at most, 30 s each.)
+    const text = (a) => getText(a.browser_download_url, LIMITS.manifest, { "User-Agent": "Kural" });
     return { sums: await text(m.sums), sig: await text(m.sig) };
   }
 
@@ -236,13 +240,16 @@ class Updater {
     // replace the file on GitHub could replace that too, but not sign the list.
     validateAssetVersion(asset && asset.name, rel.version, this.version);
     if (!downloadOk(asset)) throw new Error("the download isn't from Kural's GitHub releases");
-    const manifest = await this.manifest(rel);
+    const manifest = await this.manifest(rel).catch((e) => { e.duringDownload = true; throw e; });
     if (!manifest) throw new Error("this release has no signed checksum list, so Kural won't install it automatically. Download it from the releases page and install by hand.");
     const signedSha = expectedSha(manifest.sums, manifest.sig, asset.name, RELEASE_PUBLIC_KEYS);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-update-"));
     const file = path.join(dir, asset.name);
-    const ok = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Downloading Kural ${rel.version}`, cancellable: true },
-      async (progress, token) => { await download(asset.browser_download_url, file, progress, token); return !token.isCancellationRequested; });
+    let ok;
+    try {
+      ok = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Downloading Kural ${rel.version}`, cancellable: true },
+        async (progress, token) => (await download(asset.browser_download_url, file, progress, token, +asset.size || 0)) && !token.isCancellationRequested);
+    } catch (e) { fs.rmSync(dir, { recursive: true, force: true }); e.duringDownload = true; throw e; }
     if (!ok) { fs.rmSync(dir, { recursive: true, force: true }); return; }
     log(`update: downloaded ${asset.name} (${fs.statSync(file).size} bytes)`);
     const got = await sha256(file);
@@ -250,7 +257,7 @@ class Updater {
     log("update: signature OK; checksum matches");
     const want = /^sha256:([0-9a-f]{64})$/i.exec(asset.digest || "");
     if (want && got !== want[1].toLowerCase()) { fs.rmSync(dir, { recursive: true, force: true }); throw new Error("the download is damaged (its checksum doesn't match GitHub's); try again"); }
-    await this.install(file, dir, rel.version);
+    await this.install(file, dir, rel.version, signedSha);
   }
 
   // "Verify this installation": is the checksum list of the release you're running really signed by Kural's key?
@@ -258,17 +265,17 @@ class Updater {
   async verifyInstall() {
     const tag = `v${this.version}`;
     try {
-      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${tag}`, { headers: { Accept: "application/vnd.github+json", "User-Agent": "Kural" } });
+      const res = await fetchLimited(`https://api.github.com/repos/${REPO}/releases/tags/${tag}`, { ms: LIMITS.list.ms, headers: { Accept: "application/vnd.github+json", "User-Agent": "Kural" } });
       if (!res.ok) throw new Error(`GitHub has no release ${tag} (${res.status}). A version built from the code can't be checked.`);
-      const m = await this.manifest(await res.json());
+      const m = await this.manifest(JSON.parse((await readCapped(res, LIMITS.list.bytes)).toString("utf8")));
       if (!m) throw new Error(`release ${tag} has no signed checksum list`);
       const v = verifySignature(Buffer.from(m.sums), m.sig, RELEASE_PUBLIC_KEYS);
       if (!v.ok) throw new Error(`release ${tag}: the checksum list is NOT signed by Kural's key`);
       vscode.window.showInformationMessage(`Kural ${this.version}: the release's checksum list is signed by Kural's key (key #${v.keyIndex + 1}).`);
-    } catch (e) { log(`verify: ${e.message}`); vscode.window.showWarningMessage(`Couldn't verify: ${e.message}`); }
+    } catch (e) { log(`verify: ${e.message}`); vscode.window.showWarningMessage(isOffline(e) ? "Couldn't verify: no connection." : `Couldn't verify: ${e.message}`); }
   }
 
-  async install(file, dir, version) {
+  async install(file, dir, version, signedSha) {
     validateAssetVersion(path.basename(file), version, this.version);
     const pid = process.ppid;   // Kural's main process (this code runs in a child of it)
     const caches = builtinCaches(this.context);
@@ -278,6 +285,9 @@ class Updater {
     if (process.platform === "linux") {
       // Installing needs administrator rights: pkexec shows Ubuntu's password window.
       const root = process.getuid && process.getuid() === 0;
+      // Checked once more right before it gets administrator rights: a fresh copy in a new private folder, hashed again
+      // against the signed list (narrows the time in which another program of yours could swap the file).
+      file = verifiedCopy(file, signedSha);
       const cmd = root ? ["/usr/bin/dpkg", ["-i", file]] : ["pkexec", ["/usr/bin/dpkg", "-i", file]];
       // dpkg needs the system folders (/usr/sbin has ldconfig) even if Kural was started without them.
       const env = { ...process.env, PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" };
@@ -363,4 +373,4 @@ class Updater {
   }
 }
 
-module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk, unixScript, macSteps, _test: { MAC_SWAP } };
+module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk, unixScript, winScript, macSteps, _test: { MAC_SWAP } };
