@@ -120,7 +120,7 @@ class SearchView {
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
     view.webview.options = { enableScripts: true, localResourceRoots: [media] };
     this.ready = false;
-    const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    const nonce = require("crypto").randomBytes(16).toString("base64");
     const uri = (f) => view.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     view.webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${view.webview.cspSource}; font-src ${view.webview.cspSource}; script-src 'nonce-${nonce}';">

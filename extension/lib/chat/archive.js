@@ -11,6 +11,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { privateFolder } = require("../private-file");
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;   // ids become file names: nothing else gets in
 
@@ -20,7 +21,7 @@ class ChatArchive {
     this.metas = new Map();     // id -> card (what's on disk, as far as we know)
     this.written = new Map();   // id -> signature of what we last wrote (skip unchanged chats)
     this.deleted = new Set();
-    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* read-only: History just stays empty */ }
+    try { privateFolder(dir); } catch { /* read-only: History just stays empty */ }
     this.loadDeleted();
     this.refresh();
   }
@@ -30,7 +31,7 @@ class ChatArchive {
   // Write to a temporary file, then rename: a crash never leaves half a chat.
   put(file, data) {
     const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data));
+    fs.writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
     fs.renameSync(tmp, file);
   }
 

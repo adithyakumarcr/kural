@@ -16,6 +16,7 @@ const http = require("http");
 const https = require("https");
 const { Tools, definitions, SUPPORTED } = require("./tools");
 const { within } = require("../paths");
+const { writePrivate } = require("../private-file");
 const usageHub = require("./usage");
 const READS = new Set(["Read", "Grep", "Glob"]);
 
@@ -88,7 +89,7 @@ class LocalAgent {
   save() {
     const f = this.file();
     if (!f) return;
-    try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify({ model: this.model, messages: this.history })); } catch { /* best effort */ }
+    try { writePrivate(f, JSON.stringify({ model: this.model, messages: this.history })); } catch { /* best effort */ }
   }
 
   // Your message: a string, or Claude-style blocks (text and images). Sent while it answers: added to that answer before

@@ -44,9 +44,13 @@ const has = (p) => fs.existsSync(p);
     spawnSync("zip", ["-qr", path.join(tmp, "o.zip"), "Ollama.app"], { cwd: src });
     files["/download/Ollama-darwin.zip"] = fs.readFileSync(path.join(tmp, "o.zip"));
     const apps = path.join(tmp, "Applications");
-    let up = false; const opened = [];
+    let up = false; const opened = [], signChecks = [];
     const run = (cmd, args, opts) => {
       if (cmd === "/usr/bin/open") { opened.push(args); setTimeout(() => { up = true; }, 50); return spawn("true", [], opts); }
+      if (cmd === "/usr/bin/codesign") {   // a Developer ID signature (stand-in for the Mac's codesign)
+        signChecks.push(args);
+        return spawn(process.execPath, ["-e", "process.stderr.write('Authority=Developer ID Application: Ollama Inc. (ABCDE12345)\\nTeamIdentifier=ABCDE12345\\n')"], opts);
+      }
       return spawn(cmd, args, opts);
     };
     const inst = new OllamaInstaller({ platform: "darwin", base, appsDirs: [apps], run, isUp: async () => up, waitMs: 5000 });
@@ -62,11 +66,26 @@ const has = (p) => fs.existsSync(p);
     assert.ok(ins.length > 2 && ins[ins.length - 1] === 100 && ins.some((p) => p > 0 && p < 100), `install percent: ${ins}`);
     assert.ok(seen.some((s) => s.phase === "start"));
     assert.strictEqual(inst.state, null, "done: no state left");
+    assert.ok(signChecks.some((a) => a[0] === "--verify" && a.includes("--deep") && a.includes("--strict")), "the signature was checked before the install");
 
     // Installed already, just not running: started, nothing downloaded.
     up = false; delete files["/download/Ollama-darwin.zip"];
     await inst.install();
     assert.strictEqual(opened.length, 2);
+  });
+
+  await check("Mac: an unsigned or ad-hoc-signed download is not installed (APP-6)", async () => {
+    if (!canZip) return console.log("     (skipped: no zip/unzip here)");
+    files["/download/Ollama-darwin.zip"] = fs.readFileSync(path.join(tmp, "o.zip"));
+    for (const [code, out] of [[1, "a sealed resource is missing or invalid"], [0, "Signature=adhoc\nTeamIdentifier=not set\n"]]) {
+      const apps = path.join(tmp, `Apps-${code}`);
+      const run = (cmd, args, opts) => cmd === "/usr/bin/codesign"
+        ? spawn(process.execPath, ["-e", `process.stderr.write(${JSON.stringify(out)}); process.exit(${code})`], opts)
+        : cmd === "/usr/bin/open" ? (() => { throw new Error("opened an unsigned app"); })() : spawn(cmd, args, opts);
+      const inst = new OllamaInstaller({ platform: "darwin", base, appsDirs: [apps], run, isUp: async () => false, waitMs: 100 });
+      await assert.rejects(inst.install(), /isn't properly signed/);
+      assert.deepStrictEqual(fs.readdirSync(apps), [], "nothing installed, no unpacking folder left");
+    }
   });
 
   await check("already running: does nothing", async () => {
