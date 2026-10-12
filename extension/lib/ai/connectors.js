@@ -3,6 +3,7 @@
 // but they're managed on claude.ai). ChatGPT (Codex): `codex mcp list --json|add|remove`. Google Gemini (Antigravity) and
 // your own model: none in Kural yet (agy has no command for it that we know of; Kural's own engine has no MCP).
 const os = require("os");
+const fs = require("fs");
 const { execFile } = require("child_process");
 
 const SUPPORTED = { claude: true, codex: true };
@@ -32,7 +33,7 @@ function parseClaudeList(text) {
     const m = /^(.+?): (.+) - (?:[^\w\s]\s*)?(.+)$/u.exec(line.trim());
     if (!m || /^checking\b/i.test(line)) continue;
     const name = m[1].trim(), [status, ...why] = m[3].trim().split(/\s+[—–]\s+/);
-    out.push({ name, target: m[2].trim(), status, why: why.join(" — "), ok: /^connected$/i.test(status), needsAuth: /authenticat|sign.?in|log.?in/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : "" });
+    out.push({ name, target: require("./connector-catalog").unwrapTarget(m[2].trim()), status, why: why.join(" — "), ok: /^connected$/i.test(status), needsAuth: /authenticat|sign.?in|log.?in/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : "" });
   }
   return out;
 }
@@ -44,7 +45,8 @@ function parseCodexList(text) {
   if (!Array.isArray(list)) return null;
   return list.filter((s) => s && typeof s.name === "string").map((s) => {
     const t = s.transport || {};
-    const target = t.url || [t.command, ...(Array.isArray(t.args) ? t.args : [])].filter(Boolean).join(" ");
+    const inner = require("./connector-catalog").unwrapArgs(t.command, t.args);
+    const target = t.url || (inner ? inner : [t.command, ...(Array.isArray(t.args) ? t.args : [])]).filter(Boolean).join(" ");
     // (auth_status: "not_logged_in" for a web connector that needs you to sign in; "unknown" when it can't tell.)
     const needsAuth = s.enabled !== false && /^not.?logged.?in$/i.test(String(s.auth_status || ""));
     return { name: s.name, target, status: s.enabled === false ? "Turned off" : needsAuth ? "Needs sign-in" : "Added", ok: s.enabled !== false && !needsAuth, needsAuth, auth: String(s.auth_status || ""), managed: "" };
@@ -100,12 +102,25 @@ async function add(ai, bin, env, c) {
 }
 
 // A connector from the catalog (lib/ai/connector-catalog.js) with the values you filled in. existing: the names already there.
-async function addItem(ai, bin, env, item, values, existing) {
-  const a = require("./connector-catalog").addArgs(ai, item || {}, values || {}, existing || []);
+// keyDir: a private folder for keys (see connector-catalog.js addArgs); the files are written before the program runs
+// and removed again when it fails.
+async function addItem(ai, bin, env, item, values, existing, keyDir) {
+  const a = require("./connector-catalog").addArgs(ai, item || {}, values || {}, existing || [], { keyDir });
   if (a.error) return { error: a.error };
   if (!bin) return { error: "Set it up first (Get started)." };
+  const { writePrivate } = require("../private-file");
+  try { for (const f of a.files || []) writePrivate(f.path, f.data); }
+  catch (e) { return { error: `Kural couldn't save the key: ${e.message}` }; }
   const r = await run(bin, a.args, env);
+  if (!r.ok) for (const f of a.files || []) { try { fs.unlinkSync(f.path); } catch { /* not there */ } }
   return r.ok ? { ok: true, name: a.name } : { error: firstLine(r) || "It couldn't add the connector." };
+}
+
+// A removed connector's key files go too.
+function forgetKeys(ai, name, keyDir) {
+  if (!keyDir || !NAME_RE.test(String(name || ""))) return;
+  const { keyFile } = require("./connector-catalog");
+  for (const ext of ["env", "headers.json"]) { try { fs.unlinkSync(keyFile(keyDir, ai, name, ext)); } catch { /* none */ } }
 }
 
 // What signing in to a connector runs, in a terminal: Codex has a command for it; Claude Code only has /mcp inside its screen.
@@ -114,10 +129,11 @@ function signInArgs(ai, name) {
   return ai === "codex" ? ["mcp", "login", name] : ai === "claude" ? [] : null;
 }
 
-async function remove(ai, bin, env, name, cwd) {
+async function remove(ai, bin, env, name, cwd, keyDir) {
   if (!SUPPORTED[ai] || !bin || !NAME_RE.test(String(name || ""))) return { error: "Kural can't remove this one." };
   const r = await run(bin, ["mcp", "remove", name], env, 30000, cwd || os.tmpdir());
+  if (r.ok) forgetKeys(ai, name, keyDir);
   return r.ok ? { ok: true } : { error: firstLine(r) || "It couldn't remove the connector." };
 }
 
-module.exports = { SUPPORTED, NAME_RE, run, addItem, signInArgs, list, add, remove, parseClaudeList, parseCodexList, splitArgs, addArgs };
+module.exports = { forgetKeys, SUPPORTED, NAME_RE, run, addItem, signInArgs, list, add, remove, parseClaudeList, parseCodexList, splitArgs, addArgs };
