@@ -10,6 +10,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn, execFile } = require("child_process");
+const { onText } = require("../utf8");
 
 const IS_MAC = process.platform === "darwin", IS_WIN = process.platform === "win32";
 const PACKAGES = {
@@ -150,8 +151,8 @@ function runInstall(plan, { ask, onOutput, signal, quietMs = 20000 } = {}) {
       clearTimeout(idle); idle = setTimeout(check, 400);
       clearTimeout(quiet); quiet = setTimeout(unknown, quietMs);
     };
-    p.stdout.on("data", got);
-    p.stderr.on("data", got);
+    onText(p.stdout, got);
+    onText(p.stderr, got);
     p.stdin.on("error", () => {});
     p.on("error", (e) => finish({ ok: false, code: -1, output: `${output}\n${e.message}` }));
     p.on("close", (code) => finish({ ok: code === 0, code }));

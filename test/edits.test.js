@@ -11,6 +11,13 @@ const cases = [
   ["old habit: markdown fence", "```python\n    y = 2\n```", "    y = 2"],
   ["plain reply", "    z = 3", "    z = 3"],
   ["empty region", "<code>\n</code>", ""],
+  // BUG-6: the wrapper is a tag at the start / end of a line; a sentence mentioning the tags is chatter.
+  ["chatter mentions <code> before the wrapper", "I put it in <code> tags as asked:\n<code>\n  x = 1\n</code>", "  x = 1"],
+  ["chatter mentions </code> after the wrapper", "<code>\n  x = 1\n</code>\nThe closing </code> tag ends it.", "  x = 1"],
+  ["chatter mentions both, code has a </code> line", "Use <code> and </code>:\n<code>\nprint(1)\n</code>\nok", "print(1)"],
+  ["tags but no wrapper: rejected, not guessed", "Wrap the answer in <code> tags, please.", null],
+  ["only an opening tag: rejected", "<code>\n  x = 1\n", null],
+  ["chatter with a stray tag mention and no wrapper: rejected","Not <code>-wrapped:\n```js\nlet a;\n```", null],
 ];
 let fail = 0;
 for (const [name, input, want] of cases) {

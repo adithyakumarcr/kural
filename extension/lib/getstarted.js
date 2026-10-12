@@ -274,6 +274,8 @@ class GetStarted {
     } else {
       this.s.test = { state: "fail", error: r.error, hint: checks.explain(r.error) };
       if (r.login) this.s.login = { state: "no" };
+      // Passed before, fails now (you pressed Test again): Claude is not ready. It used to stay "All set" beside the error.
+      if (this.rec.claude && !this.problem) this.problem = r.login ? "login" : "test";
     }
     this.changed();
   }
@@ -317,6 +319,8 @@ class GetStarted {
     } else {
       S.test = { state: "fail", error: r.error || "No answer." };
       if (r.login) S.login = { state: "no" };
+      // Passed before, fails now: no longer set up (until a test passes again).
+      if (this.rec[id]) { this.rec[id] = null; brain.setCli(id, { ready: false }); await this.save(); }
     }
     this.changed();
   }

@@ -7,6 +7,7 @@
 
 const fs = require("fs"), path = require("path");
 const { spawn } = require("child_process");
+const { onText } = require("../utf8");
 const { caseSensitive, jsRegex, replacement, expand, preserveCase } = require("../../media/search-replace");
 
 // VS Code's own ripgrep (@vscode/ripgrep-universal has one per system; older VS Codes had @vscode/ripgrep).
@@ -167,7 +168,7 @@ function runRg(bin, cwd, args, onFile, { max = 20000, spawnFn = spawn } = {}) {
     child = spawnFn(bin, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
     let buf = "", err = "", total = 0, limited = false, file = null, list = [];
     const flush = () => { if (file && list.length) onFile(path.resolve(cwd, file), list); file = null; list = []; };
-    child.stdout.on("data", (d) => {
+    onText(child.stdout, (d) => {
       buf += d;
       let i;
       while ((i = buf.indexOf("\n")) >= 0) {
@@ -181,7 +182,7 @@ function runRg(bin, cwd, args, onFile, { max = 20000, spawnFn = spawn } = {}) {
         } else if (j.type === "end") flush();
       }
     });
-    child.stderr.on("data", (d) => { err += d; });
+    onText(child.stderr, (d) => { err += d; });
     child.on("error", (e) => resolve({ limited, error: e.message }));
     child.on("close", (code) => {
       flush();
