@@ -73,6 +73,29 @@ check("ids can't reach outside the folder", () => {
   assert.strictEqual(a.read("../../etc/passwd"), null);
 });
 
+check("BUG-14: a save that fails leaves no .tmp file behind", () => {
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), "kural-archive-tmp-"));
+  const a = new ChatArchive(d2);
+  fs.mkdirSync(path.join(d2, "abc.json"));                 // the rename target can't be replaced (like a locked file on Windows)
+  const t = chat("abc", 2, wsA);
+  assert.strictEqual(a.save(t, card(t)), false);
+  assert.deepStrictEqual(fs.readdirSync(d2).filter((n) => n.endsWith(".tmp")), []);
+  fs.rmSync(d2, { recursive: true, force: true });
+});
+
+check("BUG-14: old .tmp files of a killed window are swept when the archive opens; fresh ones (another window writing) stay", () => {
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), "kural-archive-sweep-"));
+  const stale = path.join(d2, "x.json.4242.tmp"), fresh = path.join(d2, "y.json.4243.tmp"), other = path.join(d2, "notes.tmp");
+  for (const f of [stale, fresh, other]) fs.writeFileSync(f, "{");
+  const old = new Date(Date.now() - 2 * 3600000);
+  fs.utimesSync(stale, old, old); fs.utimesSync(other, old, old);
+  new ChatArchive(d2);
+  assert.ok(!fs.existsSync(stale), "stale temp file removed");
+  assert.ok(fs.existsSync(fresh), "a recent one may be in use by another window");
+  assert.ok(fs.existsSync(other), "only <name>.<pid>.tmp files are ours");
+  fs.rmSync(d2, { recursive: true, force: true });
+});
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(fail ? `archive: ${fail} FAILED` : "archive: ALL PASS");
 process.exit(fail ? 1 : 0);

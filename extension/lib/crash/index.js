@@ -54,7 +54,7 @@ class CrashLog {
     const since = this.context.globalState.get(LAST_SCAN) || now - 3 * 86400000;
     const ips = process.platform === "darwin" ? scan.crashReports(since) : [];
     // VS Code's logs of the sessions since then (not this one: it just started).
-    const sessions = scan.sessionsSince(path.join(this.userData, "logs"), since, (this.info.started || now) - 20000)
+    const sessions = scan.sessionsSince(scan.logsRoot(this.context.logUri && this.context.logUri.fsPath, path.join(this.userData, "logs")), since, (this.info.started || now) - 20000)
       .map((s) => ({ ...s, scan: scan.scanSession(s.dir) }));
     const crashedSessions = sessions.filter((s) => s.scan.crashes.length);
     await this.context.globalState.update(LAST_SCAN, now);
