@@ -203,7 +203,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   ones (Notion, Linear, Sentry, Atlassian, Asana, Stripe, Vercel, Supabase, Hugging Face, Context7, Cloudflare docs,
   Playwright, GitHub, Filesystem) and the official MCP directory as you type (those show the exact command or address
   and ask you to confirm: nobody checked them); Add, and fill in a token or folder only if
-  it asks; "Add one by hand" at the bottom takes a command or web address; ChatGPT can't use ones that need a key header
+  it asks (on Mac and Linux a token is kept in a private file in Kural's storage, never on a command line; Windows passes
+  it to the program directly); "Add one by hand" at the bottom takes a command or web address; ChatGPT can't use ones that need a key header
   or the older SSE kind; Claude also: "Use my Claude Code setup (plugins, skills)" and Reload; Gemini: no connectors
   yet), then "Switch to another AI near a limit". Your own model's page: Find & download models, change model, context
   length. Then Moods (your own chat moods: add, edit, delete; remove or restore the built-in ones); What Kural learns

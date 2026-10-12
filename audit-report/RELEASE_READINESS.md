@@ -98,3 +98,13 @@ Recommendation stays **NO-GO**. SEC-012 is **IMPLEMENTED, NOT VERIFIED against t
 ## Second-pass remediation — readiness impact
 
 Recommendation stays **NO-GO**. The second pass fixed or mitigated most AGENT/APP/REL/SUP/BUG findings (table in SECURITY_AUDIT.md and BUG_REPORT.md); local `npm test` 98/98 PASS at `4355ff8`. Several fixes for Windows and macOS (installer folder check, install.ps1 BOM, tree kill, Ollama signature checks) were not run on those systems: the Windows installer only under Wine. The original blockers are unchanged: SEC-012 real-CLI verification, SEC-010/011 and REL-001/002 owner actions, native acceptance.
+
+
+## What remains for GO (2026-10-12)
+
+Code findings: none open beyond documented residuals (danger.js is not a sandbox; AGENT-5/9 documented; APP-6 Linux relies on HTTPS from Ollama). REL-001/002: **accepted risk** by the owner (no paid signing); state it in the release notes. Still required, by the owner:
+1. SEC-011: protect `main` and `v*` tags, then confirm a direct push is refused.
+2. SEC-010: move Windows signing secrets into a protected environment (or remove them while unused).
+3. SEC-012: run `scripts/verify-agy-gate.sh` with a logged-in agy and record the result.
+4. Native acceptance: install, start, update and uninstall a release candidate on macOS, Windows and Ubuntu; on Windows the installer folder check, the update script with a non-ASCII folder and Stop on a long command; on Ubuntu the update's password window (install-deb.sh) and Ollama's install.
+With 1–4 done and passing, the recommendation can move to **GO for an alpha release** with the signing warnings documented.
