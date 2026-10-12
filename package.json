@@ -8,5 +8,8 @@
     "test:live": "node test/completion.live.js",
     "build": "./make-deb.sh"
   },
-  "author": "Adithya Chinnakkonda"
+  "author": "Adithya Chinnakkonda",
+  "devDependencies": {
+    "resedit": "3.1.0"
+  }
 }

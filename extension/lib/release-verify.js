@@ -57,4 +57,22 @@ function validateAssetVersion(assetName, version, currentVersion) {
   if (!forms.test(String(assetName))) throw new Error("the signed asset filename does not match the requested release version");
 }
 
-module.exports = { validateAssetVersion, parseSums, verifySignature, expectedSha, pickManifest };
+// Right before a verified download is handed to an installer with administrator rights (Ubuntu: pkexec dpkg -i): copy
+// it into a new private folder and hash the copy again. Returns the copy's path; throws if it no longer matches.
+// (Narrows, doesn't close, the window in which another program running as you could swap the file: only a privileged
+// step that checks the signature itself would close it.)
+function verifiedCopy(file, sha) {
+  const fs = require("fs"), os = require("os"), path = require("path");
+  if (!/^[0-9a-f]{64}$/.test(String(sha || ""))) throw new Error("no signed checksum to check the download against");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-install-"));   // 0700: only you
+  const copy = path.join(dir, path.basename(file));
+  fs.copyFileSync(file, copy, fs.constants.COPYFILE_EXCL);
+  fs.chmodSync(copy, 0o400);
+  const h = crypto.createHash("sha256"), buf = Buffer.alloc(1 << 20), fd = fs.openSync(copy, "r");
+  try { for (let n; (n = fs.readSync(fd, buf, 0, buf.length, null)) > 0;) h.update(buf.subarray(0, n)); } finally { fs.closeSync(fd); }
+  const got = h.digest("hex");
+  if (got !== sha) { fs.rmSync(dir, { recursive: true, force: true }); throw new Error("the download changed after it was checked; not installing it"); }
+  return copy;
+}
+
+module.exports = { verifiedCopy, validateAssetVersion, parseSums, verifySignature, expectedSha, pickManifest };
