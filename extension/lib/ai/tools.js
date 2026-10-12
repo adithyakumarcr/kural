@@ -5,6 +5,8 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const { onText } = require("../utf8");
+const { killTree } = require("./killtree");
 
 const SKIP_DIRS = new Set([".git", "node_modules", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache", "dist", "build",
   ".next", "target", ".gradle", ".idea", ".vscode-test", "coverage", ".tox"]);
@@ -161,12 +163,18 @@ class Tools {
       // the output open for ever, so don't wait for that.
       const p = spawn(win ? "powershell.exe" : (process.env.SHELL || "/bin/bash"), win ? ["-NoProfile", "-Command", command] : ["-lc", command],
         { cwd: this.cwd, env: process.env, windowsHide: true, detached: !win });
-      const killAll = () => { try { if (!win && p.pid) process.kill(-p.pid, "SIGTERM"); else p.kill(); } catch { try { p.kill(); } catch { /* gone */ } } };
+      // SIGTERM, then SIGKILL after 2 s (a command that ignores SIGTERM would otherwise never end); Windows: taskkill /T /F.
+      // Should even that not end the shell, answer anyway a moment after the SIGKILL.
+      let force = null;
+      const killAll = () => {
+        killTree(p);
+        if (!force) force = setTimeout(() => finish(clip(`${out.trim() || "(no output)"}\n(stopped; it did not exit)`)), 3000);
+      };
       this.running = { kill: killAll };
       let out = "", finished = false;
       const add = (d) => { out += d; if (out.length > 2 * MAX_OUT) out = out.slice(-2 * MAX_OUT); };
-      p.stdout.on("data", add); p.stderr.on("data", add);
-      const finish = (text) => { if (finished) return; finished = true; clearTimeout(timer); this.running = null; resolve(text); };
+      onText(p.stdout, add); onText(p.stderr, add);
+      const finish = (text) => { if (finished) return; finished = true; clearTimeout(timer); clearTimeout(force); this.running = null; resolve(text); };
       const timer = setTimeout(() => { out += `\n(stopped after ${Math.round(timeout / 1000)} s)`; killAll(); }, Math.min(Number(timeout) || 120000, 600000));
       p.on("error", (e) => finish(`Couldn't run it: ${e.message}`));
       // (A moment after exit for the last output; "close" may never come while a background child holds the pipe.)

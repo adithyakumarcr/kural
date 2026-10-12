@@ -18,6 +18,7 @@ const crypto = require("crypto");
 
 const { initLog, log } = require("../log");   // (re-exported below: older code imports log from here)
 const usage = require("./usage");
+const { killTree } = require("./killtree");
 const { profileEnv } = require("../profiles/env");
 
 const LOGIN_RE = /not logged in|log ?in|invalid api key|api key|oauth|credential|401/i;
@@ -88,11 +89,16 @@ const isSetUp = () => setupOk();
 
 // Instructions for Claude go in a small file instead of on the command line:
 // Windows limits a command line to ~32,000 characters, and CLAUDE.md can be longer.
-const promptDir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-prompts-"));
-let promptCount = 0;
-function promptFile(text) {
+// The files are only read when `claude` starts; a process removes its own when it ends (ClaudeProcess.start: cleanup), and
+// the folder goes when Kural's extension host ends. (The folder is made at the first use: tests and idle windows leave none.)
+let promptDir = null, promptCount = 0;
+function makePromptFile(text) {
+  if (!promptDir) {
+    promptDir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-prompts-"));
+    process.once("exit", () => { try { fs.rmSync(promptDir, { recursive: true, force: true }); } catch { /* gone */ } });
+  }
   const f = path.join(promptDir, `p${++promptCount}.md`);
-  fs.writeFileSync(f, text, "utf8");
+  fs.writeFileSync(f, text, { encoding: "utf8", mode: 0o600 });
   return f;
 }
 
@@ -259,6 +265,9 @@ class ClaudeProcess {
     // board), turn those things off one by one instead.
     if (o.safeMode && o.mcpServers) args.push("--setting-sources", "", "--disable-slash-commands");
     else if (o.safeMode) args.push("--safe-mode");
+    // What this process made on disk (prompt files, its own empty working folder): removed when it ends.
+    const made = [];
+    const promptFile = (text) => { const f = makePromptFile(text); made.push(f); return f; };
     if (o.systemPrompt) args.push("--system-prompt-file", promptFile(o.systemPrompt));
     if (o.appendSystemPrompt) args.push("--append-system-prompt-file", promptFile(o.appendSystemPrompt));
     args.push("--tools", (o.tools || []).join(","));
@@ -272,9 +281,16 @@ class ClaudeProcess {
     if (!o.persist) args.push("--no-session-persistence");
 
     const cwd = o.cwd || fs.mkdtempSync(path.join(os.tmpdir(), "kural-")); // empty folder: no project files loaded
+    if (!o.cwd) made.push(cwd);
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return; cleaned = true;
+      for (const f of made) { try { fs.rmSync(f, { recursive: true, force: true }); } catch { /* gone */ } }
+    };
     const env = cleanEnv({ ...(o.noThinking ? { MAX_THINKING_TOKENS: "0" } : {}), ...(o.env || {}) });   // env: e.g. a local model (Ollama)
     // Its own process group (not on Windows), so stopping it also stops the commands it started.
-    this.proc = spawn(bin, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
+    try { this.proc = spawn(bin, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN }); }
+    catch (e) { cleanup(); throw e; }
     this.startedAt = Date.now();
     log(`${o.name}: started claude (pid ${this.proc.pid}, ${o.model}${o.effort ? "/" + o.effort : ""}${o.resume ? ", resuming" : ""})`);
 
@@ -285,9 +301,10 @@ class ClaudeProcess {
       for (const line of String(d).split(/\r?\n/)) if (line.trim()) log(`${o.name}: [claude] ${line.trim().slice(0, 300)}`);
     });
     this.proc.stdin.on("error", () => {}); // process already gone; the exit handler reports it
-    this.proc.on("error", (e) => log(`${o.name}: could not start claude: ${e.message}`));
+    this.proc.on("error", (e) => { log(`${o.name}: could not start claude: ${e.message}`); cleanup(); });
     this.proc.on("exit", (code) => {
       this.exited = true;
+      cleanup();
       log(`${o.name}: claude exited (code ${code})`);
       if (this.h.onExit) this.h.onExit({ code, login: LOGIN_RE.test(this.stderr), stderr: this.stderr });
     });
@@ -349,8 +366,7 @@ class ClaudeProcess {
   setModel(model) { this.control({ subtype: "set_model", model }); }
   kill() {
     if (!this.proc || this.exited) return;
-    if (!IS_WIN) { try { process.kill(-this.proc.pid, "SIGTERM"); return; } catch { /* fall back */ } }
-    this.proc.kill();
+    killTree(this.proc);   // SIGTERM, then SIGKILL after 2 s; Windows: taskkill /T /F (the commands it started too)
   }
 }
 
