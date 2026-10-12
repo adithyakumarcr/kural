@@ -65,4 +65,28 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
   return { ask: true };   // Agent mode: running commands asks you first.
 }
 
-module.exports = { decide, READ_TOOLS, EDIT_TOOLS, SUBAGENT_TOOLS, DEVICE_TOOLS, DEVICE_TOOL_RE };
+// The mode a call through Gemini's gate is decided in. startedFor: the mode that agy was started for. The same as the
+// chat's: that mode. A stricter one (a team's planners and reviewers run in Plan or Ask while the chat is in Agent, or
+// the chat was switched to a looser mode mid-answer): the stricter one, which can only refuse more. A looser one (the chat
+// was switched to a stricter mode mid-answer): null, refuse (nothing more runs in that answer).
+const STRICTNESS = { ask: 0, plan: 1, agent: 2, auto: 3 };
+function gatedMode(chatMode, startedFor) {
+  if (!startedFor || startedFor === chatMode) return chatMode;
+  return STRICTNESS[startedFor] < STRICTNESS[chatMode] ? startedFor : null;
+}
+
+// "Allow all" counts for the mode, model and conversation it was given in: changing any of them (a mode or model switch,
+// the router picking another model, a handoff to another AI, a new session) asks again.
+const grantKey = (tab) => [tab.mode, tab.model, tab.sessionId].join("|");
+const allowAllNow = (tab) => !!tab.allowAll && tab.allowAllFor === grantKey(tab);
+
+// What Auto means, said before the first switch to it with this AI (engine: claude / codex / agy / ollama). Each AI's
+// commands reach Kural's checks a different way, so the sentence about dangerous commands differs.
+function autoWarning(engine, fullSetup = false) {
+  const base = "Auto mode runs commands and edits files without asking. Dangerous commands (sudo, deleting outside the project, a forced push to main…) still ask";
+  if (engine === "agy") return `${base}: with Google Gemini through Kural's approval gate, which hasn't been checked against the real Gemini program yet. If Gemini runs a step without asking the gate, Kural stops it after that step.`;
+  if (engine === "claude" && fullSetup) return `${base}, unless Claude Code's own settings (yours, or this project's) already allow them: with your full setup, Claude Code doesn't ask Kural about what they allow.`;
+  return `${base}.`;
+}
+
+module.exports = { decide, gatedMode, grantKey, allowAllNow, autoWarning, READ_TOOLS, EDIT_TOOLS, SUBAGENT_TOOLS, DEVICE_TOOLS, DEVICE_TOOL_RE };
