@@ -15,6 +15,7 @@ const ws = require("../workspace");
 const { Attachments } = require("./attachments");
 const { within, runsLater, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
+const { trimMessages } = require("./trim");
 const { forkConversation } = require("./fork");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("../ai/ollama");
 const brain = require("../ai");
@@ -638,11 +639,7 @@ class ChatView {
   saveNow() {
     clearTimeout(this.saveTimer);
     // Keep the last ~150 KB of each conversation (60 KB for closed ones) so this stays quick.
-    const trim = (t, max) => {
-      let msgs = t.messages, size = JSON.stringify(msgs).length;
-      while (size > max && msgs.length > 2) { msgs = msgs.slice(2); size = JSON.stringify(msgs).length; }
-      return { ...t, messages: msgs, status: "idle" };
-    };
+    const trim = (t, max) => ({ ...t, messages: trimMessages(t.messages, max), status: "idle" });   // (chat/trim.js: sizes added up once)
     for (const t of this.tabs) if (t.messages.length) this.archive.save(t, this.card(t));   // History: in full
     return this.context.workspaceState.update(storeKey(), {
       tabs: this.tabs.map((t) => trim(t, 150000)),
