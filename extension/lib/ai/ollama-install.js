@@ -12,6 +12,7 @@
 
 const fs = require("fs"), os = require("os"), path = require("path");
 const { spawn } = require("child_process");
+const { onText } = require("../utf8");
 const { privateTmp } = require("../paths");
 
 const BASE = "https://ollama.com/download";
@@ -120,8 +121,8 @@ class OllamaInstaller {
   exec(cmd, args, onOut = () => {}, opts = {}) {
     return new Promise((resolve, reject) => {
       const p = this.child = this.run(cmd, args, { stdio: ["ignore", "pipe", "pipe"], cwd: os.tmpdir(), ...opts });
-      if (p.stdout) p.stdout.on("data", (d) => onOut(String(d)));
-      if (p.stderr) p.stderr.on("data", (d) => onOut(String(d)));
+      if (p.stdout) onText(p.stdout, onOut);
+      if (p.stderr) onText(p.stderr, onOut);
       p.on("error", reject);
       p.on("close", (code) => resolve(code));
     });
