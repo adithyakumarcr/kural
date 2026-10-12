@@ -138,6 +138,25 @@ class RuntimeTests(unittest.TestCase):
             finally:
                 d.ROOT = original
 
+    def test_bundled_versions_checked_against_the_running_runtime(self):
+        # DEP-001: the SBOM's Chromium/Node versions come from the pin; the build asks the new runtime and refuses a mismatch.
+        import platform, sys
+        if platform.system() != 'Linux':
+            self.skipTest('runs the Linux runtime stand-in')
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp)
+            pin = {'version': '42.0.0', 'bundles': {'chromium': '148.0.1', 'node': '24.1.0', 'libuv': '1.5.0'}}
+            def runtime(versions):
+                exe = app / 'codium'
+                exe.write_text(f'#!{sys.executable}\nimport json\nprint(json.dumps({versions!r}))\n')
+                exe.chmod(0o755)
+            runtime({'electron': '42.0.0', 'chrome': '148.0.1', 'node': '24.1.0', 'uv': '1.5.0'})
+            d.check_bundles(app, 'linux-x64', pin)
+            runtime({'electron': '42.0.0', 'chrome': '147.9.9', 'node': '24.1.0', 'uv': '1.5.0'})
+            with self.assertRaises(ValueError):
+                d.check_bundles(app, 'linux-x64', pin)
+            d.check_bundles(app, 'win32-x64', pin)   # (a Windows build on Linux can't run it: says so, doesn't fail)
+
 
 if __name__ == '__main__':
     unittest.main()
