@@ -286,9 +286,11 @@ class Updater {
       // Installing needs administrator rights: pkexec shows Ubuntu's password window.
       const root = process.getuid && process.getuid() === 0;
       // Checked once more right before it gets administrator rights: a fresh copy in a new private folder, hashed again
-      // against the signed list (narrows the time in which another program of yours could swap the file).
+      // against the signed list. Then root checks its own copy again (install-deb.sh, REL-3): another program of yours
+      // can't swap the file between the check and dpkg.
       file = verifiedCopy(file, signedSha);
-      const cmd = root ? ["/usr/bin/dpkg", ["-i", file]] : ["pkexec", ["/usr/bin/dpkg", "-i", file]];
+      const helper = path.join(__dirname, "install-deb.sh");
+      const cmd = root ? ["/bin/sh", [helper, file, signedSha]] : ["pkexec", ["/bin/sh", helper, file, signedSha]];
       // dpkg needs the system folders (/usr/sbin has ldconfig) even if Kural was started without them.
       const env = { ...process.env, PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" };
       const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Installing Kural ${version}…` },
@@ -302,6 +304,7 @@ class Updater {
       if (r.code !== 0) {
         log(`update: install failed (${r.code}): ${r.err}`);
         if (r.code === 126 || r.code === 127) throw new Error("the password window was closed");
+        if (r.code === 5 || r.code === 6) throw new Error("the download didn't pass the final check, so it wasn't installed");
         throw new Error(r.code === -1 ? `can't run ${cmd[0]}: ${r.err}` : `installing failed. Install it by hand: sudo apt install ${file}`);
       }
       log(`update: installed ${version}; restarting`);
