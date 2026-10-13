@@ -40,7 +40,8 @@ check("macOS-guarded folders and other people's homes are protected", () => {
   if (process.platform !== "win32") assert.ok(isProtected("/Volumes") && isProtected("/Users") && isProtected("/home"));
   assert.ok(isProtected(path.dirname(os.homedir())), "everyone's homes (C:\\Users on Windows)");
   assert.ok(!isProtected(path.join(os.homedir(), "code")));
-  assert.ok(isHomeOrAbove(os.homedir()) && isHomeOrAbove("/") && !isHomeOrAbove(path.join(os.homedir(), "code")));
+  // (the root of the home folder's own drive: on Windows "/" is the current drive, which can be another one)
+  assert.ok(isHomeOrAbove(os.homedir()) && isHomeOrAbove(path.parse(os.homedir()).root) && !isHomeOrAbove(path.join(os.homedir(), "code")));
 });
 check("a walk never goes into a protected folder below where it started", () => {
   const fakeHome = path.join(tmp, "home");
