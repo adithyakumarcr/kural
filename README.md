@@ -176,7 +176,6 @@ Also in the chat:
 - **Notifications.** When an answer is done or needs you (a command to allow, a question) and you're not looking, a
   system notification names the chat; click it to go there. macOS asks once whether Kural may send notifications.
   Setting `kural.notifications`.
-- **Did you know?** While an answer is being worked on, a short Kural tip or programming fact shows under it.
 - **Pictures.** Pictures in answers are shown: from your project, ones the model read, or ones an image model made.
   A picture from the internet waits for a click (loading it would tell that website you read the answer).
 - **Ask about Kural.** "How do I …?", "can Kural …?": the chat knows Kural's features, and if Kural can't do something

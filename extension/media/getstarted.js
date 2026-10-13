@@ -161,6 +161,13 @@
     if (i.state === "checking") one = step(1, `Install ${C.program}`, "running", el("p", { class: "muted" }, `Looking for ${C.program}…`));
     else if (i.state === "ok") one = step(1, `Install ${C.program}`, "ok", el("p", {}, `${C.program} ${i.version}`, el("span", { class: "muted" }, ` · ${i.path}`)),
       i.chosen ? el("p", { class: "muted small" }, "You chose this file. ", il("Find it automatically instead", "forgetCliPath")) : null);
+    // Installed, but older than Kural needs: its own update (Google's installer leaves an existing agy as it is).
+    else if (i.state === "broken" && i.old) one = step(1, `Update ${C.program}`, installing ? "waiting" : "fail",
+      el("p", {}, `Found ${C.program} ${i.old}`, el("span", { class: "muted" }, ` · ${i.path}`)),
+      el("p", {}, `Kural needs ${i.need} or newer: its approval gate (Kural asks you before each change) doesn't work with older versions.`),
+      installing ? runBox(id) : el("div", { class: "row" }, ib("Update for me", "installCli", "primary")),
+      el("p", { class: "muted small" }, "Or run this in a terminal yourself:"), code(i.update),
+      installing ? null : el("p", { class: "muted small" }, il("Update in a terminal instead", "installCliTerminal")));
     else one = step(1, `Install ${C.program}`, installing ? "waiting" : i.state === "broken" ? "fail" : "todo",
       i.state === "broken" ? [el("p", {}, "Found ", el("code", {}, i.path), ", but it doesn't run. Install it again:")]
         : el("p", {}, `${C.program} is the official program for ${C.short}. Kural runs it in the background with its own login, so there's no key to paste.`),

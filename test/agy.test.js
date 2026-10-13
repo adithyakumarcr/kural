@@ -288,6 +288,26 @@ function chat(opts = {}) {
     assert.strictEqual(agy._test.findLoginUrl("Open https://accounts.google.com/o/auth?x=1\r\nThen come back", 0), "https://accounts.google.com/o/auth?x=1");
   });
 
+  await check("login screen of the real agy 1.3.4 (80 columns): the address is found whole, never a piece of it", async () => {
+    // Recorded from agy 1.3.4 after choosing "Google OAuth" (fixtures/): the screen, and what agy gave `open`.
+    const screen = fs.readFileSync(path.join(__dirname, "fixtures", "agy-1.3.4-login-screen.bin"), "utf8");
+    const real = fs.readFileSync(path.join(__dirname, "fixtures", "agy-1.3.4-login-url.txt"), "utf8").trim();
+    assert.strictEqual(agy._test.findLoginUrl(screen, 0), real);
+    assert.strictEqual(agy._test.complete(real), true);
+    // What Kural opened before: the address cut after its first pieces (Google: "Required parameter is missing").
+    assert.strictEqual(agy._test.complete(real.slice(0, real.indexOf("s.googleusercontent"))), false);
+    assert.strictEqual(agy._test.complete(real.replace(/&response_type=code/, "")), false);
+    // Fed in small pieces, as a terminal does: nothing until the screen is quiet, then the whole address once.
+    const urls = [];
+    const s = agy.loginSession(BIN, { onUrl: (u) => urls.push(u), quietMs: 150 });
+    try {
+      for (let i = 0; i < screen.length; i += 40) { s.feed(screen.slice(i, i + 40)); await new Promise((r) => setTimeout(r, 5)); }
+      assert.deepStrictEqual(urls, [], "no address while the screen is still being written");
+      await new Promise((r) => setTimeout(r, 300));
+      assert.deepStrictEqual(urls, [real]);
+    } finally { s.dispose(); }
+  });
+
   await check("real agy's logged-out message means \"not logged in\" (Log in, not a failed test)", async () => {
     assert.strictEqual(agy._test.friendly("error: authentication failed or timed out"), agy.NOT_LOGGED_IN);
   });
@@ -309,6 +329,26 @@ function chat(opts = {}) {
       assert.ok(!fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").includes("stream-json"));   // agy never ran a conversation
       assert.ok(!fs.existsSync(path.join(project, "c.txt")));
     } finally { delete process.env.FAKE_AGY_VERSION; }
+  });
+
+  await check("an old agy: Get started learns its version, and \"Update for me\" runs agy's own update (not the installer)", async () => {
+    const old = path.join(tmp, "old-agy-2.js");
+    fs.copyFileSync(BIN, old); fs.chmodSync(old, 0o755);
+    const updated = `${process.env.FAKE_AGY_FILE || path.join(os.tmpdir(), "kural-fake-agy-state")}.updated`;
+    fs.rmSync(updated, { force: true });
+    process.env.FAKE_AGY_VERSION = "1.2.16";
+    try {
+      const { CLIS } = require("../extension/lib/ai/clis");
+      assert.strictEqual(await CLIS.agy.version(old), null);
+      assert.strictEqual(await CLIS.agy.installedVersion(old), "1.2.16");
+      assert.strictEqual(CLIS.agy.minVersion, "1.3.4");
+      const installer = require("../extension/lib/ai/install");
+      const r = await installer.install("agy", { update: { file: old, args: CLIS.agy.update.args, text: CLIS.agy.update.text } });
+      assert.strictEqual(r.ok, true, r.output);
+      assert.strictEqual(r.plan.how, "update");
+      assert.match(r.output, /Updated to 1\.3\.4/);
+      assert.strictEqual(await CLIS.agy.installedVersion(old), "1.3.4");
+    } finally { delete process.env.FAKE_AGY_VERSION; fs.rmSync(updated, { force: true }); }
   });
 
   await check("agy's tool names and parameters → the chat's tools", async () => {

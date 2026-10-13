@@ -256,6 +256,24 @@ function activate(context) {
     changed: (p) => { account.profileName = p.name; account.draw(); },
     // The installed Claude Code's version, "none" when there isn't one (a Mac needs 2.1.296+ for per-folder keychain logins).
     claudeVersion: async () => { const bin = findClaude(); if (!bin) return "none"; const v = await require("./lib/ai/claude-checks").claudeVersion(bin, require("./lib/ai/claude").cleanEnv({})); return v.version || null; },
+    // "Update Claude Code" on the too-old message: `claude update`. (Without cleanEnv's DISABLE_AUTOUPDATER, which is
+    // for Kural's background processes, not for an update you asked for.)
+    updateClaude: async () => {
+      const bin = findClaude();
+      if (!bin) return { error: "Claude Code wasn't found" };
+      const env = require("./lib/ai/claude").cleanEnv({});
+      delete env.DISABLE_AUTOUPDATER;
+      return require("./lib/ai/claude-checks").claudeUpdate(bin, env);
+    },
+    // When the update fails: the same command in a terminal, where you see what it says (and can answer it).
+    updateClaudeInTerminal: () => {
+      const bin = findClaude();
+      if (!bin) return getStarted.open();
+      const win = process.platform === "win32";
+      const t = vscode.window.createTerminal({ name: "Update Claude Code", shellPath: win ? "powershell.exe" : undefined, env: profileEnv() });
+      t.show();
+      t.sendText(win ? `& "${bin}" update` : `"${bin}" update`);
+    },
     // Deleting a profile: log its accounts out first (a Mac keeps Claude's login in the keychain, named for the folder).
     // The environment names the profile's folders, so only that profile's logins are touched.
     logout: async (dir, { claude }) => {
