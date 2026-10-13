@@ -22,7 +22,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   and Help → Report Issue goes to Kural's GitHub issues.
 - Get started (Command Palette: "Kural: Get Started"): pick Claude, Google Gemini, ChatGPT (Codex) or your own model;
   Kural checks each step (install, log in or download a model, a test request). Any one is enough; all can be set up.
-  "Install for me" installs in the background (Gemini: Google's Antigravity installer; Codex: Homebrew or npm,
+  "Install for me" installs in the background (Gemini: Google's Antigravity installer, or "Update for me" (agy update)
+  when an Antigravity older than 1.3.4 is there; Codex: Homebrew or npm,
   whichever the computer has, else it points to Node.js's installer) and shows what it's doing on the page (its output,
   time, a warning when it goes quiet; Stop); any question the installer asks comes as a pop-up. "Log in": Codex opens
   the login page in the browser; Gemini (Antigravity) only logs in on its own screen, so Kural runs it in a terminal,
@@ -70,8 +71,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
   Claude Code's own plans and memory). How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
   answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
-  it. While it works, a "Did you know?" line under "Thinking…" shows a Kural tip or programming fact (a new one every
-  15 s; "Know more" opens its page in Kural's browser tab); setting kural.chat.didYouKnow turns it off.
+  it.
   Notifications: when an answer is done or needs you (a command or file to allow, a question, a plan to build, an
   error, a login), a system notification names the chat ("Fix the login is done"); click it to go there. By default only
   while you're not looking (Kural's window not in front, or that chat not on screen); setting kural.notifications:
@@ -244,7 +244,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (rename, share / stop sharing, delete). Switching reloads the window so everything starts again with the other
   accounts; a new profile opens Get started to log in. Logins and usage numbers are always separate; sharing means the
   same chats, History, open tabs and Tab Completion memory as the main profile. Google Gemini and models on this
-  computer are the same in every profile. On a Mac, a new profile needs Claude Code 2.1.296 or newer (claude update), and
+  computer are the same in every profile. On a Mac, a new profile needs Claude Code 2.1.296 or newer (with an older one, New
+  profile offers "Update Claude Code": one click, then it goes on; if that fails, "Update in a Terminal"), and
   profiles are experimental there (two logins in the Mac keychain haven't been tried yet).
   CLAUDE_CODE_OAUTH_TOKEN or an API key in your environment applies to every
   profile.

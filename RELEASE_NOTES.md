@@ -3,6 +3,19 @@
 - **Gemini needs Antigravity 1.3.4 or newer.** Kural's approval gate works only from that version; an older one never
   asked it, so its first change could run before Kural noticed. Kural no longer starts an older one: Get started and
   the chat say to run `agy update`.
+- **An older Antigravity is updated, not "not found".** Get started's "Install for me" ran Google's installer, which
+  leaves an existing agy as it is, and then said Kural "can't find the agy program". Now Get started shows the version
+  it found (for example 1.2.16) and **Update for me** runs `agy update`.
+- **Gemini's login link works.** Get started opened Google's sign-in page with the link cut short ("Required parameter
+  is missing: response_type"): Kural read it off Antigravity's screen while it was still being written. Now it uses the
+  link Antigravity hands to the browser, or the screen's once it's complete.
+- **Kural Settings: no usage on an AI you logged out of.** A card that says "Not set up" or "Not logged in" no longer
+  shows the old account's numbers and "Usage updated just now". The AI Usage panel keeps the history.
+- **New profile with an older Claude Code: one click to update it.** The message that Claude Code is older than
+  2.1.296 now has an **Update Claude Code** button; after the update, making the profile goes on. If the update can't
+  finish (Homebrew, npm), **Update in a Terminal** runs it there.
+- **"Did you know?" is gone.** The tips under "Thinking…" while an answer is worked on, and their setting
+  `kural.chat.didYouKnow`, were removed.
 - Get started no longer says Gemini "can't ask before a command": it asks Kural before each change.
 - A few features are now marked **experimental** where they start: searching the public MCP directory for connectors,
   installing Ollama from the Tab Completion panel, and profiles on a Mac.

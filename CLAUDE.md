@@ -681,10 +681,6 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (a fixed button; mousedown is prevented so the click doesn't clear the selection) → a pill `kind: "quote"` {text ≤
   8,000 chars, label}; `buildPrompt` sends it as "Part of this chat I selected" with `> ` lines; textOf/titleOf/journal
   show `"label"`. Test: `test/chat-context.test.js` (also Ctrl+L and the no-log-button title bar).
-- **Did you know** (`media/facts.js`, setting `kural.chat.didYouKnow`): one fact under the working line from ~4 s into an
-  answer, a new one every 15 s, a fixed three-line height (the answer never jumps), gone when it ends; "Know more" opens
-  in Kural's browser. Kural tips link to the wiki (pages not published yet link to `blob/main/docs/wiki/*.md`); the
-  others to MDN/Wikipedia/official docs. Every link answered 200 on 8 Oct 2026: check new ones the same way.
 - **Only the project's files are "changed"** (`changes.js` `inProject`): checkpoints, `finishTurn` and old chats
   (`clean()`) leave out files outside the project folders (no folder open: `ws.workDir()`; a project inside /tmp counts),
   e.g. notes the AI writes in /tmp or `~/.claude`. Undo all, Restore code and what Tab/Auto learn follow.

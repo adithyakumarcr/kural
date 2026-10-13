@@ -56,6 +56,11 @@ CLIS.agy = {
   version: (bin) => agy.agyVersion(bin),
   // (agyVersion is null for an agy older than this: Get started says to update it)
   tooOld: `It doesn't start, or it's older than ${agy.MIN_VERSION}, the version Kural's approval gate needs. Update it: run "agy update" in a terminal, then Check again.`,
+  // An agy that runs but is too old: its version, and how it updates itself (Google's installer leaves an existing
+  // agy as it is, so "Install for me" runs this instead).
+  minVersion: agy.MIN_VERSION,
+  installedVersion: (bin) => agy.installedVersion(bin),
+  update: { args: ["update"], text: "agy update" },
   auth: (bin) => agy.agyAuth(bin),
   logout: (bin) => agy.agyLogout(bin),
   loginCommand: (bin) => agy.loginCommand(bin),

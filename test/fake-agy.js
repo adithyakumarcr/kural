@@ -57,7 +57,10 @@ if (!args.length) {
   ask();
   return;
 }
-if (args[0] === "--version") { console.log(process.env.FAKE_AGY_VERSION || "1.3.4"); process.exit(0); }
+// `update` (agy's own update): from then on this stand-in says 1.3.4 (FAKE_AGY_VERSION only until then).
+const updated = `${file}.updated`;
+if (args[0] === "--version") { console.log(fs.existsSync(updated) ? "1.3.4" : process.env.FAKE_AGY_VERSION || "1.3.4"); process.exit(0); }
+if (args[0] === "update") { fs.writeFileSync(updated, "1"); console.log("Updated to 1.3.4"); process.exit(0); }
 if (args[0] === "models") { console.log(["gemini-3.8-flash-low\tGemini 3.8 Flash (Low)", "gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)",
   "gemini-3.8-flash-high\tGemini 3.8 Flash (High)", "gemini-3.8-pro-high\tGemini 3.8 Pro (High)", "claude-sonnet-5\tClaude Sonnet 5"].join("\n")); process.exit(0); }
 const printed = flag("--print");

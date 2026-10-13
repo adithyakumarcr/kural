@@ -1,6 +1,6 @@
 // Usage thresholds with real routing/handoff methods, without any account requests.
 const assert = require("assert"), fs = require("fs"), os = require("os"), path = require("path"), Module = require("module");
-const values = {}, updates = [], config = { get: (k, d) => Object.hasOwn(values, k) ? values[k] : d,
+const values = {}, updates = [], config = { get: (k, d) => Object.hasOwn(values, k) ? values[k] : d, inspect: () => ({}),
   update: async (key, value, target) => { updates.push({ key, value, target }); values[key] = value; } };
 const load = Module._load;
 const vscode = { workspace: { isTrusted: true, workspaceFolders: [], textDocuments: [], getConfiguration: () => config },
@@ -81,6 +81,20 @@ function fixture() {
     for (const threshold of [0, 100, 42.5, "90", null, NaN]) await page.onMessage({ type: "usageSwitch", threshold });
     assert.strictEqual(updates.length, 2);
     await page.onMessage({ type: "usageSwitch", enabled: false }); assert.strictEqual(values["usageSwitch.enabled"], false);
+  });
+  await check("Kural Settings: a logged-out or not set up AI's card shows no usage (only a logged-in one does)", () => {
+    const page = new SettingsPage({ extension: { packageJSON: { version: "1" } }, extensionPath: "/x" }, {}, {});
+    page.account = { auth: { loggedIn: true, email: "a@b.c" }, cliAuth: { agy: { loggedIn: false }, codex: { loggedIn: true, email: "c@d.e" } } };
+    page.gs = { passed: true, cliReady: (id) => id !== "none", localModel: null };
+    report("agy", 40); report("codex", 30); report("claude", 20);
+    usage.addTokens("agy", { input: 12000, output: 49 });
+    const cards = page.state().cards, card = (id) => cards.find((c) => c.id === id);
+    assert.strictEqual(card("agy").state, "out");
+    assert.deepStrictEqual([card("agy").windows, card("agy").tokens, card("agy").at], [[], null, null]);
+    assert.strictEqual(card("codex").state, "on"); assert.strictEqual(card("codex").windows.length, 1); assert.ok(card("codex").at);
+    page.gs.cliReady = (id) => id !== "agy";
+    assert.strictEqual(page.state().cards.find((c) => c.id === "agy").state, "off");
+    assert.deepStrictEqual(page.state().cards.find((c) => c.id === "agy").windows, []);
   });
   await check("handoffs retain team, device, attachment and connector capability requirements", () => {
     report("claude", 71);

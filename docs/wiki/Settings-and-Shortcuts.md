@@ -33,7 +33,6 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.notifications` | whenAway | a system notification when a chat's answer is done or needs you: `whenAway` (Kural's window isn't in front, or that chat isn't on screen), `always`, `off`. On a Mac it shows as Script Editor: allow Script Editor and Kural in System Settings → Notifications. **Kural: Test Notification** sends one now |
 | `kural.chat.keepAwake` | on | while a chat is working, the Mac doesn't go to sleep by itself (the screen may still turn off; the lid still sleeps it). macOS only |
 | `kural.welcomeWhenEmpty` | on | closing the last editor tab opens the Welcome page (not when that tab was Welcome itself) |
-| `kural.chat.didYouKnow` | on | a short "Did you know?" tip under an answer while it's being worked on |
 | `kural.chat.moods` | (none) | your own chat moods (name, hint, instructions); edit them in Kural Settings → Moods |
 | `kural.chat.hiddenMoods` | (none) | built-in moods (Default, Explorer, Critic, Learn) removed from the chat's model menu; remove or restore them in Kural Settings → Moods |
 | `kural.usageSwitch.enabled` | off | move the same chat to another available AI when its reported usage reaches the AI's switch points; one switch for all AIs, shown on every AI's page in Kural Settings ("Switch to another AI near a limit") |

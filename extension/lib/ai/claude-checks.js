@@ -58,6 +58,17 @@ async function claudeLogout(bin, env) {
   return { ok: true };
 }
 
+// Update Claude Code (`claude update`: its own updater; it knows how it was installed). { ok, output } or { error }.
+// No input is given (stdin closed), so a question would end it; the caller checks the version afterwards either way.
+async function claudeUpdate(bin, env, timeout = 5 * 60000) {
+  const r = await run(bin, ["update"], env, timeout);
+  const output = `${r.stdout}\n${r.stderr}`.trim();
+  const last = (output.split("\n").filter((l) => l.trim()).pop() || "").slice(0, 300);
+  if (r.error) return { error: r.error.code === "ETIMEDOUT" ? `it didn't finish within ${Math.round(timeout / 60000)} minutes` : r.error.message };
+  if (r.status !== 0) return { error: last || `exit code ${r.status}` };
+  return { ok: true, output: last };
+}
+
 // "pro" → "Pro", "max" → "Max", "team" → "Team"…
 const planName = (t) => t ? `${String(t)[0].toUpperCase()}${String(t).slice(1)}` : "";
 
@@ -132,4 +143,4 @@ const INSTALL = {
 };
 const installFor = (platform) => INSTALL[platform === "win32" ? "win32" : "other"];
 
-module.exports = { claudeVersion, claudeAuth, claudeLogout, claudeTest, explain, gitVersion, installFor, describeMethod, TEST_PROMPT };
+module.exports = { claudeVersion, claudeAuth, claudeLogout, claudeUpdate, claudeTest, explain, gitVersion, installFor, describeMethod, TEST_PROMPT };
