@@ -45,7 +45,7 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 - The chat in every mode: it reads and edits files, runs commands, and each change can be kept or undone.
   - Codex asks Kural before each command in Agent mode, like Claude.
   - **Gemini asks through Kural's approval gate.** Google's program has no editor protocol, but it runs *hooks*:
-    Kural adds one entry, `kural-gate`, to `~/.gemini/antigravity-cli/hooks.json` (your own entries stay; the file before
+    Kural adds one entry, `kural-gate`, to `~/.gemini/config/hooks.json`, where Antigravity reads its hooks (your own entries stay; the file before
     is kept as `hooks.json.kural-backup`). Before each tool call Antigravity runs it and waits for Kural: the same cards
     and rules as Claude (files outside the project or that run code later, dangerous commands even in **Auto**; **Plan**
     and **Ask** change nothing). Undo's copy of a file is taken before the change is allowed. Antigravity's own modes
@@ -56,8 +56,8 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
       without the gate being asked (an Antigravity version without hooks), Kural stops Gemini and says so.
     - A project's own `.agents/hooks.json` (loaded by Antigravity only in trusted folders) runs alongside Kural's: it
       can add a "no" but can't overrule Kural's. It still runs its own command, so trust only folders you trust.
-    - **Not yet confirmed with the real Antigravity program**: `scripts/verify-agy-gate.sh` checks it on a computer
-      where `agy` is logged in.
+    - Checked with the real Antigravity (agy 1.3.4, 13 Oct 2026): a "no" from Kural stops the step, also in Auto.
+      `scripts/verify-agy-gate.sh` checks it again on a computer where `agy` is logged in (after an Antigravity update).
   - Gemini can't read attached pictures directly: Kural saves them where it can open them and tells it where.
 - Ask, Ctrl+K, Apply, commit messages and plain words in the terminal use the chat's model, so these too.
 - The usage meter: Codex has a Session (5-hour) and a Weekly limit, like Claude: the status bar shows its Session.

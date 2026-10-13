@@ -29,19 +29,20 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   opens Google's login page itself, asks for the code Google shows (a pop-up) and types it in, and closes the screen
   when you're logged in.
 - Gemini (Antigravity): Kural adds an approval gate to Antigravity's own hooks (an entry "kural-gate" in
-  ~/.gemini/antigravity-cli/hooks.json; your own entries stay), so Gemini asks Kural before each tool call and waits:
+  ~/.gemini/config/hooks.json; your own entries stay), so Gemini asks Kural before each tool call and waits:
   the same cards and rules as Claude (files outside the project, files that run code later, dangerous commands even in
   Auto; Plan and Ask change nothing). Antigravity's own modes still apply too: in Agent mode it runs no commands (the
   answer says which it didn't run); in Auto it runs them. A mode change stops approvals for the running answer and
   applies from the next message. If a change runs without the gate being asked (an Antigravity version without hooks),
-  Kural stops Gemini and says so; if the hooks file can't be read, Kural doesn't start Gemini. Not yet confirmed
-  with the real Antigravity program. Multiple agents work with Gemini; devices do not.
+  Kural stops Gemini and says so; if the hooks file can't be read, Kural doesn't start Gemini. Checked with the
+  real Antigravity (agy 1.3.4). Multiple agents work with Gemini; devices do not.
 - Chat (panel on the right; Ctrl+L shows or hides it; with code selected in the editor, Ctrl+L adds that code to your
   message instead, also while the chat is open): tabs; modes Agent (edits files, asks before commands), Auto (no asking, except
   dangerous commands: sudo, deleting outside the project, curl | sh, a forced push to main, git reset --hard…; the
   first switch to Auto explains this once; Gemini too, through Kural's gate), Plan
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
-  (Plan and Ask too, without asking; Codex: live search, its commands stay offline); a model on this computer can't.
+  (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
+  your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
   beside it: it goes into your message as a quote, and the AI gets the whole selected text. Side chat: select text in an
@@ -192,7 +193,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
 - Trust a workspace before using Kural AI; Kural is unavailable in Restricted Mode. Ask and Plan reject mutating
   requests handled by Kural's permission policy. Provider-native reads are not confined by this policy. Gemini's
-  approval gate (Antigravity hooks) is not yet confirmed with the real program; use a separately isolated account for
+  approval gate (Antigravity hooks) relies on Antigravity running its hooks; use a separately isolated account for
   untrusted content.
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
 - Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a short

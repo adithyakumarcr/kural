@@ -84,7 +84,7 @@ const allowAllNow = (tab) => !!tab.allowAll && tab.allowAllFor === grantKey(tab)
 // commands reach Kural's checks a different way, so the sentence about dangerous commands differs.
 function autoWarning(engine, fullSetup = false) {
   const base = "Auto mode runs commands and edits files without asking. Dangerous commands (sudo, deleting outside the project, a forced push to main…) still ask";
-  if (engine === "agy") return `${base}: with Google Gemini through Kural's approval gate, which hasn't been checked against the real Gemini program yet. If Gemini runs a step without asking the gate, Kural stops it after that step.`;
+  if (engine === "agy") return `${base}: with Google Gemini through Kural's approval gate (Antigravity's hooks). If Gemini runs a step without asking the gate, Kural stops it after that step.`;
   if (engine === "claude" && fullSetup) return `${base}, unless Claude Code's own settings (yours, or this project's) already allow them: with your full setup, Claude Code doesn't ask Kural about what they allow.`;
   return `${base}.`;
 }

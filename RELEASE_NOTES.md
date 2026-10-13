@@ -1,10 +1,12 @@
-## Not released yet
+## What's new in 1.1.0-alpha.9
 
 - **Safer by default** (from a security review):
   - "Allow all" ends when you change the mode or model, or the chat is handed to another AI; "Build it" uses Agent.
   - More commands ask even in Auto (piped `python`/`node`, `find -delete`, hidden `sudo`, deleting `main`, PowerShell),
     and more files that run code later ask before they're written (`CLAUDE.md`, `.mcp.json`, `.npmrc`, build files).
   - Only Atlassian's own read tools run without asking in a Jira chat.
+  - Claude and Gemini ask before searching the web or opening a page (Allow all covers the rest of the chat), except in
+    Auto: a web address can carry your project's data away.
   - Import settings skips risky settings and shortcuts and asks before installing extensions; export leaves out keys.
   - A project's settings can no longer turn on Auto, automatic updates or Tab's learning.
   - Terminal Tab reads git only inside your project, without running the repository's own programs.
@@ -20,9 +22,9 @@
   ends stubborn commands; Ctrl+K no longer pastes chatter; Get started no longer says "All set" after a failed test;
   Claude's temporary files are cleaned up; big chats save and big files diff without freezing.
 - **Gemini asks before it acts.** Kural adds an approval gate to Google Antigravity's own hooks (an entry "kural-gate" in
-  `~/.gemini/antigravity-cli/hooks.json`; your own entries stay). Gemini then waits for Kural before each tool call: the
-  same cards and rules as Claude, also in Auto for risky commands. Your own `agy` in a terminal isn't affected. Not yet
-  confirmed with the real Antigravity program (`scripts/verify-agy-gate.sh` checks it).
+  `~/.gemini/config/hooks.json`; your own entries stay). Gemini then waits for Kural before each tool call: the
+  same cards and rules as Claude, also in Auto for risky commands. Your own `agy` in a terminal isn't affected. Checked
+  with the real Antigravity (agy 1.3.4).
 - **Side chat.** Select text in an answer and press **Ask** to ask a quick question about it right under the answer. A
   fast model answers (Haiku, or the lightest Gemini model, or your own). It stays out of the conversation and is
   saved with the answer; **Add to chat** brings a useful side answer into your message.

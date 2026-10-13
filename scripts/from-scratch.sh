@@ -95,8 +95,13 @@ logout_codex() {
 # logged in by itself. Now: /logout if agy is there, then the saved login itself, always.
 # Kural's approval gate entry ("kural-gate") in agy's hooks file points into ~/.kural, which is deleted below: take the
 # entry out (your own entries stay), so your own agy doesn't run a hook that's gone. perl's JSON::PP is in every perl.
+# (~/.gemini/config/hooks.json is where agy reads hooks; older Kural versions wrote to antigravity-cli/hooks.json.)
 forget_agy_gate() {
-  local f="$HOME/.gemini/antigravity-cli/hooks.json"
+  local f
+  for f in "$HOME/.gemini/config/hooks.json" "$HOME/.gemini/antigravity-cli/hooks.json"; do forget_agy_gate_in "$f"; done
+}
+forget_agy_gate_in() {
+  local f="$1"
   [ -f "$f" ] && grep -q '"kural-gate"' "$f" 2>/dev/null || return 0
   if perl -MJSON::PP -e '
     my $f = shift; local $/; open(my $h, "<", $f) or exit 1; my $j = JSON::PP->new->relaxed->decode(<$h>); close $h;
