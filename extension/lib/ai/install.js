@@ -184,7 +184,10 @@ function npmBinDir(plan) {
 // The whole install: the plan, then a retry into ~/.npm-global if npm had no permission.
 // Resolves { ok, code, output, cancelled, plan, binDir? (npm: the folder the program went into) }.
 async function install(id, opts = {}) {
-  const plan = await installPlan(id);
+  // An installed program that's too old updates itself (opts.update: { file, args, text }; a .js stand-in runs with Node).
+  const u = opts.update;
+  const plan = u ? { how: "update", ...(/\.js$/i.test(u.file) ? { file: process.execPath, args: [u.file, ...u.args], env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } }
+    : { file: u.file, args: u.args, env: { ...process.env, PATH: await fullPath() } }), text: u.text } : await installPlan(id);
   if (plan.missing) return { ok: false, plan };
   if (opts.onPlan) opts.onPlan(plan);
   let r = await runInstall(plan, opts), used = plan;

@@ -22,7 +22,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   and Help → Report Issue goes to Kural's GitHub issues.
 - Get started (Command Palette: "Kural: Get Started"): pick Claude, Google Gemini, ChatGPT (Codex) or your own model;
   Kural checks each step (install, log in or download a model, a test request). Any one is enough; all can be set up.
-  "Install for me" installs in the background (Gemini: Google's Antigravity installer; Codex: Homebrew or npm,
+  "Install for me" installs in the background (Gemini: Google's Antigravity installer, or "Update for me" (agy update)
+  when an Antigravity older than 1.3.4 is there; Codex: Homebrew or npm,
   whichever the computer has, else it points to Node.js's installer) and shows what it's doing on the page (its output,
   time, a warning when it goes quiet; Stop); any question the installer asks comes as a pop-up. "Log in": Codex opens
   the login page in the browser; Gemini (Antigravity) only logs in on its own screen, so Kural runs it in a terminal,

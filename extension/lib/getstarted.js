@@ -287,7 +287,10 @@ class GetStarted {
     const bin = await c.find(chosen || undefined).catch(() => null);
     if (!bin) { S.install = { state: "missing", chosen: !!chosen, chosenPath: chosen }; S.login = { state: "blocked" }; S.test = { state: "blocked" }; return; }
     const version = await c.version(bin).catch(() => null);
-    S.install = version ? { state: "ok", path: tilde(bin), version, chosen: !!chosen } : { state: "broken", path: tilde(bin), error: c.tooOld || "It doesn't start (no version).", chosen: !!chosen };
+    // Runs, but older than Kural needs: say which version, and offer its own update.
+    const old = !version && c.installedVersion ? await c.installedVersion(bin).catch(() => null) : null;
+    S.install = version ? { state: "ok", path: tilde(bin), version, chosen: !!chosen }
+      : { state: "broken", path: tilde(bin), error: c.tooOld || "It doesn't start (no version).", chosen: !!chosen, ...(old ? { old, need: c.minVersion, update: c.update.text } : {}) };
     S.bin = bin;
     if (!version) { S.login = { state: "blocked" }; S.test = { state: "blocked" }; return; }
     if (this.rec[id] && this.rec[id].bin !== bin) { this.rec[id].bin = bin; brain.setCli(id, { bin }); await this.save(); }
@@ -444,15 +447,17 @@ class GetStarted {
   // Install in the background (lib/ai/install.js). Questions the installer asks become pop-ups. No Homebrew and no
   // Node.js: say so, and offer Node.js's download page (its installer is a normal Mac/Windows app).
   async installCli(id) {
-    const c = CLIS[id];
+    const c = CLIS[id], S = this.s.clis[id];
     if (this.installing) return;
     this.installing = id;
+    // Installed but too old: it updates itself (its installer would leave it as it is).
+    const updating = !!(S.install.old && c.update && S.bin);
     // The run, shown live on the page (its output, how long, when it last printed) so you can see it isn't stuck.
     const run = this.run = { id, text: "", lines: [], started: Date.now(), last: Date.now(), ac: new AbortController(), warned: false };
     this.wait(`install-${id}`);
     let ticker = null;
     try {
-      const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Installing ${c.program}`, cancellable: true }, (progress, token) => {
+      const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `${updating ? "Updating" : "Installing"} ${c.program}`, cancellable: true }, (progress, token) => {
         token.onCancellationRequested(() => run.ac.abort());
         let lastLine = "";
         const show = () => {
@@ -472,6 +477,7 @@ class GetStarted {
         };
         ticker = setInterval(show, 1000);
         return installer.install(id, {
+          update: updating ? { file: S.bin, args: c.update.args, text: c.update.text } : null,
           signal: run.ac.signal,
           onPlan: (plan) => { log(`get started: installing ${c.program}: ${plan.text}`); run.text = plan.text; run.lines.push(`$ ${plan.text}`); show(); },
           onOutput: (text) => {
@@ -518,8 +524,17 @@ class GetStarted {
         const f = [id, `${id}.cmd`, `${id}.exe`].map((n) => require("path").join(r.binDir, n)).find((p) => require("fs").existsSync(p));
         if (f) { await cfg().update(`${id}Path`, f, vscode.ConfigurationTarget.Global); await this.refresh(); }
       }
+      const now = this.s.clis[id].install;
+      // Still too old (the installer left it, or the update didn't take): say so with the versions, not "can't find".
+      if (now.state !== "ok" && now.old) {
+        this.wait(null);
+        vscode.window.showWarningMessage(`Kural: ${c.program} is still version ${now.old}; Kural needs ${now.need} or newer. Update it in a terminal with: ${now.update}`,
+          "Update in a terminal", "Show details").then((pick) => {
+          if (pick === "Show details") vscode.commands.executeCommand("kural.showLog");
+          else if (pick) this.installInTerminal(id);
+        });
       // Installed somewhere Kural doesn't look by itself (an unusual npm folder): say so, and let you point to it.
-      if (this.s.clis[id].install.state !== "ok") {
+      } else if (now.state !== "ok") {
         this.wait(null);
         vscode.window.showWarningMessage(`Kural: ${c.program} was installed, but Kural can't find the ${id} program. Choose the file it was installed to.`, `Choose the ${id} file…`, "Show details").then((pick) => {
           if (pick === "Show details") vscode.commands.executeCommand("kural.showLog");
@@ -551,8 +566,12 @@ class GetStarted {
   }
 
   installInTerminal(id) {
-    const c = CLIS[id];
-    this.terminal(`Install ${c.program}`, process.platform === "win32" ? `${c.install}; Write-Host 'Done. Back to Kural.'` : `${c.install} && echo 'Done. Back to Kural.'`);
+    const c = CLIS[id], S = this.s.clis[id];
+    // Too old: the program's own update, run by its full path (it may not be on the terminal's PATH).
+    const bin = S.install.old && c.update && S.bin;
+    const cmd = !bin ? c.install : process.platform === "win32" ? `& '${S.bin.replace(/'/g, "''")}' ${c.update.args.join(" ")}`
+      : `'${S.bin.replace(/'/g, "'\\''")}' ${c.update.args.join(" ")}`;
+    this.terminal(`${bin ? "Update" : "Install"} ${c.program}`, process.platform === "win32" ? `${cmd}; Write-Host 'Done. Back to Kural.'` : `${cmd} && echo 'Done. Back to Kural.'`);
     this.wait(`install-${id}`);
   }
 

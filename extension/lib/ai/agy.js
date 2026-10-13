@@ -118,12 +118,17 @@ function quietDir() {
 
 const older = (a, b) => { const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); return false; };
 
-// "1.3.4" → "1.3.4" (or null). Too old for the approval gate: null too (Get started then says to update).
-async function agyVersion(bin) {
+// The version agy says it is ("1.2.16"), old or not (or null: it doesn't run).
+async function installedVersion(bin) {
   const r = await run(bin, ["--version"], { timeout: 15000 });
   const v = /(\d+\.\d+\.\d+)/.exec(`${r.stdout}`);
-  if (!v) return null;
-  return older(v[1], MIN_VERSION) ? null : v[1];
+  return v ? v[1] : null;
+}
+
+// "1.3.4" → "1.3.4" (or null). Too old for the approval gate: null too (Get started then says to update).
+async function agyVersion(bin) {
+  const v = await installedVersion(bin);
+  return v && !older(v, MIN_VERSION) ? v : null;
 }
 
 // The same check before a chat starts agy (set up earlier with an older one, or agy changed since): once per program
@@ -884,5 +889,5 @@ async function agyTest(bin, { cwd, model } = {}) {
   } catch (e) { return { ok: false, error: e.message, login: !!e.login }; }
 }
 
-module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginSession, hasSavedLogin, setLog,
+module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, installedVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginSession, hasSavedLogin, setLog,
   NOT_LOGGED_IN, MIN_VERSION, TOO_OLD, _test: { describe, gateCall, parseUsage, friendly, findLoginUrl, asksForCode } };
