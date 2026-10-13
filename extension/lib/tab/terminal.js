@@ -18,7 +18,10 @@
 const vscode = require("vscode");
 const { execFile } = require("child_process");
 const { log } = require("../ai/claude");
-const { isHomeOrAbove, hasControl } = require("../paths");
+const { isHomeOrAbove, hasControl, within } = require("../paths");
+const { SECRET } = require("./activity");
+// What the log may show of a typed or suggested line: never one that looks like it holds a password or key (APP-12).
+const shown = (s, n = 120) => { const t = String(s || ""); return SECRET.test(t) ? `[${t.length} characters hidden: looks secret]` : t.slice(0, n); };
 
 const DIFF_CHARS = 3500;
 
@@ -52,16 +55,45 @@ If nothing sensible fits, reply <cmd></cmd>.`;
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function run(cmd, args, cwd, timeout = 1500) {
+// git for a suggestion must never run a program the repository's config names (APP-1): fsmonitor, diff.external,
+// diff drivers/textconv (--no-ext-diff --no-textconv), clean/process filters (`filters` = the repo's own filter
+// names, each switched off), gpg for log.showSignature, hooks; submodules (their own config) are skipped.
+const GIT_SAFE = ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "diff.external=", "-c", "log.showSignature=false",
+  "-c", `core.hooksPath=${process.platform === "win32" ? "NUL" : "/dev/null"}`];
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" };
+function run(cmd, args, cwd, timeout = 1500, filters = []) {
+  const off = filters.flatMap((n) => ["-c", `filter.${n}.clean=`, "-c", `filter.${n}.smudge=`, "-c", `filter.${n}.process=`, "-c", `filter.${n}.required=false`]);
+  const extra = args[0] === "diff" ? ["--no-ext-diff", "--no-textconv", "--ignore-submodules=all"] : args[0] === "status" || args[1] === "status" ? ["--ignore-submodules=all"] : [];
+  const gitArgs = [...GIT_SAFE, ...off, ...args, ...extra];
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, timeout, maxBuffer: 4 * 1024 * 1024 }, (err, out) => resolve(err ? "" : String(out)));
+    execFile(cmd, cmd === "git" ? gitArgs : args, { cwd, timeout, maxBuffer: 4 * 1024 * 1024, env: cmd === "git" ? GIT_ENV : process.env },
+      (err, out) => resolve(err ? "" : String(out)));
   });
 }
+// The filter drivers the repository itself defines (local/worktree config, includes too): reading config runs nothing.
+async function repoFilters(cwd) {
+  const names = new Set();
+  for (const where of ["--local", "--worktree"]) {
+    const out = await run("git", ["config", where, "--includes", "--name-only", "--get-regexp", "^filter\\."], cwd);
+    for (const line of out.split("\n")) {
+      if (!line.trim()) continue;
+      const m = /^filter\.(.+)\.[^.]+$/.exec(line.replace(/\r$/, ""));
+      if (!m || /[=\r\n]/.test(m[1])) return null;   // a name `-c` can't switch off: no git context then
+      names.add(m[1]);
+    }
+  }
+  return [...names];
+}
+// The terminal's folder is inside one of the window's (trusted) workspace folders.
+const inWorkspace = (cwd) => within(cwd, (vscode.workspace.workspaceFolders || []).filter((f) => f.uri && f.uri.scheme === "file").map((f) => f.uri.fsPath));
 
 // What the model needs to know besides the line itself. Git is asked at most every few seconds per folder.
 // For a commit also: when the last commit was and which files changed (to pick your activity since then).
 const gitCache = new Map();   // cwd + kind -> { at, text, since, files }
 async function gitContext(cwd, wantDiff) {
+  // Only in a trusted window and inside its workspace folders: a folder you cd'd into (an unpacked download) has a
+  // .git/config nobody trusted.
+  if (vscode.workspace.isTrusted === false || !inWorkspace(cwd)) return { at: Date.now(), text: "", since: 0, files: [] };
   const key = `${cwd}|${wantDiff}`;
   const hit = gitCache.get(key);
   if (hit && Date.now() - hit.at < 4000) return hit;
@@ -69,21 +101,23 @@ async function gitContext(cwd, wantDiff) {
   // A repo at your home folder (dotfiles) or above: `git status` would look through all of home (Desktop, Documents,
   // Music…, and macOS asks about each). Not worth it for a suggestion.
   const top = (await run("git", ["rev-parse", "--show-toplevel"], cwd)).trim();
-  if (top && isHomeOrAbove(top)) { const r = { at: Date.now(), text: "", since: 0, files: [] }; gitCache.set(key, r); return r; }
-  const status = top ? await run("git", ["--no-optional-locks", "status", "--short", "--branch"], cwd) : "";
+  const filters = top && !isHomeOrAbove(top) ? await repoFilters(cwd) : null;
+  if (!filters) { const r = { at: Date.now(), text: "", since: 0, files: [] }; gitCache.set(key, r); return r; }
+  const git = (args) => run("git", args, cwd, 1500, filters);
+  const status = await git(["--no-optional-locks", "status", "--short", "--branch"]);
   if (status) {
     text = `git status:\n${status.split("\n").slice(0, 25).join("\n")}`;
-    const remotes = (await run("git", ["remote"], cwd)).trim().split("\n").filter(Boolean);
+    const remotes = (await git(["remote"])).trim().split("\n").filter(Boolean);
     if (remotes.length) text += `\nRemotes: ${remotes.join(", ")}`;
     if (wantDiff) {
-      let diff = await run("git", ["diff", "--cached", "--stat"], cwd), which = "staged", names = ["--cached"];
-      let body = diff ? await run("git", ["diff", "--cached", "-U1"], cwd) : "";
-      if (!diff) { which = "not staged yet"; names = []; diff = await run("git", ["diff", "--stat"], cwd); body = await run("git", ["diff", "-U1"], cwd); }
+      let diff = await git(["diff", "--cached", "--stat"]), which = "staged", names = ["--cached"];
+      let body = diff ? await git(["diff", "--cached", "-U1"]) : "";
+      if (!diff) { which = "not staged yet"; names = []; diff = await git(["diff", "--stat"]); body = await git(["diff", "-U1"]); }
       if (diff) text += `\n\nChanges (${which}):\n${diff}\n${body.slice(0, DIFF_CHARS)}${body.length > DIFF_CHARS ? "\n… (more changes)" : ""}`;
-      files = (await run("git", ["diff", "--name-only", ...names], cwd)).split("\n").filter(Boolean);
-      const log = (await run("git", ["log", "-8", "--format=%s"], cwd)).trim();
+      files = (await git(["diff", "--name-only", ...names])).split("\n").filter(Boolean);
+      const log = (await git(["log", "-8", "--format=%s"])).trim();
       if (log) text += `\n\nTheir recent commit messages (match this style):\n${log}`;
-      since = Number((await run("git", ["log", "-1", "--format=%ct"], cwd)).trim()) * 1000 || 0;
+      since = Number((await git(["log", "-1", "--format=%ct"])).trim()) * 1000 || 0;
     }
   }
   const out = { at: Date.now(), text, since, files };
@@ -291,12 +325,12 @@ function terminalTab(context, session, local, activity = null, commitSession = n
       const t0 = Date.now();
       let line = "", engine = "";
       try { [line, engine] = await suggest(terminal, typed, mine.cts.token); } catch (e) { log(`terminal tab: ${e.message}`); }
-      if (mine.cts.token.isCancellationRequested) { log(`terminal tab: "${typed.slice(0, 60)}" dropped (you typed on)`); return; }
+      if (mine.cts.token.isCancellationRequested) { log(`terminal tab: "${shown(typed, 60)}" dropped (you typed on)`); return; }
       cache.set(typed, line || "");
       if (cache.size > 200) cache.delete(cache.keys().next().value);
       if (job === mine) job = null;
-      if (!line) { log(`terminal tab: no suggestion for "${typed.slice(0, 60)}" (${engine || "no engine"})`); return; }
-      log(`terminal tab: "${line}" after ${Date.now() - t0} ms (${engine})`);
+      if (!line) { log(`terminal tab: no suggestion for "${shown(typed, 60)}" (${engine || "no engine"})`); return; }
+      log(`terminal tab: "${shown(line)}" after ${Date.now() - t0} ms (${engine})`);
       // Still on that line, in that terminal: show it.
       if (latest === typed && vscode.window.activeTerminal === terminal) vscode.commands.executeCommand("workbench.action.terminal.triggerSuggest");
     }, pause);
@@ -314,4 +348,4 @@ function terminalTab(context, session, local, activity = null, commitSession = n
   log("terminal tab: ready");
 }
 
-module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT, _test: { suggestionItem, gitContext, claudePrompt, plainWords, tidyIntent, intentPrompt } };
+module.exports = { terminalTab, tidy, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT, _test: { suggestionItem, gitContext, claudePrompt, plainWords, tidyIntent, intentPrompt, shown } };

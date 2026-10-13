@@ -11,7 +11,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const CRASH_LINE = /terminated unexpectedly|renderer process gone|process gone|has crashed|crashed\b|exited unexpectedly|GPU process (?:exited|crashed|isn't usable)|out of memory|oom\b|SIGSEGV|SIGABRT|SIGTRAP|SIGKILL|SIGBUS|Trace\/BPT trap|EXC_BAD_ACCESS|EXC_BREAKPOINT|Failed to fetch dynamically imported module|ENOENT[^\n]*\/Kural\.app\//i;
+const CRASH_LINE = /terminated unexpectedly|renderer process gone|process gone|has crashed|crashed\b|exited unexpectedly|GPU process (?:exited|crashed|isn't usable)|out of memory|\bOOM\b|SIGSEGV|SIGABRT|SIGTRAP|SIGKILL|SIGBUS|Trace\/BPT trap|EXC_BAD_ACCESS|EXC_BREAKPOINT|Failed to fetch dynamically imported module|ENOENT[^\n]*\/Kural\.app\//i;
 const ERROR_LINE = /\[(error|critical)\]/i;
 
 // ---------- markers ----------
@@ -75,6 +75,24 @@ function crashReports(since, dir = DIAG) {
 }
 
 // ---------- VS Code's logs ----------
+// Where the session folders are. The extension's own log folder (context.logUri) sits inside the current session's:
+// <logs>/<20261006T064923>/window1/exthost/kural.kural. So the folder that holds sessions is the parent of the
+// ancestor named like a session; this stays right when VS Code is started with its own --user-data-dir or logs path
+// (Linux, portable installs), where the folder guessed from the storage path is not where the logs are. `fallback`
+// (the guess) is used when logUri is missing or doesn't look like that.
+function logsRoot(logUri, fallback) {
+  if (logUri) {
+    let d = path.resolve(String(logUri));
+    for (;;) {
+      const up = path.dirname(d);
+      if (up === d) break;
+      if (/^\d{8}T\d{6}$/.test(path.basename(d))) return up;
+      d = up;
+    }
+  }
+  return fallback;
+}
+
 // Session folders are named by start time (20261006T064923). Those that started after `since` and before this one.
 function sessionsSince(logsDir, since, now = Date.now()) {
   let names = [];
@@ -142,4 +160,4 @@ function report({ markers = [], ips = [], sessions = [], version = "", platform 
   return parts.join("\n");
 }
 
-module.exports = { writeMarker, endedUnexpectedly, parseIps, crashReports, sessionsSince, scanSession, report, CRASH_LINE, DIAG, alive };
+module.exports = { writeMarker, endedUnexpectedly, parseIps, crashReports, sessionsSince, logsRoot, scanSession, report, CRASH_LINE, DIAG, alive };

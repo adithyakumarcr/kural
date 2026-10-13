@@ -11,12 +11,14 @@ if (process.platform === "win32") { console.log("handoff-fakes: skipped on Windo
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-handoff-"));
 const proj = path.join(tmp, "proj"); fs.mkdirSync(proj);
+// (Gemini's agy gets Kural's approval gate in ~/.gemini and ~/.kural: a home of our own, never the real one.)
+process.env.HOME = process.env.USERPROFILE = path.join(tmp, "home"); fs.mkdirSync(process.env.HOME, { recursive: true });
 process.env.FAKE_CODEX_FILE = path.join(tmp, "codex-state"); delete process.env.FAKE_CODEX_STATE;
 process.env.FAKE_AGY_FILE = path.join(tmp, "agy-state"); delete process.env.FAKE_AGY_STATE;
 process.env.FAKE_CODEX_INPUT_LOG = path.join(tmp, "codex-input.jsonl");
 process.env.FAKE_AGY_INPUT_LOG = path.join(tmp, "agy-input.jsonl");
-const PORT = 11600 + Math.floor(Math.random() * 300);
-const conf = { claudePath: path.join(__dirname, "fake-claude-chat.js"), "chat.fullClaudeCodeSetup": false, "tabCompletion.ollamaUrl": `http://127.0.0.1:${PORT}`,
+let PORT = 0;   // (any free port: set once the stand-in listens)
+const conf = { claudePath: path.join(__dirname, "fake-claude-chat.js"), "chat.fullClaudeCodeSetup": false, get "tabCompletion.ollamaUrl"() { return `http://127.0.0.1:${PORT}`; },
   "localModels.contextLength": 32768 };
 const vscode = { workspace: { isTrusted: true, workspaceFolders: [{ name: "proj", uri: { scheme: "file", fsPath: proj } }], textDocuments: [],
   getConfiguration: () => ({ get: (k, d) => Object.hasOwn(conf, k) ? conf[k] : d, inspect: () => ({}) }) },
@@ -32,7 +34,7 @@ brain.setCli("agy", { bin: path.join(__dirname, "fake-agy.js"), ready: true, mod
 brain.setStore(path.join(tmp, "cli-store"));
 const { ChatView } = require("../extension/lib/chat");
 const { Attachments } = require("../extension/lib/chat/attachments");
-const fakeOllama = require("./fake-ollama-chat").start(PORT);
+const fakeOllama = require("./fake-ollama-chat").start(0);
 fs.writeFileSync(process.env.FAKE_CODEX_FILE, "ok"); fs.writeFileSync(process.env.FAKE_AGY_FILE, "ok");
 
 let failed = 0;
@@ -76,6 +78,7 @@ async function received(to, chat, tab) {
 const stop = (chat) => { for (const r of chat.runtime.values()) if (r.proc) r.proc.kill(); };
 
 (async () => {
+  await fakeOllama.ready; PORT = fakeOllama.port;
   for (const from of ["claude", "codex", "agy", "ollama"]) {
     for (const to of ["claude", "codex", "agy", "ollama"].filter((x) => x !== from)) {
       await check(`${from} → ${to}: the next AI gets the whole conversation and your new message, in a new session`, async () => {

@@ -161,7 +161,17 @@ function connectorName(item, existing = []) {
 }
 
 // → { name, args } for `claude` / `codex`, or { error } in words. values: { [input key]: text }.
-function addArgs(ai, item, values = {}, existing = []) {
+// Keys stay off the command line (APP-9): on Mac/Linux any user of the computer can see a program's arguments while it
+// runs. With `keyDir`, a key goes into a private file (0600) there instead, which the connector reads when it starts:
+// a web connector's headers through Claude Code's `headersHelper` (`cat` of a JSON file), a local connector's
+// variables through `sh -c '. "$0"; exec "$@"' <file> <command…>`. Both checked with Claude Code 2.1.296 and Codex
+// 0.160 (Codex only stored here: it doesn't start servers to list them). Windows keeps the arguments: other users
+// can't read a program's command line there, and there's no `sh`/`cat`.
+const sq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+const ENV_RUN = '. "$0"; exec "$@"';
+const keyFile = (keyDir, ai, name, ext) => require("path").join(keyDir, `${ai}-${name}.${ext}`);
+
+function addArgs(ai, item, values = {}, existing = [], opts = {}) {
   const why = unsupported(ai, item);
   if (why) return { error: why };
   const inputs = item.inputs || [], vals = {};
@@ -181,9 +191,16 @@ function addArgs(ai, item, values = {}, existing = []) {
   if (item.kind === "remote") {
     if (!/^https?:\/\/\S+$/i.test(item.url || "")) return { error: "This connector has no usable address." };
     if (claude) {
+      const hs = inputs.filter((i) => i.header);
+      if (hs.length && useFiles(opts)) {
+        const file = keyFile(opts.keyDir, ai, name, "headers.json"), headers = {};
+        for (const i of hs) headers[i.header] = (i.prefix || "") + vals[i.key];
+        const json = { type: item.transport === "sse" ? "sse" : "http", url: item.url, headersHelper: `cat ${sq(file)}` };
+        return { name, args: ["mcp", "add-json", "-s", "user", name, JSON.stringify(json)], files: [{ path: file, data: JSON.stringify(headers) }] };
+      }
       // (Headers last: Claude Code's -H takes every word after it.)
       const args = ["mcp", "add", "-s", "user", "--transport", item.transport === "sse" ? "sse" : "http", name, item.url];
-      const headers = inputs.filter((i) => i.header).map((i) => `${i.header}: ${(i.prefix || "") + vals[i.key]}`);
+      const headers = hs.map((i) => `${i.header}: ${(i.prefix || "") + vals[i.key]}`);
       if (headers.length) args.push("-H", ...headers);
       return { name, args };
     }
@@ -192,9 +209,26 @@ function addArgs(ai, item, values = {}, existing = []) {
   // On this computer: npx (npm) or uvx (pypi), with the package's own required variables and arguments.
   const runner = item.kind === "pypi" ? ["uvx", item.package] : ["npx", "-y", ...(item.args || [item.package])];
   const cmd = [...runner, ...inputs.filter((i) => i.arg).map((i) => vals[i.key])];
-  const env = inputs.filter((i) => i.env).map((i) => `${i.env}=${vals[i.key]}`);
+  const envs = inputs.filter((i) => i.env);
+  if (envs.length && useFiles(opts)) {
+    const file = keyFile(opts.keyDir, ai, name, "env");
+    const run = ["sh", "-c", ENV_RUN, file, ...cmd];
+    return { name, args: claude ? ["mcp", "add", "-s", "user", name, "--", ...run] : ["mcp", "add", name, "--", ...run],
+      files: [{ path: file, data: envs.map((i) => `export ${i.env}=${sq(vals[i.key])}\n`).join("") }] };
+  }
+  const env = envs.map((i) => `${i.env}=${vals[i.key]}`);
   if (claude) return { name, args: ["mcp", "add", "-s", "user", name, ...env.flatMap((e) => ["-e", e]), "--", ...cmd] };
   return { name, args: ["mcp", "add", name, ...env.flatMap((e) => ["--env", e]), "--", ...cmd] };
+}
+
+const useFiles = (opts) => !!(opts && opts.keyDir) && (opts.platform || process.platform) !== "win32";
+
+// What the program lists for a connector whose key is in a file: the command without Kural's wrapper (for the page).
+function unwrapTarget(target) {
+  return String(target || "").replace(/^sh -c \. "\$0"; exec "\$@" .*?[\\/][a-z]+-[A-Za-z0-9_.-]+\.env /, "");
+}
+function unwrapArgs(cmd, args) {
+  return cmd === "sh" && Array.isArray(args) && args[0] === "-c" && args[1] === ENV_RUN ? args.slice(3) : null;
 }
 
 // The same item with `unsupported` filled in for this AI (what the page needs).
@@ -202,4 +236,4 @@ function addArgs(ai, item, values = {}, existing = []) {
 const shown = (item) => item.kind === "remote" ? item.url : (item.kind === "pypi" ? ["uvx", item.package] : ["npx", "-y", ...(item.args || [item.package])]).join(" ");
 const forAi = (ai, item) => ({ ...item, unsupported: unsupported(ai, item), shows: shown(item) });
 
-module.exports = { BUILT_IN, REGISTRY, search, matchBuiltIn, parseRegistry, fromRegistryServer, addArgs, connectorName, unsupported, forAi, slug };
+module.exports = { keyFile, unwrapTarget, unwrapArgs, ENV_RUN, BUILT_IN, REGISTRY, search, matchBuiltIn, parseRegistry, fromRegistryServer, addArgs, connectorName, unsupported, forAi, slug };

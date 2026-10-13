@@ -10,6 +10,8 @@ function parseSums(text) {
     if (!line.trim()) continue;
     const m = /^([0-9a-fA-F]{64}) [ *](.+)$/.exec(line);
     if (!m) throw new Error(`the checksum list has a line that isn't a checksum: ${line.slice(0, 80)}`);
+    if (out.has(m[2])) throw new Error("the checksum list has duplicate filenames");
+    if (/[\\/\x00-\x1f\x7f]/.test(m[2]) || m[2] === "." || m[2] === "..") throw new Error("unsafe release filename");
     out.set(m[2], m[1].toLowerCase());
   }
   return out;
@@ -43,4 +45,34 @@ function pickManifest(assets) {
   return sums && sig ? { sums, sig } : null;
 }
 
-module.exports = { parseSums, verifySignature, expectedSha, pickManifest };
+
+// The signed asset name binds its hash to a version. Unsigned release tags cannot relabel old binaries as new.
+function validateAssetVersion(assetName, version, currentVersion) {
+  const { parseVersion, compareVersions } = require("./version-compare");
+  if (!parseVersion(version) || !parseVersion(currentVersion) || compareVersions(version, currentVersion) <= 0)
+    throw new Error("invalid version or update would not advance this installation");
+  const v = String(version).replace(/^v/, "");
+  const safe = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const forms = new RegExp(`^(?:Kural-${safe}-(?:macos-arm64\\.zip|windows-x64-setup\\.exe)|kural_${safe}(?:\\+[0-9A-Za-z.-]+)?_amd64\\.deb)$`);
+  if (!forms.test(String(assetName))) throw new Error("the signed asset filename does not match the requested release version");
+}
+
+// Right before a verified download is handed to an installer with administrator rights (Ubuntu: pkexec dpkg -i): copy
+// it into a new private folder and hash the copy again. Returns the copy's path; throws if it no longer matches.
+// (Narrows, doesn't close, the window in which another program running as you could swap the file: only a privileged
+// step that checks the signature itself would close it.)
+function verifiedCopy(file, sha) {
+  const fs = require("fs"), os = require("os"), path = require("path");
+  if (!/^[0-9a-f]{64}$/.test(String(sha || ""))) throw new Error("no signed checksum to check the download against");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-install-"));   // 0700: only you
+  const copy = path.join(dir, path.basename(file));
+  fs.copyFileSync(file, copy, fs.constants.COPYFILE_EXCL);
+  fs.chmodSync(copy, 0o400);
+  const h = crypto.createHash("sha256"), buf = Buffer.alloc(1 << 20), fd = fs.openSync(copy, "r");
+  try { for (let n; (n = fs.readSync(fd, buf, 0, buf.length, null)) > 0;) h.update(buf.subarray(0, n)); } finally { fs.closeSync(fd); }
+  const got = h.digest("hex");
+  if (got !== sha) { fs.rmSync(dir, { recursive: true, force: true }); throw new Error("the download changed after it was checked; not installing it"); }
+  return copy;
+}
+
+module.exports = { verifiedCopy, validateAssetVersion, parseSums, verifySignature, expectedSha, pickManifest };

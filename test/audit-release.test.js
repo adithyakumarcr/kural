@@ -1,0 +1,13 @@
+const assert=require('assert'),crypto=require('crypto');
+const {parseVersion}=require('../extension/lib/version-compare');
+const {validateAssetVersion,expectedSha,parseSums}=require('../extension/lib/release-verify');
+for(const v of ['v99.0.0$(id)','1.2.3\nwhoami','1.2.3";id','1.2.3-alpha..1','1.2.3/../x']) assert.strictEqual(parseVersion(v),null,v);
+const k=crypto.generateKeyPairSync('ed25519'), pub=k.publicKey.export({type:'spki',format:'pem'});
+const old='Kural-1.0.0-macos-arm64.zip', sums='a'.repeat(64)+'  '+old+'\n',sig=crypto.sign(null,Buffer.from(sums),k.privateKey).toString('base64');
+assert.strictEqual(expectedSha(sums,sig,old,[pub]),'a'.repeat(64));
+assert.throws(()=>validateAssetVersion(old,'2.0.0','1.5.0'),/filename/,'old signed bytes cannot be relabelled as a new version');
+assert.throws(()=>validateAssetVersion(old,'1.0.0','1.5.0'),/advance/);
+for(const n of ['Kural-2.0.0-macos-arm64.zip','Kural-2.0.0-windows-x64-setup.exe','kural_2.0.0+1.135.06055_amd64.deb']) validateAssetVersion(n,'2.0.0','1.5.0');
+assert.throws(()=>parseSums(sums+sums),/duplicate/);
+assert.throws(()=>parseSums('a'.repeat(64)+'  ../bad.zip\n'),/unsafe/);
+console.log('audit-release: strict tags, signed version binding, downgrade and unsafe manifest regressions PASS');

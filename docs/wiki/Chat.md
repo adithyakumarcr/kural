@@ -28,7 +28,8 @@ Skip). Files you attached are fine. That keeps the AI out of your other folders,
 nothing asks.
 
 **Files that run code later ask too, even in your project** (Agent mode): git hooks, `.vscode/tasks.json`, `package.json`,
-`.env`, a Makefile, a Dockerfile, GitHub workflows and shell profiles. A page or README the AI reads could try to trick it
+`.env`, a Makefile, a Dockerfile, GitHub workflows, shell profiles, `CLAUDE.md`, `.mcp.json`, `.npmrc`, Python/Gradle/
+Maven/Cargo build files and editor settings (in any upper/lower case). A page or README the AI reads could try to trick it
 into planting one, so writing one gets a card ("This file can make your computer run something later."). The temp folder
 isn't writable without asking either.
 
@@ -36,7 +37,9 @@ You can change the mode while an answer is running. Agent → Auto: the commands
 later ones don't ask. Dangerous commands still ask in Auto (and after "Allow all"): `sudo`, deleting outside the project
 or the whole project, `curl … | sh`, a forced push to main, `git reset --hard`, `git clean -f`, writing into `/etc`,
 `/usr` or `~/.ssh`, formatting a disk, shutting down. It's a best-effort check of the command's text, not a sandbox.
-Gemini (Antigravity) can't ask, so in Auto it doesn't get this check. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
+Gemini (Antigravity) gets this check through Kural's approval gate (a hook in Antigravity's own settings; not yet
+confirmed with the real program). "Allow all" lasts only for the mode, model and conversation you gave it in: a new mode, another model (also one Auto
+picks) or a handoff ends it. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.
 
 ## The model menu (bottom of the chat)
@@ -229,7 +232,8 @@ With a Claude model, the chat uses your whole Claude Code setup: MCP servers, co
 
 1. **Kural Settings → Settings** on the Claude card (or the gear beside Claude in the model menu). That opens Claude's page.
 2. **Connectors → Add connector.** Search, or pick one from Popular.
-3. **Add.** Fill in a token or a folder only if it asks. A result from the public MCP directory (not one of the Popular ones) first shows the exact
+3. **Add.** Fill in a token or a folder only if it asks. On a Mac and Linux Kural keeps the token in a private file and the
+   connector reads it when it starts, so other programs on your computer never see it. A result from the public MCP directory (not one of the Popular ones) first shows the exact
    command or address it will run, since nobody checked it: add it only if you trust it.
 4. **Sign in**, if the connector needs your account. A terminal opens: type `/mcp`, pick the connector, then Authenticate.
 

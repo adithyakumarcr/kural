@@ -26,6 +26,7 @@ echo "Building $TITLE ..."
 # 1. Move the app folder and rename the executables
 mv "$R/usr/share/codium" "$R/usr/share/$NAME"
 A="$R/usr/share/$NAME"
+python3 scripts/electron_runtime.py "$A" linux-x64
 mv "$A/codium" "$A/$NAME"
 mv "$A/bin/codium" "$A/bin/$NAME"
 rm -f "$A/bin/codium-tunnel"
@@ -37,6 +38,7 @@ sed -i -e "s#/usr/share/codium#/usr/share/$NAME#" \
 # 2–3. Names, data folders, built-in extensions (Kural + Claudemeter), Git's Ctrl+K
 #      shortcuts moved, auto-update off. Shared with the macOS and Windows builds.
 python3 scripts/rebrand.py "$A/resources/app" linux
+python3 scripts/sbom.py "dist/kural-${VER%%+*}-linux-x64.cdx.json" --app-root "$A/resources/app" --platform linux-x64
 
 # 4. Desktop menu entries, icon, shell completions, mime
 rm -f "$R"/usr/share/applications/codium*.desktop "$R/usr/share/pixmaps/vscodium.png" "$R/usr/share/appdata/codium.appdata.xml"

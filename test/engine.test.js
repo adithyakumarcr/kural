@@ -8,7 +8,7 @@ const fake = require("./fake-ollama-chat");
 
 let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
-const PORT = 11463;
+let PORT = 0;   // (set once the stand-in listens: any free port)
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), "kural-engine-"));
 fs.writeFileSync(path.join(proj, "README.md"), "# My project\nmore\n");
 fs.writeFileSync(path.join(proj, "notes.txt"), "one\nthree\n");
@@ -30,8 +30,8 @@ function ask(opts, text, onPermission, during) {
 const text = (ev) => ev.filter((m) => m.type === "stream_event" && m.event.delta && m.event.delta.type === "text_delta").map((m) => m.event.delta.text).join("");
 
 (async () => {
-  const f = fake.start(PORT);
-  await new Promise((r) => setTimeout(r, 100));
+  const f = fake.start(0);
+  await f.ready; PORT = f.port;
 
   await check("an answer streams in, then the result", async () => {
     const { events, result } = await ask({}, "hello there");
@@ -152,9 +152,9 @@ const text = (ev) => ev.filter((m) => m.type === "stream_event" && m.event.delta
     const word = "வணக்கம் உலகம்";
     const line = Buffer.from(JSON.stringify({ message: { role: "assistant", content: word }, done: false }) + "\n" + JSON.stringify({ message: { role: "assistant", content: "" }, done: true }) + "\n");
     const cut = line.indexOf(Buffer.from("வ")) + 1;   // in the middle of a letter
-    const srv = http.createServer((q, res) => { q.resume(); q.on("end", () => { res.write(line.subarray(0, cut)); setTimeout(() => res.end(line.subarray(cut)), 30); }); }).listen(11464);
-    await new Promise((r) => setTimeout(r, 50));
-    const { events } = await ask({ baseUrl: "http://127.0.0.1:11464", tools: [] }, "hello");
+    const srv = http.createServer((q, res) => { q.resume(); q.on("end", () => { res.write(line.subarray(0, cut)); setTimeout(() => res.end(line.subarray(cut)), 30); }); }).listen(0, "127.0.0.1");
+    await new Promise((r) => srv.once("listening", r));
+    const { events } = await ask({ baseUrl: `http://127.0.0.1:${srv.address().port}`, tools: [] }, "hello");
     srv.close();
     assert.strictEqual(text(events), word);
   });

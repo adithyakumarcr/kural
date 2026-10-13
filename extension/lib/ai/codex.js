@@ -19,6 +19,7 @@ const crypto = require("crypto");
 const { spawn, execFile } = require("child_process");
 const usage = require("./usage");
 const { profileEnv } = require("../profiles/env");   // (a profile's own CODEX_HOME)
+const { writePrivate } = require("../private-file");
 
 const IS_WIN = process.platform === "win32";
 const RAW_LOG = process.env.KURAL_RAW_LOG || "";
@@ -564,8 +565,7 @@ class CodexAgent {
     try {
       let all = {}; try { all = JSON.parse(fs.readFileSync(f, "utf8")); } catch { /* first one */ }
       all[this.sessionId] = this.threadId;
-      fs.mkdirSync(path.dirname(f), { recursive: true });
-      fs.writeFileSync(f, JSON.stringify(all));
+      writePrivate(f, JSON.stringify(all));
     } catch { /* best effort */ }
   }
 
@@ -669,7 +669,7 @@ class CodexAgent {
       else if (b.type === "image" && b.source && b.source.data) {
         const ext = (/image\/(\w+)/.exec(b.source.media_type || "") || [, "png"])[1].replace("jpeg", "jpg");
         const f = path.join(privateTmp("pictures"), `${crypto.randomUUID()}.${ext}`);
-        try { fs.writeFileSync(f, Buffer.from(b.source.data, "base64")); items.push({ type: "localImage", path: f }); temp.push(f); } catch { /* skip it */ }
+        try { fs.writeFileSync(f, Buffer.from(b.source.data, "base64"), { mode: 0o600 }); items.push({ type: "localImage", path: f }); temp.push(f); } catch { /* skip it */ }
       } else if (b.type === "document") text += `\n\n(A PDF was attached: ${b.title || "document"}. Codex can't read PDFs here.)`;
     }
     return { items: [textInput(text), ...items], temp };

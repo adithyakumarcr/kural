@@ -146,7 +146,8 @@ mac() {
     # instead of changing your system's Python.
     if ! python3 -c "import PIL" 2>/dev/null; then
       [ -x build/venv/bin/python3 ] || { echo "Setting up Pillow in build/venv (once) ..."; python3 -m venv build/venv; }
-      build/venv/bin/python3 -c "import PIL" 2>/dev/null || build/venv/bin/python3 -m pip install -q pillow
+      # (An exact Pillow, checked against the hashes in scripts/requirements-icons.txt; ready-made wheels only.)
+      build/venv/bin/python3 -c "import PIL" 2>/dev/null || build/venv/bin/python3 -m pip install -q --require-hashes --only-binary=:all: -r scripts/requirements-icons.txt
       export PATH="$PWD/build/venv/bin:$PATH"
     fi
     ./build-mac.sh

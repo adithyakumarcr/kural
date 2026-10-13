@@ -188,7 +188,7 @@ check("updates.js: a failing mv leaves the old app intact", () => {
   assert.strictEqual(marker(app), "old"); assert.match(log, /failed/);
 });
 check("updates.js: the script text is the shared file's text", () => {
-  assert.ok(macSteps({ app: "/A/Kural.app", fresh: "/N/Kural.app", version: "1" }).includes(fs.readFileSync(LIB, "utf8")));
+  assert.ok(macSteps({ app: "/A/Kural.app", fresh: "/N/Kural.app", version: "1.0.0" }).includes(fs.readFileSync(LIB, "utf8")));
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

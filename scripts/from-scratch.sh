@@ -93,6 +93,20 @@ logout_codex() {
 # Secret Service, and in ~/.gemini/antigravity-cli/antigravity-oauth-token where there's no keyring (SSH). So the login
 # survived both `agy --print /logout` (which may not run slash commands when printing) and removing agy, and a new agy
 # logged in by itself. Now: /logout if agy is there, then the saved login itself, always.
+# Kural's approval gate entry ("kural-gate") in agy's hooks file points into ~/.kural, which is deleted below: take the
+# entry out (your own entries stay), so your own agy doesn't run a hook that's gone. perl's JSON::PP is in every perl.
+forget_agy_gate() {
+  local f="$HOME/.gemini/antigravity-cli/hooks.json"
+  [ -f "$f" ] && grep -q '"kural-gate"' "$f" 2>/dev/null || return 0
+  if perl -MJSON::PP -e '
+    my $f = shift; local $/; open(my $h, "<", $f) or exit 1; my $j = JSON::PP->new->relaxed->decode(<$h>); close $h;
+    exit 1 unless ref $j eq "HASH"; delete $j->{"kural-gate"};
+    open(my $o, ">", "$f.kural-tmp") or exit 1; print $o JSON::PP->new->pretty->canonical->encode($j); close $o;
+    rename("$f.kural-tmp", $f) or exit 1;' "$f" 2>/dev/null
+  then say "Antigravity: removed Kural's approval gate from its hooks file"
+  else say "Antigravity: couldn't remove Kural's entry \"kural-gate\" from $f: delete it by hand"; fi
+}
+
 logout_agy() {
   local b; b=$(find_bin agy) || b=""
   [ -n "$b" ] && { limited 60 "$b" --print /logout --output-format json >/dev/null 2>&1 || true; }
@@ -104,6 +118,7 @@ logout_agy() {
     secret-tool clear service gemini username antigravity >/dev/null 2>&1 || true
   fi
   gone "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+  forget_agy_gate
   if [ "$left" = 1 ]; then say "Antigravity (Google Gemini): its keychain login is still there. Open Keychain Access, search \"gemini\", delete it"
   else say "Antigravity (Google Gemini): logged out"; fi
   return 0

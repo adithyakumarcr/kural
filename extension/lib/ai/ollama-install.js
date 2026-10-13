@@ -12,6 +12,7 @@
 
 const fs = require("fs"), os = require("os"), path = require("path");
 const { spawn } = require("child_process");
+const { onText } = require("../utf8");
 const { privateTmp } = require("../paths");
 
 const BASE = "https://ollama.com/download";
@@ -89,11 +90,13 @@ class OllamaInstaller {
   }
 
   // A file from ollama.com, with the download percent.
-  async download(name, url = `${this.base}/${name}`) {
+  // onlyHost: the answer must come from this host (a redirect elsewhere is refused).
+  async download(name, url = `${this.base}/${name}`, onlyHost = null) {
     this.set({ phase: "download", percent: 0, note: `Downloading ${name}` });
     const file = path.join(privateTmp("ollama"), name);
     const res = await fetch(url, { signal: this.ctl.signal });
     if (!res.ok) throw new Error(`ollama.com answered ${res.status} for ${name}`);
+    if (onlyHost && !fromOllama(res.url || url, onlyHost)) throw new Error(`${name} came from ${new URL(res.url).host}, not ${onlyHost}; not using it`);
     const total = Number(res.headers.get("content-length")) || 0;
     const out = fs.createWriteStream(file);
     const done = new Promise((resolve, reject) => { out.on("finish", resolve); out.on("error", reject); });
@@ -117,11 +120,14 @@ class OllamaInstaller {
   }
 
   // Run a program; onOut gets its output as it comes. Resolves with the exit code.
+  // opts.input: a Buffer written to its stdin (then closed).
   exec(cmd, args, onOut = () => {}, opts = {}) {
+    const { input, ...rest } = opts;
     return new Promise((resolve, reject) => {
-      const p = this.child = this.run(cmd, args, { stdio: ["ignore", "pipe", "pipe"], cwd: os.tmpdir(), ...opts });
-      if (p.stdout) p.stdout.on("data", (d) => onOut(String(d)));
-      if (p.stderr) p.stderr.on("data", (d) => onOut(String(d)));
+      const p = this.child = this.run(cmd, args, { stdio: [input ? "pipe" : "ignore", "pipe", "pipe"], cwd: os.tmpdir(), ...rest });
+      if (input && p.stdin) { p.stdin.on("error", () => {}); p.stdin.end(input); }
+      if (p.stdout) onText(p.stdout, onOut);
+      if (p.stderr) onText(p.stderr, onOut);
       p.on("error", reject);
       p.on("close", (code) => resolve(code));
     });
@@ -146,6 +152,7 @@ class OllamaInstaller {
       });
       if (this.stopped) throw new Error("stopped");
       if (code !== 0 || !fs.existsSync(path.join(stage, "Ollama.app"))) throw new Error(`unpacking Ollama failed (unzip ${code})`);
+      await this.macSigned(path.join(stage, "Ollama.app"));
       const app = path.join(dir, "Ollama.app");
       if (fs.existsSync(app)) {
         // An older Ollama: quit it first (Get started's "Update Ollama"), like Ollama's own install.sh.
@@ -159,8 +166,32 @@ class OllamaInstaller {
     } finally { fs.rmSync(stage, { recursive: true, force: true }); fs.rmSync(zip, { force: true }); }
   }
 
+  // Before a download is installed or run (APP-6): it must carry a valid code signature. Mac: codesign checks every
+  // file of the app and that it's signed with a Developer ID (a team), not ad hoc. Ollama's own Team ID isn't pinned
+  // (not confirmed here), so a validly signed app from another developer would pass; the download is https from
+  // ollama.com either way.
+  async macSigned(app) {
+    const what = [];
+    const ok = await this.exec("/usr/bin/codesign", ["--verify", "--deep", "--strict", app], (t) => what.push(t));
+    let info = "";
+    const shown = ok === 0 ? await this.exec("/usr/bin/codesign", ["-dv", "--verbose=2", app], (t) => { info += t; }) : 1;
+    const team = /TeamIdentifier=(\S+)/.exec(info);
+    if (ok !== 0 || shown !== 0 || !team || team[1] === "not" || !/Authority=Developer ID Application/.test(info))
+      throw new Error(`the downloaded Ollama.app isn't properly signed, so Kural didn't install it (${(what.join("").trim().split("\n").pop() || "no Developer ID").slice(0, 160)})`);
+    this.log(`ollama: Ollama.app signed by team ${team[1]}`);
+  }
+  async windowsSigned(file) {
+    let signer = "";
+    const code = await this.exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+      "$s = Get-AuthenticodeSignature -LiteralPath $env:KURAL_SIGNED_FILE; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject; exit 0 } else { [string]$s.Status; exit 1 }"],
+    (t) => { signer += t; }, { env: { ...process.env, KURAL_SIGNED_FILE: file } }).catch(() => 1);
+    if (code !== 0) throw new Error(`OllamaSetup.exe isn't validly signed (${signer.trim().slice(0, 120) || "no signature"}), so Kural didn't run it`);
+    this.log(`ollama: OllamaSetup.exe signed by ${signer.trim()}`);
+  }
+
   async windows() {
     const setup = await this.download("OllamaSetup.exe");
+    try { await this.windowsSigned(setup); } catch (e) { fs.rmSync(setup, { force: true }); throw e; }
     this.set({ phase: "install", percent: undefined, note: "Installing Ollama" });
     const code = await this.exec(setup, ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"]);
     fs.rmSync(setup, { force: true });
@@ -173,11 +204,19 @@ class OllamaInstaller {
   }
 
   async linux() {
-    const script = await this.download("install.sh", this.base.replace(/\/download$/, "") + "/install.sh");
+    // Ollama signs nothing for Linux (APP-6), so this is what can be checked: install.sh comes from Ollama's own site
+    // (no redirect elsewhere), looks like Ollama's installer, and goes to root through a pipe, the way Ollama's own
+    // `curl -fsSL https://ollama.com/install.sh | sh` does. It's never a file root reads later, which another program
+    // of yours could swap after this check.
+    const site = this.base.replace(/\/download$/, "");
+    const file = await this.download("install.sh", site + "/install.sh", new URL(site).host);
+    let body;
+    try { body = fs.readFileSync(file); } finally { fs.rmSync(file, { force: true }); }
+    if (!checkInstallScript(body)) throw new Error("the file from ollama.com doesn't look like Ollama's installer; not running it");
     const root = process.getuid && process.getuid() === 0;
     this.set({ phase: "download", percent: 0, note: root ? "Downloading Ollama" : "Ollama installs for the whole computer: type your password in the window that opens" });
     let last = "", error = "", buf = "";
-    const code = await this.exec(root ? "/bin/sh" : "pkexec", root ? [script] : ["/bin/sh", script], (t) => {
+    const code = await this.exec(root ? "/bin/sh" : "pkexec", root ? ["-s"] : ["/bin/sh", "-s"], (t) => {
       buf += t; const parts = buf.split(/[\r\n]+/); buf = parts.pop();
       for (const piece of parts) {
         const r = readLinux(piece);
@@ -192,8 +231,7 @@ class OllamaInstaller {
         } else if (r.note) this.set({ note: r.note });
         else if (r.percent !== undefined && this.state.phase === "download") this.set({ percent: r.percent });
       }
-    }).catch((e) => { throw e.code === "ENOENT" ? new Error("this computer has no pkexec to ask for the password") : e; });
-    fs.rmSync(script, { force: true });
+    }, { input: body }).catch((e) => { throw e.code === "ENOENT" ? new Error("this computer has no pkexec to ask for the password") : e; });
     if (this.stopped) throw new Error("stopped");
     if (code === 126 || code === 127) throw new Error("the password window was closed");
     if (code !== 0) throw new Error(error || `Ollama's installer failed (${code})${last ? `: ${last}` : ""}`);
@@ -225,4 +263,18 @@ class OllamaInstaller {
   }
 }
 
-module.exports = { OllamaInstaller, readLinux };
+// Ollama's own site, or Ollama's own GitHub repository (in case ollama.com redirects there; not seen, unchecked here).
+function fromOllama(url, host) {
+  const u = new URL(url);
+  if (u.host === host) return true;
+  return u.protocol === "https:" && ((u.host === "raw.githubusercontent.com" || u.host === "github.com") && u.pathname.startsWith("/ollama/ollama/"));
+}
+
+// Ollama's install.sh: a POSIX shell script that installs ollama, small. (Not a proof: Ollama publishes no signature.)
+function checkInstallScript(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 20 || buf.length > 256 * 1024 || buf.includes(0)) return false;
+  const t = buf.toString("utf8");
+  return /^#!\s*\/bin\/(ba)?sh\b/.test(t) && /ollama/i.test(t);
+}
+
+module.exports = { OllamaInstaller, readLinux, checkInstallScript, fromOllama };

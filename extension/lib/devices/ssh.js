@@ -19,6 +19,7 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
+const { onText } = require("../utf8");
 
 const IS_WIN = process.platform === "win32";
 const MAX_OUT = 200 * 1024;      // what a command may print before Kural cuts it (the model reads it all)
@@ -26,6 +27,18 @@ const MAX_OUT = 200 * 1024;      // what a command may print before Kural cuts i
 // 'it''s' quoting for the device's shell (devices run Linux: POSIX sh).
 const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
 // A path for the device's shell: quoted, but a leading ~/ still means the home folder (models often write ~/x).
+// The shared /tmp: someone else could make our fixed-name folder first, or a link there. Use it only if it's a real
+// folder (not a link), ours, and nobody else may enter it.
+function privateDir(dir) {
+  try { fs.mkdirSync(dir, { mode: 0o700 }); } catch (e) { if (e.code !== "EEXIST") return false; }
+  try {
+    const st = fs.lstatSync(dir);
+    if (!st.isDirectory() || st.isSymbolicLink()) return false;
+    if (process.getuid && st.uid !== process.getuid()) return false;
+    if (st.mode & 0o077) fs.chmodSync(dir, 0o700);
+    return (fs.lstatSync(dir).mode & 0o077) === 0;
+  } catch { return false; }
+}
 const qp = (p) => { p = String(p); return p === "~" ? '"$HOME"' : p.startsWith("~/") ? `"$HOME"/${q(p.slice(2))}` : q(p); };
 
 class Ssh {
@@ -42,7 +55,7 @@ class Ssh {
     this.keygen = process.env.KURAL_SSH_KEYGEN || (near && fs.existsSync(near) ? near : IS_WIN ? "ssh-keygen.exe" : "ssh-keygen");
     // A short folder for reused connections: macOS allows at most 104 characters for their socket path.
     this.controlDir = IS_WIN ? null : path.join("/tmp", `kural-ssh-${process.getuid ? process.getuid() : "u"}`);
-    if (this.controlDir) { try { fs.mkdirSync(this.controlDir, { recursive: true, mode: 0o700 }); fs.chmodSync(this.controlDir, 0o700); } catch { this.controlDir = null; } }
+    if (this.controlDir && !privateDir(this.controlDir)) this.controlDir = null;   // no reuse then (APP-13)
   }
 
   writeAskpass() {
@@ -91,8 +104,8 @@ class Ssh {
       const stop = (why) => { if (done) return; if (why === "timeout") timedOut = true; else err += "Stopped."; try { p.kill(); } catch { /* gone */ } finish(null); };
       const timer = setTimeout(() => stop("timeout"), timeout);
       if (signal) { if (signal.aborted) setImmediate(() => stop("abort")); else signal.addEventListener("abort", () => stop("abort"), { once: true }); }
-      p.stdout.on("data", (d) => { if (out.length < MAX_OUT) out += d; else cut = true; });
-      p.stderr.on("data", (d) => { if (err.length < 20000) err += d; });
+      onText(p.stdout, (d) => { if (out.length < MAX_OUT) out += d; else cut = true; });
+      onText(p.stderr, (d) => { if (err.length < 20000) err += d; });
       p.on("error", (e) => { err += e.code === "ENOENT" ? "There's no ssh program on this computer." : e.message; finish(-1); });
       p.on("close", (code) => finish(code));
       p.stdin.on("error", () => {});
@@ -114,7 +127,7 @@ class Ssh {
       const pub = await new Promise((resolve) => {
         const p = spawn(this.keygen, ["-y", "-f", this.key], { windowsHide: true });
         let out = "";
-        p.stdout.on("data", (d) => { out += d; });
+        onText(p.stdout, (d) => { out += d; });
         p.on("error", () => resolve(""));
         p.on("close", (code) => resolve(code === 0 ? out.trim() : ""));
       });
@@ -125,7 +138,7 @@ class Ssh {
       const r = await new Promise((resolve) => {
         const p = spawn(this.keygen, ["-q", "-t", "ed25519", "-N", "", "-C", `kural@${os.hostname().split(".")[0] || "computer"}`, "-f", this.key], { windowsHide: true });
         let err = "";
-        p.stderr.on("data", (d) => { err += d; });
+        onText(p.stderr, (d) => { err += d; });
         p.on("error", (e) => resolve({ code: -1, err: e.code === "ENOENT" ? "There's no ssh-keygen program on this computer." : e.message }));
         p.on("close", (code) => resolve({ code, err }));
       });
@@ -215,4 +228,4 @@ function explain(r) {
   return e.split("\n").filter(Boolean).slice(-2).join(" ") || `ssh stopped (exit code ${r.code}).`;
 }
 
-module.exports = { Ssh, explain, q, qp };
+module.exports = { Ssh, explain, q, qp, privateDir };

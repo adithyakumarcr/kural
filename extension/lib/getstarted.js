@@ -176,7 +176,7 @@ class GetStarted {
     const p = vscode.window.createWebviewPanel("kural.getStarted", "Get started", vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] });
     p.iconPath = vscode.Uri.joinPath(media, "chat-icon.svg");
-    const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    const nonce = require("crypto").randomBytes(16).toString("base64");
     const uri = (f) => p.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     p.webview.html = `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${p.webview.cspSource}; font-src ${p.webview.cspSource}; script-src 'nonce-${nonce}';">
@@ -274,6 +274,8 @@ class GetStarted {
     } else {
       this.s.test = { state: "fail", error: r.error, hint: checks.explain(r.error) };
       if (r.login) this.s.login = { state: "no" };
+      // Passed before, fails now (you pressed Test again): Claude is not ready. It used to stay "All set" beside the error.
+      if (this.rec.claude && !this.problem) this.problem = r.login ? "login" : "test";
     }
     this.changed();
   }
@@ -317,6 +319,8 @@ class GetStarted {
     } else {
       S.test = { state: "fail", error: r.error || "No answer." };
       if (r.login) S.login = { state: "no" };
+      // Passed before, fails now: no longer set up (until a test passes again).
+      if (this.rec[id]) { this.rec[id] = null; brain.setCli(id, { ready: false }); await this.save(); }
     }
     this.changed();
   }

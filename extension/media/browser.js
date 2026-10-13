@@ -49,10 +49,12 @@
 
   window.addEventListener("message", (e) => {
     const d = e.data || {};
-    // From the page (through the picker): only from our own frame.
-    if (d.kural && e.source === frame.contentWindow) {
+    // From the page (through the picker): only from our own frame, and never treated as Kural's own messages (the
+    // page is any website). A pick counts only while you're picking: a page can't add things to your chat by itself.
+    if (e.source === frame.contentWindow) {
+      if (!d.kural) return;
       if (d.type === "page") post({ type: "page", url: d.url, title: d.title });
-      if (d.type === "picked") { picking = false; pick.classList.remove("on"); post({ type: "picked", info: d.info }); flash(`Added ${d.info.short} to the chat.`, 2500); }
+      if (d.type === "picked" && picking && d.info && typeof d.info === "object") { picking = false; pick.classList.remove("on"); post({ type: "picked", info: d.info }); flash(`Added ${String(d.info.short || "an element")} to the chat.`, 2500); }
       if (d.type === "pickStopped") { picking = false; pick.classList.remove("on"); flash(""); }
       return;
     }

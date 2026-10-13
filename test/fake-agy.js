@@ -11,6 +11,17 @@
 //   "run tests"   runs `npm test` (run_command); refused unless --dangerously-skip-permissions
 //   "slow"        writes slowly until SIGINT, then ends the answer as "interrupted" and exits
 //   "who"         says the conversation id
+//   "tool <name> <json args>"  one tool call with those arguments. write_to_file / replace_file_content write "ok" to
+//                 TargetFile (refused unless accept-edits or skip-permissions); run_command with "touch <file>" creates
+//                 the file in Cwd (refused unless skip-permissions); view_file reads; any other tool does nothing
+//                 (refused unless accept-edits or skip-permissions). (run_command: "touch <file>" anywhere in it.)
+// Hooks (like Antigravity's PreToolUse hooks): before a tool that agy's mode allows, every PreToolUse hook in
+// $HOME/.gemini/antigravity-cli/hooks.json whose matcher fits ("*", "" or a regex) runs with the call as JSON on stdin
+// ({hookEventName, conversationId, workspacePaths, transcriptPath, artifactDirectoryPath, modelName, toolCall {name, args},
+// stepIdx}); a {"decision":"deny"} or {"allow_tool":false} answer, a non-zero exit or a timeout skips the tool (as a
+// permission error). FAKE_AGY_PERMISSIVE=1: agy's own mode refuses nothing in "tool …" (so only Kural's gate decides).
+// FAKE_AGY_NO_HOOKS=1: hooks never run (an agy without hooks). FAKE_AGY_HOOK_ENV=strip: hooks don't
+// get KURAL_AGY_GATE (an agy that doesn't pass its environment on). $FAKE_AGY_HOOK_LOG: one line per hook run.
 //   anything else "You said: <your words>"
 // `agy` with no arguments is its login screen: logged out, it logs in by itself after 2 s.
 const fs = require("fs"), os = require("os"), path = require("path"), crypto = require("crypto");
@@ -107,11 +118,56 @@ async function say(t) {
   upd({ state: "DONE", step_type: "agent_response", usage: { input_tokens: 100, output_tokens: 20 } });
 }
 
+// The PreToolUse hooks that fit this tool, from the global hooks file. [{ command, timeout }]
+function hooksFor(name) {
+  if (process.env.FAKE_AGY_NO_HOOKS) return [];
+  let cfg; try { cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".gemini", "antigravity-cli", "hooks.json"), "utf8")); } catch { return []; }
+  const out = [];
+  for (const v of Object.values(cfg || {})) for (const m of (v && v.PreToolUse) || []) {
+    const fits = !m.matcher || m.matcher === "*" || (() => { try { return new RegExp(m.matcher).test(name); } catch { return false; } })();
+    if (fits) for (const h of m.hooks || []) if (h.type === "command" && h.command) out.push(h);
+  }
+  return out;
+}
+// Runs them (all; any "no" blocks). → null (allowed) | the reason.
+async function runHooks(name, args) {
+  for (const h of hooksFor(name)) {
+    const why = await new Promise((resolve) => {
+      const env = { ...process.env };
+      if (process.env.FAKE_AGY_HOOK_ENV === "strip") delete env.KURAL_AGY_GATE;
+      const p = require("child_process").spawn(h.command, [], { env, stdio: ["pipe", "pipe", "pipe"] });
+      let out = "";
+      const timer = setTimeout(() => { p.kill("SIGKILL"); resolve("hook timed out"); }, (Number(h.timeout) || 30) * 1000);
+      p.stdout.on("data", (d) => { out += d; });
+      p.on("error", (e) => {
+        clearTimeout(timer);
+        if (process.env.FAKE_AGY_HOOK_LOG) fs.appendFileSync(process.env.FAKE_AGY_HOOK_LOG, JSON.stringify({ tool: name, error: e.message }) + "\n");
+        resolve(`hook failed: ${e.message}`);
+      });
+      p.on("exit", (code) => {
+        clearTimeout(timer);
+        if (process.env.FAKE_AGY_HOOK_LOG) fs.appendFileSync(process.env.FAKE_AGY_HOOK_LOG, JSON.stringify({ tool: name, code, out: out.trim() }) + "\n");
+        if (code !== 0) return resolve(`hook exited ${code}`);
+        let j = null; try { j = out.trim() ? JSON.parse(out.trim().split("\n").pop()) : null; } catch { return resolve("hook answer unreadable"); }
+        if (j && (j.decision === "deny" || j.allow_tool === false)) return resolve(j.reason || j.deny_reason || "denied by hook");
+        resolve(null);
+      });
+      p.stdin.on("error", () => {});
+      p.stdin.end(JSON.stringify({ hookEventName: "PreToolUse", conversationId: conv, workspacePaths: [cwd], transcriptPath: "", artifactDirectoryPath: "",
+        modelName: flag("--model") || "fake", toolCall: { name, args }, stepIdx: step }));
+    });
+    if (why) return why;
+  }
+  return null;
+}
+
 async function tool(name, parameters, allowed, work) {
   step++;
   upd({ state: "ACTIVE", step_type: "tool", tool_name: name, tool_info: { name, parameters } });
   await sleep(20);
   if (!allowed) { upd({ state: "ERROR", step_type: "tool", tool_name: name, tool_info: { name, error: { type: "permission", message: `permission check failed: user denied permission for ${name}` } } }); return false; }
+  const vetoed = await runHooks(name, parameters);
+  if (vetoed) { upd({ state: "ERROR", step_type: "tool", tool_name: name, tool_info: { name, error: { type: "permission", message: `permission denied by hook: ${vetoed}` } } }); return false; }
   const output = work();
   upd({ state: "DONE", step_type: "tool", tool_name: name, tool_info: { name, output } });
   return true;
@@ -140,6 +196,16 @@ async function turn(text) {
     const ok = await tool("run_command", { CommandLine: "npm test", Cwd: cwd }, skip, () => "All tests passed.");
     if (!ok) denied.push({ action: "command", display_name: "run_command" });
     await say(ok ? "The tests pass." : "I couldn't run the tests.");
+  } else if (/^tool (\S+) (\{.*\})\s*$/s.test(msg.trim())) {
+    const [, name, json] = /^tool (\S+) (\{.*\})\s*$/s.exec(msg.trim());
+    const a = JSON.parse(json);
+    const edits = mode === "accept-edits" || skip || !!process.env.FAKE_AGY_PERMISSIVE;
+    let allowed = edits, work = () => "Done.";
+    if (name === "write_to_file" || name === "replace_file_content") work = () => { fs.writeFileSync(path.resolve(cwd, a.TargetFile), "ok"); return "Wrote it."; };
+    else if (name === "run_command") { allowed = skip || !!process.env.FAKE_AGY_PERMISSIVE; work = () => { const m = /\btouch (\S+)/.exec(a.CommandLine || ""); if (m) fs.writeFileSync(path.resolve(a.Cwd || cwd, m[1]), ""); return "ran"; }; }
+    else if (name === "view_file") { allowed = true; work = () => fs.readFileSync(path.resolve(cwd, a.AbsolutePath), "utf8"); }
+    const ok = await tool(name, a, allowed, work);
+    await say(ok ? `${name} done.` : `${name} was not allowed.`);
   } else if (/^who/i.test(msg.trim())) {
     await say(`conversation ${conv}`);
   } else {
