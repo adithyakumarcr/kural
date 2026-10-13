@@ -6,6 +6,9 @@
 - **An older Antigravity is updated, not "not found".** Get started's "Install for me" ran Google's installer, which
   leaves an existing agy as it is, and then said Kural "can't find the agy program". Now Get started shows the version
   it found (for example 1.2.16) and **Update for me** runs `agy update`.
+- **Gemini's login link works.** Get started opened Google's sign-in page with the link cut short ("Required parameter
+  is missing: response_type"): Kural read it off Antigravity's screen while it was still being written. Now it uses the
+  link Antigravity hands to the browser, or the screen's once it's complete.
 - Get started no longer says Gemini "can't ask before a command": it asks Kural before each change.
 - A few features are now marked **experimental** where they start: searching the public MCP directory for connectors,
   installing Ollama from the Tab Completion panel, and profiles on a Mac.

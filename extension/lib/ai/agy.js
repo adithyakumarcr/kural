@@ -205,14 +205,24 @@ function findLoginUrl(text, cols) {
     if (!m) continue;
     let url = m[0];
     // Wrapped: the address ran to the end of the line, and the next line goes on with address characters only.
-    // (cols 0: the width isn't known; then a line that ends with the address and a next line of address characters
-    // only, with at least one of / ? = & %, count as one.)
-    const full = (l) => cols ? l.trimEnd().length >= cols - 1 : /https:\/\/\S+$|^[^\s"'<>]+$/.test(l.trimEnd());
-    const more = (l) => /^[^\s"'<>]+$/.test(l.trim()) && (cols || /[\/?=&%]/.test(l));
-    for (let j = i; full(lines[j] || "") && more(lines[j + 1] || ""); j++) url += lines[j + 1].trim();
+    // (cols 0: the width isn't known. Then a line that ends with the address and a next line of address characters
+    // only, with at least one of / ? = & %, count as one; after that, every line as wide as the first one goes on
+    // too, the last piece of any width. Real agy 1.3.4 at 80 columns: " https://…client_id=107100" then lines like
+    // " 6060591-…&code_chall", each 79 wide with a leading space, the last one " vg".)
+    const width = lines[i].trimEnd().length;
+    const full = (l, j) => cols ? l.trimEnd().length >= cols - 1 : j === i ? /https:\/\/\S+$/.test(l.trimEnd()) : l.trimEnd().length === width;
+    const more = (l, j) => /^[^\s"'<>]+$/.test(l.trim()) && (cols || j > i || /[\/?=&%]/.test(l));
+    for (let j = i; full(lines[j] || "", j) && more(lines[j + 1] || "", j); j++) url += lines[j + 1].trim();
     if (/accounts\.google\.com|oauth|auth|login|signin/i.test(url)) return url;
   }
   return null;
+}
+
+// A Google login address has everything Google needs (a piece of one gets "Required parameter is missing").
+// Other addresses: as they are.
+function complete(u) {
+  if (!/^https:\/\/accounts\.google\.com\/o\/oauth2\//.test(u)) return true;
+  return /[?&]response_type=/.test(u) && /[?&]redirect_uri=/.test(u) && /[?&]client_id=[^&]+\.apps\.googleusercontent\.com(&|$)/.test(u);
 }
 
 // Is the screen waiting for the code? (Its last lines ask for a code, and nothing came after.)
@@ -240,9 +250,10 @@ async function hasSavedLogin() {
 //   codeGiven()     after typing a code: a new question for one counts again
 //   dispose()
 // onUrl(url) once per address; onCode() when the screen waits for the code.
-function loginSession(bin, { onUrl, onCode } = {}) {
+function loginSession(bin, { onUrl, onCode, quietMs } = {}) {
   const seen = new Set();
-  const url = (u) => { if (u && /^https?:\/\//.test(u) && !seen.has(u)) { seen.add(u); onUrl && onUrl(u); } };
+  let opened = false;   // (agy's own "open the browser" call came: the screen's copy isn't needed)
+  const url = (u) => { if (u && /^https?:\/\//.test(u) && complete(u) && !seen.has(u)) { seen.add(u); onUrl && onUrl(u); } };
   // The stand-in browser opener (Mac, Linux): agy's "open the browser" writes the address to a file Kural reads.
   let shim = null, poll = null;
   if (!IS_WIN) {
@@ -251,9 +262,15 @@ function loginSession(bin, { onUrl, onCode } = {}) {
     fs.writeFileSync(urls, "", { mode: 0o600 });
     const quoted = `'${urls.replace(/'/g, "'\\''")}'`;
     for (const n of ["open", "xdg-open"]) fs.writeFileSync(path.join(shim, n), `#!/bin/sh\nfor a in "$@"; do last="$a"; done\nprintf '%s\\n' "$last" >> ${quoted}\n`, { mode: 0o700 });
-    poll = setInterval(() => { try { fs.readFileSync(urls, "utf8").split("\n").forEach(url); } catch { /* not yet */ } }, 300);
+    poll = setInterval(() => {
+      try { for (const u of fs.readFileSync(urls, "utf8").split("\n")) if (u.trim()) { opened = true; url(u.trim()); } } catch { /* not yet */ }
+    }, 300);
   }
-  let all = "", tail = "", idle = null, asked = false;
+  // The address on the screen comes in pieces, wrapped over many lines: read it only once the screen has been quiet
+  // (opened at the first piece, the link was cut short: Google's "Required parameter is missing: response_type").
+  // With the stand-in `open` (Mac, Linux), agy's own call gives the whole address, so the screen's waits longer.
+  const settle = quietMs != null ? quietMs : shim ? 2000 : 700;
+  let all = "", tail = "", idle = null, asked = false, screen = null;
   return {
     shellPath: bin,
     env: { AGY_CLI_DISABLE_AUTO_UPDATE: "1", ANTIGRAVITY_AGENT: null, ANTIGRAVITY_CONVERSATION_ID: null,
@@ -262,15 +279,17 @@ function loginSession(bin, { onUrl, onCode } = {}) {
       const s = String(d);
       all = (all + s).slice(-20000);
       tail = (tail + s).slice(-3000);
-      url(findLoginUrl(all, 0));
+      clearTimeout(screen);
+      screen = setTimeout(() => { if (!opened) url(findLoginUrl(all, 0)); }, settle);
       clearTimeout(idle);
       // Waiting for the code: the screen stops changing on a line that asks for it.
-      idle = setTimeout(() => { if (!asked && asksForCode(tail)) { asked = true; onCode && onCode(); } }, 600);
+      // (The question comes after the address: by then it's whole, so it's read now if agy's `open` didn't give it.)
+      idle = setTimeout(() => { if (!asked && asksForCode(tail)) { asked = true; if (!opened) url(findLoginUrl(all, 0)); onCode && onCode(); } }, 600);
     },
     codeGiven() { tail = ""; asked = false; },
     // The screen's last line (for "the login screen closed: …").
     lastLine() { return lastLine(strip(all).replace(/\r/g, "\n")); },
-    dispose() { clearInterval(poll); clearTimeout(idle); if (shim) fs.rm(shim, { recursive: true, force: true }, () => {}); },
+    dispose() { clearInterval(poll); clearTimeout(idle); clearTimeout(screen); if (shim) fs.rm(shim, { recursive: true, force: true }, () => {}); },
   };
 }
 
@@ -890,4 +909,4 @@ async function agyTest(bin, { cwd, model } = {}) {
 }
 
 module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, installedVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginSession, hasSavedLogin, setLog,
-  NOT_LOGGED_IN, MIN_VERSION, TOO_OLD, _test: { describe, gateCall, parseUsage, friendly, findLoginUrl, asksForCode } };
+  NOT_LOGGED_IN, MIN_VERSION, TOO_OLD, _test: { describe, gateCall, parseUsage, friendly, findLoginUrl, asksForCode, complete } };
