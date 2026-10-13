@@ -18,7 +18,17 @@ const bg = (cmd) => Number(spawnSync("/bin/sh", ["-c", `${cmd} >/dev/null 2>&1 &
   if (process.platform === "win32") { console.log("updates-script: SKIP (sh)"); return; }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-upd-"));
   const app = path.join(tmp, "Applications", "Kural.app"), fresh = path.join(tmp, "new", "Kural.app"), logFile = path.join(tmp, "update.log");
-  const mk = (dir, text) => { fs.mkdirSync(path.join(dir, "Contents", "MacOS"), { recursive: true }); fs.writeFileSync(path.join(dir, "Contents", "MacOS", "version"), text); };
+  // A whole stand-in app: the swap (lib/mac-swap.sh kural_app_ok) refuses one without the program, Electron Framework
+  // and the four helpers, and keeps the old app.
+  const mk = (dir, text) => {
+    const put = (rel, t = "x") => { const f = path.join(dir, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t, { mode: 0o755 }); };
+    put("Contents/MacOS/version", text); put("Contents/MacOS/Kural");
+    const fw = path.join(dir, "Contents/Frameworks/Electron Framework.framework");
+    put("Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework");
+    fs.symlinkSync("A", path.join(fw, "Versions/Current"));
+    fs.symlinkSync("Versions/Current/Electron Framework", path.join(fw, "Electron Framework"));
+    for (const h of ["", " (GPU)", " (Renderer)", " (Plugin)"]) put(`Contents/Frameworks/Kural Helper${h}.app/Contents/MacOS/Kural Helper${h}`);
+  };
   // "open" stand-in: records the app it was asked to start.
   const fakeOpen = path.join(tmp, "open.sh"); fs.writeFileSync(fakeOpen, `#!/bin/sh\necho "$1" > ${JSON.stringify(path.join(tmp, "opened"))}\n`, { mode: 0o755 });
   const ditto = process.platform === "darwin" ? "ditto" : null;
