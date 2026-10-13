@@ -9,6 +9,8 @@
 - **Gemini's login link works.** Get started opened Google's sign-in page with the link cut short ("Required parameter
   is missing: response_type"): Kural read it off Antigravity's screen while it was still being written. Now it uses the
   link Antigravity hands to the browser, or the screen's once it's complete.
+- **Kural Settings: no usage on an AI you logged out of.** A card that says "Not set up" or "Not logged in" no longer
+  shows the old account's numbers and "Usage updated just now". The AI Usage panel keeps the history.
 - Get started no longer says Gemini "can't ask before a command": it asks Kural before each change.
 - A few features are now marked **experimental** where they start: searching the public MCP directory for connectors,
   installing Ollama from the Tab Completion panel, and profiles on a Mac.
