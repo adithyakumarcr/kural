@@ -82,11 +82,19 @@ function fromShell() {
 }
 
 // Run `agy <args>` and wait. { status, stdout, stderr, error }. No terminal: agy never shows its login screen here.
+// How to start `bin`: a .js file (the test stand-in) runs with Node, like Codex's (codex.js command): Windows can't
+// start a .js file by itself.
+function command(bin, args) {
+  if (/\.js$/i.test(bin)) return { file: process.execPath, args: [bin, ...args], env: { ELECTRON_RUN_AS_NODE: "1" } };
+  return { file: bin, args, env: {} };
+}
+
 function run(bin, args, { timeout = 30000, cwd } = {}) {
   return new Promise((resolve) => {
     let p;
     try {
-      p = execFile(bin, args, { cwd: cwd || quietDir(), env: cleanEnv(), timeout, encoding: "utf8", windowsHide: true, maxBuffer: 4 << 20 }, (error, stdout, stderr) =>
+      const c = command(bin, args);
+      p = execFile(c.file, c.args, { cwd: cwd || quietDir(), env: cleanEnv(c.env), timeout, encoding: "utf8", windowsHide: true, maxBuffer: 4 << 20 }, (error, stdout, stderr) =>
         resolve({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: stdout || "", stderr: stderr || "",
           error: error && (error.killed ? Object.assign(new Error("Gemini took too long to answer."), { code: "ETIMEDOUT" }) : typeof error.code === "string" ? error : null) }));
     } catch (e) { resolve({ status: null, stdout: "", stderr: "", error: e }); return; }
@@ -422,7 +430,8 @@ class AgyAgent {
     let p;
     try {
       // Its own process group (not on Windows): agy starts helpers (a language server, MCP servers) that should stop with it.
-      p = spawn(this.opts.bin, this.args(), { cwd: this.cwd(), env: cleanEnv({ ...(this.opts.env || {}), KURAL_AGY_GATE: g.env }), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
+      const c = command(this.opts.bin, this.args());
+      p = spawn(c.file, c.args, { cwd: this.cwd(), env: cleanEnv({ ...(this.opts.env || {}), ...c.env, KURAL_AGY_GATE: g.env }), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
     } catch (e) { this.closeGate(); this.failStart(e.message); return; }
     this.proc = p;
     let buf = "";
