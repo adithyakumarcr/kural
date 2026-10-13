@@ -16,3 +16,8 @@ __pycache__/
 
 # Written by install.sh: which branch/commit a build from the code came from ("Unreleased version · main")
 extension/build.json
+
+# Marketing material made here, not part of Kural: LinkedIn posts, videos (2.5 GB), HTML pages
+/docs/linkedin/
+/video/
+*.html
