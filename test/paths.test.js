@@ -31,12 +31,14 @@ check("a link inside the project that points outside counts as outside", () => {
   const outside = path.join(tmp, "secret.txt"); fs.writeFileSync(outside, "x");
   fs.symlinkSync(outside, path.join(proj, "link.txt"));
   assert.ok(!within(path.join(proj, "link.txt"), [proj]));
-  assert.strictEqual(real(path.join(proj, "link.txt")), outside);
+  // (the real path: on Windows the temp folder's short name, "RUNNER~1", comes back long)
+  assert.strictEqual(real(path.join(proj, "link.txt")), fs.realpathSync.native(outside));
 });
 check("macOS-guarded folders and other people's homes are protected", () => {
   for (const n of ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Movies", "Library"]) assert.ok(isProtected(path.join(os.homedir(), n)), n);
   assert.ok(isProtected(path.join(os.homedir(), "Music") + path.sep));    // (a trailing slash too)
-  assert.ok(isProtected("/Volumes") && isProtected("/Users") && isProtected("/home"));
+  if (process.platform !== "win32") assert.ok(isProtected("/Volumes") && isProtected("/Users") && isProtected("/home"));
+  assert.ok(isProtected(path.dirname(os.homedir())), "everyone's homes (C:\\Users on Windows)");
   assert.ok(!isProtected(path.join(os.homedir(), "code")));
   assert.ok(isHomeOrAbove(os.homedir()) && isHomeOrAbove("/") && !isHomeOrAbove(path.join(os.homedir(), "code")));
 });

@@ -85,7 +85,7 @@ const BARE = /(?<![/\w])VSCodium(?![\w/])/;
 text = open(${JSON.stringify(src)}, encoding="utf-8").read()
 once = rebrand.drop_vscodium_welcome(text)
 twice = rebrand.drop_vscodium_welcome(once)
-open(${JSON.stringify(patched)}, "w", encoding="utf-8").write(once)
+open(${JSON.stringify(patched)}, "w", encoding="utf-8", newline="").write(once)
 print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 `);
   await check("the Welcome patch runs on a real workbench file without warnings, and again changes nothing", () => {

@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import stat
 import tempfile
@@ -77,7 +78,8 @@ class RuntimeTests(unittest.TestCase):
     def test_archive_rejection(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for name in ('../outside', '/outside', 'C:/outside', 'folder\\outside', 'a/../b'):
+            # (On Windows zipfile itself turns 'folder\\outside' into 'folder/outside', a harmless subfolder.)
+            for name in ('../outside', '/outside', 'C:/outside', 'a/../b') + (() if os.name == 'nt' else ('folder\\outside',)):
                 archive = root / 'bad.zip'
                 with zipfile.ZipFile(archive, 'w') as z:
                     z.writestr(name, b'harmless')
@@ -129,7 +131,8 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual((app / 'codium').read_bytes(), wire + b'new')
                 self.assertEqual((app / 'libEGL.so').read_bytes(), b'new library')
                 self.assertEqual((app / 'locales/en-US.pak').read_bytes(), b'new locale')
-                self.assertEqual(stat.S_IMODE((app / 'chrome-sandbox').stat().st_mode), 0o4755)
+                if os.name != 'nt':   # (no setuid bit on Windows)
+                    self.assertEqual(stat.S_IMODE((app / 'chrome-sandbox').stat().st_mode), 0o4755)
                 self.assertEqual(marker.read_text(), 'preserve the editor')
                 self.assertFalse((app / 'resources/default_app.asar').exists())
                 self.assertEqual(json.loads(manifest.read_text())['kuralRuntime']['version'], '42.11.12')

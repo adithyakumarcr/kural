@@ -5,6 +5,11 @@ Usage: rebrand.py <app-dir> <linux|mac|win>
   <app-dir> is VSCodium's resources/app folder (the one containing product.json).
 """
 import base64, hashlib, json, os, re, shutil, sys, uuid
+
+# Messages have → and … in them: a Windows console (cp1252) can't print those and rebrand stopped with an error.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
 from runtime_dependencies import install as install_runtime_dependencies
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,7 +23,7 @@ def load(p):
 
 
 def save(p, d):
-    with open(p, "w", encoding="utf-8") as f:
+    with open(p, "w", encoding="utf-8", newline="\n") as f:   # (the same file on every system)
         json.dump(d, f, indent="\t")
 
 

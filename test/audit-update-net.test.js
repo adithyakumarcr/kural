@@ -122,7 +122,7 @@ const server = http.createServer((req, res) => {
     const copy = verifiedCopy(f, sha);
     assert.notStrictEqual(path.dirname(copy), path.dirname(f));
     assert.strictEqual(fs.readFileSync(copy, "utf8"), "the real package");
-    assert.strictEqual(fs.statSync(path.dirname(copy)).mode & 0o077, 0, "private folder");
+    if (process.platform !== "win32") assert.strictEqual(fs.statSync(path.dirname(copy)).mode & 0o077, 0, "private folder");   // (no Unix modes on Windows; this is the Ubuntu updater)
     fs.writeFileSync(f, "a swapped package");                       // changed after the first check
     assert.throws(() => verifiedCopy(f, sha), /changed after it was checked/);
     assert.throws(() => verifiedCopy(f, undefined), /no signed checksum/);
