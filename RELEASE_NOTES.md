@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.1.0-alpha.10
 
 - **Gemini needs Antigravity 1.3.4 or newer.** Kural's approval gate works only from that version; an older one never
   asked it, so its first change could run before Kural noticed. Kural no longer starts an older one: Get started and
@@ -28,9 +28,8 @@
   costs money every year). Click **More info**, then **Run anyway**. Kural's own updates don't ask again.
 - **macOS warns the first time you open Kural**: it isn't notarized by Apple. Open it once from System Settings →
   Privacy & Security → **Open Anyway**.
-- **Gemini's approval gate** was checked with the real Antigravity on Ubuntu only, not yet on macOS or Windows.
-- **ChatGPT (Codex)** hasn't been tried with a logged-in account yet: approvals, edits and Undo were tested with a
-  stand-in program only.
+- **Gemini's approval gate** was checked with the real Antigravity on Ubuntu and macOS, not yet on Windows.
+- **ChatGPT (Codex)** was tried with a logged-in account on macOS only, not yet on Ubuntu or Windows.
 - **Experimental:** connector search in the public MCP directory, installing Ollama from Kural, profiles on a Mac
   (two logins in the keychain), and picking a page element in Kural's browser with a real mouse click.
 
