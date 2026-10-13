@@ -3,7 +3,7 @@
 # For the owner, on a machine where `agy` is installed and logged in. See audit-report/GEMINI_ADAPTER_REQUIREMENTS.md.
 #
 # What it does (it prints this and asks first):
-#   - backs up ~/.gemini/antigravity-cli/hooks.json and puts it back at the end (also on Ctrl+C or an error)
+#   - backs up ~/.gemini/config/hooks.json (where agy reads hooks; HOOKS=… for another file) and puts it back at the end (also on Ctrl+C or an error)
 #   - adds Kural's hook entry ("kural-gate", matcher "*") pointing at a test launcher that runs the real
 #     extension/lib/ai/agy-gate.js with this computer's `node`, and logs every hook run
 #   - a tiny local stand-in for Kural (a Unix socket in a private temp folder) answers every gate request with
@@ -18,7 +18,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 GATE_JS="$REPO/extension/lib/ai/agy-gate.js"
 AGY="${AGY:-$(command -v agy || true)}"
 NODE="${NODE:-$(command -v node || true)}"
-HOOKS="$HOME/.gemini/antigravity-cli/hooks.json"
+HOOKS="${HOOKS:-$HOME/.gemini/config/hooks.json}"
 TIMEOUT_S="${VERIFY_TIMEOUT_S:-600}"
 
 [ -n "$AGY" ] && [ -x "$AGY" ] || { echo "agy not found (set AGY=/path/to/agy)"; exit 2; }

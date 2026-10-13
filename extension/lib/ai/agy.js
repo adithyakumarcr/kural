@@ -21,7 +21,7 @@
 //   Ask → agy's default (reads only)   Plan → --mode plan   Agent → --mode accept-edits (agy itself doesn't run
 //   commands there: Kural says which it didn't run)   Auto → --dangerously-skip-permissions.
 // If a tool that changes something finishes without Kural's gate having been asked (hooks not running in this agy),
-// Kural stops agy and says so (gateMissed). NOT VERIFIED against the real agy yet: scripts/verify-agy-gate.sh.
+// Kural stops agy and says so (gateMissed). Checked with the real agy 1.3.4 (scripts/verify-agy-gate.sh; hooks in ~/.gemini/config).
 // A mode or model is fixed when agy starts: a change starts a new agy in the same conversation (--conversation).
 // Stop: SIGINT (agy ends the answer as "interrupted" and exits); the next message starts it again, same conversation.
 //

@@ -17,9 +17,11 @@ Every file change shows under the answer: open the before/after, **keep** it or 
 are listed: a note the AI writes in the temp folder, or Claude Code's own plans and memory (`~/.claude`), aren't.
 
 **The web, in every mode.** Claude, Google Gemini and ChatGPT (Codex) can search the web and read web pages in all four
-modes, Plan and Ask too (a plan often needs current docs or versions), without asking: it changes nothing on your
-computer. Codex uses live search (not its cached copy of the web); the commands it runs still have no internet. A model
-on this computer has no web tools.
+modes, Plan and Ask too (a plan often needs current docs or versions). Claude and Gemini ask first (Allow, or Allow all
+for the rest of the chat), except in Auto: a search changes nothing on your computer, but a web address the AI opens can
+carry your project's data away (for example after it read a page with hidden instructions). Codex uses live search (not
+its cached copy of the web) without asking; the commands it runs still have no internet. A model on this computer has no
+web tools.
 
 **Outside your project, Kural asks first.** In every mode the AI reads (and in Agent mode changes) files in your
 project without asking. A file anywhere else gets a card first: **Read this file?** or **Change this file?** (Allow /

@@ -71,9 +71,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Old chats with `gemini:` models fall back to the default model (`validModel`). No ACP: stream-json like Claude Code (`--input-format/--output-format stream-json
   --disable-slash-commands --print-timeout 12h --add-dir <cwd>`; `--add-dir` is load-bearing). Events: `init`
   (conversation_id), `step_update` (agent_response `text_delta`; tool `tool_info.{name,parameters,output,error}`),
-  `result` (ends a turn; `usage` adds up per process). **Approvals = Kural's hook gate (SEC-012; IMPLEMENTED, NOT
-  VERIFIED against the real agy: `scripts/verify-agy-gate.sh`)**: `lib/ai/agy-gate-host.js` (no vscode) merges a
-  `kural-gate` PreToolUse entry (matcher `*`, timeout 43200 s) into the GLOBAL `~/.gemini/antigravity-cli/hooks.json`
+  `result` (ends a turn; `usage` adds up per process). **Approvals = Kural's hook gate (SEC-012; checked with the real agy 1.3.4 on 13 Oct
+  2026: `scripts/verify-agy-gate.sh`)**: `lib/ai/agy-gate-host.js` (no vscode) merges a
+  `kural-gate` PreToolUse entry (matcher `*`, timeout 43200 s) into the GLOBAL `~/.gemini/config/hooks.json` (agy 1.3.x reads only that one; Kural's entry in the old
+  `~/.gemini/antigravity-cli/hooks.json` never ran and is taken out by `dropOldEntry`)
   (user entries kept, `.kural-backup`, atomic; unparseable file → never overwritten, agy not started) whose command is
   `~/.kural/agy-gate/kural-agy-gate` (0700 launcher → `ELECTRON_RUN_AS_NODE=1 <execPath> lib/ai/agy-gate.js`). Each agy
   spawn opens a gate session (`host.open`: private socket in `privateTmp("g")`/named pipe, 32-byte token, sha256 lookup

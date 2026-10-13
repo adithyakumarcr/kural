@@ -51,7 +51,7 @@ check("AGENT-10: tool output can't close the handoff record early", () => {
 check("AGENT-4: the Auto warning says what's true for each AI", () => {
   const { autoWarning } = require("../extension/lib/chat/permission-policy");
   for (const e of ["claude", "codex", "ollama", "agy"]) assert.match(autoWarning(e), /Dangerous commands .* still ask/);
-  assert.match(autoWarning("agy"), /Gemini/); assert.match(autoWarning("agy"), /hasn't been checked/);
+  assert.match(autoWarning("agy"), /Gemini/); assert.match(autoWarning("agy"), /approval gate/); assert.match(autoWarning("agy"), /stops it/);
   assert.match(autoWarning("claude", true), /Claude Code's own settings/);
   assert.doesNotMatch(autoWarning("claude", false), /settings|Gemini/);
   assert.doesNotMatch(autoWarning("codex"), /settings|Gemini/);
