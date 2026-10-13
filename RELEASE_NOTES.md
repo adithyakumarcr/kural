@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.1.0-alpha.9
 
 - **Safer by default** (from a security review):
   - "Allow all" ends when you change the mode or model, or the chat is handed to another AI; "Build it" uses Agent.
