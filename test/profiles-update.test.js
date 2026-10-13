@@ -19,6 +19,10 @@ const vscode = {
   StatusBarAlignment: { Right: 2 }, ProgressLocation: { Notification: 15 }, QuickPickItemKind: { Separator: -1 },
   commands: { registerCommand: () => ({ dispose() {} }), executeCommand: async () => {} },
 };
+// The offer is for a Mac (its keychain keeps one Claude login per folder only from 2.1.296; elsewhere every version is
+// fine): act as one, so the test runs the same on Linux and Windows CI.
+const realPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+Object.defineProperty(process, "platform", { value: "darwin" });
 const load = Module._load;
 Module._load = function (r, ...a) { return r === "vscode" ? vscode : load.call(this, r, ...a); };
 const { Profiles } = require("../extension/lib/profiles/index.js");
@@ -64,5 +68,14 @@ const make = (hooks) => new Profiles({ subscriptions: [], globalState: { get() {
     await p.create();
     assert.strictEqual(shown[0].kind, "pick");
   });
+  await check("not a Mac: an older Claude Code is fine, no offer", async () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    try {
+      const p = make({ claudeVersion: async () => "2.1.289" });
+      await p.create();
+      assert.strictEqual(shown[0].kind, "pick");
+    } finally { Object.defineProperty(process, "platform", { value: "darwin" }); }
+  });
+  Object.defineProperty(process, "platform", realPlatform);
   if (fail) { console.log(`${fail} failed`); process.exit(1); }
 })();
