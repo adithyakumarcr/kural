@@ -231,10 +231,10 @@ const rejects = async (p, re) => { try { await p; } catch (e) { assert.match(e.m
     const can = (f) => within(f, ws.aiRoots(false));
     scope.configure({ storage: store, profile: { id: "me", share: false } });
     penv.setProfileEnv(penv.envFor(path.join(store, "profiles", "me")));
-    assert.ok(can(path.join(store, "chats", "x.json")), "the main profile's data (shared or not, it is the main one's)" );
-    assert.ok(can(path.join(store, "images", "a.png")));
-    assert.ok(can(path.join(store, "profiles", "me", "chats", "x.json")), "its own chats");
-    assert.ok(can(path.join(store, "profiles", "me", "claude", "projects", "p")) && can(path.join(store, "profiles", "me", "claude", "plans", "p.md")));
+    assert.ok(!can(path.join(store, "chats", "x.json")), "other chats require an explicit grant" );
+    assert.ok(!can(path.join(store, "images", "a.png")));
+    assert.ok(!can(path.join(store, "profiles", "me", "chats", "x.json")), "its own other chats also require a grant");
+    assert.ok(!can(path.join(store, "profiles", "me", "claude", "projects", "p")) && can(path.join(store, "profiles", "me", "claude", "plans", "p.md")));
     assert.ok(!can(path.join(store, "profiles", "me", "claude", ".credentials.json")), "its own login");
     assert.ok(!can(path.join(store, "profiles", "me", "codex", "auth.json")));
     assert.ok(!can(path.join(store, "profiles", "other", "claude", ".credentials.json")), "another profile's login");

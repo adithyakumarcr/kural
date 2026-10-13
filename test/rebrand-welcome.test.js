@@ -29,6 +29,7 @@ const BARE = /(?<![/\w])VSCodium(?![\w/])/;
   put("product.json", JSON.stringify({ nameShort: "VSCodium", reportIssueUrl: "https://github.com/VSCodium/vscodium/issues/new",
     licenseUrl: "https://github.com/VSCodium/vscodium/blob/master/LICENSE", checksums: { "vs/workbench/workbench.desktop.main.js": sha(workbench) } }));
   put("package.json", JSON.stringify({ name: "vscodium" }));
+  put("node_modules/shell-quote/package.json", JSON.stringify({ name: "shell-quote", version: "1.10.0" }));
   put("extensions/git/package.json", JSON.stringify({ contributes: { keybindings: [] } }));
   put("out/vs/workbench/workbench.desktop.main.js", workbench);
   put("out/nls.messages.json", JSON.stringify(messages));

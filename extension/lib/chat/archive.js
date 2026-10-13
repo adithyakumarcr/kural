@@ -11,6 +11,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { privateFolder } = require("../private-file");
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;   // ids become file names: nothing else gets in
 
@@ -20,8 +21,9 @@ class ChatArchive {
     this.metas = new Map();     // id -> card (what's on disk, as far as we know)
     this.written = new Map();   // id -> signature of what we last wrote (skip unchanged chats)
     this.deleted = new Set();
-    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* read-only: History just stays empty */ }
+    try { privateFolder(dir); } catch { /* read-only: History just stays empty */ }
     this.loadDeleted();
+    this.sweepTmp();
     this.refresh();
   }
 
@@ -30,8 +32,27 @@ class ChatArchive {
   // Write to a temporary file, then rename: a crash never leaves half a chat.
   put(file, data) {
     const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data));
-    fs.renameSync(tmp, file);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
+      fs.renameSync(tmp, file);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* not there */ }   // (a failed write or rename used to leave the .tmp for ever)
+      throw e;
+    }
+  }
+
+  // Temporary files left by a window that was killed between writing and renaming: removed when the archive opens.
+  // Only old ones: another window may be writing one right now.
+  sweepTmp(maxAgeMs = 3600000) {
+    let names = [];
+    try { names = fs.readdirSync(this.dir); } catch { return 0; }
+    let n = 0;
+    for (const name of names) {
+      if (!/\.\d+\.tmp$/.test(name)) continue;
+      const f = path.join(this.dir, name);
+      try { if (Date.now() - fs.statSync(f).mtimeMs > maxAgeMs) { fs.unlinkSync(f); n++; } } catch { /* gone */ }
+    }
+    return n;
   }
 
   loadDeleted() {

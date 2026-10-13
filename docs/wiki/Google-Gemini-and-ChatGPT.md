@@ -44,9 +44,20 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 
 - The chat in every mode: it reads and edits files, runs commands, and each change can be kept or undone.
   - Codex asks Kural before each command in Agent mode, like Claude.
-  - **Gemini can't ask** before it acts (Google's program has no way to). So in **Agent** mode it edits files but runs
-    no commands; the answer says which commands it didn't run. In **Auto** it runs commands. **Plan** and **Ask** change
-    nothing. A mode change applies from your next message. Undo works for its edits on a best-effort basis.
+  - **Gemini asks through Kural's approval gate.** Google's program has no editor protocol, but it runs *hooks*:
+    Kural adds one entry, `kural-gate`, to `~/.gemini/antigravity-cli/hooks.json` (your own entries stay; the file before
+    is kept as `hooks.json.kural-backup`). Before each tool call Antigravity runs it and waits for Kural: the same cards
+    and rules as Claude (files outside the project or that run code later, dangerous commands even in **Auto**; **Plan**
+    and **Ask** change nothing). Undo's copy of a file is taken before the change is allowed. Antigravity's own modes
+    still apply as well: in **Agent** mode it runs no commands (the answer says which it didn't run); in **Auto** it
+    runs them. A mode change stops approvals for the running answer and applies from your next message.
+    - Your own `agy` in a terminal isn't affected: the gate says nothing when Kural didn't start it.
+    - If `hooks.json` can't be read, Kural leaves it alone and doesn't start Gemini (it says why). If a change runs
+      without the gate being asked (an Antigravity version without hooks), Kural stops Gemini and says so.
+    - A project's own `.agents/hooks.json` (loaded by Antigravity only in trusted folders) runs alongside Kural's: it
+      can add a "no" but can't overrule Kural's. It still runs its own command, so trust only folders you trust.
+    - **Not yet confirmed with the real Antigravity program**: `scripts/verify-agy-gate.sh` checks it on a computer
+      where `agy` is logged in.
   - Gemini can't read attached pictures directly: Kural saves them where it can open them and tells it where.
 - Ask, Ctrl+K, Apply, commit messages and plain words in the terminal use the chat's model, so these too.
 - The usage meter: Codex has a Session (5-hour) and a Weekly limit, like Claude: the status bar shows its Session.

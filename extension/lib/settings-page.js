@@ -15,6 +15,8 @@ const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
 const usageSwitch = require("./ai/usage-switch");
 const connectors = require("./ai/connectors");
+// Connector keys: a private folder per profile (its accounts), never on a command line (APP-9).
+const keyDir = () => require("./profiles/scope").dir("connector-keys", "account");
 const catalog = require("./ai/connector-catalog");
 const { withProfileEnv, profileEnv } = require("./profiles/env");
 const os = require("os");
@@ -95,7 +97,7 @@ class SettingsPage {
       const p = this.panel = vscode.window.createWebviewPanel("kural.settings", "Kural Settings", vscode.ViewColumn.Active,
         { enableScripts: true, localResourceRoots: [media], retainContextWhenHidden: false });
       p.iconPath = vscode.Uri.joinPath(media, "chat-icon.svg");
-      const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const nonce = require("crypto").randomBytes(16).toString("base64");
       const uri = (f) => p.webview.asWebviewUri(vscode.Uri.joinPath(media, f));
       p.webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${p.webview.cspSource}; font-src ${p.webview.cspSource}; img-src ${p.webview.cspSource}; script-src 'nonce-${nonce}';">
@@ -222,7 +224,7 @@ class SettingsPage {
         let r;
         try {
           const { bin, env } = this.program(m.id);
-          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name, this.projectDir());
+          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name, this.projectDir(), keyDir());
         } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
         if (this.panel) this.panel.webview.postMessage({ type: "connectorDone", id: m.id, reqId: m.reqId, error: r.error || "" });
         if (r.ok) this.afterConnectorChange(m.id); else this.push();
@@ -257,7 +259,7 @@ class SettingsPage {
             const { bin, env } = this.program(ai);
             // (The names already there, fresh: a name taken since the page listed them would make the program refuse.)
             const have = (await connectors.list(ai, bin, env, this.projectDir())).servers.map((x) => x.name);
-            r = await connectors.addItem(ai, bin, env, item, m.values || {}, have);
+            r = await connectors.addItem(ai, bin, env, item, m.values || {}, have, keyDir());
           } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
         }
         if (r.ok && item.signIn) (c.fresh = c.fresh || {})[r.name] = true;

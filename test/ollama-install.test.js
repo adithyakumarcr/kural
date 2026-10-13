@@ -44,9 +44,13 @@ const has = (p) => fs.existsSync(p);
     spawnSync("zip", ["-qr", path.join(tmp, "o.zip"), "Ollama.app"], { cwd: src });
     files["/download/Ollama-darwin.zip"] = fs.readFileSync(path.join(tmp, "o.zip"));
     const apps = path.join(tmp, "Applications");
-    let up = false; const opened = [];
+    let up = false; const opened = [], signChecks = [];
     const run = (cmd, args, opts) => {
       if (cmd === "/usr/bin/open") { opened.push(args); setTimeout(() => { up = true; }, 50); return spawn("true", [], opts); }
+      if (cmd === "/usr/bin/codesign") {   // a Developer ID signature (stand-in for the Mac's codesign)
+        signChecks.push(args);
+        return spawn(process.execPath, ["-e", "process.stderr.write('Authority=Developer ID Application: Ollama Inc. (ABCDE12345)\\nTeamIdentifier=ABCDE12345\\n')"], opts);
+      }
       return spawn(cmd, args, opts);
     };
     const inst = new OllamaInstaller({ platform: "darwin", base, appsDirs: [apps], run, isUp: async () => up, waitMs: 5000 });
@@ -62,11 +66,26 @@ const has = (p) => fs.existsSync(p);
     assert.ok(ins.length > 2 && ins[ins.length - 1] === 100 && ins.some((p) => p > 0 && p < 100), `install percent: ${ins}`);
     assert.ok(seen.some((s) => s.phase === "start"));
     assert.strictEqual(inst.state, null, "done: no state left");
+    assert.ok(signChecks.some((a) => a[0] === "--verify" && a.includes("--deep") && a.includes("--strict")), "the signature was checked before the install");
 
     // Installed already, just not running: started, nothing downloaded.
     up = false; delete files["/download/Ollama-darwin.zip"];
     await inst.install();
     assert.strictEqual(opened.length, 2);
+  });
+
+  await check("Mac: an unsigned or ad-hoc-signed download is not installed (APP-6)", async () => {
+    if (!canZip) return console.log("     (skipped: no zip/unzip here)");
+    files["/download/Ollama-darwin.zip"] = fs.readFileSync(path.join(tmp, "o.zip"));
+    for (const [code, out] of [[1, "a sealed resource is missing or invalid"], [0, "Signature=adhoc\nTeamIdentifier=not set\n"]]) {
+      const apps = path.join(tmp, `Apps-${code}`);
+      const run = (cmd, args, opts) => cmd === "/usr/bin/codesign"
+        ? spawn(process.execPath, ["-e", `process.stderr.write(${JSON.stringify(out)}); process.exit(${code})`], opts)
+        : cmd === "/usr/bin/open" ? (() => { throw new Error("opened an unsigned app"); })() : spawn(cmd, args, opts);
+      const inst = new OllamaInstaller({ platform: "darwin", base, appsDirs: [apps], run, isUp: async () => false, waitMs: 100 });
+      await assert.rejects(inst.install(), /isn't properly signed/);
+      assert.deepStrictEqual(fs.readdirSync(apps), [], "nothing installed, no unpacking folder left");
+    }
   });
 
   await check("already running: does nothing", async () => {
@@ -75,9 +94,10 @@ const has = (p) => fs.existsSync(p);
   });
 
   await check("Linux: install.sh through pkexec; its output becomes download and install percent", async () => {
-    files["/install.sh"] = Buffer.from("echo fake\n");
-    const fake = path.join(tmp, "fake-install.js");
+    files["/install.sh"] = Buffer.from("#!/bin/sh\n# This script installs Ollama on Linux.\necho fake\n");
+    const fake = path.join(tmp, "fake-install.js"), got = path.join(tmp, "stdin-got");
     fs.writeFileSync(fake, `
+      let inp = ""; process.stdin.on("data", (d) => inp += d).on("end", () => require("fs").writeFileSync(${JSON.stringify(got)}, inp));
       const w = (s) => process.stderr.write(s);
       w(">>> Installing ollama to /usr/local\\n>>> Downloading ollama-linux-amd64.tar.zst\\n");
       w("\\r####    10.0%\\r########   55.5%\\r############ 100.0%\\n");
@@ -90,11 +110,32 @@ const has = (p) => fs.existsSync(p);
     inst.onProgress((s) => { if (s) seen.push({ ...s }); });
     await inst.install();
     if (!(process.getuid && process.getuid() === 0)) assert.strictEqual(ran[0][0], "pkexec");
-    assert.ok(ran[0][ran[0].length - 1].endsWith("install.sh"));
+    // (APP-6: the script goes to root's shell through a pipe, never as a file it reads later)
+    assert.deepStrictEqual(ran[0].slice(-2), process.getuid && process.getuid() === 0 ? ["/bin/sh", "-s"].slice(-2) : ["/bin/sh", "-s"]);
+    for (let i = 0; i < 50 && !fs.existsSync(got); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.strictEqual(fs.readFileSync(got, "utf8"), files["/install.sh"].toString());
     const dl = seen.filter((s) => s.phase === "download").map((s) => s.percent);
     assert.ok(dl.includes(56) && dl.includes(100), `download percent: ${dl}`);
     const ins = seen.filter((s) => s.phase === "install").map((s) => s.percent);
     assert.deepStrictEqual([...new Set(ins)], [20, 70, 85, 100]);
+  });
+
+  await check("Linux: something that isn't Ollama's installer is never run", async () => {
+    const { checkInstallScript } = require("../extension/lib/ai/ollama-install");
+    assert.ok(checkInstallScript(Buffer.from("#!/bin/sh\n# installs ollama\n")));
+    const { fromOllama } = require("../extension/lib/ai/ollama-install");
+    assert.ok(fromOllama("https://ollama.com/install.sh", "ollama.com"));
+    assert.ok(fromOllama("https://raw.githubusercontent.com/ollama/ollama/main/scripts/install.sh", "ollama.com"));
+    assert.ok(!fromOllama("https://raw.githubusercontent.com/evil/ollama/main/install.sh", "ollama.com"));
+    assert.ok(!fromOllama("https://ollama.com.evil.dev/install.sh", "ollama.com"));
+    for (const bad of ["<html>ollama</html>", "#!/bin/sh\necho hi\n", "#!/usr/bin/python3\nollama", "#!/bin/sh ollama\0x", "#!/bin/sh\nollama" + "x".repeat(300000)])
+      assert.ok(!checkInstallScript(Buffer.from(bad)), bad.slice(0, 30));
+    files["/install.sh"] = Buffer.from("<html>Ollama</html>");
+    const ran = [];
+    const inst = new OllamaInstaller({ platform: "linux", base, run: (c, a, o) => { ran.push(c); return spawn(process.execPath, ["-e", "0"], o); }, isUp: async () => false, waitMs: 100 });
+    await assert.rejects(inst.install(), /doesn't look like Ollama's installer/);
+    assert.deepStrictEqual(ran, []);
+    files["/install.sh"] = Buffer.from("#!/bin/sh\n# This script installs Ollama on Linux.\necho fake\n");
   });
 
   await check("Linux: closing the password window says so", async () => {

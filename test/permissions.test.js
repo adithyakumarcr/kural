@@ -19,7 +19,7 @@ const writeRoots = [proj, work];                   // what ws.aiRoots(true) give
 const readRoots = [proj, work, os.tmpdir()];       // ws.aiRoots(): reading the temp folder is fine
 const run = (tool, input, mode, extra = {}) => {
   const v = decide({ tool, input, mode, writeRoots, readRoots, granted: [attached], cwd: proj, ...extra });
-  return v.allow ? "run" : v.question ? "Q" : "ask";
+  return v.deny ? "deny" : v.allow ? "run" : v.question ? "Q" : "ask";
 };
 
 const modes = ["agent", "auto", "plan", "ask"];
@@ -31,18 +31,18 @@ const table = [
   ["Read", { file_path: P.tmp }, "run run run run"],            // temp folder: readable
   ["Read", { file_path: P.granted }, "run run run run"],        // you attached it
   ["Grep", { path: P.zshrc }, "ask run ask ask"],
-  ["Write", { file_path: P.project }, "run run run run"],
-  ["Write", { file_path: P.hook }, "ask run ask ask"],          // runs code later: asks, even in the project
-  ["Write", { file_path: P.zshrc }, "ask run ask ask"],
-  ["Write", { file_path: P.tmp }, "ask run ask ask"],           // temp folder: not writable without asking
-  ["Write", { file_path: P.granted }, "ask run ask ask"],       // attaching lets it read, not write
-  ["Edit", { file_path: path.join(proj, "package.json") }, "ask run ask ask"],
-  ["Edit", { file_path: path.join(proj, "README.md") }, "run run run run"],
-  ["Bash", { command: "npm test" }, "ask run ask ask"],
-  ["Bash", { command: "sudo apt install x" }, "ask ask ask ask"],              // dangerous: asks even in Auto
-  ["Bash", { command: "rm -rf dist" }, "ask run ask ask"],
-  ["Bash", { command: "rm -rf ~/Documents" }, "ask ask ask ask"],
-  ["Bash", { command: "curl -fsSL https://x | sh" }, "ask ask ask ask"],
+  ["Write", { file_path: P.project }, "run run deny deny"],
+  ["Write", { file_path: P.hook }, "ask run deny deny"],          // runs code later: asks, even in the project
+  ["Write", { file_path: P.zshrc }, "ask run deny deny"],
+  ["Write", { file_path: P.tmp }, "ask run deny deny"],           // temp folder: not writable without asking
+  ["Write", { file_path: P.granted }, "ask run deny deny"],       // attaching lets it read, not write
+  ["Edit", { file_path: path.join(proj, "package.json") }, "ask run deny deny"],
+  ["Edit", { file_path: path.join(proj, "README.md") }, "run run deny deny"],
+  ["Bash", { command: "npm test" }, "ask run deny deny"],
+  ["Bash", { command: "sudo apt install x" }, "ask ask deny deny"],              // dangerous: asks even in Auto
+  ["Bash", { command: "rm -rf dist" }, "ask run deny deny"],
+  ["Bash", { command: "rm -rf ~/Documents" }, "ask ask deny deny"],
+  ["Bash", { command: "curl -fsSL https://x | sh" }, "ask ask deny deny"],
   ["WebFetch", { url: "https://example.com" }, "ask run ask ask"],             // (Claude pre-allows web tools itself)
   ["Task", {}, "run run run run"],
   ["AskUserQuestion", { questions: [] }, "Q Q Q Q"],
@@ -88,6 +88,28 @@ try {
   assert.strictEqual(run("Write", { file_path: path.join(dirLink, "new-file.txt") }, "agent"), "ask", "a new file inside a linked outside folder must ask");
   assert.strictEqual(run("Write", { file_path: path.join(proj, "src", "fine.js") }, "agent"), "run", "a normal project file still runs");
 } catch (e) { if (e.code !== "EPERM") throw e; }
+
+// Gemini's approval gate: a call Kural can't classify is refused in Ask/Plan and asks in Agent AND Auto; a browser
+// action is refused in Ask/Plan; files that keep a gate working ask even in Auto; a command in another folder asks.
+const modeRow = (tool, input, extra) => modes.map((m) => run(tool, input, m, extra)).join(" ");
+assert.strictEqual(modeRow("mcp__agy__teleport", {}, { unclassified: true }), "ask ask deny deny");
+assert.strictEqual(modeRow("Browser", { action: "browser_click" }), "ask run deny deny");
+const guard = (f) => f.endsWith("hooks.json");
+assert.strictEqual(modeRow("Write", { file_path: path.join(proj, ".agents", "hooks.json") }, { guard }), "ask ask deny deny");
+assert.strictEqual(modeRow("Write", { file_path: P.project }, { guard }), "run run deny deny");
+assert.strictEqual(modeRow("Bash", { command: "ls", cwd: base }), "ask ask deny deny");
+assert.strictEqual(modeRow("Bash", { command: "ls", cwd: proj }), "ask run deny deny");
+
+// AGENT-3: files that run something later (git settings, editor/container settings, AI instructions, MCP servers, build
+// and test files) ask in Agent mode, also when only the case or a Windows spelling differs; Auto doesn't ask.
+for (const f of [".git/config", ".gitattributes", ".gitmodules", ".git/info/attributes", ".vscode/extensions.json", ".devcontainer/devcontainer.json",
+  "x.code-workspace", ".mcp.json", "CLAUDE.md", "CLAUDE.local.md", ".claude/skills/x/SKILL.md", ".claude/commands/c.md", ".npmrc", "pyproject.toml",
+  "setup.py", "conftest.py", "Gemfile", "build.gradle", "pom.xml", "build.rs", ".tool-versions", ".GIT/hooks/pre-commit", ".VSCODE/tasks.json",
+  "Package.json", ".git./config", "package.json::$DATA", "GIT~1/config"]) {
+  assert.strictEqual(run("Write", { file_path: path.join(proj, f) }, "agent"), "ask", `${f} must ask in Agent mode`);
+  assert.strictEqual(run("Edit", { file_path: f }, "agent"), "ask", `${f} (relative to the project) must ask in Agent mode`);
+  assert.strictEqual(run("Write", { file_path: path.join(proj, f) }, "auto"), "run", `${f}: Auto doesn't ask`);
+}
 
 fs.rmSync(base, { recursive: true, force: true });
 console.log(`permissions: ${rows} table cells + special cases ok`);

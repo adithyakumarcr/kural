@@ -1,0 +1,20 @@
+const assert=require('assert'),Module=require('module'),fs=require('fs'),os=require('os'),path=require('path');
+const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'kural-audit-host-'));
+const v={workspace:{isTrusted:true,workspaceFolders:[{name:'p',uri:{scheme:'file',fsPath:tmp}}],textDocuments:[],getConfiguration:()=>({get:(_,d)=>d,inspect:()=>undefined})},window:{showWarningMessage:()=>{}},env:{appRoot:'/unused'},Uri:{file:f=>({fsPath:f})},EventEmitter:class{}};
+const load=Module._load;Module._load=function(n,...a){return n==='vscode'?v:load.call(this,n,...a)};
+const brain=require('../extension/lib/ai');const {ChatView}=require('../extension/lib/chat');let opts;
+brain.makeAgent=(_m,o,_l,h)=>{opts=o;return{start:()=>true,kill:()=>{},h}};
+const chat=Object.create(ChatView.prototype);Object.assign(chat,{runtime:new Map(),endDevice:()=>{},root:()=>tmp,teamSize:()=>0,procKey:()=>'',handoffDir:()=>path.join(tmp,'none'),handoffBudget:()=>1000,context:{},routingCheckpoint:()=>{},onClaude:()=>{}});
+const tab={id:'a',model:'sonnet',mode:'agent',effort:'low'};
+chat.startProc(tab);assert.ok(!opts.allowedTools.includes('WebFetch'));assert.ok(!opts.allowedTools.includes('WebSearch'));
+v.workspace.isTrusted=false;opts=null;assert.strictEqual(chat.startProc(tab),null);assert.strictEqual(opts,null);
+(async()=>{
+ const res=await chat.onPermission({...tab,mode:'ask'},{turn:{snaps:{},reply:{blocks:[]}}},{tool_name:'Write',input:{file_path:path.join(tmp,'a')}});assert.strictEqual(res.allow,false);
+ v.workspace.isTrusted=true;
+ let saved=0, snapped=0;
+ v.workspace.textDocuments=[{uri:{fsPath:path.join(tmp,'a')},isDirty:true,save:async()=>{saved++}}];
+ chat.changes={snapshot:()=>{snapped++}};chat.projectRoots=()=>[tmp];
+ const denied=await chat.onPermission({...tab,mode:'plan'},{turn:{snaps:{},reply:{blocks:[]}}},{tool_name:'Write',input:{file_path:path.join(tmp,'a')}});
+ assert.strictEqual(denied.allow,false);assert.strictEqual(saved,0);assert.strictEqual(snapped,0);
+ fs.rmSync(tmp,{recursive:true,force:true});console.log('audit-host: actual launch web permissions, untrusted launch, and read-only no-save/no-checkpoint PASS');
+})().catch(e=>{console.error(e);process.exitCode=1});

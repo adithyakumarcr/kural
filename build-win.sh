@@ -20,16 +20,21 @@ fi
 ./scripts/check-codium.sh "$(basename "$SRC")" "$SRC" || exit 1   # (also a file left from an earlier run)
 rm -rf "$WORK" && mkdir -p "$APP"
 unzip -q "$SRC" -d "$APP"
+python3 scripts/electron_runtime.py "$APP" win32-x64
 
 echo "Rebranding ..."
 python3 scripts/rebrand.py "$APP/resources/app" win
+python3 scripts/sbom.py "dist/kural-$VER-windows-x64.cdx.json" --app-root "$APP/resources/app" --platform windows-x64
 python3 scripts/make-icons.py "$WORK/icons" >/dev/null
 
 # The program itself: Kural.exe with the Kural icon and name
 mv "$APP/VSCodium.exe" "$APP/Kural.exe"
 mv "$APP/VSCodium.VisualElementsManifest.xml" "$APP/Kural.VisualElementsManifest.xml"
 sed -i 's/VSCodium/Kural/g' "$APP/Kural.VisualElementsManifest.xml"
-[ -d scripts/node_modules/resedit ] || (cd scripts && npm install --silent --no-audit --no-fund --no-save resedit@3 >/dev/null)
+# resedit (edits the .exe) comes from package-lock.json: one exact version, checked against its recorded checksum, and
+# no package install scripts run (this job can hold the signing certificate). `npm ci` every time: a folder left from
+# an earlier build is never trusted.
+npm ci --ignore-scripts --no-audit --no-fund --silent >/dev/null
 node scripts/win-exe.js "$APP/Kural.exe" "$WORK/icons/icon.ico" "$VER"
 
 # The `kural` command-line launchers

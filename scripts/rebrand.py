@@ -5,6 +5,7 @@ Usage: rebrand.py <app-dir> <linux|mac|win>
   <app-dir> is VSCodium's resources/app folder (the one containing product.json).
 """
 import base64, hashlib, json, os, re, shutil, sys, uuid
+from runtime_dependencies import install as install_runtime_dependencies
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NAME, TITLE, LONG = "kural", "Kural", "Kural Code Editor"
@@ -22,6 +23,7 @@ def save(p, d):
 
 
 def main(app, platform):
+    install_runtime_dependencies(app)
     # 1. Names, data folders, url scheme — so Kural never shares settings with VS Code/VSCodium.
     p = os.path.join(app, "product.json")
     d = load(p)

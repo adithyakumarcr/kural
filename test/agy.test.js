@@ -6,6 +6,9 @@ const fs = require("fs"), os = require("os"), path = require("path");
 if (process.platform === "win32") { console.log("agy: skipped on Windows (the stand-in is a script)"); process.exit(0); }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-agy-test-"));
+// (agy reads its hooks from ~/.gemini: Kural installs its approval gate there. A home of our own, never the real one.)
+process.env.HOME = process.env.USERPROFILE = path.join(tmp, "home");
+fs.mkdirSync(process.env.HOME);
 process.env.FAKE_AGY_FILE = path.join(tmp, "state");
 process.env.FAKE_AGY_LOG = path.join(tmp, "args.log");
 fs.writeFileSync(process.env.FAKE_AGY_FILE, "ok");
@@ -22,6 +25,21 @@ let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.stack.split("\n").slice(0, 2).join(" ")); } };
 const lastArgs = () => { const l = fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").trim().split("\n"); return JSON.parse(l[l.length - 1]); };
 
+// Waits until cond() is true (polling), instead of a fixed pause that is too short on a busy computer.
+const waitFor = async (cond, what, ms = 15000) => {
+  const t0 = Date.now();
+  while (!cond()) { if (Date.now() - t0 > ms) throw new Error(`timed out waiting for ${what}`); await new Promise((r) => setTimeout(r, 10)); }
+};
+// Waits until value() has not changed for quietMs: "nothing more happens" without guessing how long that takes.
+const settled = async (value, quietMs = 300, ms = 15000) => {
+  const t0 = Date.now(); let last = value(), since = Date.now();
+  while (Date.now() - since < quietMs) {
+    if (Date.now() - t0 > ms) throw new Error("never settled");
+    await new Promise((r) => setTimeout(r, 20));
+    const v = value(); if (v !== last) { last = v; since = Date.now(); }
+  }
+};
+
 // A chat with agy: send messages, collect what the chat would get.
 function chat(opts = {}) {
   const events = [], perms = [], waiters = [];
@@ -35,6 +53,7 @@ function chat(opts = {}) {
     a, events, perms, exit: () => exit,
     ask: (text) => new Promise((res) => { waiters.push(res); a.send(text); }),
     text: () => events.filter((m) => m.type === "stream_event" && m.event.delta && m.event.delta.type === "text_delta").map((m) => m.event.delta.text).join(""),
+    started: (from) => events.slice(from).some((m) => m.type === "stream_event" && m.event.delta && m.event.delta.text === "."),   // (the slow answer is streaming)
     tools: () => events.filter((m) => m.type === "assistant").flatMap((m) => m.message.content).filter((c) => c.type === "tool_use"),
   };
 }
@@ -69,24 +88,26 @@ function chat(opts = {}) {
     assert.ok(args.includes("--disable-slash-commands"));
   });
 
-  await check("Agent mode: edits happen (the chat keeps a copy first, for Undo); commands don't, and the answer says so", async () => {
+  await check("Agent mode: edits happen after Kural's gate approved them (the chat keeps a copy first, for Undo); commands don't, and the answer says so", async () => {
     const c = first;
     assert.deepStrictEqual([lastArgs().includes("--mode"), lastArgs()[lastArgs().indexOf("--mode") + 1]], [true, "accept-edits"]);
     const r = await c.ask("edit notes");
     assert.match(fs.readFileSync(path.join(project, "notes.txt"), "utf8"), /two/);
     assert.deepStrictEqual(c.perms.map((p) => [p.tool_name, p.input.file_path]), [["Edit", path.join(project, "notes.txt")]]);
+    assert.strictEqual(c.perms[0].gate, true);   // (asked through Kural's gate, before agy changed the file)
     assert.strictEqual(c.tools().find((t) => t.name === "Edit").input.file_path, path.join(project, "notes.txt"));
     assert.match(r.result, /added a line/);
     const r2 = await c.ask("run tests");
-    assert.match(r2.result, /didn't run: `npm test`/); assert.match(r2.result, /Switch to Auto/);
+    assert.match(r2.result, /Not run in Agent mode: `npm test`/); assert.match(r2.result, /Switch to Auto/);
   });
 
   await check("Stop ends the answer at once; the next message continues the same conversation", async () => {
     const c = first;
     const before = await c.ask("who");
     const conv = /conversation (\S+)/.exec(before.result)[1];
+    const from = c.events.length;
     const p = c.ask("slow please");
-    await new Promise((r) => setTimeout(r, 300));
+    await waitFor(() => c.started(from), "the slow answer to start");
     c.a.interrupt();
     const r = await p;
     assert.strictEqual(r.result, "Stopped.");
@@ -142,7 +163,7 @@ function chat(opts = {}) {
     c.a.start();
     const r = await c.ask("hello");
     assert.strictEqual(r.is_error, true); assert.strictEqual(r.result, agy.NOT_LOGGED_IN);
-    await new Promise((res) => setTimeout(res, 50));
+    await waitFor(() => c.exit(), "agy to exit");
     assert.strictEqual(c.exit().login, true);
     const t = await agy.agyTest(BIN, { cwd: project });
     assert.strictEqual(t.ok, false); assert.strictEqual(t.login, true);
@@ -183,7 +204,7 @@ function chat(opts = {}) {
     const before = fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").split("\n").length;
     const r2 = await c.ask("second");
     assert.strictEqual(r2.is_error, true);
-    await new Promise((res) => setTimeout(res, 300));
+    await settled(() => fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").split("\n").length);   // (nothing more starts)
     assert.ok(fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").split("\n").length - before <= 2, "started once");
     fs.writeFileSync(process.env.FAKE_AGY_FILE, "ok");
     c.a.kill();
@@ -194,7 +215,7 @@ function chat(opts = {}) {
     c.a.start();
     const p1 = c.ask("slow one");
     const p2 = c.ask("queued one");
-    await new Promise((res) => setTimeout(res, 300));
+    await waitFor(() => c.started(0), "the slow answer to start");
     c.a.interrupt();
     assert.strictEqual((await p1).result, "Stopped.");
     assert.match((await p2).result, /You said: queued one/);
@@ -207,7 +228,7 @@ function chat(opts = {}) {
     const p1 = c.ask("slow one");
     const p2 = c.ask("queued one");
     const echoes = () => c.events.filter((m) => m.type === "user" && m.isReplay).map((m) => m.message.content);
-    await new Promise((res) => setTimeout(res, 300));
+    await waitFor(() => c.started(0), "the slow answer to start");
     assert.deepStrictEqual(echoes(), ["slow one"]);   // the queued one isn't taken yet
     await p1; await p2;
     assert.deepStrictEqual(echoes(), ["slow one", "queued one"]);
@@ -241,7 +262,7 @@ function chat(opts = {}) {
     p = require("child_process").spawn(session.shellPath, [], { env, stdio: ["pipe", "pipe", "pipe"] });
     const feed = (d) => { seen.screen += d; session.feed(d); };
     p.stdout.on("data", feed); p.stderr.on("data", feed);
-    const finish = () => { clearInterval(t); clearTimeout(cap); session.dispose(); p.kill(); setTimeout(() => done(seen), 300); };
+    const finish = () => { clearInterval(t); clearTimeout(cap); session.dispose(); p.once("close", () => done(seen)); p.kill(); setTimeout(() => done(seen), 3000).unref(); };
     const t = setInterval(() => { if (/Signed in/.test(seen.screen)) finish(); }, 100);
     const cap = setTimeout(finish, 15000);
   });

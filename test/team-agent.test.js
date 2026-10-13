@@ -3,9 +3,16 @@ const { TeamAgent, assignments } = require("../extension/lib/chat/team-agent");
 const { CodexAgent } = require("../extension/lib/ai/codex");
 const { AgyAgent } = require("../extension/lib/ai/agy");
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-team-agent-"));
+// (Gemini's agy gets Kural's approval gate in ~/.gemini and ~/.kural: a home of our own, never the real one.)
+process.env.HOME = process.env.USERPROFILE = path.join(dir, "home"); fs.mkdirSync(process.env.HOME, { recursive: true });
 let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } };
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+// Waits until cond() is true (polling), instead of a fixed pause that is too short on a busy computer.
+const waitFor = async (cond, what, ms = 8000) => {
+  const t0 = Date.now();
+  while (!cond()) { if (Date.now() - t0 > ms) throw new Error(`timed out waiting for ${what}`); await pause(5); }
+};
 const timeout = (p) => { let timer; return Promise.race([p, new Promise((_, reject) => timer = setTimeout(() => reject(new Error("team timed out")), 8000))]).finally(() => clearTimeout(timer)); };
 const members = [{ name: "Monica", id: "developer" }, { name: "Chandler", id: "developer" }];
 const plan = (same = false) => JSON.stringify({ summary: "Build two independent parts", assignments: members.map((m, i) => ({ name: m.name, files: [same ? "a.js" : `${i}.js`], task: `Implement part ${i}` })) });
@@ -68,7 +75,7 @@ function fixture(config = { size: 4, roles: ["researcher", "architect", "develop
   await check("project teams plan, wait for approval, build separate files, then review and fix findings", async () => {
     let approve; const f = fixture(undefined, { waitApproval: new Promise((r) => approve = r) });
     const result = f.done(); f.agent.send("Implement two features, keep the API.");
-    await pause(30);
+    await waitFor(() => f.answers.length === 1, "the plan question");
     assert.strictEqual(f.answers.length, 1);
     assert.ok(!f.jobs.some((j) => /Build your assigned/.test(j.opts.appendSystemPrompt)));
     approve(); const r = await result;
@@ -131,7 +138,7 @@ function fixture(config = { size: 4, roles: ["researcher", "architect", "develop
   await check("interrupt cancels all members; Finish now suppresses further rounds and concludes", async () => {
     for (const finish of [false, true]) {
       const f = fixture({ size: 2, roles: [], style: "discuss" }, { hang: true }); const done = f.done(); f.agent.send("Discuss");
-      await pause(10); finish ? f.agent.finishTeam() : f.agent.interrupt(); const r = await done;
+      await waitFor(() => f.jobs.length > 0 && f.jobs.every((j) => j.content), "the members to be working"); finish ? f.agent.finishTeam() : f.agent.interrupt(); const r = await done;
       assert.strictEqual(r.is_error, !finish); if (!finish) assert.strictEqual(r.subtype, "error_during_execution");
       assert.ok(f.jobs.every((j) => j.killed)); assert.ok(!f.jobs.some((j) => /Answer the other positions/.test(j.opts.appendSystemPrompt))); f.agent.kill();
     }
@@ -139,7 +146,8 @@ function fixture(config = { size: 4, roles: ["researcher", "architect", "develop
   await check("a failed member stops its teammates and produces one error result", async () => {
     const f = fixture({ size: 2, roles: [], style: "discuss" }, { fail: true }); const done = f.done(); f.agent.send("Discuss");
     const r = await done; assert.strictEqual(r.is_error, true); assert.match(r.result, /quota/);
-    await pause(15); assert.strictEqual(f.events.filter((m) => m.type === "result").length, 1); assert.ok(f.jobs.every((j) => j.killed)); f.agent.kill();
+    await waitFor(() => f.jobs.every((j) => j.killed), "the teammates to be stopped"); await pause(15);   // (and no second result follows)
+    assert.strictEqual(f.events.filter((m) => m.type === "result").length, 1); assert.ok(f.jobs.every((j) => j.killed)); f.agent.kill();
   });
   await check("a provider startup exception ends every member's card", async () => {
     const f = fixture({ size: 2, roles: [], style: "discuss" }, { makeThrow: true }); const done = f.done(); f.agent.send("Discuss");

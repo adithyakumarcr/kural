@@ -15,6 +15,7 @@ const ws = require("../workspace");
 const { Attachments } = require("./attachments");
 const { within, runsLater, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
+const { trimMessages } = require("./trim");
 const { forkConversation } = require("./fork");
 const { Ollama, memoryGB, totalMemoryGB, MIN_VERSION } = require("../ai/ollama");
 const brain = require("../ai");
@@ -58,6 +59,7 @@ const validModel = (m) => valid(MODELS, m) || ((/^ollama:./.test(m || "") || !!c
 // Which program has the conversation: "claude" (Claude Code), "ollama" (Kural's own engine), "codex", "agy" (Gemini).
 const { CLIS, IDS: CLI_IDS, cliOf, cliModel } = require("../ai/clis");
 const { splitLevel } = require("../ai/agy");
+const { isGateFile } = require("../ai/agy-gate-host");
 const engineOf = (m) => brain.engineOf(m);
 // A linked device's tools need the model's program to take Kural's MCP server and ask Kural before each command:
 // Claude Code and Codex do; Kural's own engine (Ollama) has no MCP, and Gemini (Antigravity) can't ask.
@@ -65,7 +67,7 @@ const deviceOk = (m) => ["claude", "codex"].includes(engineOf(m));
 const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
 
-const { decide, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
+const { decide, gatedMode, grantKey, allowAllNow, autoWarning, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
 // Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
 const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
@@ -90,6 +92,13 @@ const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / te
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => Math.random().toString(36).slice(2, 9);
 const valid = (list, v) => list.some((x) => x.id === v);
+// The kural.chat.mode setting for new chats. Auto (commands run without asking) only from YOUR settings: a project's
+// .vscode/settings.json can't turn it on for you (APP-8).
+function settingMode() {
+  const m = cfg().get("chat.mode"), i = cfg().inspect ? cfg().inspect("chat.mode") : null;
+  if (m === "auto") return i && i.globalValue === "auto" ? "auto" : "agent";
+  return valid(MODES, m) ? m : "agent";
+}
 
 // Messages meant only for the pane you're using (see ChatView.post).
 const ONE_PANE = new Set(["full", "attached", "pasted", "insertPill", "focus", "showHistory", "flash"]);
@@ -259,7 +268,7 @@ class ChatView {
       model: this.usableModel(validModel(last.model) ? last.model : (valid(MODELS, cfg().get("chat.model")) ? cfg().get("chat.model") : "sonnet")),
       autoRoute: !!last.autoRoute, routingProfile: profileOf(last.routingProfile || cfg().get("modelRouter.profile")),
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
-      mode: valid(MODES, last.mode) ? last.mode : (valid(MODES, cfg().get("chat.mode")) ? cfg().get("chat.mode") : "agent"),
+      mode: valid(MODES, last.mode) ? last.mode : settingMode(),
       team: TEAM_SIZES.includes(last.team) ? last.team : 0,
       mood: valid(allMoods(), last.mood) ? last.mood : firstMood(),
       roles: Array.isArray(last.roles) ? last.roles.filter((r) => valid(ROLES, r)) : [],
@@ -630,11 +639,7 @@ class ChatView {
   saveNow() {
     clearTimeout(this.saveTimer);
     // Keep the last ~150 KB of each conversation (60 KB for closed ones) so this stays quick.
-    const trim = (t, max) => {
-      let msgs = t.messages, size = JSON.stringify(msgs).length;
-      while (size > max && msgs.length > 2) { msgs = msgs.slice(2); size = JSON.stringify(msgs).length; }
-      return { ...t, messages: msgs, status: "idle" };
-    };
+    const trim = (t, max) => ({ ...t, messages: trimMessages(t.messages, max), status: "idle" });   // (chat/trim.js: sizes added up once)
     for (const t of this.tabs) if (t.messages.length) this.archive.save(t, this.card(t));   // History: in full
     return this.context.workspaceState.update(storeKey(), {
       tabs: this.tabs.map((t) => trim(t, 150000)),
@@ -685,7 +690,7 @@ class ChatView {
     this.panes.push(pane);
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
     webview.options = { enableScripts: true, localResourceRoots: this.resourceRoots() };
-    const nonce = shortId() + shortId();
+    const nonce = require("crypto").randomBytes(16).toString("base64");
     const uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
@@ -1153,11 +1158,12 @@ class ChatView {
   }
 
   startProc(tab, fresh = false) {
+    if (vscode.workspace.isTrusted === false) return null;
     const old = this.runtime.get(tab.id);
     if (old && old.proc) { old.stale = true; old.proc.kill(); }
     this.endDevice(old);
     const full = fullSetup();
-    const instr = full ? { text: "", files: [] } : projectInstructions(this.root());
+    const instr = full ? { text: "", files: [] } : projectInstructions(this.root(), vscode.workspace.isTrusted !== false);
     const editing = tab.mode === "agent" || tab.mode === "auto";
     const team = this.teamSize(tab);
     const nativeTeam = team && isClaude(tab.model);
@@ -1189,7 +1195,7 @@ class ChatView {
       addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
-      tools, allowedTools: [...WEB_TOOLS,...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
+      tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
       mcpServers: nativeTeam || dev ? { ...(nativeTeam ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
         ...(dev ? { device: dev.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
@@ -1271,6 +1277,10 @@ class ChatView {
     const live = (x) => x && !x.stale && x.proc && !x.proc.exited && x.turn && x.turn.dispatched && (x.turn.reply.running || (x.steers || []).length);
     if (!live(r)) { this.post({ type: "flash", text: "Kural is still starting the answer: send it in a moment" }); return; }
     if (!r.proc.echoes) { this.post({ type: "flash", text: "To send a message while it answers, update Claude Code (claude update)" }); return; }
+    if (vscode.workspace.isTrusted === false) {
+      vscode.window.showWarningMessage("Trust this workspace before using Kural AI. Repository files and provider setup may execute code.");
+      return;
+    }
     let text = ChatView.textOf(segments).trim();
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     const built = await this.buildPrompt(text, contexts);
@@ -1395,6 +1405,10 @@ class ChatView {
   }
 
   async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null) {
+    if (vscode.workspace.isTrusted === false) {
+      vscode.window.showWarningMessage("Trust this workspace before using Kural AI. Repository files and provider setup may execute code.");
+      return;
+    }
     let text = ChatView.textOf(segments).trim();
     if (!text && !attachIds.length) return;
     if (tab.visiting) return;   // (a chat from another workspace: read only)
@@ -1629,6 +1643,7 @@ class ChatView {
   // The inline overview fits the receiving model. Omitted details remain in a private, readable local file, which is
   // replaced on the next handoff and deleted with the chat. A failed save stops the handoff instead of losing details.
   handoffRecord(tab, messages, model = tab.model) {
+    this.revokeAllowAll(tab);   // (another AI or a new conversation: "Allow all" was given to the old one)
     const budget = this.handoffBudget(model), whole = journal.handoff(messages);
     if (whole.length <= budget) {
       // An edit/fork can shorten a previously large chat. Its old record must not expose the discarded future turns.
@@ -1649,7 +1664,7 @@ class ChatView {
     if (c.retry) return wrapped("", `That's our conversation so far. ${c.retry} stopped in the middle of my last request (above) because it reached its usage limit: carry that request on from where it got to. Steps marked complete happened already; check the files before you change them.`);
     if (c.account) return wrapped("", "That's our conversation so far (before I switched accounts). Carry on from it.");
     if (c.model) return wrapped("", "That's our conversation so far (with another model). Carry on from it.");
-    return wrapped(` workspace="${String(c.from || "").replace(/"/g, "'")}"`, "That's our earlier conversation, from another workspace. Carry on from it here.");
+    return wrapped(` workspace="${String(c.from || "").replace(/"/g, "'").replace(/[<>\r\n]/g, " ")}"`, "That's our earlier conversation, from another workspace. Carry on from it here.");
   }
 
   // How many characters of conversation record the next model gets: the router's handoff setting (120,000 by default);
@@ -1808,11 +1823,13 @@ class ChatView {
     this.save();
   }
 
-  // "Build it" under a plan: switch to Agent (or Auto, if you last used it) and carry the plan out.
+  // "Build it" under a plan: switch to Agent and carry the plan out. Auto only when this chat is already in Auto: a plan
+  // (shaped by whatever the AI read) must not start running commands unasked because another chat once used Auto.
   async buildPlan(tab) {
     if (tab.status !== "idle") return;
-    const last = this.context.globalState.get(LAST_KEY) || {};
-    tab.mode = last.buildMode === "auto" ? "auto" : "agent";
+    const was = tab.mode;
+    tab.mode = tab.mode === "auto" ? "auto" : "agent";
+    if (tab.mode !== was) this.revokeAllowAll(tab);
     this.postTabs();
     await this.send(tab, [{ t: "text", v: BUILD_TEXT }], []);
   }
@@ -2280,6 +2297,21 @@ class ChatView {
   async onPermission(tab, r, req) {
     const turn = r.turn;
     const input = req.input || {};
+    if (vscode.workspace.isTrusted === false) return { allow: false, message: "Workspace trust is required." };
+    // Gemini's approval gate (lib/ai/agy-gate-host.js): only for the answer that's running, and only for the mode agy was
+    // started for (a mode change revokes the gate; the next message starts agy with the new mode).
+    // (A team's planner or reviewer runs its agy in Plan or Ask while the chat is in Agent: decided in its own, stricter mode.)
+    let mode = tab.mode;
+    if (req.gate) {
+      mode = gatedMode(tab.mode, req.gateMode);
+      if (!mode) return { allow: false, message: "The chat's mode changed; nothing more runs in this answer." };
+      if (!turn || !turn.reply.running) return { allow: false, message: "The answer was stopped." };
+    }
+    const verdict = decide({ tool: req.tool_name, input, mode, allowAll: allowAllNow(tab), allowAllDevice: tab.allowAllDevice, device: tab.device,
+      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice,
+      unclassified: !!req.unclassified, guard: isGateFile });
+    if (verdict.deny) return { allow: false, message: verdict.message };
+    const prepareEdit = async () => {
     if (EDIT_TOOLS.has(req.tool_name)) {
       const file = input.file_path || input.notebook_path;
       if (file && turn) {
@@ -2293,10 +2325,10 @@ class ChatView {
         if (inProject(abs, this.projectRoots(tab))) this.changes.snapshot(turn, abs);
       }
     }
+    };
     // Run at once or ask: permission-policy.js decides (its test is the table of every case).
-    const verdict = decide({ tool: req.tool_name, input, mode: tab.mode, allowAll: tab.allowAll, allowAllDevice: tab.allowAllDevice, device: tab.device,
-      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice });
-    if (verdict.allow) return { allow: true };
+
+    if (verdict.allow) { await prepareEdit(); return { allow: true }; }
     if (verdict.question) return this.askUser(tab, r, req);
     const risky = verdict.risky;
     // Agent mode: running commands asks you first.
@@ -2312,12 +2344,20 @@ class ChatView {
     this.notify(tab, "permission", { tool: req.tool_name, detail: block.detail, where: block.where });
     const allow = await new Promise((resolve) => r.perms.set(pid, resolve));
     this.clearNotice(tab.id);
+    if (allow) await prepareEdit();
     block.state = allow ? "allowed" : "denied";
     // (After Stop the answer is already over: don't flip the tab back to "running".)
     if (turn && turn.reply.running) tab.status = "running";
     this.post({ type: "permState", tabId: tab.id, pid, state: block.state });
     this.postTabs(); this.save();
     return allow ? { allow: true } : { allow: false, message: "The user chose not to run this. Continue without it or ask them." };
+  }
+
+  // "Allow all" ends (a mode or model change, a handoff). A device's own "Allow all" (allowAllDevice) ends with its link.
+  revokeAllowAll(tab) {
+    if (!tab.allowAll && !tab.allowAllFor) return;
+    tab.allowAll = false; delete tab.allowAllFor;
+    log(`chat ${tab.id}: "Allow all" ended (mode, model or conversation changed)`);
   }
 
   // A command or a file write on the linked device: your mode decides, like a command here. (Reads just happen.)
@@ -2343,9 +2383,13 @@ class ChatView {
       }
     }
     const editing = (x) => x === "agent" || x === "auto";
-    // Gemini (Antigravity) can't be asked: what it may do is fixed when it starts, so every mode applies from the next message.
-    if (engineOf(tab.model) === "agy") this.post({ type: "flash", text: "Gemini: the new mode applies from your next message" });
-    else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" ? "Plan" : tab.mode === "ask" ? "Ask" : "Editing"} mode applies from your next message` });
+    // Gemini (Antigravity): its flags are fixed when it starts. Kural's gate stops approving anything for the agy that was
+    // started for the old mode (so a late "yes" can't count under the new one); the new mode applies from the next message.
+    if (engineOf(tab.model) === "agy") {
+      if (r && r.proc && typeof r.proc.revokeGate === "function") r.proc.revokeGate();
+      this.post({ type: "flash", text: "Gemini: nothing more runs in this answer; the new mode applies from your next message" });
+    }
+    else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" || tab.mode === "ask" ? "Read-only permissions apply now; tools refresh" : "Editing tools become available"} from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });
   }
@@ -2595,6 +2639,7 @@ class ChatView {
         if (tab.autoRoute && m.model !== was && tab.status === "idle") this.routerFeedback(tab, "better", m.model);
         tab.autoRoute = false;
         tab.model = m.model;
+        if (m.model !== was) this.revokeAllowAll(tab);
         const r = this.runtime.get(tab.id);
         if (engineOf(m.model) !== engineOf(was) || isLocal(m.model)) {
           // To another program (Claude Code, Codex, Gemini, Kural's own engine), which doesn't have this conversation:
@@ -2629,16 +2674,18 @@ class ChatView {
         else this.post({ type: "flash", text: "Intensity applies from your next message" });   // set when Claude starts
       } break;
       case "setMode": if (valid(MODES, m.mode)) {
-        // The first switch to Auto ever: say what it means, once.
-        if (m.mode === "auto" && tab.mode !== "auto" && !this.context.globalState.get(AUTO_WARNED)) {
-          const pick = await vscode.window.showWarningMessage("Auto mode runs commands and edits files without asking. Dangerous commands (sudo, deleting outside the project, a forced push to main…) still ask.",
-            { modal: true }, "Use Auto");
+        // The first switch to Auto with this AI: say what it means, once per AI (what still asks differs: autoWarning).
+        // (Older versions saved `true`: that covered every AI but Gemini, whose gate is new.)
+        const engine = engineOf(tab.model), warned = this.context.globalState.get(AUTO_WARNED);
+        const seen = warned === true ? { claude: true, codex: true, ollama: true } : (warned && typeof warned === "object" ? warned : {});
+        if (m.mode === "auto" && tab.mode !== "auto" && !seen[engine]) {
+          const pick = await vscode.window.showWarningMessage(autoWarning(engine, isClaude(tab.model) && fullSetup()), { modal: true }, "Use Auto");
           if (pick !== "Use Auto") { this.postTabs(); break; }   // (the page goes back to the mode the tab has)
-          await this.context.globalState.update(AUTO_WARNED, true);
+          await this.context.globalState.update(AUTO_WARNED, { ...seen, [engine]: true });
         }
         const was = tab.mode;
         tab.mode = m.mode; this.remember(tab);
-        if (m.mode === "agent" || m.mode === "auto") this.context.globalState.update(LAST_KEY, { ...this.context.globalState.get(LAST_KEY), buildMode: m.mode });
+        if (m.mode !== was) this.revokeAllowAll(tab);
         if (tab.status !== "idle") this.modeChangedMidAnswer(tab, was);
         this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab);
       } break;
@@ -2664,7 +2711,8 @@ class ChatView {
         if (m.always) {
           const b = r && r.turn && r.turn.reply.blocks.find((x) => x.k === "perm" && x.pid === m.pid);
           if (b && b.where) tab.allowAllDevice = tab.device;   // only this device, only while it's linked
-          else { tab.allowAll = true; this.post({ type: "allowAll", tabId: tab.id }); }
+          // (For this mode, model and conversation only: allowAllNow() in permission-policy.js.)
+          else { tab.allowAll = true; tab.allowAllFor = grantKey(tab); this.post({ type: "allowAll", tabId: tab.id }); }
         }
         const res = r && r.perms.get(m.pid);
         if (res) { r.perms.delete(m.pid); res(!!m.allow); }
@@ -2925,4 +2973,4 @@ function elementNote(e) {
   return lines.join("\n");
 }
 
-module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, teamPrompt, FRIENDS, ROLES, MOOD_PROMPTS, toolDetail } };
+module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, teamPrompt, FRIENDS, ROLES, MOOD_PROMPTS, toolDetail, settingMode } };

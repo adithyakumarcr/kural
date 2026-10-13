@@ -16,6 +16,7 @@ const http = require("http");
 const https = require("https");
 const { Tools, definitions, SUPPORTED } = require("./tools");
 const { within } = require("../paths");
+const { writePrivate } = require("../private-file");
 const usageHub = require("./usage");
 const READS = new Set(["Read", "Grep", "Glob"]);
 
@@ -88,7 +89,7 @@ class LocalAgent {
   save() {
     const f = this.file();
     if (!f) return;
-    try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify({ model: this.model, messages: this.history })); } catch { /* best effort */ }
+    try { writePrivate(f, JSON.stringify({ model: this.model, messages: this.history })); } catch { /* best effort */ }
   }
 
   // Your message: a string, or Claude-style blocks (text and images). Sent while it answers: added to that answer before
@@ -196,7 +197,7 @@ class LocalAgent {
     // Reading is allowed without asking only inside the project (and its other folders, the temp folder): reading
     // your Documents or Desktop would make macOS ask about Kural, so it's your call (the chat asks you).
     const where = input && (input.file_path || input.path);
-    const outside = READS.has(u.name) && where && !within(where, [this.tools.cwd, ...(this.tools.dirs || []), os.tmpdir(), ...(this.opts.readRoots || [])]);
+    const outside = READS.has(u.name) && where && !within(where, [this.tools.cwd, ...(this.tools.dirs || []), ...(this.opts.readRoots || [])]);
     if (!this.allowed.has(u.name) || outside) {
       let ans = { allow: false, message: "Not allowed here." };
       try { if (this.h.onPermission) ans = await this.h.onPermission({ tool_name: u.name, input, tool_use_id: u.id }); } catch (e) { ans = { allow: false, message: e.message }; }

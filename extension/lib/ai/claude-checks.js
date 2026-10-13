@@ -10,6 +10,7 @@
 const os = require("os");
 const { spawn, execFile } = require("child_process");
 const usage = require("./usage");
+const { onText } = require("../utf8");
 
 // Run a program without blocking Kural (spawnSync would freeze every extension while it runs).
 // Resolves { status, stdout, stderr, error }.
@@ -80,8 +81,8 @@ function claudeTest(bin, env, { cwd, timeoutMs = 90000, model = "haiku" } = {}) 
     } catch (e) { resolve({ ok: false, ms: 0, error: e.message }); return; }
     const timer = setTimeout(() => finish({ ok: false, error: `No answer after ${Math.round(timeoutMs / 1000)} s. Check your internet connection.` }), timeoutMs);
     p.on("error", (e) => finish({ ok: false, error: e.message }));
-    p.stderr.on("data", (d) => { err += d; });
-    p.stdout.on("data", (d) => {
+    onText(p.stderr, (d) => { err += d; });
+    onText(p.stdout, (d) => {
       out += d;
       let i;
       while ((i = out.indexOf("\n")) >= 0) {

