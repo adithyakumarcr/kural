@@ -1,5 +1,5 @@
 // Kural's approval gate for Google Gemini (lib/ai/agy-gate.js, agy-gate-host.js, AgyAgent.gateDecide) against the
-// stand-in test/fake-agy.js, which runs PreToolUse hooks from $HOME/.gemini/antigravity-cli/hooks.json the way
+// stand-in test/fake-agy.js, which runs PreToolUse hooks from $HOME/.gemini/config/hooks.json the way
 // Google documents them. The chat's own onPermission (a stand-in ChatView) decides, like in Kural.
 // A temporary HOME: the real ~/.gemini is never touched. This proves Kural's side only; the real agy is checked by
 // scripts/verify-agy-gate.sh.
@@ -90,6 +90,16 @@ function runLauncher(input, env) {
 const sample = { hookEventName: "PreToolUse", conversationId: "c-1", workspacePaths: [proj], toolCall: { name: "run_command", args: { CommandLine: "ls" } }, stepIdx: 1 };
 
 (async () => {
+  await check("install: the hook goes where agy reads it (~/.gemini/config); Kural's entry in the old file is taken out", async () => {
+    assert.strictEqual(gate.hooksFile(), path.join(os.homedir(), ".gemini", "config", "hooks.json"));
+    const old = gate.oldHooksFile();
+    fs.mkdirSync(path.dirname(old), { recursive: true });
+    fs.writeFileSync(old, JSON.stringify({ mine: { PreToolUse: [] }, [gate.KEY]: { PreToolUse: [] } }));
+    assert.ok(gate.ensureInstalled().ok);
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(old, "utf8")), { mine: { PreToolUse: [] } });
+    fs.rmSync(old); fs.rmSync(gate.hooksFile());
+  });
+
   await check("install: Kural's hook entry is added, your own hooks stay, the old file is kept, a second run changes nothing", async () => {
     const file = gate.hooksFile();
     fs.mkdirSync(path.dirname(file), { recursive: true });

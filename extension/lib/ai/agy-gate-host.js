@@ -2,7 +2,7 @@
 //
 // agy has no editor protocol that waits for an answer, but it runs "hooks": a program before each tool call
 // (PreToolUse) that can say allow or deny. Kural installs one hook entry, "kural-gate", in agy's global hooks file
-// (~/.gemini/antigravity-cli/hooks.json; your own entries there are kept) whose command is a small launcher that
+// (~/.gemini/config/hooks.json; your own entries there are kept) whose command is a small launcher that
 // runs lib/ai/agy-gate.js. When Kural starts agy for a chat it opens a gate session here: a random token, sent to the
 // gate through agy's environment (KURAL_AGY_GATE) and, once the conversation id is known, a private registry entry.
 // Each hook call comes to this process over a private local socket (a Unix socket in a 0700 folder; a named pipe on
@@ -29,8 +29,12 @@ const FIRST_LINE_MS = 15000;
 const GATE_JS = path.join(__dirname, "agy-gate.js");
 
 const home = () => os.homedir();
-const agyDir = () => path.join(home(), ".gemini", "antigravity-cli");
-const hooksFile = () => path.join(agyDir(), "hooks.json");
+// agy's global hooks file. Checked with the real agy 1.3.4 (scripts/verify-agy-gate.sh): it reads ~/.gemini/config/
+// hooks.json; ~/.gemini/antigravity-cli/hooks.json (agy's changelog: "the /hooks command wrote to … instead of the
+// shared ~/.gemini/config/hooks.json") is never read, so a gate there never ran.
+const hooksDir = () => path.join(home(), ".gemini", "config");
+const hooksFile = () => path.join(hooksDir(), "hooks.json");
+const oldHooksFile = () => path.join(home(), ".gemini", "antigravity-cli", "hooks.json");
 const gateDir = () => path.join(home(), ".kural", "agy-gate");
 const registryDir = () => path.join(gateDir(), "conversations");
 const launcherPath = () => path.join(gateDir(), IS_WIN ? "kural-agy-gate.cmd" : "kural-agy-gate");
@@ -110,7 +114,8 @@ function ensureInstalled({ execPath = process.execPath, gateJs = GATE_JS } = {})
       writeAtomic(launcher, want, 0o700);
     }
 
-    fs.mkdirSync(agyDir(), { recursive: true, mode: 0o700 });
+    dropOldEntry();
+    fs.mkdirSync(hooksDir(), { recursive: true, mode: 0o700 });
     const file = hooksFile();
     let text = null; try { text = fs.readFileSync(file, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
     let cfg = {};
@@ -127,6 +132,19 @@ function ensureInstalled({ execPath = process.execPath, gateJs = GATE_JS } = {})
   } catch (e) {
     return { error: `Kural couldn't set up its approval gate for Gemini (${e.message}). Gemini isn't started without it.` };
   }
+}
+
+// Kural's entry in the file older Kural versions used (agy doesn't read it): taken out, your own entries stay. A file
+// that isn't JSON is left alone (best effort: it does nothing either way).
+function dropOldEntry() {
+  const file = oldHooksFile();
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    const cfg = JSON.parse(text);
+    if (!cfg || typeof cfg !== "object" || Array.isArray(cfg) || !(KEY in cfg)) return;
+    delete cfg[KEY];
+    writeAtomic(file, JSON.stringify(cfg, null, 2) + "\n", 0o600);
+  } catch { /* no file, or not ours to fix */ }
 }
 
 // Is Kural's entry there, pointing at today's launcher? (For checks and tests.)
@@ -256,4 +274,4 @@ class GateHost {
 
 const host = new GateHost();
 
-module.exports = { host, GateHost, ensureInstalled, installed, isGateFile, hooksFile, launcherPath, registryDir, gateDir, KEY, HOOK_TIMEOUT_S, GATE_JS, _test: { launcherText, hookEntry } };
+module.exports = { host, GateHost, ensureInstalled, installed, isGateFile, hooksFile, oldHooksFile, launcherPath, registryDir, gateDir, KEY, HOOK_TIMEOUT_S, GATE_JS, _test: { launcherText, hookEntry } };

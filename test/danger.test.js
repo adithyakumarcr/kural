@@ -48,4 +48,11 @@ assert(d && typeof d.why === "string" && /sudo/.test(d.why) && d.why.endsWith(".
 assert.strictEqual(dangerous("", cwd), null);
 assert.strictEqual(dangerous(undefined, cwd), null);
 assert(dangerous(`rm -rf ${os.homedir()}`, cwd));
+// A long run of slashes is checked quickly (a /\/+$/ regex took quadratic time on it: CodeQL).
+{
+  const t = Date.now();
+  dangerous(`Remove-Item -Recurse ${"/".repeat(50000)}x`, cwd);
+  dangerous(`Remove-Item -Recurse dist${"/".repeat(50000)}x`, cwd);
+  assert(Date.now() - t < 1000, `slashes took ${Date.now() - t} ms`);
+}
 console.log("danger ok");

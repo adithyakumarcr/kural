@@ -106,5 +106,11 @@ Code findings: none open beyond documented residuals (danger.js is not a sandbox
 1. SEC-011: protect `main` and `v*` tags, then confirm a direct push is refused.
 2. SEC-010: move Windows signing secrets into a protected environment (or remove them while unused).
 3. SEC-012: run `scripts/verify-agy-gate.sh` with a logged-in agy and record the result.
+   **Done 2026-10-13 (agy 1.3.0 → 1.3.4, Ubuntu):** the first run FAILED (0 hook runs): agy reads global hooks from
+   `~/.gemini/config/hooks.json`, not `~/.gemini/antigravity-cli/hooks.json`. Kural now writes there (and removes its old
+   entry). Re-run: PASS in all four cases (deny/allow × Auto/Agent; agy waited for the gate and obeyed it; the
+   hook got agy's environment). Kural's own launcher + socket + agy-gate.js with the real agy in Auto, gate denying:
+   neither `write_to_file` nor `run_command` ran. Real tool arguments match `gateCall` (`TargetFile`, `CommandLine`,
+   `Cwd`). Not checked: macOS and Windows agy.
 4. Native acceptance: install, start, update and uninstall a release candidate on macOS, Windows and Ubuntu; on Windows the installer folder check, the update script with a non-ASCII folder and Stop on a long command; on Ubuntu the update's password window (install-deb.sh) and Ollama's install.
 With 1–4 done and passing, the recommendation can move to **GO for an alpha release** with the signing warnings documented.
