@@ -288,6 +288,26 @@ function chat(opts = {}) {
     assert.strictEqual(agy._test.findLoginUrl("Open https://accounts.google.com/o/auth?x=1\r\nThen come back", 0), "https://accounts.google.com/o/auth?x=1");
   });
 
+  await check("login screen of the real agy 1.3.4 (80 columns): the address is found whole, never a piece of it", async () => {
+    // Recorded from agy 1.3.4 after choosing "Google OAuth" (fixtures/): the screen, and what agy gave `open`.
+    const screen = fs.readFileSync(path.join(__dirname, "fixtures", "agy-1.3.4-login-screen.bin"), "utf8");
+    const real = fs.readFileSync(path.join(__dirname, "fixtures", "agy-1.3.4-login-url.txt"), "utf8").trim();
+    assert.strictEqual(agy._test.findLoginUrl(screen, 0), real);
+    assert.strictEqual(agy._test.complete(real), true);
+    // What Kural opened before: the address cut after its first pieces (Google: "Required parameter is missing").
+    assert.strictEqual(agy._test.complete(real.slice(0, real.indexOf("s.googleusercontent"))), false);
+    assert.strictEqual(agy._test.complete(real.replace(/&response_type=code/, "")), false);
+    // Fed in small pieces, as a terminal does: nothing until the screen is quiet, then the whole address once.
+    const urls = [];
+    const s = agy.loginSession(BIN, { onUrl: (u) => urls.push(u), quietMs: 150 });
+    try {
+      for (let i = 0; i < screen.length; i += 40) { s.feed(screen.slice(i, i + 40)); await new Promise((r) => setTimeout(r, 5)); }
+      assert.deepStrictEqual(urls, [], "no address while the screen is still being written");
+      await new Promise((r) => setTimeout(r, 300));
+      assert.deepStrictEqual(urls, [real]);
+    } finally { s.dispose(); }
+  });
+
   await check("real agy's logged-out message means \"not logged in\" (Log in, not a failed test)", async () => {
     assert.strictEqual(agy._test.friendly("error: authentication failed or timed out"), agy.NOT_LOGGED_IN);
   });
