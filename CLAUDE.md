@@ -230,7 +230,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   folder open, AI work runs in `ws.workDir()`, never `~`; shell lookups and checks run with `cwd: os.tmpdir()`, and the
   `$SHELL -ilc` lookup only when claude isn't found otherwise. `build-mac.sh` keeps Info.plist's usage texts (without
   them macOS kills the app when any extension touches that device).
-- **Untrusted folders** (VS Code's Restricted Mode): package.json `untrustedWorkspaces: limited` with
+- **Untrusted folders** (VS Code's Restricted Mode): package.json `untrustedWorkspaces.supported: false` (Kural is off until the folder is trusted; CI starts the app with `--disable-workspace-trust`), with
   `restrictedConfigurations` (program paths, Ollama URL, chat mode/model, full setup) and `scope: machine` for the paths;
   `fullSetup()` = the setting AND `vscode.workspace.isTrusted` (a project's .claude/settings.json hooks would run, and
   Kural starts Claude early); trusting the folder → `setupChanged`. Updates install only from this repo's releases
