@@ -264,6 +264,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [linux-check, macos, windows-check]
     runs-on: ubuntu-24.04
+    # The release key (KURAL_RELEASE_PRIVATE_KEY) lives in this GitHub environment, not in the repository's secrets:
+    # Settings -> Environments -> "release", deployment tags v*. A workflow changed on a branch can't read it then.
+    environment: release
     permissions:
       contents: write       # publish the release
       id-token: write       # build provenance (signed statement of where the files were built)
