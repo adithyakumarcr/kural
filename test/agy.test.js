@@ -311,6 +311,26 @@ function chat(opts = {}) {
     } finally { delete process.env.FAKE_AGY_VERSION; }
   });
 
+  await check("an old agy: Get started learns its version, and \"Update for me\" runs agy's own update (not the installer)", async () => {
+    const old = path.join(tmp, "old-agy-2.js");
+    fs.copyFileSync(BIN, old); fs.chmodSync(old, 0o755);
+    const updated = `${process.env.FAKE_AGY_FILE || path.join(os.tmpdir(), "kural-fake-agy-state")}.updated`;
+    fs.rmSync(updated, { force: true });
+    process.env.FAKE_AGY_VERSION = "1.2.16";
+    try {
+      const { CLIS } = require("../extension/lib/ai/clis");
+      assert.strictEqual(await CLIS.agy.version(old), null);
+      assert.strictEqual(await CLIS.agy.installedVersion(old), "1.2.16");
+      assert.strictEqual(CLIS.agy.minVersion, "1.3.4");
+      const installer = require("../extension/lib/ai/install");
+      const r = await installer.install("agy", { update: { file: old, args: CLIS.agy.update.args, text: CLIS.agy.update.text } });
+      assert.strictEqual(r.ok, true, r.output);
+      assert.strictEqual(r.plan.how, "update");
+      assert.match(r.output, /Updated to 1\.3\.4/);
+      assert.strictEqual(await CLIS.agy.installedVersion(old), "1.3.4");
+    } finally { delete process.env.FAKE_AGY_VERSION; fs.rmSync(updated, { force: true }); }
+  });
+
   await check("agy's tool names and parameters → the chat's tools", async () => {
     const d = agy._test.describe;
     assert.deepStrictEqual(d("view_file", { AbsolutePath: "/a/b.py" }, "/x"), { name: "Read", input: { file_path: "/a/b.py" } });

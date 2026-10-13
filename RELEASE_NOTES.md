@@ -3,6 +3,9 @@
 - **Gemini needs Antigravity 1.3.4 or newer.** Kural's approval gate works only from that version; an older one never
   asked it, so its first change could run before Kural noticed. Kural no longer starts an older one: Get started and
   the chat say to run `agy update`.
+- **An older Antigravity is updated, not "not found".** Get started's "Install for me" ran Google's installer, which
+  leaves an existing agy as it is, and then said Kural "can't find the agy program". Now Get started shows the version
+  it found (for example 1.2.16) and **Update for me** runs `agy update`.
 - Get started no longer says Gemini "can't ask before a command": it asks Kural before each change.
 - A few features are now marked **experimental** where they start: searching the public MCP directory for connectors,
   installing Ollama from the Tab Completion panel, and profiles on a Mac.
