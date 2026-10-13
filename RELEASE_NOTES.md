@@ -1,3 +1,26 @@
+## Not released yet
+
+- **Gemini needs Antigravity 1.3.4 or newer.** Kural's approval gate works only from that version; an older one never
+  asked it, so its first change could run before Kural noticed. Kural no longer starts an older one: Get started and
+  the chat say to run `agy update`.
+- Get started no longer says Gemini "can't ask before a command": it asks Kural before each change.
+- A few features are now marked **experimental** where they start: searching the public MCP directory for connectors,
+  installing Ollama from the Tab Completion panel, and profiles on a Mac.
+- Builds: the tests also run on macOS and Windows, and every build checks that Kural's own extension finished starting
+  (not only that a window opened).
+
+**Known issues**
+
+- **Windows warns before installing** ("Windows protected your PC"): the installer isn't code-signed (a certificate
+  costs money every year). Click **More info**, then **Run anyway**. Kural's own updates don't ask again.
+- **macOS warns the first time you open Kural**: it isn't notarized by Apple. Open it once from System Settings →
+  Privacy & Security → **Open Anyway**.
+- **Gemini's approval gate** was checked with the real Antigravity on Ubuntu only, not yet on macOS or Windows.
+- **ChatGPT (Codex)** hasn't been tried with a logged-in account yet: approvals, edits and Undo were tested with a
+  stand-in program only.
+- **Experimental:** connector search in the public MCP directory, installing Ollama from Kural, profiles on a Mac
+  (two logins in the keychain), and picking a page element in Kural's browser with a real mouse click.
+
 ## What's new in 1.1.0-alpha.9
 
 - **Safer by default** (from a security review):

@@ -60,7 +60,7 @@ function chat(opts = {}) {
 
 (async () => {
   await check("version, models, login check, limits", async () => {
-    assert.strictEqual(await agy.agyVersion(BIN), "1.2.7");
+    assert.strictEqual(await agy.agyVersion(BIN), "1.3.4");
     // One entry per model; its thinking levels go to the intensity.
     const models = await agy.agyModels(BIN);
     assert.deepStrictEqual(models.map((m) => [m.id, m.label]), [["gemini-3.8-flash", "Gemini 3.8 Flash"], ["gemini-3.8-pro", "Gemini 3.8 Pro"], ["claude-sonnet-5", "Claude Sonnet 5"]]);
@@ -290,6 +290,25 @@ function chat(opts = {}) {
 
   await check("real agy's logged-out message means \"not logged in\" (Log in, not a failed test)", async () => {
     assert.strictEqual(agy._test.friendly("error: authentication failed or timed out"), agy.NOT_LOGGED_IN);
+  });
+
+  await check("an agy older than the gate's version isn't started: the chat says to update it", async () => {
+    // (a copy of the stand-in: the version is remembered per program file)
+    const old = path.join(tmp, "old-agy.js");
+    fs.copyFileSync(BIN, old); fs.chmodSync(old, 0o755);
+    process.env.FAKE_AGY_VERSION = "1.2.7";
+    try {
+      assert.strictEqual(await agy.agyVersion(old), null);   // (Get started: "doesn't start", update)
+      fs.writeFileSync(process.env.FAKE_AGY_LOG, "");
+      const c = chat({ bin: old });
+      assert.ok(c.a.start());
+      const r = await c.ask("make a file");
+      assert.strictEqual(r.is_error, true);
+      assert.strictEqual(r.result, agy.TOO_OLD);
+      assert.match(r.result, /1\.3\.4/);
+      assert.ok(!fs.readFileSync(process.env.FAKE_AGY_LOG, "utf8").includes("stream-json"));   // agy never ran a conversation
+      assert.ok(!fs.existsSync(path.join(project, "c.txt")));
+    } finally { delete process.env.FAKE_AGY_VERSION; }
   });
 
   await check("agy's tool names and parameters → the chat's tools", async () => {

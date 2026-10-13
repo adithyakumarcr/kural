@@ -250,7 +250,7 @@
   function fieldsBox(item) {
     const F = fieldsFor(item);
     return el("div", { class: "cat-fields" },
-      item.from === "registry" ? el("div", { class: "muted small" }, "From the public MCP directory, not checked by Kural.") : null,
+      item.from === "registry" ? el("div", { class: "muted small" }, "From the public MCP directory, not checked by Kural (experimental: tell us if one doesn't work).") : null,
       item.from === "registry" && item.shows ? el("code", { class: "cat-cmd" }, item.shows) : null,
       (item.inputs || []).map((i) => el("label", { class: "field" }, el("span", { class: "flabel" }, i.label),
         el("div", { class: "row" }, F[i.key],

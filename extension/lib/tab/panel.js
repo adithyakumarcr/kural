@@ -179,10 +179,10 @@ function page(nonce, csp, codicons) {
       bar(L.pulling.percent || 0);
     } else if (!L.allowed) {
       // Not chosen yet (a model left over from before doesn't count): say so, and offer it. One click does it all.
-      $("localText").innerHTML = '<span class="muted">' + ic("info") + ' Not set up. A small model on this computer makes suggestions faster and works offline.</span>';
+      $("localText").innerHTML = '<span class="muted">' + ic("info") + ' Not set up. A small model on this computer makes suggestions faster and works offline.' + (L.running ? "" : " Installing Ollama from here is experimental.") + '</span>';
       button(L.running ? (L.hasModel ? "Set up" : "Set up (" + cur.size + ")") : "Set up (installs Ollama, then the model)", "setup");
     } else if (!L.running) {
-      $("localText").innerHTML = '<span class="warn">' + ic("warning") + ' Ollama isn’t installed or running.</span>';
+      $("localText").innerHTML = '<span class="warn">' + ic("warning") + ' Ollama isn’t installed or running. (Installing it from here is experimental.)</span>';
       button("Install Ollama and the model", "setup"); button("Check again", "check", true);
     } else if (!L.hasModel) {
       $("localText").innerHTML = '<span class="warn">' + ic("warning") + ' Model not downloaded yet.</span>';

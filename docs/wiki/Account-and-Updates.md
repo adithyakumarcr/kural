@@ -158,6 +158,9 @@ Settings.
 
 ## Profiles (personal and work)
 
+> **Experimental on a Mac:** two Claude logins kept apart in the Mac keychain haven't been tried with real accounts yet.
+> If logging in to a new profile logs your main profile out, tell us.
+
 A profile is a separate set of AI accounts: one for your own projects and one for your job, each logged in to a
 different Claude or ChatGPT account.
 
