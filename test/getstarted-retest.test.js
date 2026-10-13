@@ -27,6 +27,7 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
 
 (async () => {
   await check("a failed re-test takes Claude out of 'ready'; a passing one puts it back", async () => {
+    if (process.platform === "win32") { console.log("  (skipped on Windows: the stand-in claude is a script, and Windows starts only .exe programs (like checks.test.js))"); return; }
     const { GetStarted } = require("../extension/lib/getstarted");
     const context = { globalState: { get: (k) => store.get(k), update: async (k, v) => { store.set(k, v); } }, extensionUri: { fsPath: tmp }, subscriptions: [] };
     const gs = new GetStarted(context);

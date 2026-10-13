@@ -25,7 +25,7 @@ const run = (text) => py(`
 text = ${JSON.stringify(text)}
 once = rebrand.add_workspace_color_item(text)
 twice = rebrand.add_workspace_color_item(once)
-open(${JSON.stringify(outFile)}, "w", encoding="utf-8").write(once)
+open(${JSON.stringify(outFile)}, "w", encoding="utf-8", newline="").write(once)
 print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 `);
 const out = () => fs.readFileSync(outFile, "utf8");
@@ -59,7 +59,7 @@ const real = py(`
 text = open(${JSON.stringify(src)}, encoding="utf-8").read()
 once = rebrand.add_workspace_color_item(text)
 twice = rebrand.add_workspace_color_item(once)
-open(${JSON.stringify(patched)}, "w", encoding="utf-8").write(once)
+open(${JSON.stringify(patched)}, "w", encoding="utf-8", newline="").write(once)
 print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 `);
 check("the patch runs on a real workbench file without warnings, and again changes nothing", () => {

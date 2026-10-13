@@ -158,7 +158,7 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 text = open(${JSON.stringify(src)}, encoding="utf-8").read()
 once = rebrand.add_os_toast(text)
 twice = rebrand.add_os_toast(once)
-open(${JSON.stringify(out)}, "w", encoding="utf-8").write(once)
+open(${JSON.stringify(out)}, "w", encoding="utf-8", newline="").write(once)
 print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 `);
   await check("the patch runs on a real workbench file without warnings, and again changes nothing", () => {

@@ -65,7 +65,7 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-kb-")), f = path.join(dir, "keybindings.json");
     fs.writeFileSync(f, "[]", { mode: 0o640 }); io.writeAtomic(f, out);
     assert.strictEqual(fs.readFileSync(f, "utf8"), out); assert.deepStrictEqual(fs.readdirSync(dir), ["keybindings.json"]);
-    assert.strictEqual(fs.statSync(f).mode & 0o777, 0o640);
+    if (process.platform !== "win32") assert.strictEqual(fs.statSync(f).mode & 0o777, 0o640);   // (Windows has no such modes)
     fs.rmSync(dir, { recursive: true, force: true });
   });
   await check("import never takes program paths, terminal env/profiles, proxy, security, tasks, Auto or terminal shortcuts (APP-3)", () => {

@@ -17,7 +17,7 @@ check("oom: only the word OOM (or 'out of memory') counts as a crash line", () =
 });
 
 check("logsRoot: the folder that holds the sessions is found from the extension's log folder", () => {
-  const logs = path.join(path.sep, "data", "my-logs");
+  const logs = path.resolve(path.sep, "data", "my-logs");   // (resolve: on Windows with its drive, "D:\\data\\my-logs")
   const logUri = path.join(logs, "20261011T101500", "window1", "exthost", "kural.kural");
   assert.strictEqual(scan.logsRoot(logUri, "/guess/logs"), logs);
   assert.strictEqual(scan.logsRoot(path.join(logs, "20261011T101500", "exthost1", "kural.kural"), "/guess/logs"), logs);   // (older layout)

@@ -5,6 +5,7 @@ const fs = require("fs"), os = require("os"), path = require("path");
 const { spawnSync } = require("child_process");
 
 const ROOT = path.join(__dirname, "..");
+if (process.platform === "win32") { console.log("from-scratch: skipped on Windows (install.sh and from-scratch.sh are for Mac and Ubuntu)"); process.exit(0); }
 let fail = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
 
