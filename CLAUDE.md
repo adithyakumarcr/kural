@@ -740,7 +740,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   the last 5000 lines in memory, a read-only `kural-log:` editor tab; VS Code's Output tab is hidden).
 
 ## Branches (main is protected)
-Never commit to `main` directly: GitHub rejects pushes to it (repo rules "Protect main" / "Release tags").
+Never commit to `main` directly: GitHub rejects pushes to it (rulesets "block direct push and delete" for main and "delete tags" for every tag; Adithya merges and tags with his admin bypass).
 Work on a branch (`git checkout -b fix-something`), push the branch, open a pull request to `main`; Adithya
 reviews and merges it. Only he creates `v*` tags, and only on `main` (the workflow checks).
 

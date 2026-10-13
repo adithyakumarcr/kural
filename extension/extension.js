@@ -374,6 +374,7 @@ function activate(context) {
   });
   getStarted.start();
   chat.readyChanged(getStarted.ready);   // (saved empty chats get a model that's set up)
+  crashLog.ready();   // (everything above ran: the window marker says so; CI checks it after starting the app)
 }
 
 // Which files you edit, and the lines around your last edit in each (for Tab in other files).

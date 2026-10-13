@@ -41,6 +41,14 @@ class CrashLog {
     setTimeout(() => this.collect(markers).catch((e) => log(`crash log: ${e.stack || e.message}`)), 4000);
   }
 
+  // Kural started completely (the end of activate()): the marker says so. A crash report then knows startup finished,
+  // and CI's install checks look for it (a window that opens with Kural's extension broken would pass otherwise).
+  ready() {
+    if (!this.info) return;
+    this.info.ready = Date.now();
+    try { scan.writeMarker(this.markers, this.info); } catch { /* next minute */ }
+  }
+
   // Closed normally: this window's marker says so.
   stop() {
     clearInterval(this.timer);

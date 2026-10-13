@@ -44,7 +44,7 @@ CLIS.agy = {
   short: "Gemini",
   program: "Antigravity CLI",
   what: "Google's Gemini models (and others) with your Google account, through Google's Antigravity CLI.",
-  facts: ["Free with a Google account; more with Google AI Pro or Ultra", "Can't ask before a command: Agent mode edits files only, Auto runs commands", "Project teams and discussions"],
+  facts: ["Free with a Google account; more with Google AI Pro or Ultra", "Asks Kural before each change; in Agent mode it runs no commands, in Auto it does", "Project teams and discussions"],
   // Google's own installer (a single program, no Node.js needed): ~/.local/bin/agy, or %LOCALAPPDATA%\agy\bin on Windows.
   install: IS_WIN ? "irm https://antigravity.google/cli/install.ps1 | iex" : "curl -fsSL https://antigravity.google/cli/install.sh | bash",
   installAlt: IS_WIN ? "winget install Google.AntigravityCLI" : "",
@@ -54,6 +54,8 @@ CLIS.agy = {
   loginTerminal: true,
   find: (chosen) => agy.findAgy(chosen),
   version: (bin) => agy.agyVersion(bin),
+  // (agyVersion is null for an agy older than this: Get started says to update it)
+  tooOld: `It doesn't start, or it's older than ${agy.MIN_VERSION}, the version Kural's approval gate needs. Update it: run "agy update" in a terminal, then Check again.`,
   auth: (bin) => agy.agyAuth(bin),
   logout: (bin) => agy.agyLogout(bin),
   loginCommand: (bin) => agy.loginCommand(bin),

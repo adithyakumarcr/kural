@@ -287,7 +287,7 @@ class GetStarted {
     const bin = await c.find(chosen || undefined).catch(() => null);
     if (!bin) { S.install = { state: "missing", chosen: !!chosen, chosenPath: chosen }; S.login = { state: "blocked" }; S.test = { state: "blocked" }; return; }
     const version = await c.version(bin).catch(() => null);
-    S.install = version ? { state: "ok", path: tilde(bin), version, chosen: !!chosen } : { state: "broken", path: tilde(bin), error: "It doesn't start (no version).", chosen: !!chosen };
+    S.install = version ? { state: "ok", path: tilde(bin), version, chosen: !!chosen } : { state: "broken", path: tilde(bin), error: c.tooOld || "It doesn't start (no version).", chosen: !!chosen };
     S.bin = bin;
     if (!version) { S.login = { state: "blocked" }; S.test = { state: "blocked" }; return; }
     if (this.rec[id] && this.rec[id].bin !== bin) { this.rec[id].bin = bin; brain.setCli(id, { bin }); await this.save(); }
