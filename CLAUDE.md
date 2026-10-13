@@ -128,8 +128,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   that started after it (returning at once while a check ran gave callers the old state). Notifications there are never awaited
   while `installing`/`loggingIn` is set. Terminal ways stay as fallbacks (`installCliTerminal`, `loginCliTerminal`). Tests: `test/fake-codex.js`, `test/fake-agy.js` (state via `FAKE_CODEX_STATE` /
   `FAKE_AGY_STATE` or their files in tmp). In the editor: settings `kural.codexPath` / `kural.agyPath` pointing at
-  the fakes. The real programs were only checked logged out (agy not at all): verify streaming, approvals and tool names with real
-  accounts when you can.
+  the fakes. Both were used with real logged-in accounts on macOS (13 Oct 2026: a chat with an edit, an approval, Undo;
+  agy 1.3.4's login screen is recorded in test/fixtures); not yet on Ubuntu or Windows with a real account.
 - **Devices over SSH** (`lib/devices/`): `ssh.js` (no vscode) runs the computer's own `ssh` with **Kural's own key**
   (`<globalStorage>/ssh/id_ed25519`, made by `ssh-keygen`; `-i`, IdentitiesOnly, BatchMode, no password auth). The
   password is used once by `installKey` (adding a device, "Set up again") to append the public key to the device's
