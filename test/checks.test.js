@@ -32,6 +32,18 @@ const isWin = process.platform === "win32";
     assert.strictEqual((await checks.claudeAuth(fake, e)).loggedIn, false);
     fs.unlinkSync(file);
   });
+  await check("update: an old Claude Code is new afterwards; a refusal is an error with its words", async () => {
+    const file = path.join(os.tmpdir(), `kural-fake-update-${process.pid}`);
+    fs.writeFileSync(file, "old");
+    const e = { ...process.env, FAKE_CLAUDE_FILE: file, FAKE_CLAUDE_MS: "50" };
+    delete e.FAKE_CLAUDE_STATE; delete e.DISABLE_AUTOUPDATER;
+    assert.deepStrictEqual(await checks.claudeVersion(fake, e), { version: "1.0.30" });
+    const r = await checks.claudeUpdate(fake, e);
+    assert.strictEqual(r.ok, true); assert.match(r.output, /2\.1\.300/);
+    assert.deepStrictEqual(await checks.claudeVersion(fake, e), { version: "2.1.300" });
+    assert.deepStrictEqual(await checks.claudeUpdate(fake, { ...e, DISABLE_AUTOUPDATER: "1" }), { error: "Auto-updates are disabled." });
+    fs.unlinkSync(file);
+  });
   await check("old Claude Code without `auth status`: unknown (the test decides)", async () =>
     assert.strictEqual((await checks.claudeAuth(fake, env("old"))).loggedIn, null));
   await check("checks don't block: other work runs meanwhile", async () => {

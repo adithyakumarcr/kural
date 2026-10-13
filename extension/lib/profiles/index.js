@@ -128,10 +128,7 @@ class Profiles {
 
   async create() {
     const cc = await this.claudeCheck();
-    if (!cc.ok) {
-      vscode.window.showErrorMessage(`Kural can't make a profile yet: your Claude Code${cc.version ? ` (${cc.version})` : ""} is older than ${MIN_KEYCHAIN_CLAUDE}. On a Mac, an older Claude Code keeps one login for every folder, so a profile's login would replace your main one. Update Claude Code (run "claude update" in a terminal), then try again.`, { modal: true });
-      return;
-    }
+    if (!cc.ok && !(await this.offerClaudeUpdate(cc))) return;
     const kind = await vscode.window.showQuickPick([
       { label: "$(person) Personal", description: "for your own projects", kind: "personal" },
       { label: "$(briefcase) Work", description: "for your job", kind: "work" }],
@@ -154,6 +151,30 @@ class Profiles {
     catch (e) { vscode.window.showErrorMessage(`Kural: ${e.message}`); return; }
     log(`profiles: made "${p.name}" (${p.id}, ${p.kind}, ${p.share ? "shared" : "separate"} data)`);
     await this.switchTo(p.id, true);   // (reloads; Get started then opens for its logins)
+  }
+
+  // Claude Code is too old for a profile: one click updates it (`claude update`), then making the profile goes on.
+  // true = it's new enough now. A failed update offers the same command in a terminal (you see what it says there).
+  async offerClaudeUpdate(cc) {
+    const go = await vscode.window.showWarningMessage(`Update Claude Code to make a profile?`, { modal: true,
+      detail: `Your Claude Code${cc.version ? ` (${cc.version})` : ""} is older than ${MIN_KEYCHAIN_CLAUDE}. On a Mac, an older Claude Code keeps one login for every folder, so a profile's login would replace your main one. Kural can update it now; your chats keep working.` },
+      "Update Claude Code");
+    if (go !== "Update Claude Code") return false;
+    if (!this.hooks.updateClaude) return false;
+    const r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Updating Claude Code…" },
+      () => this.hooks.updateClaude().catch((e) => ({ error: e.message })));
+    const now = await this.claudeCheck();
+    log(`profiles: claude update: ${r.error ? `failed: ${r.error}` : "done"}; version ${cc.version || "?"} → ${now.version || "?"}`);
+    if (now.ok) {
+      vscode.window.setStatusBarMessage(`Claude Code updated${now.version ? ` to ${now.version}` : ""}`, 4000);
+      return true;
+    }
+    const why = r.error ? `The update stopped: ${r.error}` : `It's still ${now.version || "an older version"} after the update${r.output ? ` ("${r.output}")` : ""}.`;
+    const next = await vscode.window.showErrorMessage(`Kural couldn't update Claude Code.`, { modal: true,
+      detail: `${why}\n\nRun the update in a terminal to see what it says (Claude Code installed with Homebrew or npm updates there: brew upgrade claude-code, or npm install -g @anthropic-ai/claude-code). Then make the profile again.` },
+      "Update in a Terminal");
+    if (next === "Update in a Terminal" && this.hooks.updateClaudeInTerminal) this.hooks.updateClaudeInTerminal();
+    return false;
   }
 
   // ---------- manage ----------

@@ -833,11 +833,6 @@
           "default": "whenAway",
           "markdownDescription": "A system notification when a chat's answer is done or needs you (a command to allow, a question, a plan to build, an error). macOS asks once whether Kural may send notifications."
         },
-        "kural.chat.didYouKnow": {
-          "type": "boolean",
-          "default": true,
-          "description": "While an answer is being worked on, show a short \"Did you know?\" tip or fact under it, with a Know more link."
-        },
         "kural.chat.keepAwake": {
           "type": "boolean",
           "default": true,
