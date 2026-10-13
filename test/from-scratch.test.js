@@ -34,8 +34,11 @@ function setup() {
   fs.mkdirSync(path.join(home, ".gemini/antigravity-cli"), { recursive: true });
   fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/antigravity-oauth-token"), "{}");
   fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/settings.json"), "{}");
-  fs.writeFileSync(path.join(home, ".gemini/antigravity-cli/hooks.json"), JSON.stringify({ mine: { PreToolUse: [] },
-    "kural-gate": { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: path.join(home, ".kural/agy-gate/kural-agy-gate") }] }] } }));
+  // Kural's gate entry: where agy reads hooks (config/), and where older Kural versions wrote it (antigravity-cli/).
+  fs.mkdirSync(path.join(home, ".gemini/config"), { recursive: true });
+  for (const f of [".gemini/config/hooks.json", ".gemini/antigravity-cli/hooks.json"])
+    fs.writeFileSync(path.join(home, f), JSON.stringify({ mine: { PreToolUse: [] },
+      "kural-gate": { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: path.join(home, ".kural/agy-gate/kural-agy-gate") }] }] } }));
   fs.mkdirSync(path.join(tmp, "kural-abc123/attachments"), { recursive: true });
   fs.mkdirSync(path.join(home, ".ollama/models"), { recursive: true });
   return { home, tmp, bin, processLog };
@@ -67,7 +70,8 @@ check("yes, keep the programs: logged out everywhere, Kural's data gone, the res
     ".gemini/antigravity-cli/antigravity-oauth-token"]) assert.ok(!exists(s, p), p);
   assert.ok(exists(s, ".gemini/antigravity-cli/settings.json"));   // (its settings aren't a login)
   // Kural's gate entry leaves with ~/.kural; your own hooks stay.
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(s.home, ".gemini/antigravity-cli/hooks.json"), "utf8")), { mine: { PreToolUse: [] } });
+  for (const f of [".gemini/config/hooks.json", ".gemini/antigravity-cli/hooks.json"])
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(s.home, f), "utf8")), { mine: { PreToolUse: [] } }, f);
   for (const p of [".claude/projects", ".ollama/models", ".local/bin/claude", ".local/bin/codex", ".local/bin/agy"]) assert.ok(exists(s, p), p);
 });
 check("yes, remove the programs too: Claude Code's install and the others are gone", () => {

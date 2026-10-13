@@ -103,14 +103,21 @@ function findWhy(args, dir, cwd) {
 }
 
 // A Windows path (C:\x, \\server, %VAR%, $env:X, .\x, x\y) outside the project? PowerShell and cmd's deletes.
+// Trailing slashes off, without a regex: /\/+$/ takes quadratic time on a long run of "/" (CodeQL).
+function trimSlashes(s) {
+  let e = s.length;
+  while (e > 0 && s[e - 1] === "/") e--;
+  return s.slice(0, e);
+}
+
 function winOutside(a, dir, cwd) {
   if (/^[$%]/.test(a)) return `"${a}" (a variable: can't tell what it deletes)`;
-  const norm = (p) => String(p).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  const norm = (p) => trimSlashes(String(p).replace(/\\/g, "/")).toLowerCase();
   const root = norm(cwd);
   let t;
   if (/^([a-z]:|[\\/]|~)/i.test(a)) t = norm(a.replace(/^~/, os.homedir()));
   else if (dir === null) return `"${a}" (can't tell which folder that is)`;
-  else t = path.posix.normalize(norm(dir || cwd) + "/" + norm(a)).replace(/\/+$/, "");
+  else t = trimSlashes(path.posix.normalize(norm(dir || cwd) + "/" + norm(a)));
   return t.startsWith(root + "/") && !t.slice(root.length).split("/").includes("..") ? null
     : t === root ? "the whole project folder" : `${a}, outside the project`;
 }

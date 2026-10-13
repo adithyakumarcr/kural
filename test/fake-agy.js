@@ -16,7 +16,7 @@
 //                 the file in Cwd (refused unless skip-permissions); view_file reads; any other tool does nothing
 //                 (refused unless accept-edits or skip-permissions). (run_command: "touch <file>" anywhere in it.)
 // Hooks (like Antigravity's PreToolUse hooks): before a tool that agy's mode allows, every PreToolUse hook in
-// $HOME/.gemini/antigravity-cli/hooks.json whose matcher fits ("*", "" or a regex) runs with the call as JSON on stdin
+// $HOME/.gemini/config/hooks.json (where the real agy 1.3.4 reads them) whose matcher fits ("*", "" or a regex) runs with the call as JSON on stdin
 // ({hookEventName, conversationId, workspacePaths, transcriptPath, artifactDirectoryPath, modelName, toolCall {name, args},
 // stepIdx}); a {"decision":"deny"} or {"allow_tool":false} answer, a non-zero exit or a timeout skips the tool (as a
 // permission error). FAKE_AGY_PERMISSIVE=1: agy's own mode refuses nothing in "tool …" (so only Kural's gate decides).
@@ -121,7 +121,7 @@ async function say(t) {
 // The PreToolUse hooks that fit this tool, from the global hooks file. [{ command, timeout }]
 function hooksFor(name) {
   if (process.env.FAKE_AGY_NO_HOOKS) return [];
-  let cfg; try { cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".gemini", "antigravity-cli", "hooks.json"), "utf8")); } catch { return []; }
+  let cfg; try { cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".gemini", "config", "hooks.json"), "utf8")); } catch { return []; }
   const out = [];
   for (const v of Object.values(cfg || {})) for (const m of (v && v.PreToolUse) || []) {
     const fits = !m.matcher || m.matcher === "*" || (() => { try { return new RegExp(m.matcher).test(name); } catch { return false; } })();
