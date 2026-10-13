@@ -135,7 +135,7 @@ class Profiles {
     const kind = await vscode.window.showQuickPick([
       { label: "$(person) Personal", description: "for your own projects", kind: "personal" },
       { label: "$(briefcase) Work", description: "for your job", kind: "work" }],
-      { title: "New profile (1 of 3): what kind?", placeHolder: "A profile has its own Claude and ChatGPT accounts. You name it next." });
+      { title: "New profile (1 of 3): what kind?", placeHolder: `A profile has its own Claude and ChatGPT accounts. You name it next.${process.platform === "darwin" ? " (Experimental on a Mac: two logins in the keychain haven't been tried yet.)" : ""}` });
     if (!kind) return;
     const taken = (n) => !!this.store.checkName(n);
     let suggestion = KIND_LABEL[kind.kind], i = 2;

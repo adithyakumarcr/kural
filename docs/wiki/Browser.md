@@ -21,6 +21,9 @@ Cursor calls Design Mode: **click an element on the page and tell Kural what to 
 3. Kural finds the code that makes the element (it searches your project for the classes, id and text) and changes it.
    Reload the page to see the result.
 
+Picking an element with a real mouse click is **experimental**: it was checked with the picker's data, not yet with a
+click by hand. If nothing is added to your message, use the dropdown's **screenshot of an area** instead.
+
 The dropdown also adds **a screenshot** (the page, an area, or the full page) and the page's **console logs** to the
 message. Pictures arrive as attachments; click one in the chat to see it full size.
 
