@@ -40,7 +40,10 @@ const gateHost = require("./agy-gate-host");
 const { within } = require("../paths");
 
 const IS_WIN = process.platform === "win32";
-const MIN_VERSION = "1.1.15";   // stream-json input
+// The approval gate needs agy's hooks in ~/.gemini/config/hooks.json: checked with agy 1.3.4 (scripts/verify-agy-gate.sh).
+// An older agy never asks the gate, so its first change would run before Kural notices: Kural doesn't start one.
+const MIN_VERSION = "1.3.4";
+const TOO_OLD = `This Gemini (the Antigravity program) is too old for Kural's approval gate. Update it to ${MIN_VERSION} or newer (run "agy update" in a terminal), then send again.`;
 const RAW_LOG = process.env.KURAL_RAW_LOG;   // debugging: every line to and from agy
 const raw = (dir, line) => { if (RAW_LOG) { try { fs.appendFileSync(RAW_LOG, `agy ${dir} ${line}\n`, { mode: 0o600 }); } catch { /* debugging only */ } } };
 let log = () => {};
@@ -107,12 +110,22 @@ function quietDir() {
 
 const older = (a, b) => { const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); return false; };
 
-// "1.2.7" → "1.2.7" (or null). Too old for stream-json: null too (Get started then says to update).
+// "1.3.4" → "1.3.4" (or null). Too old for the approval gate: null too (Get started then says to update).
 async function agyVersion(bin) {
   const r = await run(bin, ["--version"], { timeout: 15000 });
   const v = /(\d+\.\d+\.\d+)/.exec(`${r.stdout}`);
   if (!v) return null;
   return older(v[1], MIN_VERSION) ? null : v[1];
+}
+
+// The same check before a chat starts agy (set up earlier with an older one, or agy changed since): once per program
+// file, asked again when the file changes (an update).
+const versionChecks = new Map();
+function versionOk(bin) {
+  let key = bin;
+  try { const st = fs.statSync(bin); key = `${bin}|${st.size}|${st.mtimeMs}`; } catch { /* checked below */ }
+  if (!versionChecks.has(key)) versionChecks.set(key, agyVersion(bin).then((v) => !!v, () => false));
+  return versionChecks.get(key);
 }
 
 // A slash command in print mode (no model turn, no quota): `agy --print /model --output-format json`.
@@ -385,6 +398,17 @@ class AgyAgent {
 
   spawn() {
     if (this.exited || this.proc) return;
+    // A new enough agy first (its version, once): an older one would run tools without asking the gate.
+    if (this.versionOk !== true) {
+      if (this.versionOk === undefined) {
+        this.versionOk = null;   // (being checked)
+        versionOk(this.opts.bin).then((ok) => {
+          this.versionOk = ok;
+          if (ok) this.spawn(); else this.failStart(TOO_OLD);
+        });
+      } else if (this.versionOk === false) this.failStart(TOO_OLD);
+      return;
+    }
     this.ready = false;
     this.started = false;   // this agy said "init"
     this.stderr = "";
@@ -440,7 +464,7 @@ class AgyAgent {
   failStart(why) {
     if (this.exited) return;
     const login = LOGIN_RE.test(String(why || ""));
-    const text = login ? NOT_LOGGED_IN : /approval gate/.test(String(why || "")) ? String(why) : friendly(why);
+    const text = login ? NOT_LOGGED_IN : why === TOO_OLD || /approval gate/.test(String(why || "")) ? String(why) : friendly(why);
     if (this.queue.length || this.busy) { this.queue = []; this.busy = false; this.turn = null; this.emit({ type: "result", subtype: "error", is_error: true, result: text, duration_ms: 0 }); }
     this.finish({ code: login ? 1 : -1, login, stderr: login ? text : String(why || "").slice(-2000) });
   }
@@ -852,4 +876,4 @@ async function agyTest(bin, { cwd, model } = {}) {
 }
 
 module.exports = { AgyAgent, groupModels, variantFor, splitLevel, findAgy, agyVersion, agyAuth, agyLogout, agyModels, agyLimits, agyTest, askAgy, loginCommand, loginSession, hasSavedLogin, setLog,
-  NOT_LOGGED_IN, MIN_VERSION, _test: { describe, gateCall, parseUsage, friendly, findLoginUrl, asksForCode } };
+  NOT_LOGGED_IN, MIN_VERSION, TOO_OLD, _test: { describe, gateCall, parseUsage, friendly, findLoginUrl, asksForCode } };

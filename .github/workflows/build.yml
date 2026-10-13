@@ -7,7 +7,8 @@
 #      kural_<ver>_amd64.deb                Ubuntu 22.04 / 24.04 (x64)   - installed and opened on both
 #      Kural-<ver>-macos-arm64.dmg / .zip   macOS on Apple Silicon (M1-M5) - installed from the .dmg, opened
 #      Kural-<ver>-windows-x64-setup.exe    Windows 10/11 installer        - installed and opened
-# "Opened" = the real window starts and is still running after 25 s (not just `kural --version`).
+# "Opened" = the real window starts and is still running after 25 s (not just `kural --version`), and Kural's own
+# extension finished starting (its window marker in globalStorage/kural.kural/sessions says "ready").
 #      Kural-<ver>-windows-x64.zip          Windows portable
 #
 # The tag must match extension/package.json's version (v1.2.0 <-> "1.2.0"), or the run stops early.
@@ -58,6 +59,20 @@ jobs:
             exit 1
           fi
 
+  # The same tests on macOS and Windows: code that only runs there (Windows paths, taskkill, named pipes, the Mac's
+  # update swap) gets tested too. Tests that can't run on a system say "skipped" there.
+  test-mac-win:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 22 }
+      - run: npm test
+
   # ---------- Ubuntu ----------
   linux:
     needs: test
@@ -102,6 +117,10 @@ jobs:
           DISPLAY=:99 /usr/share/kural/kural --user-data-dir /tmp/ud /tmp > /tmp/kural.log 2>&1 &
           sleep 25
           pgrep -af -- "--type=renderer" || { echo "::error::Kural quit or didn't open a window"; cat /tmp/kural.log; exit 1; }
+          # Kural's own extension started completely: its window marker says "ready" (end of activate()).
+          S=/tmp/ud/User/globalStorage/kural.kural/sessions
+          for i in $(seq 1 35); do grep -qs '"ready":' $S/*.json && break; sleep 1; done
+          grep -qs '"ready":' $S/*.json || { echo "::error::Kural's extension didn't finish starting"; ls -la $S; find /tmp/ud/logs -name 'exthost*.log' -exec cat {} +; exit 1; }
           pkill -x kural || true
 
   # ---------- macOS (Apple Silicon) ----------
@@ -146,6 +165,11 @@ jobs:
           ps ax -o pid,command | grep -F "Kural Helper (Renderer)" | grep -v grep || {
             echo "::error::Kural quit or didn't open a window"; cat "$RUNNER_TEMP/kural.log"
             ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null; exit 1; }
+          # Kural's own extension started completely: its window marker says "ready" (end of activate()).
+          S="$RUNNER_TEMP/ud/User/globalStorage/kural.kural/sessions"
+          for i in $(seq 1 35); do grep -qs '"ready":' "$S"/*.json && break; sleep 1; done
+          grep -qs '"ready":' "$S"/*.json || { echo "::error::Kural's extension didn't finish starting"; ls -la "$S"
+            find "$RUNNER_TEMP/ud/logs" -name 'exthost*.log' -exec cat {} +; exit 1; }
           pkill -x Kural || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -247,6 +271,18 @@ jobs:
           $procs = @(Get-Process Kural -ErrorAction SilentlyContinue)
           Write-Host "Kural processes running: $($procs.Count)"
           if ($procs.Count -lt 2) { throw "Kural quit or didn't open a window" }
+          # Kural's own extension started completely: its window marker says "ready" (end of activate()).
+          $S = "$env:RUNNER_TEMP\ud\User\globalStorage\kural.kural\sessions"
+          $ready = $false
+          for ($i = 0; $i -lt 35 -and -not $ready; $i++) {
+            $ready = [bool](Get-ChildItem "$S\*.json" -ErrorAction SilentlyContinue | Select-String -SimpleMatch '"ready":' -Quiet)
+            if (-not $ready) { Start-Sleep -Seconds 1 }
+          }
+          if (-not $ready) {
+            Get-ChildItem $S -ErrorAction SilentlyContinue
+            Get-ChildItem "$env:RUNNER_TEMP\ud\logs" -Recurse -Filter 'exthost*.log' -ErrorAction SilentlyContinue | Get-Content
+            throw "Kural's extension didn't finish starting"
+          }
           $procs | Stop-Process -Force
       - name: Signed (when a certificate is set up)
         if: needs.windows.outputs.signed == 'true'
@@ -262,7 +298,7 @@ jobs:
   # ---------- Release (tags only) ----------
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux-check, macos, windows-check]
+    needs: [test-mac-win, linux-check, macos, windows-check]
     runs-on: ubuntu-24.04
     permissions:
       contents: write       # publish the release

@@ -56,6 +56,8 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
       without the gate being asked (an Antigravity version without hooks), Kural stops Gemini and says so.
     - A project's own `.agents/hooks.json` (loaded by Antigravity only in trusted folders) runs alongside Kural's: it
       can add a "no" but can't overrule Kural's. It still runs its own command, so trust only folders you trust.
+    - Needs Antigravity 1.3.4 or newer. Kural doesn't start an older one (it never asks the gate): Get started and
+      the chat say to update it with `agy update`.
     - Checked with the real Antigravity (agy 1.3.4, 13 Oct 2026): a "no" from Kural stops the step, also in Auto.
       `scripts/verify-agy-gate.sh` checks it again on a computer where `agy` is logged in (after an Antigravity update).
   - Gemini can't read attached pictures directly: Kural saves them where it can open them and tells it where.
