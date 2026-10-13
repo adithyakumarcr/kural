@@ -123,6 +123,9 @@ class SettingsPage {
         tokens: u && u.tokens && (u.tokens.input || u.tokens.output) ? { input: u.tokens.input, output: u.tokens.output } : null,
       };
     };
+    // Not set up, or logged out: no usage on the card (the numbers were the old account's; "updated just now" under
+    // "Not set up" read as if it were still in use). The AI Usage panel keeps the history.
+    const noUsage = (card) => card.state === "off" || card.state === "out" ? Object.assign(card, { windows: [], tokens: null, at: null }) : card;
     const cards = [];
     // Claude
     const claude = { id: "claude", name: "Claude", what: "Claude's models with your Claude plan, through Claude Code.", ...limits("claude") };
@@ -132,7 +135,7 @@ class SettingsPage {
         note: a.provider !== "firstParty" || a.apiKey ? `Logged in with ${a.method}` : "", page: a.provider === "firstParty" ? (a.apiKey ? USAGE.apiKey : USAGE.claude) : "" });
     } else if (a && a.loggedIn === false) claude.state = "out";
     else claude.state = "set";   // (this Claude Code can't say who's logged in)
-    cards.push(claude);
+    cards.push(noUsage(claude));
     // Google Gemini, ChatGPT (Codex)
     for (const id of CLI_IDS) {
       const C = CLIS[id], c = this.account.cliAuth[id];
@@ -141,7 +144,7 @@ class SettingsPage {
       else if (c && c.loggedIn) Object.assign(card, { state: "on", who: c.name || c.email || c.method || "Logged in", email: c.name ? c.email : "", plan: [c.plan, c.email ? c.method : ""].filter(Boolean).join(" · "), page: C.usageUrl });
       else if (c && c.loggedIn === false) card.state = "out";
       else card.state = "set";
-      cards.push(card);
+      cards.push(noUsage(card));
     }
     // Your own model
     const local = this.gs.localModel;
