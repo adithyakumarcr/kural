@@ -618,7 +618,9 @@ First public version, released as the test version **1.1.0-alpha.1**.
 | **Ubuntu 22.04 / 24.04** (x64) | `kural_…_amd64.deb` |
 | **Windows 10 / 11** (x64) | `Kural-…-windows-x64-setup.exe` (or the portable `.zip`) |
 
-Kural's **Get started** page helps you install **Claude Code** and log in the first time you open it.
+The first time you open Kural, its **Get started** page sets up the AI you pick: **Claude** (Claude Code), **Google
+Gemini** (Antigravity), **ChatGPT** (Codex) or **your own model** (Ollama, offline). It installs what's missing and
+helps you log in. One is enough.
 
 ### Mac
 1. Open the `.dmg` (or unzip the `.zip`) and drag **Kural** into **Applications**.

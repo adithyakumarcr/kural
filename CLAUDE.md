@@ -13,10 +13,9 @@ Claude Code itself). The completion feature is called **Tab Completion** (never 
 change `guide.js` and `docs/wiki/` in the same pull request.
 Read `README.md` for the features. This file is how the code works and how to change it safely.
 
-## The owner
-Adithya is learning to code. Keep answers short; explain the *why* first; when fixing a bug say what
-was wrong and why; point out mistakes plainly. Small decisions: make them and say so.
-At the end of every change, give the steps to build and install: `./install.sh` on his Mac or Ubuntu (builds from
+## Making a change
+Keep answers short and explain the *why* first; when fixing a bug, say what was wrong and why.
+At the end of every change, give the steps to build and install: `./install.sh` on a Mac or Ubuntu (builds from
 this folder and installs; `./install.sh --ext` when only `extension/` changed; `./install.sh --fresh` to try it as a
 new user: Kural's data is moved to `~/kural-backup-<date>` first; `./install.sh --from-scratch-install` for a real first
 start: `scripts/from-scratch.sh` deletes Kural's data without backup, logs Claude Code/Codex/Antigravity out, resets
@@ -398,7 +397,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Control/plain words 5; tests: `KURAL_IDLE_MS`) and the next question starts it (~0.8 s instead of 0.6 s once); Ask's
   Claude starts on the Ask tab, not for text search; terminal Tab keeps one process; `~/.claude.json` is parsed again
   only when it changed; Ollama's status is polled only while the window is in front. Idle chats: see "Idle chats free
-  their program". Measured 8 Oct 2026: Adithya's Kural 2.6 GB (326 MB idle helpers); test copy idle 1,268 → 1,078 MB.
+  their program". Measured 8 Oct 2026: a heavily used Kural 2.6 GB (326 MB idle helpers); test copy idle 1,268 → 1,078 MB.
 - **Rename offer** (`lib/tab/rename.js`, no vscode; setting `kural.tabCompletion.renameAcrossFiles`): follows one word
   per document; after you change a name and move on, Kural searches the project for the old one (ripgrep, whole word,
   case-sensitive; not node_modules/dist/build, minified/lock files or prose files) and offers Review (Search & Ask filled

@@ -35,7 +35,7 @@ sed -i -e "s#/usr/share/codium#/usr/share/$NAME#" \
        -e "s#which -a 'codium'#which -a '$NAME'#" \
        -e "s#VSCodium#$TITLE#g" -e "s#\`codium\`#\`$NAME\`#g" "$A/bin/$NAME"
 
-# 2–3. Names, data folders, built-in extensions (Kural + Claudemeter), Git's Ctrl+K
+# 2–3. Names, data folders, the built-in Kural extension, Git's Ctrl+K
 #      shortcuts moved, auto-update off. Shared with the macOS and Windows builds.
 python3 scripts/rebrand.py "$A/resources/app" linux
 python3 scripts/sbom.py "dist/kural-${VER%%+*}-linux-x64.cdx.json" --app-root "$A/resources/app" --platform linux-x64
@@ -58,7 +58,7 @@ sed -i "s/codium/$NAME/g; s/VSCodium/$TITLE/g" "$R/usr/share/mime/packages/$NAME
 cat > "$R/usr/share/applications/$NAME.desktop" <<EOF
 [Desktop Entry]
 Name=$TITLE Code Editor
-Comment=Code editor with Claude built in: tab completion, chat and inline edit
+Comment=Code editor with AI built in: Tab Completion, chat with agents and inline edit
 GenericName=Text Editor
 Exec=/usr/share/$NAME/$NAME %F
 Icon=$NAME
@@ -102,10 +102,11 @@ Conflicts: claude-vs, claudex
 Replaces: claude-vs, claudex
 Installed-Size: $SIZE
 Maintainer: Adithya Chinnakkonda <50017783+adithyakumarcr@users.noreply.github.com>
-Description: $TITLE Code Editor - a code editor with Claude built in
- VSCodium (open-source VS Code) rebuilt as $TITLE: Claude tab completion,
- a chat panel (Ctrl+L), inline edits (Ctrl+K), Claude Code, and Claudemeter
- usage tracking, all using your Claude login.
+Description: $TITLE Code Editor - a code editor with AI built in
+ VSCodium (open-source VS Code) rebuilt as $TITLE: Tab Completion, a chat
+ panel with agents (Ctrl+L), inline edits (Ctrl+K) and Search & Ask, with
+ Claude, Google Gemini, ChatGPT (Codex) or your own model on this computer
+ (Ollama, offline), using your own accounts.
 EOF
 cat > "$R/DEBIAN/postinst" <<EOF
 #!/bin/sh
