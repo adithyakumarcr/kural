@@ -1,4 +1,4 @@
-// Commands that Auto mode (and "Allow all") must still ask about. No vscode here (test/danger.test.js).
+// Commands that Agent mode's "Allow all" must still ask about (Auto is unrestricted since 14 Oct 2026). No vscode here (test/danger.test.js).
 //
 // This is a seat belt, not a sandbox: it reads the command as text and knows a list of things that are hard or
 // impossible to undo. A determined model (or a prompt-injected page) can get around it (a script file that does the same

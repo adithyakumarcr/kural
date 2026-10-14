@@ -32,14 +32,14 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Gemini (Antigravity): Kural adds an approval gate to Antigravity's own hooks (an entry "kural-gate" in
   ~/.gemini/config/hooks.json; your own entries stay), so Gemini asks Kural before each tool call and waits:
   the same cards and rules as Claude (in Agent: files outside the project, files that run code later and commands; in
-  Auto only dangerous commands; Plan and Ask change nothing). Antigravity's own modes still apply too: in Agent mode it runs no commands (the
+  Auto nothing, except a change to the gate's own files; Plan and Ask change nothing). Antigravity's own modes still apply too: in Agent mode it runs no commands (the
   answer says which it didn't run); in Auto it runs them. A mode change stops approvals for the running answer and
   applies from the next message. If a change runs without the gate being asked (an Antigravity version without hooks),
   Kural stops Gemini and says so; if the hooks file can't be read, Kural doesn't start Gemini. Needs agy 1.3.4 or
   newer (checked with that one): an older one isn't started, and Kural says to run "agy update". Multiple agents work with Gemini; devices do not.
 - Chat (panel on the right; Ctrl+L shows or hides it; with code selected in the editor, Ctrl+L adds that code to your
-  message instead, also while the chat is open): tabs; modes Agent (edits files, asks before commands), Auto (no asking, except
-  dangerous commands: sudo, deleting outside the project, curl | sh, a forced push to main, git reset --hard…; the
+  message instead, also while the chat is open): tabs; modes Agent (edits files, asks before commands), Auto (unrestricted: no asking,
+  also for dangerous commands and files outside the project; the AI ends each answer with a "What I did" list; the
   first switch to Auto explains this once; Gemini too, through Kural's gate), Plan
   (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
@@ -107,7 +107,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   something on the page and it's added to your message with its HTML, size and computed CSS and a picture of it; "Comment
   on Elements" adds what you want changed ("make this bigger") as the start of your message; its dropdown also adds a
   screenshot, an area or the full page, and the console logs. Then Kural finds the code behind the element in the project
-  and changes it; reload the page to see it. (Picking with a real mouse click is experimental: if nothing is added,
+  and changes it; reload the page to see it. (If nothing is added when you click an element,
   use a screenshot of the area instead.)
 - Devices over SSH (a Raspberry Pi, a board computer…): + → Link device → add one (name, address, username, password).
   Kural uses the password once to put its own SSH key on the device and doesn't save it anywhere (no keychain); after
@@ -152,7 +152,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   settings link, or Kural Settings → Tab Completion opens its panel: on/off, speed, engine (Auto, local or Claude) and model.
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
-  then downloads the model. Installing Ollama this way is experimental: if it fails, Kural offers ollama.com's own
+  then downloads the model. If the installation fails, Kural offers ollama.com's own
   installer.
   It learns from your work in each workspace only when you turn it on (setting kural.tabCompletion.learnFromActivity,
   off by default; "Kural: Forget What Tab Completion Learned" clears it).
@@ -192,7 +192,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
   Inside the project it doesn't ask, except for files that run code later (git hooks, .vscode/tasks.json, package.json,
   .env, Makefile, Dockerfile, workflows, shell profiles) and the temp folder (Agent mode still asks before commands).
-  That's Agent mode: Auto asks about none of these, only about dangerous commands. Kural never looks through Desktop,
+  That's Agent mode: Auto asks about none of these. Kural never looks through Desktop,
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
 - Trust a workspace before using Kural AI; Kural is unavailable in Restricted Mode. Ask and Plan reject mutating
   requests handled by Kural's permission policy. Provider-native reads are not confined by this policy. Gemini's
@@ -205,7 +205,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   account / set up. An AI's page: Connectors (Claude and ChatGPT: each with its status, Sign in when one needs it (Codex
   opens its login; Claude opens a terminal where you type /mcp), remove; "Add connector" opens a searchable list: Popular
   ones (Notion, Linear, Sentry, Atlassian, Asana, Stripe, Vercel, Supabase, Hugging Face, Context7, Cloudflare docs,
-  Playwright, GitHub, Filesystem) and the official MCP directory as you type (experimental; those show the exact command
+  Playwright, GitHub, Filesystem) and the official MCP directory as you type (those show the exact command
   or address and ask you to confirm: nobody checked them); Add, and fill in a token or folder only if
   it asks (on Mac and Linux a token is kept in a private file in Kural's storage, never on a command line; Windows passes
   it to the program directly); "Add one by hand" at the bottom takes a command or web address; ChatGPT can't use ones that need a key header
@@ -246,8 +246,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   accounts; a new profile opens Get started to log in. Logins and usage numbers are always separate; sharing means the
   same chats, History, open tabs and Tab Completion memory as the main profile. Google Gemini and models on this
   computer are the same in every profile. On a Mac, a new profile needs Claude Code 2.1.296 or newer (with an older one, New
-  profile offers "Update Claude Code": one click, then it goes on; if that fails, "Update in a Terminal"), and
-  profiles are experimental there (two logins in the Mac keychain haven't been tried yet).
+  profile offers "Update Claude Code": one click, then it goes on; if that fails, "Update in a Terminal").
   CLAUDE_CODE_OAUTH_TOKEN or an API key in your environment applies to every
   profile.
 - Workspace Color: right-click the activity bar (the icons on the far left) → "Workspace Color...", or "Kural: Workspace

@@ -21,3 +21,8 @@ extension/build.json
 /docs/linkedin/
 /video/
 *.html
+
+# Notes and research made here, not part of Kural
+/AGENTS.md
+/reports/
+/research_notes/

@@ -20,8 +20,17 @@
   with a short name (Windows' temp folder for a long user name, "C:\Users\ADITHY~1\…"). And the folder of everyone's
   home folders (C:\Users) is now kept out of the AI's folder walks, as /Users and /home already were.
 - Get started no longer says Gemini "can't ask before a command": it asks Kural before each change.
-- A few features are now marked **experimental** where they start: searching the public MCP directory for connectors,
-  installing Ollama from the Tab Completion panel, and profiles on a Mac.
+- **Auto mode is unrestricted.** It asks about nothing: not dangerous commands (`sudo`, deleting outside the project,
+  a forced push to main), not files outside the project, not Gemini's unknown tools (only a change to Gemini's own
+  approval gate still asks). So you still know what happened, the AI ends each Auto answer with a **What I did** list
+  of the commands it ran and the files it changed. Agent mode asks as before.
+- **No more "experimental" labels.** Searching the public MCP directory for connectors, installing Ollama from the Tab
+  Completion panel, profiles on a Mac and picking a page element in Kural's browser are ordinary features now.
+- **Welcome page shows the version** under "Kural Code Editor" (or "Unreleased version · branch (commit)" for a build
+  from the code).
+- **Smaller changes:** the chat's open tab has its purple line at the bottom, like an editor tab; Search & Ask's box says
+  "Ask & Search" and the example is gone; the explanation of Moods in Kural Settings is behind an info icon; the bug
+  form tells you to use **Kural: Show Log** (the Output tab is hidden in Kural).
 - Builds: the tests also run on macOS and Windows, and every build checks that Kural's own extension finished starting
   (not only that a window opened).
 
@@ -33,8 +42,6 @@
   Privacy & Security → **Open Anyway**.
 - **Gemini's approval gate** was checked with the real Antigravity on Ubuntu and macOS, not yet on Windows.
 - **ChatGPT (Codex)** was tried with a logged-in account on macOS only, not yet on Ubuntu or Windows.
-- **Experimental:** connector search in the public MCP directory, installing Ollama from Kural, profiles on a Mac
-  (two logins in the keychain), and picking a page element in Kural's browser with a real mouse click.
 
 ## What's new in 1.1.0-alpha.9
 

@@ -260,7 +260,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .icon-btn:hover, .icon-btn.on { background: var(--hover); color: var(--vscode-foreground); }
 .icon-btn.on { color: var(--accent-hi); }
 .icon-btn.small { padding: 2px 4px; margin: 0; opacity: 0; }
-.tab.active { border-top: 2px solid var(--accent); }
+.tab.active { box-shadow: inset 0 -2px 0 var(--accent); }   /* the open chat: the line is at the bottom, like VS Code's editor tabs */
 .tab.renaming { padding: 2px 4px; }
 .tab.active { flex-shrink: 0.15; min-width: 100px; }   /* the open chat keeps a readable title when space is tight */
 .tab-rename { font: inherit; font-size: calc(12px * var(--fs, 1)); width: 140px; background: var(--vscode-input-background); color: var(--vscode-foreground);

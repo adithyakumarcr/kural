@@ -47,7 +47,7 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
   - **Gemini asks through Kural's approval gate.** Google's program has no editor protocol, but it runs *hooks*:
     Kural adds one entry, `kural-gate`, to `~/.gemini/config/hooks.json`, where Antigravity reads its hooks (your own entries stay; the file before
     is kept as `hooks.json.kural-backup`). Before each tool call Antigravity runs it and waits for Kural: the same cards
-    and rules as Claude (files outside the project or that run code later, dangerous commands even in **Auto**; **Plan**
+    and rules as Claude (files outside the project or that run code later, dangerous commands in **Agent**, nothing in **Auto** except a change to the gate's own files; **Plan**
     and **Ask** change nothing). Undo's copy of a file is taken before the change is allowed. Antigravity's own modes
     still apply as well: in **Agent** mode it runs no commands (the answer says which it didn't run); in **Auto** it
     runs them. A mode change stops approvals for the running answer and applies from your next message.

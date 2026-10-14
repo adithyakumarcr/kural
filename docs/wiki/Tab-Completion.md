@@ -30,8 +30,7 @@ Claude, Tab waits a little longer between your keys while Ollama is busy, so few
 The local model is a small fill-in-the-middle code model through Ollama (`qwen2.5-coder` 0.5B, 1.5B or 3B; 1.5B is a
 good start). **Set up** in the panel does it all in one click: without Ollama, Kural downloads and installs Ollama first
 (the panel shows "Step 1 of 2: Downloading Ollama… 45%", then "Installing Ollama… 60%"; on Ubuntu the system asks for
-your password, since Ollama installs for the whole computer), then downloads the model ("Step 2 of 2"). Installing Ollama from here is **experimental** (not yet tried with the real
-download on every system): if it fails, Kural offers ollama.com's own installer. Kural uses a model on your computer only after you chose
+your password, since Ollama installs for the whole computer), then downloads the model ("Step 2 of 2"). If the installation fails, Kural offers ollama.com's own installer. Kural uses a model on your computer only after you chose
 one: **Set up** in the panel (or your own model set up in Get started). A model that's already there from before isn't
 used until then, and the panel says "Not set up".
 
