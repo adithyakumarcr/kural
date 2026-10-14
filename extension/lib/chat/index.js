@@ -2332,7 +2332,7 @@ class ChatView {
     // Agent mode: running commands asks you first.
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
-    const detail = permDetail(req.tool_name, input) + (risky ? `\n\nAsks even in Auto: ${risky.why}` : "");
+    const detail = permDetail(req.tool_name, input) + (risky ? `\n\nAsks first: ${risky.why}` : "");
     const block = { k: "perm", pid, tool: req.tool_name, detail, risky: !!risky || undefined, state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
       where: input.device || undefined };   // (a linked device's name, for its commands and writes)
     if (turn) turn.reply.blocks.push(block);
@@ -2375,7 +2375,7 @@ class ChatView {
     if (tab.mode === "auto" && r) {
       const turn = r.turn;
       for (const b of (turn && turn.reply.blocks) || []) {
-        if (b.k !== "perm" || b.state !== "pending" || b.risky) continue;   // (a risky command still waits for you)
+        if (b.k !== "perm" || b.state !== "pending") continue;   // (Auto is unrestricted: a risky one runs too)
         const resolve = r.perms.get(b.pid);
         if (resolve) { r.perms.delete(b.pid); resolve(true); }
       }

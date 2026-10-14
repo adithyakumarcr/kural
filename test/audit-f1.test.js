@@ -50,11 +50,9 @@ check("AGENT-10: tool output can't close the handoff record early", () => {
 
 check("AGENT-4: the Auto warning says what's true for each AI", () => {
   const { autoWarning } = require("../extension/lib/chat/permission-policy");
-  for (const e of ["claude", "codex", "ollama", "agy"]) assert.match(autoWarning(e), /Dangerous commands .* still ask/);
-  assert.match(autoWarning("agy"), /Gemini/); assert.match(autoWarning("agy"), /approval gate/); assert.match(autoWarning("agy"), /stops it/);
-  assert.match(autoWarning("claude", true), /Claude Code's own settings/);
-  assert.doesNotMatch(autoWarning("claude", false), /settings|Gemini/);
-  assert.doesNotMatch(autoWarning("codex"), /settings|Gemini/);
+  for (const e of ["claude", "codex", "ollama", "agy"]) assert.match(autoWarning(e), /unrestricted.*dangerous ones/);
+  assert.match(autoWarning("agy"), /Gemini/); assert.match(autoWarning("agy"), /approval gate/);
+  for (const e of ["claude", "codex", "ollama"]) assert.doesNotMatch(autoWarning(e), /settings|Gemini/);
 });
 
 check("AGENT-11: a team member's stricter mode decides its gated calls; a looser one is refused", () => {
@@ -99,7 +97,7 @@ const npmTest = { tool_name: "Bash", input: { command: "npm test" } };
     assert.strictEqual(await verdict({ ...tab, model: "opus" }, npmTest), "card", "a model change (also the router's) asks again");
     assert.strictEqual(await verdict({ ...tab, sessionId: "s2" }, npmTest), "card", "a new session or a handoff asks again");
     assert.strictEqual(await verdict({ ...tab, mode: "auto" }, npmTest), "allow", "Auto itself runs commands");
-    assert.strictEqual(await verdict({ ...tab, mode: "auto", allowAllFor: grantKey({ ...tab, mode: "auto" }) }, { tool_name: "Bash", input: { command: "sudo ls" } }), "card", "dangerous still asks");
+    assert.strictEqual(await verdict({ ...tab, mode: "auto", allowAllFor: grantKey({ ...tab, mode: "auto" }) }, { tool_name: "Bash", input: { command: "sudo ls" } }), "allow", "Auto is unrestricted: dangerous commands run too");
     assert.strictEqual(await verdict({ id: "old", model: "sonnet", mode: "agent", sessionId: "s1", allowAll: true }, npmTest), "card", "an Allow all saved by an older version doesn't carry over");
     const handed = { ...tab };
     chat.handoffRecord(handed, []);

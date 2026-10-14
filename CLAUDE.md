@@ -705,6 +705,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Moving a dragged-out chat back** (`kural.chat.moveToPanel`): editor/title button when `activeCustomEditorId ==
   kural.chatTab`; disposes the pane and activates the chat in the side panel.
 
+- **Auto is unrestricted** (Adithya, 14 Oct 2026): `decide()` returns allow for everything in Auto except
+  AskUserQuestion and a write to a gate file (`guard`); `PROMPTS.auto` makes the AI end each answer with "What I did".
+  Dangerous commands, outside files and unclassified calls ask only in Agent (and after Allow all). Threat model updated.
+- **Welcome page version**: `rebrand.py` `rebrand_messages` turns the nls string "Editing evolved" (the line under the
+  title) into "Editing evolved · v1.1.0-…" / "Unreleased version · …" (`version_label`, same words as `lib/version.js`;
+  reads `extension/build.json` at build time, so `install.sh` must stamp before the build).
+
 - **Second security pass (PR #61)**: Allow all = `grantKey`/`allowAllNow` in permission-policy.js (mode + model +
   session), `revokeAllowAll` on mode/model change and handoff. Build it = Agent unless the chat is in Auto. The Auto
   warning is per AI (`autoWarning`; globalState `kural.auto.warned` = `{engine: true}`). Gemini gate calls:

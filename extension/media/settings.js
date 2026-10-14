@@ -7,6 +7,7 @@
   const app = document.getElementById("app");
   const post = (m) => vscode.postMessage(m);
   let S = null;
+  const MOODS_INFO = "How the chat's AI works with you. Pick one in the chat's model menu, under Mood. Your own moods show there next to the built-in ones; remove a built-in one you don't use with its ×. A new chat starts with the first mood in the menu.";
 
   function el(tag, props = {}, ...kids) {
     const n = document.createElement(tag);
@@ -250,7 +251,7 @@
   function fieldsBox(item) {
     const F = fieldsFor(item);
     return el("div", { class: "cat-fields" },
-      item.from === "registry" ? el("div", { class: "muted small" }, "From the public MCP directory, not checked by Kural (experimental: tell us if one doesn't work).") : null,
+      item.from === "registry" ? el("div", { class: "muted small" }, "From the public MCP directory, not checked by Kural.") : null,
       item.from === "registry" && item.shows ? el("code", { class: "cat-cmd" }, item.shows) : null,
       (item.inputs || []).map((i) => el("label", { class: "field" }, el("span", { class: "flabel" }, i.label),
         el("div", { class: "row" }, F[i.key],
@@ -421,9 +422,9 @@
           : el("button", { class: "btn quiet", title: `Delete this mood (chats using it go to ${m.label === first ? "the next mood" : first})`, onclick: () => { M.confirm = m.id; renderMoods(true); } }, icon("trash"))),
       el("div", { class: "muted small clamp2" }, m.instructions)));
     moodsBox.replaceChildren(...[   // (replaceChildren writes a null as the word "null": left out)
-      el("div", { class: "sechead" }, el("h2", {}, "Moods"), el("span", { class: "grow" }),
+      el("div", { class: "sechead" }, el("h2", {}, "Moods"),
+        el("span", { class: "muted info-tip", tabindex: "0", "aria-label": MOODS_INFO, title: MOODS_INFO }, icon("info")), el("span", { class: "grow" }),
         M.form ? null : el("button", { class: "btn", onclick: () => openMoodForm(null) }, icon("add"), " Add a mood")),
-      el("p", { class: "muted" }, "How the chat's AI works with you. Pick one in the chat's model menu, under Mood. Your own moods show there next to the built-in ones; remove a built-in one you don't use with its ×. A new chat starts with the first mood in the menu."),
       builtInMoods(D),
       D.mine.length ? el("div", { class: "mood-list" }, mine) : (M.form ? null : el("p", { class: "muted small" }, "No moods of your own yet.")),
       M.form ? moodForm() : null].filter(Boolean));

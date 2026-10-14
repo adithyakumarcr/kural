@@ -418,6 +418,21 @@ GUIDANCE_WIKIS = ("https://github.com/VSCodium/vscodium/wiki/Submitting-Bugs-and
                   "https://github.com/microsoft/vscode/wiki/Submitting-Bugs-and-Suggestions")
 
 
+def version_label():
+    """Same words as extension/lib/version.js: "v1.1.0-rc.1", or "Unreleased version · main (abc1234)" for a build
+    from the code (install.sh writes extension/build.json; release builds never have it)."""
+    ext = os.path.join(ROOT, "extension")
+    version = load(os.path.join(ext, "package.json")).get("version", "")
+    try:
+        b = load(os.path.join(ext, "build.json"))
+    except (OSError, ValueError):
+        b = None
+    if not b or b.get("release"):
+        return f"v{version}"
+    commit = f" ({b['commit']})" if b.get("commit") else ""
+    return f"Unreleased version \u00b7 {b.get('branch') or 'local'}{commit}"
+
+
 def rebrand_messages(app):
     p = os.path.join(app, "out", "nls.messages.json")
     if not os.path.exists(p):
@@ -430,6 +445,8 @@ def rebrand_messages(app):
     def kural(m):
         for wiki in GUIDANCE_WIKIS:
             m = m.replace(wiki, f"{REPO}/blob/main/CONTRIBUTING.md")
+        if m == "Editing evolved":   # the Welcome page's line under "Kural Code Editor": says which version this is
+            return f"{m} \u00b7 {version_label()}"
         return VSCODIUM_WORD.sub(TITLE, m)
     new = [kural(m) if isinstance(m, str) else m for m in messages]
     if new == messages:

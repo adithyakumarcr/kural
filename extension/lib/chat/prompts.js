@@ -26,7 +26,10 @@ const PROMPTS = {
     "(Edit, Write, Bash, ...). The user sees every file you change and can review, keep or undo each one. Don't paste " +
     "whole files into the chat; change them. When you're done, summarize briefly what you changed and why. Be concise." + FORMAT,
 };
-PROMPTS.auto = PROMPTS.agent;
+PROMPTS.auto = PROMPTS.agent +
+  " You are in Auto mode: nothing you run asks the user first, so the user can't see what you do until you say so. " +
+  "End every answer with a short list titled \"What I did\": each command you ran (also ones that read, install, delete or " +
+  "change things outside the project) and each file you changed or created. Name anything hard to undo.";
 
 // Moods: how the chat (or the team's lead) works with you.
 const MOODS = [

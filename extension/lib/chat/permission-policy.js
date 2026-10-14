@@ -18,12 +18,21 @@ const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 //   without asking (ws.aiRoots). granted: files and folders you attached (and the handoff file). cwd: the project
 //   folder (what "outside" means for rm). notice: the program only tells, it doesn't wait: never a card (no provider
 //   uses it any more; Gemini asks through Kural's gate). unclassified: a call Kural can't classify (Gemini's gate: an
-//   unknown tool, or one whose file couldn't be found): refused in Ask/Plan, asks in Agent and Auto. guard(file): files
-//   that keep an approval gate working (agy's hooks, Kural's launcher): writing one asks, even in Auto.
+//   unknown tool, or one whose file couldn't be found): refused in Ask/Plan, asks in Agent, runs in Auto. guard(file): files
+//   that keep an approval gate working (agy's hooks, Kural's launcher): writing one asks, even in Auto. Auto runs everything else.
 function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false, unclassified = false, guard = null }) {
   // Enforce read-only modes here, even after a live transition or a provider sends an unexpected call.
   if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite", "Browser"].includes(tool)))
     return { deny: true, message: `${mode} mode cannot run commands or change files.` };
+  // Auto is unrestricted (Adithya, 14 Oct 2026): nothing asks, not a dangerous command, not a file outside the project,
+  // not a tool Kural can't classify. The chat reports what was done instead (PROMPTS.auto). Two things stay: a question
+  // the AI asks you (AskUserQuestion), and a write to the files that keep Gemini's approval gate working (otherwise one
+  // Auto answer could switch the gate off for every later one).
+  if (mode === "auto" && tool !== "AskUserQuestion") {
+    const file = input.file_path || input.notebook_path;
+    if (EDIT_TOOLS.has(tool) && file && typeof guard === "function" && guard(file)) return { ask: true, risky: { why: "It changes Gemini's hook settings or Kural's approval gate." } };
+    return { allow: true };
+  }
   if (unclassified) return mode === "ask" || mode === "plan" ? { deny: true, message: `${mode} mode: Kural doesn't know what this tool does, so it isn't run.` }
     : { ask: true, risky: { why: "Kural doesn't know what this tool does." } };
   const fileInput = input.file_path || input.notebook_path || input.path;
@@ -36,7 +45,7 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
     // Inside your project (or Kural's own work folder): no asking, that's what Agent mode is for. Anywhere else
     // (~/.zshrc, a LaunchAgent, Claude Code's own settings with its hooks), and inside the project a file that runs code
     // later (a git hook, a task, a workflow, package.json), a write can make the computer run something later, so it
-    // asks like a command does (Auto still doesn't ask).
+    // asks like a command does (Auto doesn't ask).
     if (!file || notice || (within(file, writeRoots) && !runsLater(file))) return { allow: true };
   }
   // Reading inside your project: no asking. Elsewhere (your Documents, Desktop…) it asks, like a command: on a Mac
@@ -53,8 +62,8 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
   if (tool === "AskUserQuestion") return { question: true };
   // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
   const onDevice = tool === "DeviceCommand" || tool === "DeviceWrite";
-  // A command that's hard to undo (sudo, rm -rf outside the project, curl | sh, a forced push to main…) asks even in
-  // Auto and after "Allow all" (lib/ai/danger.js; best effort, not a sandbox). On a device "outside" can't be known,
+  // A command that's hard to undo (sudo, rm -rf outside the project, curl | sh, a forced push to main…) asks in Agent
+  // and after "Allow all" (not in Auto: it returned above) (lib/ai/danger.js; best effort, not a sandbox). On a device "outside" can't be known,
   // so only the other rules count there.
   let risky = tool === "Bash" || tool === "DeviceCommand" ? dangerous(input.command, onDevice ? "/" : cwd) : null;
   // A command started in another folder (Gemini's run_command has its own Cwd): outside the project it always asks.
@@ -83,9 +92,8 @@ const allowAllNow = (tab) => !!tab.allowAll && tab.allowAllFor === grantKey(tab)
 // What Auto means, said before the first switch to it with this AI (engine: claude / codex / agy / ollama). Each AI's
 // commands reach Kural's checks a different way, so the sentence about dangerous commands differs.
 function autoWarning(engine, fullSetup = false) {
-  const base = "Auto mode runs commands and edits files without asking. Dangerous commands (sudo, deleting outside the project, a forced push to main…) still ask";
-  if (engine === "agy") return `${base}: with Google Gemini through Kural's approval gate (Antigravity's hooks). If Gemini runs a step without asking the gate, Kural stops it after that step.`;
-  if (engine === "claude" && fullSetup) return `${base}, unless Claude Code's own settings (yours, or this project's) already allow them: with your full setup, Claude Code doesn't ask Kural about what they allow.`;
+  const base = "Auto mode is unrestricted: it runs commands and edits files without asking, also dangerous ones (sudo, deleting outside the project, a forced push to main…). The chat tells you what it did";
+  if (engine === "agy") return `${base}. Only a change to Gemini's own approval gate (its hook settings) still asks.`;
   return `${base}.`;
 }
 
