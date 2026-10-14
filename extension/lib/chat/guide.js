@@ -31,8 +31,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   when you're logged in.
 - Gemini (Antigravity): Kural adds an approval gate to Antigravity's own hooks (an entry "kural-gate" in
   ~/.gemini/config/hooks.json; your own entries stay), so Gemini asks Kural before each tool call and waits:
-  the same cards and rules as Claude (files outside the project, files that run code later, dangerous commands even in
-  Auto; Plan and Ask change nothing). Antigravity's own modes still apply too: in Agent mode it runs no commands (the
+  the same cards and rules as Claude (in Agent: files outside the project, files that run code later and commands; in
+  Auto only dangerous commands; Plan and Ask change nothing). Antigravity's own modes still apply too: in Agent mode it runs no commands (the
   answer says which it didn't run); in Auto it runs them. A mode change stops approvals for the running answer and
   applies from the next message. If a change runs without the gate being asked (an Antigravity version without hooks),
   Kural stops Gemini and says so; if the hooks file can't be read, Kural doesn't start Gemini. Needs agy 1.3.4 or
@@ -191,7 +191,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   usage reports can arrive after an answer, so the percentage is a switching trigger, not a hard quota cap.
 - Files outside the project: the AI asks first ("Read this file?", "Change this file?"), except files you attached.
   Inside the project it doesn't ask, except for files that run code later (git hooks, .vscode/tasks.json, package.json,
-  .env, Makefile, Dockerfile, workflows, shell profiles) and the temp folder (Agent mode still asks before commands). Kural never looks through Desktop,
+  .env, Makefile, Dockerfile, workflows, shell profiles) and the temp folder (Agent mode still asks before commands).
+  That's Agent mode: Auto asks about none of these, only about dangerous commands. Kural never looks through Desktop,
   Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
 - Trust a workspace before using Kural AI; Kural is unavailable in Restricted Mode. Ask and Plan reject mutating
   requests handled by Kural's permission policy. Provider-native reads are not confined by this policy. Gemini's
