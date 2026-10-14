@@ -16,6 +16,9 @@
   finish (Homebrew, npm), **Update in a Terminal** runs it there.
 - **"Did you know?" is gone.** The tips under "Thinking…" while an answer is worked on, and their setting
   `kural.chat.didYouKnow`, were removed.
+- **Windows: edits inside the project no longer ask every time** in Agent mode when the project is under a folder
+  with a short name (Windows' temp folder for a long user name, "C:\Users\ADITHY~1\…"). And the folder of everyone's
+  home folders (C:\Users) is now kept out of the AI's folder walks, as /Users and /home already were.
 - Get started no longer says Gemini "can't ask before a command": it asks Kural before each change.
 - A few features are now marked **experimental** where they start: searching the public MCP directory for connectors,
   installing Ollama from the Tab Completion panel, and profiles on a Mac.

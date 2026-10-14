@@ -48,7 +48,8 @@ const SYSTEM_PROTECTED = ["/Volumes", "/System", "/private", "/Users", "/home", 
 let cache = null;
 function protectedDirs() {
   const h = os.homedir();
-  if (!cache || cache.home !== h) cache = { home: h, set: new Set([...HOME_PROTECTED.map((n) => norm(path.join(h, n))), ...SYSTEM_PROTECTED]) };
+  // (and the folder of everyone's homes, by its own name: C:\Users on Windows, where /Users and /home don't apply)
+  if (!cache || cache.home !== h) cache = { home: h, set: new Set([...HOME_PROTECTED.map((n) => norm(path.join(h, n))), ...SYSTEM_PROTECTED, norm(path.dirname(h))]) };
   return cache.set;
 }
 const isProtected = (dir) => protectedDirs().has(norm(path.resolve(dir)));
@@ -84,10 +85,15 @@ const RUNS_LATER = [
 // every system: a file that only looks like one of these on Linux asks once more, which is harmless.
 const winForm = (f) => String(f).split(/([\\/])/).map((part, i) => i % 2 ? part
   : part.replace(/^(?![a-z]:$)([^:]*):.*$/i, "$1").replace(/(?<=[^. ])[. ]+$/, "")).join("");
-// An 8.3 short name ("GIT~1", "PACKAG~1.JSO") can stand for any of these on Windows: it asks too.
+// An 8.3 short name ("GIT~1", "PACKAG~1.JSO") can stand for any of these on Windows: it asks too. Looked for in the real
+// path only: Windows expands every existing short name there ("GIT~1" → ".git", caught above), so one that's left
+// names nothing yet. The path as written isn't checked for them: Windows' own temp folder is often one
+// ("C:\Users\ADITHY~1\…"), and every file under it asked.
 const SHORT_NAME = /(^|[\\/])[^\\/~]{1,6}~\d+(\.[^\\/.]{0,3})?([\\/]|$)/;
-const runsLater = (file) => [String(file), real(file)].some((f) => SHORT_NAME.test(f) ||
-  [f, winForm(f)].some((g) => RUNS_LATER.some((re) => new RegExp(re.source, "i").test(g))));
+const runsLater = (file) => {
+  const r = real(file);
+  return SHORT_NAME.test(r) || [String(file), r].some((f) => [f, winForm(f)].some((g) => RUNS_LATER.some((re) => new RegExp(re.source, "i").test(g))));
+};
 
 // Only printable text on one line: a model's suggestion that hides a carriage return or an escape sequence could run a
 // command in the terminal without Enter being pressed.

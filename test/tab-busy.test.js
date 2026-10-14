@@ -141,6 +141,7 @@ async function suggest(e, trigger = vscode.InlineCompletionTriggerKind.Automatic
   const count = () => (fs.existsSync(calls) ? fs.readFileSync(calls, "utf8").trim().split("\n").length : 0);
   claude.setFlagsStore(tmp);
   await check("asked in the background (once, even when asked twice at the same time); the one it doesn't know is left out", async () => {
+    if (process.platform === "win32") return;   // (the stand-in claude is a script, and Windows starts only .exe programs (like checks.test.js))
     claude.supportedFlags._reset();
     const [a, b] = await Promise.all([claude.prefetchFlags(bin), claude.prefetchFlags(bin)]);
     assert.strictEqual(a, b);
@@ -149,12 +150,14 @@ async function suggest(e, trigger = vscode.InlineCompletionTriggerKind.Automatic
     assert.ok(fs.existsSync(path.join(tmp, "claude-flags.json")));
   });
   await check("the next window (nothing in memory) reads the saved answer: claude isn't started at all", () => {
+    if (process.platform === "win32") return;   // (the stand-in claude is a script, and Windows starts only .exe programs (like checks.test.js))
     claude.supportedFlags._reset();
     const f = claude.supportedFlags(bin);
     assert.strictEqual(f.thinkingDisplay, true); assert.strictEqual(f.forwardSubagentText, undefined);
     assert.strictEqual(count(), 2);
   });
   await check("Claude Code changed (an update): asked again", async () => {
+    if (process.platform === "win32") return;   // (the stand-in claude is a script, and Windows starts only .exe programs (like checks.test.js))
     const later = new Date(Date.now() + 5000);
     fs.utimesSync(bin, later, later);
     claude.supportedFlags._reset();
@@ -162,6 +165,7 @@ async function suggest(e, trigger = vscode.InlineCompletionTriggerKind.Automatic
     assert.strictEqual(count(), 4);
   });
   await check("no answer from claude (couldn't tell): none of the options, and nothing saved", async () => {
+    if (process.platform === "win32") return;   // (the stand-in claude is a script, and Windows starts only .exe programs (like checks.test.js))
     fs.writeFileSync(bin, `#!${process.execPath}\nprocess.kill(process.pid, "SIGKILL");\n`, { mode: 0o755 });
     const before = fs.readFileSync(path.join(tmp, "claude-flags.json"), "utf8");
     claude.supportedFlags._reset();
