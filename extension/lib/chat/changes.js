@@ -73,7 +73,7 @@ class ChangeTracker {
     try { bytes = fs.readFileSync(file); } catch (e) { if (e.code !== "ENOENT") throw e; }
     const content = bytes == null ? null : bytes.toString("utf8");
     const raw = bytes == null ? null : bytes.toString("base64");
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${Date.now()}-${require("crypto").randomBytes(4).toString("hex")}`;
     const target = real(file);
     this.snapshots.set(id, { file, content, raw, target });
     turn.snaps[file] = id;

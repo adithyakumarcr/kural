@@ -47,7 +47,12 @@ const table = [
   ["Task", {}, "run run run run"],
   ["AskUserQuestion", { questions: [] }, "Q Q Q Q"],
   ["mcp__atlassian__getJiraIssue", {}, "run run run run"],
-  ["mcp__atlassian__createJiraIssue", {}, "ask run ask ask"],
+  ["mcp__atlassian__createJiraIssue", {}, "ask run deny deny"],             // Ask and Plan change nothing, also through a connector
+  ["mcp__github__get_issue", {}, "ask run ask ask"],                        // a connector's lookup: asks, also in Ask and Plan
+  ["mcp__github__create_pull_request", {}, "ask run deny deny"],
+  ["mcp__claude_ai_Notion__notion-search", {}, "ask run ask ask"],          // ("notion-" is the server's own prefix)
+  ["mcp__claude_ai_Notion__notion-create-pages", {}, "ask run deny deny"],
+  ["mcp__x__get_or_create_page", {}, "ask run deny deny"],                  // a lookup verb with a change in it: not a lookup
 ];
 let rows = 0;
 for (const [tool, input, want] of table) {
@@ -59,6 +64,31 @@ for (const [tool, input, want] of table) {
 assert.strictEqual(run("Bash", { command: "npm test" }, "agent", { allowAll: true }), "run");
 assert.strictEqual(run("Bash", { command: "git push --force origin main" }, "agent", { allowAll: true }), "ask");
 assert.strictEqual(run("DeviceCommand", { command: "ls" }, "agent", { allowAll: true, device: "pi" }), "ask");
+// It covers only the kind of card it was given on: commands, web, one connector. Never a file outside the project or a
+// file that runs code later (yes or no each time). `true` (a chat saved by 1.1.0-rc.1 or older) = commands.
+const cmd = { allowAll: ["command"] }, web = { allowAll: ["web"] }, gh = { allowAll: ["connector:github"] }, all = { allowAll: ["command", "web", "connector:github"] };
+assert.strictEqual(run("Bash", { command: "npm test" }, "agent", cmd), "run");
+assert.strictEqual(run("WebFetch", { url: "https://example.com" }, "agent", cmd), "ask", "commands don't cover the web");
+assert.strictEqual(run("WebFetch", { url: "https://example.com" }, "agent", { allowAll: true }), "ask", "an old Allow all covers commands only");
+assert.strictEqual(run("WebFetch", { url: "https://example.com" }, "agent", web), "run");
+assert.strictEqual(run("Bash", { command: "npm test" }, "agent", web), "ask", "the web doesn't cover commands");
+assert.strictEqual(run("mcp__github__create_pull_request", {}, "agent", cmd), "ask");
+assert.strictEqual(run("mcp__github__create_pull_request", {}, "agent", gh), "run");
+assert.strictEqual(run("mcp__linear__create_issue", {}, "agent", gh), "ask", "one connector doesn't cover another");
+for (const [tool, input] of [["Write", { file_path: P.zshrc }], ["Write", { file_path: P.hook }], ["Read", { file_path: P.zshrc }], ["Grep", { path: P.zshrc }]])
+  assert.strictEqual(run(tool, input, "agent", all), "ask", `Allow all never covers ${tool} ${JSON.stringify(input)}`);
+// In Ask and Plan, Allow all can't open what those modes refuse; a connector's lookups it does cover.
+assert.strictEqual(run("mcp__github__create_pull_request", {}, "plan", all), "deny");
+assert.strictEqual(run("mcp__github__get_issue", {}, "plan", all), "run");
+assert.strictEqual(run("WebSearch", { query: "x" }, "ask", all), "run");
+assert.strictEqual(run("Bash", { command: "ls" }, "ask", all), "deny");
+// Each card says what its "Allow all" covers; a file card and a device's tools have none.
+const { allowLabel, allowKind } = require("../extension/lib/chat/permission-policy");
+assert.deepStrictEqual(["Bash", "WebFetch", "WebSearch", "Browser", "mcp__claude_ai_Notion__notion-search", "Write", "Read", "mcp__device__run_command"].map(allowKind),
+  ["command", "web", "web", "browser", "connector:claude_ai_Notion", null, null, null]);
+assert.strictEqual(allowLabel("mcp__claude_ai_Notion__notion-search"), "Allow everything from Notion in this chat");
+assert.strictEqual(allowLabel("WebSearch"), "Allow all web searches and pages in this chat");
+assert.strictEqual(allowLabel("Edit"), null);
 // A device: its own "Allow all", only for that device; its MCP tools are pre-allowed (Kural asks itself, per command).
 assert.strictEqual(run("DeviceCommand", { command: "ls" }, "agent", { device: "pi", allowAllDevice: "pi" }), "run");
 assert.strictEqual(run("DeviceCommand", { command: "ls" }, "agent", { device: "pi", allowAllDevice: "robot" }), "ask");

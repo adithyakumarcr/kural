@@ -16,7 +16,7 @@ const THUMB_MAX = 3 * 1024 * 1024;       // pictures up to this size get a previ
 // someone else first, and its files would be readable by others).
 const dir = () => privateTmp("attachments");
 const { privateTmp } = require("../paths");
-const newId = () => Math.random().toString(36).slice(2, 10);
+const newId = () => require("crypto").randomBytes(4).toString("hex");
 
 function kindOf(file, size) {
   const ext = path.extname(file).toLowerCase();

@@ -1,3 +1,20 @@
+## Not released yet
+
+- **"Allow all" covers only what you allowed.** Ticking it on a card now covers that kind of card for the rest of the
+  chat: commands, web searches and pages, or one connector's tools. Before, a tick on a web search card also let
+  commands run and files outside your project change without asking. Files outside the project are always yes or no.
+- **Ask and Plan change nothing, connectors included.** A connector tool that changes something (a pull request, a
+  Notion page, a Jira issue) is refused in Ask and Plan, also after "Allow all". Lookups still work (they ask first).
+- **ChatGPT (Codex) in Ask and Plan** starts without your connectors and its ChatGPT apps, and in every mode but Auto
+  without its browser and computer use: Codex doesn't ask Kural before those.
+- **Terminal commit messages run nothing.** A commit message suggested by the plain-words Tab is put in single quotes,
+  so `$(…)`, backticks or `$HOME` in it stay text when you press Enter.
+- **Kural's older files are private too.** Checkpoints, crash reports and session files written by older versions are
+  made readable only by you (once, at the first start of a new version).
+- **The old fallback browser is gone.** Kural always uses the editor's own browser; without it a page opens in your
+  web browser.
+- The Mac build makes its icon with macOS's own tools and installs no Python package.
+
 ## What's new in 1.1.0-rc.1
 
 - **Gemini needs Antigravity 1.3.4 or newer.** Kural's approval gate works only from that version; an older one never

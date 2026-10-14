@@ -336,9 +336,10 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
   chat you haven't looked at for a while stops its Claude Code process until you come back to it
   ([measurements](docs/benchmarks/memory-2026-10-08.md)).
 - **Workspace trust and permissions.** Trust the workspace before using Kural AI. In Ask and Plan, Kural rejects
-  mutating tool requests handled by its permission policy. In Agent, executable configuration changes and outside
-  files require approval; Claude web searches and fetches also require approval. Auto and Allow all intentionally
-  grant broader access. Provider-native reads are not a filesystem sandbox. Gemini asks Kural through an approval gate
+  mutating tool requests handled by its permission policy, connector tools that change things included. In Agent,
+  executable configuration changes and outside files require approval; Claude web searches and fetches also require
+  approval. "Allow all" covers one kind of card (commands, web, one connector), never outside files. Auto
+  intentionally grants broader access. Provider-native reads are not a filesystem sandbox. Gemini asks Kural through an approval gate
   installed in Antigravity's hooks (`~/.gemini/config/hooks.json`), checked with the real program (agy 1.3.4;
   `scripts/verify-agy-gate.sh`). Use these providers only with trusted repositories and separately isolated accounts.
 - **Account** (person icon in the status bar). For Claude, Google Gemini and ChatGPT (Codex): who you're logged in as and your

@@ -17,6 +17,8 @@ let loginTimer = null;
 //   "slow"          writes slowly until interrupted
 //   "fail"          an error (usage limit), then a failed turn
 //   "instructions"  says the developer instructions it got
+//   "config"        says the -c options it was started with, one per line
+// `mcp list --json` lists the connectors in $FAKE_CODEX_MCP (names separated by commas), like the real one's JSON.
 //   anything else   "You said: …" (and how many pictures came with it)
 // $FAKE_CODEX_INPUT_LOG: each turn's text (and how many pictures) is added to this file, one JSON per line.
 // Use it in Kural: the Codex path setting pointing at this file.
@@ -31,6 +33,11 @@ const args = process.argv.slice(2);
 while (args[0] === "-c") config.push(args.splice(0, 2)[1]);
 
 if (args[0] === "--version") { console.log("codex-cli 0.160.0"); process.exit(0); }
+if (args[0] === "mcp" && args[1] === "list") {
+  const names = (process.env.FAKE_CODEX_MCP || "").split(",").map((n) => n.trim()).filter(Boolean);
+  console.log(JSON.stringify(names.map((name) => ({ name, enabled: true, transport: { type: "stdio", command: "npx", args: ["-y", name] }, auth_status: "unsupported" }))));
+  process.exit(0);
+}
 if (args[0] === "login" && args[1] === "status") {
   if (state() === "loggedout") { console.error("Not logged in"); process.exit(1); }
   console.error("Logged in using ChatGPT"); process.exit(0);
@@ -215,6 +222,7 @@ async function run(threadId, turnId, th, p) {
     note("error", { error, willRetry: false, ...ids });
     return end("failed", error);
   }
+  if (/^config$/i.test(text.trim())) { await say(config.join("\n") || "(none)"); return end("completed"); }
   if (/instructions/i.test(text)) { await say(`Instructions: ${th.instructions || "(none)"}${th.resumed ? " (resumed)" : ""}`); return end("completed"); }
   await say(`You said: ${text}${pics ? ` (${pics} picture${pics > 1 ? "s" : ""})` : ""}`);
   return end("completed");

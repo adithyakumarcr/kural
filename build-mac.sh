@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds dist/Kural-<ver>-macos-arm64.zip (Apple Silicon: M1–M5) from VSCodium, plus a .dmg when run on a Mac.
-# Runs on Linux or macOS. Needs: curl, unzip, zip, python3 + Pillow, rcodesign (or macOS codesign).
+# Runs on Linux or macOS. Needs: curl, unzip, zip, python3 (+ Pillow on Linux; a Mac uses its own sips and iconutil),
+# rcodesign (or macOS codesign).
 set -euo pipefail
 cd "$(dirname "$0")"
 

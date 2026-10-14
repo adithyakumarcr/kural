@@ -35,7 +35,18 @@ check("the model's command, one line, quote closed", () => {
   assert.strictEqual(tidyIntent('Sure! <cmd>git commit -m "Please fix the login</cmd>'), 'git commit -m "Please fix the login"');
   assert.strictEqual(tidyIntent("<cmd></cmd>"), "");
   assert.strictEqual(tidyIntent("<cmd>git add -A\ngit commit</cmd>"), "git add -A");
-  assert.strictEqual(tidyIntent(`<cmd>git commit -am "$(cat <<'EOF'\nPlease add the speed check\n\nCo-Authored-By: X <x@y>\nEOF\n)"</cmd>`), 'git commit -am "Please add the speed check"');
+  assert.strictEqual(tidyIntent(`<cmd>git commit -am "$(cat <<'EOF'\nPlease add the speed check\n\nCo-Authored-By: X <x@y>\nEOF\n)"</cmd>`), "git commit -am 'Please add the speed check'");
+  // The heredoc's message runs nothing; the one-line command mustn't either: no $(…), `…` or $HOME expansion when you press
+  // Enter (it was put in double quotes before), and a ' in it stays one.
+  const heredoc = (msg) => tidyIntent(`<cmd>git commit -m "$(cat <<'EOF'\n${msg}\nEOF\n)"</cmd>`);
+  assert.strictEqual(heredoc("Docs $(touch /tmp/pwned) and `id` for $HOME"), "git commit -m 'Docs $(touch /tmp/pwned) and `id` for $HOME'");
+  assert.strictEqual(heredoc("Don't break the login"), "git commit -m 'Don'\\''t break the login'");
+  if (process.platform !== "win32") {   // (what a POSIX shell makes of it: the exact message, nothing run)
+    const line = heredoc("It's $(echo RAN) `echo RAN` $HOME \"q\"").replace(/^git commit -m /, "");
+    const out = require("child_process").execFileSync("/bin/sh", ["-c", `printf '%s' ${line}`], { encoding: "utf8" });
+    assert.strictEqual(out, "It's $(echo RAN) `echo RAN` $HOME \"q\"");
+  }
+  assert.strictEqual(heredoc("bad\u001b[2Jmessage"), "", "a control character in the message: no suggestion");
 });
 check("the suggestion list: a continuation replaces the line; plain words are deleted, then the command typed", () => {
   const { suggestionItem } = require("../extension/lib/tab/terminal")._test;

@@ -116,7 +116,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   no special code. Model ids `codex:<id>` / `agy:<id>` (`default` = the program's own).
   Codex: `codex app-server`, one JSON object per line, approval `untrusted` + workspace-write sandbox in Agent/Auto
   (read-only in Plan/Ask), so commands and file changes come to Kural's `onPermission` (files: "Edit"/"Write" first, for
-  Undo). Neither Codex nor agy does agent teams or Claude Code's setup (`isClaude()` in the chat). Set up in Get started
+  Undo). Codex's own tools that never ask Kural are switched off at launch (`lockdownArgs`, -c options; checked with
+  codex-cli 0.160.1): outside Auto `features.apps/browser_use/browser_use_external/computer_use/in_app_browser=false`; in
+  Plan/Ask (and one-shot `oneAnswer`) also every connector, one inline `mcp_servers={ name = { enabled = false }, … }`
+  (Codex deep-merges it; `mcp_servers={}` alone changes nothing; dotted `-c` paths can't address a name with a dot; an
+  unknown name makes Codex refuse its config, so names come from `codex mcp list --json`: `connectorNames`). A mode
+  change restarts the agent (`procKey` has the mode). Neither Codex nor agy does agent teams or Claude Code's setup (`isClaude()` in the chat). Set up in Get started
   (`rec.codex`/`rec.agy`: bin, models) →
   `brain.setCli()`. **Install** (`lib/ai/install.js`, no vscode): no terminal; Homebrew on a Mac if present, else npm
   (PATH from your shell: a Dock-started app has a short PATH), Node too old/missing → pop-up with nodejs.org; npm
@@ -346,8 +351,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (the patch on a real workbench file: valid JS, idempotent, the stand-in's payload). Checked live: bar button there and
   toggles, a pick's data → pill + comment + picture → Claude found and edited the right CSS → reload showed it; chat links
   open Google inside Kural. NOT checked: a real mouse click on the page's element (CDP synthetic clicks don't reach the
-  Overlay inspector). The older proxy browser (`proxy.js`, `media/browser.*`, `media/browser-picker.js`, test
-  `browser-proxy.test.js`) only runs as a fallback when `workbench.action.browser.open` doesn't exist.
+  Overlay inspector). Without `workbench.action.browser.open` (an editor with no Integrated Browser) a page opens in the
+  web browser (`openExternal`) and picking says why it can't. The old proxy browser (it removed pages' security headers
+  to add its own picker) was removed in 1.1.0-rc.2.
 - **Account names** (`lib/ai/names.js`, no vscode): the status item shows the name on the chat's AI's account, from the
   programs' own plain files only when their email is the account's: `~/.claude.json` oauthAccount.displayName (Claude
   Code's `auth status` has no name), `~/.gemini/oauth_creds.json`'s id_token `name` (Antigravity's own login is in the
@@ -712,7 +718,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   reads `extension/build.json` at build time, so `install.sh` must stamp before the build).
 
 - **Second security pass (PR #61)**: Allow all = `grantKey`/`allowAllNow` in permission-policy.js (mode + model +
-  session), `revokeAllowAll` on mode/model change and handoff. Build it = Agent unless the chat is in Auto. The Auto
+  session), `revokeAllowAll` on mode/model change and handoff. Since rc.2 it is per kind: `tab.allowAll` = the kinds
+  given (`allowKind`: command, web, browser, `connector:<server>`; `true` from older chats = command); a card shows
+  `allowLabel` (none for files, unclassified calls, devices use `allowAllDevice`), so a web card's "Allow all" never runs
+  commands or touches outside files. Ask/Plan refuse a connector tool unless `isLookup` (its name starts with a lookup
+  verb and has no change verb). Build it = Agent unless the chat is in Auto. The Auto
   warning is per AI (`autoWarning`; globalState `kural.auto.warned` = `{engine: true}`). Gemini gate calls:
   `gatedMode(chat, startedFor)` (stricter wins). Atlassian auto-allow = `SERVERS` + `READS` in lib/chat/atlassian.js.
   journal `wrap()` neutralizes delimiter tags. `runsLater` ignores case and Windows spellings. Settings import:
@@ -720,7 +730,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `scope: application`. `lib/private-file.js` (0700/0600) for archives, session maps, crash reports. `Browser.url` =
   http/https only; nonces `crypto.randomBytes`. Ollama: codesign / Authenticode before install. Installer:
   `KuralDirCheck` (silent refusal = exit 2). Updates: `lib/update-net.js` (limits), `verifiedCopy()` before pkexec,
-  install.ps1 with a BOM. Build: resedit via `npm ci --ignore-scripts`, Pillow by hash (`scripts/requirements-icons.txt`).
+  install.ps1 with a BOM. Build: resedit via `npm ci --ignore-scripts`; no Python packages (the Mac icon: macOS's `sips` + `iconutil`, else the system's Pillow).
   Child output: `lib/utf8.js` `onText`; killing: `lib/ai/killtree.js` (SIGKILL after 2 s, `taskkill /T` on Windows).
   `test/paths-runs-later.test.js` fails when the repo path contains `.claude/` (agent worktrees): run from elsewhere.
   Connector keys (APP-9): `addArgs(..., {keyDir})` → a 0600 file in `scope.dir("connector-keys", "account")`; Claude web

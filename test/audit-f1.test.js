@@ -104,6 +104,28 @@ const npmTest = { tool_name: "Bash", input: { command: "npm test" } };
     assert.strictEqual(handed.allowAll, false, "a handoff ends Allow all"); assert.strictEqual(handed.allowAllFor, undefined);
     console.log("ok   AGENT-7: Allow all ends with a mode, model or conversation change, a handoff or a new session");
 
+    // "Allow all" on a card covers only that card's kind: a web card's covers web pages, not commands or outside files.
+    const web = { id: "k", model: "sonnet", mode: "agent", sessionId: "s1", allowAll: false };
+    chat.tabs = [web];
+    const rk = runtime(); chat.runtime.set(web.id, rk);
+    const pending = chat.onPermission(web, rk, { tool_name: "WebFetch", input: { url: "https://example.com" } });
+    await new Promise((ok) => setTimeout(ok, 20));
+    const card = rk.turn.reply.blocks.find((b) => b.k === "perm");
+    assert.strictEqual(card.allowLabel, "Allow all web searches and pages in this chat");
+    await chat.handle({ type: "permission", tabId: web.id, pid: card.pid, allow: true, always: true });
+    assert.strictEqual((await pending).allow, true);
+    assert.deepStrictEqual(web.allowAll, ["web"]);
+    assert.strictEqual(await verdict(web, { tool_name: "WebFetch", input: { url: "https://example.org" } }), "allow");
+    assert.strictEqual(await verdict(web, npmTest), "card", "web pages don't cover commands");
+    assert.strictEqual(await verdict(web, { tool_name: "Write", input: { file_path: path.join(tmp, "elsewhere.txt") } }), "card", "nor a file outside the project");
+    const fileCard = runtime();
+    chat.onPermission(web, fileCard, { tool_name: "Write", input: { file_path: path.join(tmp, "elsewhere.txt") } });
+    await new Promise((ok) => setTimeout(ok, 20));
+    assert.strictEqual(fileCard.turn.reply.blocks.find((b) => b.k === "perm").allowLabel, undefined, "a file card has no Allow all");
+    for (const res of fileCard.perms.values()) res(false);
+    chat.runtime.delete(web.id); chat.tabs = [];
+    console.log("ok   Allow all covers only its card's kind (commands, web, one connector), never files outside the project");
+
     // AGENT-11: a team planner's agy (Plan) while the chat is in Agent: reads run, changes are refused; a looser mode is refused.
     const gated = { id: "g", model: "agy:gemini-3", mode: "agent", sessionId: "s" };
     const inside = path.join(project, "a.js");

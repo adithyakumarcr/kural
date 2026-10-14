@@ -90,6 +90,9 @@ const SEARCH_HTML = `<ul>
     assert.strictEqual(r[1].description, "OpenAI's open-weight models & more.");
     assert.deepStrictEqual(r[1].sizes, ["20b", "120b"]);                       // not "5.2M" (pulls)
     assert.deepStrictEqual(r[1].capabilities, ["tools", "thinking"]);
+    // Decoded once: the page's "&amp;lt;b&amp;gt;" is the text "<b>" written out, "&lt;b&gt;", never a tag.
+    const once = parseSearch(`<ul><li><a href="/library/m1"><h2>m1</h2><p>Shows &amp;lt;b&amp;gt; as text</p><span>tools</span><span>1b</span></a></li></ul>`);
+    assert.strictEqual(once[0].description, "Shows &lt;b&gt; as text");
   });
   await check("search: uses ollama.com, filtered to models with tools", async () => {
     let asked = "";

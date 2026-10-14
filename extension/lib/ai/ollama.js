@@ -54,7 +54,8 @@ const versionAtLeast = (v, min) => {
 // ("1.2M Pulls") and "Updated …". Read loosely (link + text), so small changes to the page don't break it.
 function parseSearch(html) {
   const out = [], seen = new Set();
-  const decode = (s) => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'");
+  // (&amp; last: "&amp;lt;" is the text "&lt;", not "<".)
+  const decode = (s) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&amp;/g, "&");
   const text = (s) => decode(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
   for (const li of String(html).split(/<li[\s>]/i).slice(1)) {
     const item = li.split(/<\/li>/i)[0];

@@ -183,9 +183,11 @@ function intentPrompt({ shell, cwd, history, git, typed }) {
 function tidyIntent(answer) {
   const m = /<cmd>([\s\S]*?)(<\/cmd>|$)/.exec(String(answer || ""));
   const full = (m ? m[1] : "").trim();
-  // A commit written as a heredoc (git commit -m "$(cat <<'EOF' … EOF)"): one line with its first line of message.
+  // A commit written as a heredoc (git commit -m "$(cat <<'EOF' … EOF)"): one line with its first line of message, in
+  // single quotes. (A quoted heredoc runs nothing in the message; double quotes would run $(…) and `…` and expand $HOME
+  // when you press Enter. A heredoc means a POSIX shell, so ' is written '\''.)
   const h = /^(git\s+commit\b[^\n]*?)(-[a-z]*m)\s+"\$\(cat\s+<<-?'?(\w+)'?\s*\n([\s\S]*?)\n\s*\3/.exec(full);
-  if (h) { const msg = (h[4].split(/\r?\n/).find((l) => l.trim()) || "").trim().replace(/"/g, '\\"'); return msg ? `${h[1]}${h[2]} "${msg}"` : ""; }
+  if (h) { const msg = (h[4].split(/\r?\n/).find((l) => l.trim()) || "").trim(); return msg && !hasControl(msg) ? `${h[1]}${h[2]} '${msg.replace(/'/g, "'\\''")}'` : ""; }
   let s = full.replace(/^\s*\$\s/, "").split(/\r?\n/)[0].trim().replace(/\t/g, " ");
   if (hasControl(s)) return "";   // (a hidden carriage return or escape could run something without Enter)
   if ((s.replace(/\\"/g, "").match(/"/g) || []).length % 2) s += '"';

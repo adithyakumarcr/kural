@@ -11,9 +11,50 @@ const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
 const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
 const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
+const WEB_TOOLS = new Set(["WebSearch", "WebFetch"]);
 
-// → { allow: true } | { question: true } (AskUserQuestion: a card with options) | { ask: true, risky? }
-//   tool, input: the call. mode: agent / auto / plan / ask. allowAll: "Allow all" for this chat; allowAllDevice: the
+// A connector's (MCP server's) tool: mcp__<server>__<tool> → { server, name }.
+function connectorTool(tool) {
+  const m = /^mcp__(.+?)__(.+)$/.exec(String(tool || ""));
+  return m ? { server: m[1], name: m[2] } : null;
+}
+// Does a connector tool only look things up, by its name? (get_issue, listProjects, notion-search, resolve-library-id)
+// Only for Ask and Plan, where everything else from a connector is refused; it still asks you there. A name with a word
+// that changes things (get_or_create_page, search_and_replace) is not a lookup.
+const LOOKUP_VERBS = new Set(["get", "list", "search", "find", "fetch", "read", "query", "lookup", "view", "show", "describe", "retrieve",
+  "resolve", "browse", "inspect", "count", "preview"]);
+// (Verbs that are rarely nouns: "get_release", "get_workflow_run", "get_comment" are lookups.)
+const CHANGE_WORDS = new Set(["create", "add", "insert", "update", "upsert", "edit", "set", "put", "modify", "write", "delete", "remove", "destroy",
+  "drop", "replace", "rename", "move", "send", "push", "apply", "execute", "exec", "invoke", "approve", "reject", "assign", "invite", "upload",
+  "refund", "charge", "pay", "transfer", "subscribe", "unsubscribe", "enable", "disable", "install", "uninstall", "archive", "restore", "cancel",
+  "submit", "save", "duplicate", "publish", "clear", "reset"]);
+function isLookup(tool) {
+  const c = connectorTool(tool);
+  if (!c) return false;
+  const words = c.name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  // (A server's own prefix comes first in some names: notion-search, notion-fetch. Skip a first word that is the server's name.)
+  const server = c.server.toLowerCase().replace(/^claude_ai_/, "").split(/[^a-z0-9]+/).filter(Boolean);
+  const verbs = words.length > 1 && server.includes(words[0]) ? words.slice(1) : words;
+  return verbs.length > 0 && LOOKUP_VERBS.has(verbs[0]) && !verbs.some((w) => CHANGE_WORDS.has(w));
+}
+
+// What "Allow all" on a card covers: one kind of call, for the rest of this chat (in this mode, with this model and
+// conversation: allowAllNow). Commands; web searches and pages; one connector's tools; Gemini's browser actions.
+// null: a card that never gets "Allow all" (a file outside the project, a tool Kural can't classify: yes or no each time).
+function allowKind(tool) {
+  if (tool === "Bash") return "command";
+  if (WEB_TOOLS.has(tool)) return "web";
+  if (tool === "Browser") return "browser";
+  const c = connectorTool(tool);
+  if (c && !DEVICE_TOOL_RE.test(tool)) return `connector:${c.server}`;
+  return null;
+}
+// The kinds "Allow all" was given for. (Chats saved by 1.1.0-rc.1 and older have `true`: that was given on a command card.)
+const allowedKinds = (allowAll) => Array.isArray(allowAll) ? allowAll : allowAll === true ? ["command"] : [];
+
+// → { allow: true } | { question: true } (AskUserQuestion: a card with options) | { ask: true, risky? } | { deny: true, message }
+//   tool, input: the call. mode: agent / auto / plan / ask. allowAll: the kinds "Allow all" was given for in this chat
+//   (allowKind; `true` = commands, from older chats); allowAllDevice: the
 //   device it was given for. device: the chat's linked device. writeRoots / readRoots: where the AI may write / read
 //   without asking (ws.aiRoots). granted: files and folders you attached (and the handoff file). cwd: the project
 //   folder (what "outside" means for rm). notice: the program only tells, it doesn't wait: never a card (no provider
@@ -60,6 +101,11 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
   // Reading Jira (the linked ticket, a search) changes nothing. Writing to Jira still asks below.
   if (isAtlassianRead(tool)) return { allow: true };
   if (tool === "AskUserQuestion") return { question: true };
+  // Ask and Plan change nothing, also through a connector (creating a pull request, a Notion page, a Jira issue): only a
+  // connector tool whose name says it looks something up may run there, and it asks first (or "Allow all" for that one).
+  if ((mode === "ask" || mode === "plan") && connectorTool(tool) && !isLookup(tool))
+    return { deny: true, message: `${mode === "ask" ? "Ask" : "Plan"} mode doesn't use connector tools that may change things (${tool}). Switch to Agent mode to use it.` };
+  const kinds = allowedKinds(allowAll);
   // "Allow all" is kept apart for a device: allowing every `npm test` here must not allow everything on the robot.
   const onDevice = tool === "DeviceCommand" || tool === "DeviceWrite";
   // A command that's hard to undo (sudo, rm -rf outside the project, curl | sh, a forced push to main…) asks in Agent
@@ -70,7 +116,10 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
   if (!risky && tool === "Bash" && input.cwd && !within(require("path").resolve(cwd, String(input.cwd)), writeRoots))
     risky = { why: `It runs in ${input.cwd}, outside the project.` };
   if (risky) return { ask: true, risky };
-  if (mode === "auto" || (onDevice ? !!device && allowAllDevice === device : allowAll)) return { allow: true };
+  // "Allow all" covers only the kind of card it was given on (commands, web, one connector): never a file outside the
+  // project or a file that runs code later (those are yes or no each time), never a device (its own "Allow all").
+  const kind = allowKind(tool);
+  if (mode === "auto" || (onDevice ? !!device && allowAllDevice === device : !!kind && kinds.includes(kind))) return { allow: true };
   return { ask: true };   // Agent mode: running commands asks you first.
 }
 
@@ -87,7 +136,7 @@ function gatedMode(chatMode, startedFor) {
 // "Allow all" counts for the mode, model and conversation it was given in: changing any of them (a mode or model switch,
 // the router picking another model, a handoff to another AI, a new session) asks again.
 const grantKey = (tab) => [tab.mode, tab.model, tab.sessionId].join("|");
-const allowAllNow = (tab) => !!tab.allowAll && tab.allowAllFor === grantKey(tab);
+const allowAllNow = (tab) => tab.allowAllFor === grantKey(tab) ? allowedKinds(tab.allowAll) : [];
 
 // What Auto means, said before the first switch to it with this AI (engine: claude / codex / agy / ollama). Each AI's
 // commands reach Kural's checks a different way, so the sentence about dangerous commands differs.
@@ -97,4 +146,15 @@ function autoWarning(engine, fullSetup = false) {
   return `${base}.`;
 }
 
-module.exports = { decide, gatedMode, grantKey, allowAllNow, autoWarning, READ_TOOLS, EDIT_TOOLS, SUBAGENT_TOOLS, DEVICE_TOOLS, DEVICE_TOOL_RE };
+// The words beside "Allow all" on a card of this kind (allowKind). null: no "Allow all" on it.
+function allowLabel(tool) {
+  const kind = allowKind(tool);
+  if (!kind) return null;
+  if (kind === "command") return "Allow all commands in this chat";
+  if (kind === "web") return "Allow all web searches and pages in this chat";
+  if (kind === "browser") return "Allow all browser actions in this chat";
+  const server = kind.slice("connector:".length).replace(/^claude_ai_/, "").replace(/[_-]+/g, " ");
+  return `Allow everything from ${server} in this chat`;
+}
+
+module.exports = { decide, gatedMode, grantKey, allowAllNow, allowKind, allowLabel, allowedKinds, isLookup, autoWarning, READ_TOOLS, EDIT_TOOLS, SUBAGENT_TOOLS, DEVICE_TOOLS, DEVICE_TOOL_RE };
