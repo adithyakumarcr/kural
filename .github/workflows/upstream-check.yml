@@ -1,28 +1,93 @@
-# Weekly: is there a newer VSCodium than the one Kural is built on? If so, open (or update) one issue about it.
+# Weekly, and on demand (Actions → upstream-check → Run workflow): is there a newer VSCodium, or a newer Electron patch
+# release in the line Kural ships (security fixes)? If so, this updates the pins on a branch (scripts/update-codium.sh,
+# scripts/update-electron.py), builds the Linux package to see whether each of Kural's patches to VS Code still applies,
+# adds a line to the release notes, opens (or updates) a pull request, and starts the full build on that branch (tests,
+# all three builds, install checks). The owner reviews and merges; nothing reaches main or a release by itself.
+# (A pull request opened with the workflow's own token doesn't start other workflows, so this starts "Build Kural".)
 name: upstream-check
 on:
   schedule: [{ cron: "17 6 * * 1" }]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency: { group: upstream-check, cancel-in-progress: false }
 jobs:
-  vscodium:
+  update:
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
-      issues: write
+      contents: write        # push the update branch (never main: its rules allow only pull requests)
+      pull-requests: write   # open the pull request
+      actions: write         # start "Build Kural" on the branch
+      issues: write          # if a pull request can't be opened: an issue instead
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Compare with the latest VSCodium
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: { python-version: "3.12" }
+      - name: Newest VSCodium and Electron
+        id: pins
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mine="$(sed -n 's/^# VSCodium \([0-9.]*\)\..*/\1/p' codium.lock)"
+          mine="$(sed -n 's/^# VSCodium \([0-9.]*\)\. .*/\1/p' codium.lock)"
           latest="$(gh api repos/VSCodium/vscodium/releases/latest --jq .tag_name)"
-          echo "Kural uses $mine; latest is $latest"
           [ -n "$mine" ] && [ -n "$latest" ] || { echo "::error::couldn't read a version"; exit 1; }
-          [ "$mine" != "$latest" ] || exit 0
-          title="VSCodium $latest is out (Kural uses $mine)"
-          body="A newer VSCodium is available. Update with \`./scripts/update-codium.sh $latest\`, test, and release. Browser and Chromium security fixes come with it."
-          old="$(gh issue list --state open --search 'in:title "is out (Kural uses"' --json number --jq '.[0].number // empty')"
-          if [ -n "$old" ]; then gh issue edit "$old" --title "$title" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
+          echo "Kural uses VSCodium $mine; the newest is $latest"
+          if [ "$mine" != "$latest" ]; then ./scripts/update-codium.sh "$latest"; fi
+          python3 scripts/update-electron.py
+          if git diff --quiet -- codium.lock vendor/electron-runtime.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"; echo "Everything is current."; exit 0
+          fi
+          {
+            echo "changed=true"
+            echo "codium=$(sed -n 's/^# VSCodium \([0-9.]*\)\. .*/\1/p' codium.lock)"
+            echo "electron=$(python3 -c 'import json;print(json.load(open("vendor/electron-runtime.json"))["version"])')"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build the Linux package (does every Kural patch still apply?)
+        if: steps.pins.outputs.changed == 'true'
+        run: |
+          ./make-deb.sh 2>&1 | tee build.log
+          grep '::warning::' build.log | sed 's/^::warning:://' > warnings.txt || true
+      - name: Release notes, pull request, full build
+        if: steps.pins.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODIUM: ${{ steps.pins.outputs.codium }}
+          ELECTRON: ${{ steps.pins.outputs.electron }}
+        run: |
+          branch="auto/upstream-vscodium-$CODIUM-electron-$ELECTRON"
+          python3 - <<'EOF'
+          import os, re
+          line = f"- Kural is built on VSCodium {os.environ['CODIUM']} with Electron {os.environ['ELECTRON']}: the latest editor and browser security fixes.\n"
+          notes = open("RELEASE_NOTES.md", encoding="utf-8").read()
+          if line not in notes:
+              if notes.startswith("## Not released yet\n\n"):
+                  notes = notes.replace("## Not released yet\n\n", "## Not released yet\n\n" + line, 1)
+              else:
+                  notes = "## Not released yet\n\n" + line + "\n" + notes
+              open("RELEASE_NOTES.md", "w", encoding="utf-8").write(notes)
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add codium.lock vendor/electron-runtime.json make-deb.sh build-mac.sh build-win.sh RELEASE_NOTES.md
+          git commit -q -m "VSCodium $CODIUM, Electron $ELECTRON (weekly upstream check)"
+          git push -q --force origin "$branch"
+          {
+            echo "The weekly upstream check found newer upstream versions: **VSCodium $CODIUM**, **Electron $ELECTRON** (pins: \`codium.lock\`, \`vendor/electron-runtime.json\`; each download checked against its publisher's checksums)."
+            echo
+            if [ -s warnings.txt ]; then
+              echo "**Some of Kural's patches to VS Code no longer apply** (fix \`scripts/rebrand.py\` on this branch before merging):"
+              sed 's/^/- /' warnings.txt
+            else
+              echo "Every one of Kural's patches to VS Code still applies (the Linux package built without warnings)."
+            fi
+            echo
+            echo "The full build (tests, Ubuntu/macOS/Windows packages, install and start checks) runs on this branch: Actions → Build Kural."
+            echo "Before merging: start the built app once and try the chat, the browser's element picker and terminal Tab (VS Code's internal parts Kural relies on)."
+          } > body.md
+          title="VSCodium $CODIUM, Electron $ELECTRON"
+          if gh pr view "$branch" >/dev/null 2>&1; then gh pr edit "$branch" --title "$title" --body-file body.md
+          elif ! gh pr create --base main --head "$branch" --title "$title" --body-file body.md; then
+            gh issue create --title "$title is ready on branch $branch" --body-file body.md
+          fi
+          gh workflow run build.yml --ref "$branch"

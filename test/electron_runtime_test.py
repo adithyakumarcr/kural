@@ -14,6 +14,18 @@ spec.loader.exec_module(d)
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_vendor_version_from_the_binary_when_package_json_has_none(self):
+        # VS Code 1.140 no longer lists electron in devDependencies: the one "Electron/x.y.z" in the binary counts.
+        with tempfile.TemporaryDirectory() as temp:
+            b = Path(temp) / 'codium'
+            b.write_bytes(b'xx Chrome/150.0 Electron/43.7.3 yy Electron/43.7.3 zz')
+            self.assertEqual(d.vendor_version({'devDependencies': {}}, b), '43.7.3')
+            self.assertEqual(d.vendor_version({'devDependencies': {'electron': '42.8.1'}}, b), '42.8.1')
+            b.write_bytes(b'Electron/43.7.3 and Electron/44.0.0')
+            self.assertIsNone(d.vendor_version({}, b), 'two different versions: not trusted')
+            b.write_bytes(b'no version here')
+            self.assertIsNone(d.vendor_version({}, b))
+
     def test_mac_frameworks_and_bundle_identity(self):
         original = d.ROOT
         with tempfile.TemporaryDirectory() as temp:

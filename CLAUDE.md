@@ -524,6 +524,18 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   if the old checksum matches and the anchor ("Ask @vscode" Help item) is found; otherwise it skips with a
   `::warning::` (shows in the CI summary). Because a menu patch can silently miss, updates are also checked daily and
   reachable from the Chat panel's … menu and Kural Settings.
+- **Keeping VSCodium and Electron current** (`.github/workflows/upstream-check.yml`, weekly + on demand):
+  `scripts/update-codium.sh <ver>` (codium.lock + `CODIUM_VER` in the three build scripts; each archive checked against
+  VSCodium's `.sha256`) and `scripts/update-electron.py` (the newest Electron of VSCodium's major: hashes from Electron's
+  SHASUMS256.txt, `bundles`/`abi` from running the Linux build, fuses must equal VSCodium's). VS Code 1.140 dropped
+  `devDependencies.electron`, so `electron_runtime.vendor_version` reads the one `Electron/x.y.z` in VSCodium's binary.
+  The job builds the .deb (rebrand.py `::warning::`s go into the PR), adds a release-notes line, opens a PR (needs the
+  repo setting "Actions may create pull requests", on since 14 Oct 2026) and starts Build Kural on the branch (a
+  GITHUB_TOKEN PR triggers nothing by itself). CI's runtime checks compare with `kuralRuntime` {version, abi} in the
+  installed app's package.json. rebrand.py anchors accept 1.135 (`,`/`const`, `__decorate`/`__param`) and 1.140
+  (`;`/`let`, minified decorators); 1.140's browser comment step (`_insertElementCommentReference`) lets Kural's
+  stand-in (`__kural`) pass. After a VSCodium update, try by hand: terminal Tab plain words (`inputData`, kind 101) and
+  the browser's element picker (both use VS Code internals).
 - **Remove Kural's data** (`lib/remove-data/`: `core.js` no vscode, `index.js` the command `kural.removeData`, also Kural
   Settings → More): before uninstalling. At once: `devices.remove` (returns whether the key came off), `core.removeGate`
   (entry + `.kural-backup` + `~/.kural/agy-gate`), connectors with keys in `connector-keys` (`keyedConnectors`,
@@ -753,7 +765,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (`fromOllama`, `checkInstallScript`), piped to `pkexec /bin/sh -s`. SBOM: `natives()` hashes every ELF/Mach-O/PE of the
   install; `vendor/electron-runtime.json` `bundles` (Chromium, Node…) is checked against the running runtime by
   `electron_runtime.py check_bundles` on Linux/Mac builds: update it with each Electron bump
-  (`ELECTRON_RUN_AS_NODE=1 ./electron -p 'JSON.stringify(process.versions)'`).
+  (`python3 scripts/update-electron.py` does it all: see "Keeping VSCodium and Electron current").
 
 ## Test
 - `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script, Get started checks).

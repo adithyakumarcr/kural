@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-CODIUM_VER="${CODIUM_VER:-1.135.06055}"
+CODIUM_VER="${CODIUM_VER:-1.140.06880}"
 VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')"
 SRC="downloads/VSCodium-win32-x64-$CODIUM_VER.zip"
 WORK="build/win"

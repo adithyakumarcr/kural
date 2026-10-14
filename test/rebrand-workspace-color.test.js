@@ -50,9 +50,8 @@ check("another shape: a warning and the text is unchanged", () => {
   assert.ok(/::warning::/.test(noService.stdout), noService.stdout);
 });
 
-const rel = path.join("Contents", "Resources", "app", "out", "vs", "workbench", "workbench.desktop.main.js");
-const candidates = [process.env.KURAL_WORKBENCH, path.join("/Applications/Kural.app", rel), path.join(root, "build", "mac", "Kural.app", rel)].filter(Boolean);
-const src = candidates.find((f) => fs.existsSync(f));
+// (A built or installed app, or $KURAL_WORKBENCH: the app, its "app" folder or the file itself: test/workbench.js.)
+const src = require("./workbench").findWorkbench();
 if (!src) { console.log("(real workbench file: skipped, none here)"); fs.rmSync(tmp, { recursive: true, force: true }); process.exit(fail ? 1 : 0); }
 const patched = path.join(tmp, "patched.mjs");
 const real = py(`

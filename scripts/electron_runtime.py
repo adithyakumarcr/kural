@@ -28,6 +28,18 @@ def fuse_wire(binary):
     return data[i + 2:i + 11].decode('ascii')
 
 
+def vendor_version(metadata, binary):
+    """VSCodium's own Electron version: its package.json's devDependencies (VS Code up to 1.135), or, since VS Code 1.140
+    dropped that entry, the one "Electron/x.y.z" its binary carries (read without loading the whole file)."""
+    declared = metadata.get('devDependencies', {}).get('electron')
+    if declared:
+        return declared
+    import mmap, re
+    with binary.open('rb') as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
+        found = {m.group(1).decode() for m in re.finditer(rb'Electron/(\d+\.\d+\.\d+)', data)}
+    return found.pop() if len(found) == 1 else None
+
+
 def verify(archive, digest):
     actual = hashlib.sha256()
     with archive.open('rb') as stream:
@@ -124,7 +136,9 @@ def install(app_root, platform, archive=None):
     app = app_root / ('Contents/Resources/app' if mac else 'resources/app')
     manifest = app / 'package.json'
     metadata = json.loads(manifest.read_text())
-    if metadata.get('devDependencies', {}).get('electron') != pin['replaces']:
+    vendor_binary = app_root / ('Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework' if mac
+                                else 'codium' if platform == 'linux-x64' else 'VSCodium.exe')
+    if vendor_version(metadata, vendor_binary) != pin['replaces']:
         raise ValueError('Unreviewed vendor Electron version')
     if archive is None:
         archive = ROOT / 'downloads' / f'electron-v{pin["version"]}-{platform}.zip'
@@ -193,7 +207,7 @@ def install(app_root, platform, archive=None):
             if (stage / name).is_file():
                 shutil.copy2(stage / name, licenses / name)
         metadata['devDependencies']['electron'] = pin['version']
-        metadata['kuralRuntime'] = dict(version=pin['version'], platform=platform,
+        metadata['kuralRuntime'] = dict(version=pin['version'], abi=pin.get('abi'), platform=platform,
                                         sha256=pin['platforms'][platform], source='electron/electron')
         manifest.write_text(json.dumps(metadata, indent=2) + '\n')
     check_bundles(app_root, platform, pin)
