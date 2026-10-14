@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks Kural's approval gate for Google Gemini against the REAL Antigravity CLI (`agy`) on this computer.
-# For the owner, on a machine where `agy` is installed and logged in. See audit-report/GEMINI_ADAPTER_REQUIREMENTS.md.
+# For the owner, on a machine where `agy` is installed and logged in. See docs/security-audit.md (SEC-012).
 #
 # What it does (it prints this and asks first):
 #   - backs up ~/.gemini/config/hooks.json (where agy reads hooks; HOOKS=… for another file) and puts it back at the end (also on Ctrl+C or an error)

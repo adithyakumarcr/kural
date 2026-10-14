@@ -19,7 +19,8 @@ removed too. It asks before changing anything; Ollama and its models stay.
 
 ## 2. Welcome to Kural
 
-Kural opens the editor's **Welcome** page when there are no editors to restore. **Start** has New File, Open File,
+Kural opens the editor's **Welcome** page when there are no editors to restore. Under the title it shows your Kural
+version ("Unreleased version · branch (commit)" for a build from the code). **Start** has New File, Open File,
 Open Folder and Clone Git Repository; **Recent** reopens projects; **Walkthroughs** includes **Get started with Kural**,
 the editor's **Learn the Fundamentals** and guides from your installed extensions. There's no VSCodium content on it
 (its "Get started with VSCodium" walkthrough and "VSCodium Announcements" are gone, and Kural fetches nothing from

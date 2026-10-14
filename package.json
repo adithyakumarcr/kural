@@ -1,7 +1,7 @@
 {
   "name": "kural-code-editor",
   "private": true,
-  "description": "Kural Code Editor: a code editor with Claude built in (VSCodium + the Kural extension).",
+  "description": "Kural Code Editor: a code editor with AI built in (VSCodium + the Kural extension), with Claude, Google Gemini, ChatGPT (Codex) or your own model.",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "test": "node test/run.js",

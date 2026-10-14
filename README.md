@@ -143,7 +143,7 @@ The chat sits on the right and has tabs. Pick how much freedom Kural gets:
 | Mode | What Kural may do |
 |---|---|
 | **Agent** | edits files (you keep or undo each one) and asks before running commands |
-| **Auto** | edits and runs commands without asking |
+| **Auto** | unrestricted: edits and runs commands without asking, also dangerous ones; the AI ends each answer with a **What I did** list |
 | **Plan** | writes a plan without changing anything; **Build it** carries it out |
 | **Ask** | only answers |
 
@@ -495,8 +495,10 @@ docs/                 screenshots for this README; docs/wiki/ the wiki's pages; 
 ## Credits
 
 By **Adithya Chinnakkonda**. Built on [VSCodium](https://github.com/VSCodium/vscodium) (MIT), with
-[Codicons](https://github.com/microsoft/vscode-codicons) (CC BY 4.0) for icons. Kural is an independent project. It is not made or endorsed by Anthropic or
-Microsoft. "Claude" is a trademark of Anthropic.
+[Codicons](https://github.com/microsoft/vscode-codicons) (CC BY 4.0) for icons. Kural is an independent project. It is
+not made or endorsed by Anthropic, Google, OpenAI, Ollama or Microsoft. "Claude" is a trademark of Anthropic, "Gemini"
+of Google, "ChatGPT" of OpenAI and "Visual Studio Code" of Microsoft; Kural uses these names only to say which service
+it works with.
 
 ## License
 
