@@ -1,4 +1,43 @@
-## Not released yet
+## What's new in 1.1.0
+
+Kural 1.1.0 is the first final version of **Kural Code Editor** (it was ClaudeX): VSCodium with an AI assistant built
+in, now with four ways to get its AI.
+
+- **Four AIs, one chat.** Claude (Claude Code with your Claude plan), **Google Gemini** (Google's Antigravity CLI with
+  your Google account), **ChatGPT** (OpenAI's Codex CLI with your ChatGPT plan), or **your own model** on your computer
+  through Ollama (offline, no account). **Get started** installs what's missing, helps you log in and tests each one.
+- **Model Router (Auto).** Picks the model and intensity for each message (Balance, Cost or Intelligence), moves to
+  another AI near a usage limit, and hands the whole conversation over when it switches.
+- **A chat that works like a teammate.** Agent, Auto, Plan (then **Build it**) and Ask modes; tabs; History across
+  workspaces; **Edit**, **Restore code** and **Fork from here**; messages you send while it works join the answer; a
+  side chat for quick questions about an answer; moods (your own too); pictures, PDFs, Jira tickets and page elements as
+  context; a notification when an answer is done or needs you.
+- **Teams of agents.** A Project Manager with Researcher, Architect, Developers and Tester, or agents that discuss and
+  agree, with their discussion in the answer.
+- **Kural's browser with Design Mode.** Your app beside the code; pick an element (with a comment) and Kural finds and
+  changes the code behind it.
+- **Devices over SSH.** A Raspberry Pi or board computer the chat can run commands on, asking first.
+- **Tab Completion everywhere.** In the editor (local model or Claude), in the terminal (whole commands, also from plain
+  words), and renames across files.
+- **Search & Ask, inline edit (Ctrl+K), commit messages** in Source Control, the **AI Usage** panel and status bar,
+  **Kural Settings** with connectors (MCP) and **profiles** for a personal and a work account.
+- **Safe by default.** Agent mode asks before commands and before files outside your project; Ask and Plan change
+  nothing; Gemini asks Kural through an approval gate; updates install only when signed by Kural's release key; Kural
+  keeps your data private to you and **Kural: Remove Kural's Data...** removes it.
+- **Built on VSCodium 1.140** with Electron 43, kept current by a weekly check.
+
+The 1.1.0 test versions below have every detail.
+
+**Known issues**
+
+- **Windows warns before installing** ("Windows protected your PC"): the installer isn't code-signed. Click **More
+  info**, then **Run anyway**. Kural's own updates don't ask again.
+- **macOS warns the first time you open Kural**: it isn't notarized by Apple. Open it once from System Settings →
+  Privacy & Security → **Open Anyway**.
+- **Gemini's approval gate** was checked with the real Antigravity on Ubuntu and macOS, not yet on Windows.
+- **ChatGPT (Codex)** was tried with a logged-in account on macOS only, not yet on Ubuntu or Windows.
+
+## What's new in 1.1.0-rc.2
 
 - **Built on VSCodium 1.140** (VS Code 1.140) with **Electron 43.7.11**: the newest editor, Chromium and V8 security
   fixes. Kural now keeps up by itself: a weekly job prepares each new VSCodium and Electron release, builds it and checks
@@ -27,6 +66,9 @@
   when Kural is still running instead of leaving half the files behind. The setup checks that too.
 - **Kural's new release key.** This version trusts a second signing key, kept only where release builds can use it;
   releases after 1.1.0 are signed with it.
+
+**Test before 1.1.0** (this version exists to check these on real machines): updating from rc.1 in the app, Kural:
+Remove Kural's Data and uninstalling, terminal Tab's plain words and the browser's element picker on VSCodium 1.140.
 
 ## What's new in 1.1.0-rc.1
 
@@ -559,9 +601,9 @@
   helpers (and the program and the `kural` command) are now renamed too. Every release is now opened for real on
   macOS, Ubuntu and Windows before it's published.
 
-## What's new in 1.1.0
+## What's new in 1.1.0-alpha.1
 
-First public version, released as the test version **1.1.0-alpha.1**.
+The first public version.
 
 - **ClaudeX is now Kural Code Editor** (by Adithya Chinnakkonda): new name, `{K}` logo, `kural` command, settings
   under `kural.*`. Installing it on Ubuntu replaces ClaudeX. It keeps its own settings and chats, separate from ClaudeX's.
