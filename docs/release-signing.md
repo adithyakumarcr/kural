@@ -18,7 +18,7 @@ copy exists anywhere else.
 1. 1.1.0-rc.2 and 1.1.0 ship both public keys and are still signed with key #0: rc.1 and older trust only key #0.
 2. Before switching, the workflow `verify-signing-key` (run on a `v*` tag) checks that each secret signs for its public
    key in `release-keys.js`.
-3. After 1.1.0: the release job signs with `secrets.KURAL_RELEASE_PRIVATE_KEY_NEW`, and the repository secrets
+3. Done after 1.1.0: the release job signs with `secrets.KURAL_RELEASE_PRIVATE_KEY_NEW`, and the repository secrets
    `KURAL_RELEASE_PRIVATE_KEY` and `KURAL_RELEASE_PUBLIC_KEY` are deleted. Key #0 is then gone for good, and its public
    key can come out of `release-keys.js`. Versions before 1.1.0-rc.2 trust only key #0: their updater refuses releases
    signed with key #1 (it says the list isn't signed by Kural's key), so people still on them install a newer Kural by

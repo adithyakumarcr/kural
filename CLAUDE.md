@@ -787,9 +787,9 @@ mainly on it. `rebrand.py` copies `LICENSE` into the built-in extension, so ever
 blank issues are off.
 
 ## Release
-**Signing:** `SHA256SUMS.sig` is made by the release job. Up to and including 1.1.0 with key #0 (repository secret
-`KURAL_RELEASE_PRIVATE_KEY`; rc.1 and older trust only it); afterwards with key #1 (`KURAL_RELEASE_PRIVATE_KEY_NEW`, only
-in the environment "release"), then the repository secrets are deleted (docs/release-signing.md). `verify-signing-key`
+**Signing:** `SHA256SUMS.sig` is made by the release job with key #1 (`KURAL_RELEASE_PRIVATE_KEY_NEW`, only in the
+environment "release"; the job checks the list verifies as key #1). Key #0 (a repository secret) signed releases up to
+1.1.0 and was deleted after it (docs/release-signing.md). `verify-signing-key`
 (run on a `v*` tag) proves each secret matches its public key in `extension/lib/release-keys.js`.
 **Version numbers:** don't bump the version (1.1.0-alpha.N) unless Adithya says so. If the current version isn't
 tagged yet, new changes go into its "What's new" block; if it's already released, they go under "## Not released yet"
