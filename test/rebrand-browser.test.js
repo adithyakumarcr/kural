@@ -30,6 +30,9 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
   await check("the patch runs without warnings", () => { assert.strictEqual(py.status, 0, py.stderr); assert.ok(!/::warning::/.test(py.stdout), py.stdout); });
   await check("patching twice changes nothing more", () => assert.ok(/SAME_TWICE/.test(py.stdout), py.stdout));
   const js = fs.readFileSync(out, "utf8");
+  // (An installed Kural was patched when it was built, by that version's rebrand.py; patching again changes nothing, so
+  // only an unpatched workbench, as the build sees it, shows today's patch.)
+  const prePatched = fs.readFileSync(src, "utf8").includes("/*kural-browser*/");
   await check("the result is valid JavaScript", () => { const r = spawnSync(process.execPath, ["--check", out]); assert.strictEqual(r.status, 0, String(r.stderr)); });
   await check("each part is there exactly once", () => {
     assert.strictEqual(js.split("/*kural-browser*/").length - 1, 1);
@@ -37,7 +40,7 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
     assert.strictEqual(js.split('kind:"element",comment:').length - 1, 1);
   });
   await check("the browser's buttons don't need VS Code's chat any more", () => {
-    const i = js.indexOf("this.ID=va.AddElementToChat");
+    const i = js.search(/this\.ID=\w+\.AddElementToChat/);   // (minified names differ per build)
     assert.ok(i > 0);
     const action = js.slice(i, i + 700);
     assert.ok(/precondition:\w+\.and\(\w+,\w+,\w+\.negate\(\),\w+\.true\(\)\)/.test(action), action);
@@ -46,10 +49,13 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
   await check("the stand-in hands plain data to kural.browser.attach (picture as base64)", async () => {
     const method = js.slice(js.indexOf("async _revealChatWidgetForAttachment("), js.indexOf("/*kural-browser*/"));
     const sent = [];
-    const sandbox = { Uint8Array, btoa: (s) => Buffer.from(s, "latin1").toString("base64"), String, Ie: "commandService", out: sent };
+    // (The command service's short name in this build, e.g. "Ie" in 1.135, "be" in 1.140: a plain string here.)
+    const svc = /(\w+)=\w+\("commandService"\)/.exec(js)[1];
+    const sandbox = { Uint8Array, btoa: (s) => Buffer.from(s, "latin1").toString("base64"), String, [svc]: "commandService", out: sent };
     const w = await vm.runInNewContext(`class T { constructor() { this.__kural = { invokeFunction: (f) => f({ get: (id) => ({ executeCommand: (c, items) => out.push([id, c, items]) }) }) }; } ${method} }
       new T()._revealChatWidgetForAttachment(false);`, sandbox);
     assert.ok(w.viewModel && w.attachmentModel && typeof w.focusInput === "function" && w.inputEditor.getModel() === null);
+    if (!prePatched) assert.strictEqual(w.__kural, true, "marked, so 1.140's comment step lets it pass");
     w.attachmentModel.addContext(
       { kind: "element", name: "button#order", fullName: "button#order.buy", value: "Attached Element Context ...", innerText: "Order more", comment: "make it bigger", imageData: new Uint8Array([1, 2, 3]), imageMimeType: "image/jpeg", ancestors: [{ not: "sent" }] },
       { kind: "image", value: { buffer: new Uint8Array([255, 216]) }, mimeType: "image/png" });
@@ -59,6 +65,11 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
     assert.deepStrictEqual(JSON.parse(JSON.stringify(items)), [
       { kind: "element", name: "button#order", fullName: "button#order.buy", value: "Attached Element Context ...", innerText: "Order more", comment: "make it bigger", mime: "image/jpeg", image: "AQID" },
       { kind: "image", value: "", mime: "image/png", image: "/9g=" }]);
+  });
+  await check("VS Code 1.140+: the comment step lets Kural's stand-in pass (Kural's chat takes the comment itself)", () => {
+    if (!/_insertElementCommentReference\(/.test(js)) return;   // (older builds have no such step)
+    if (prePatched) return "skip";
+    assert.match(js, /_insertElementCommentReference\((\w+),\w+,\w+,\w+,\w+,\w+\)\{if\(\1&&\1\.__kural\)return!0;/);
   });
   fs.rmSync(tmp, { recursive: true, force: true });
   process.exit(fail ? 1 : 0);

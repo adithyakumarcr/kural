@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 NAME=kural            # command / folder name
 TITLE="Kural"         # name shown in the app
-CODIUM_VER="${CODIUM_VER:-1.135.06055}"
+CODIUM_VER="${CODIUM_VER:-1.140.06880}"
 
 # 0. Download VSCodium (the open-source build of VS Code) if we don't have it yet
 mkdir -p dist

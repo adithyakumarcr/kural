@@ -403,9 +403,11 @@ No GitHub needed: one command builds Kural from the code in this folder and inst
 ```
 
 The first build downloads VSCodium and the platform's patched Electron runtime (about 120–150 MB extra,
-cached in `downloads/`). Builds verify the VSCodium pins in `codium.lock` and the Electron 42.11.12 pins in
+cached in `downloads/`). Builds verify the VSCodium pins in `codium.lock` and the Electron pins in
 `vendor/electron-runtime.json`; a mismatch stops the build. The runtime replacement keeps the editor core,
-bundle identities and vendor security fuses. After that, a build takes about a
+bundle identities and vendor security fuses. A weekly job (`upstream-check`) updates both pins when VSCodium or
+Electron publish a newer version (`scripts/update-codium.sh`, `scripts/update-electron.py`), builds it and opens a
+pull request. After that, a build takes about a
 minute. On a Mac you need Apple's command-line tools once (`xcode-select --install`). `install.sh` sets up
 everything else itself. After `--ext` on Ubuntu, reload the window (**Developer: Reload Window**). On a Mac,
 Kural restarts.

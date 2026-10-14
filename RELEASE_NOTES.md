@@ -1,5 +1,8 @@
 ## Not released yet
 
+- **Built on VSCodium 1.140** (VS Code 1.140) with **Electron 43.7.11**: the newest editor, Chromium and V8 security
+  fixes. Kural now keeps up by itself: a weekly job prepares each new VSCodium and Electron release, builds it and checks
+  that all of Kural's changes to the editor still apply.
 - **"Allow all" covers only what you allowed.** Ticking it on a card now covers that kind of card for the rest of the
   chat: commands, web searches and pages, or one connector's tools. Before, a tick on a web search card also let
   commands run and files outside your project change without asking. Files outside the project are always yes or no.

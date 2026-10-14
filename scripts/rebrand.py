@@ -220,10 +220,15 @@ def hide_builtin_views(text):
 # command service's name in this build, and the element's own comment ("Comment on Elements", Cursor's "tell it what to
 # change") added to the object that's attached. Each anchor is found by shape, with this build's own short names; if
 # one isn't found (another VSCodium), the browser stays as it is and a ::warning:: says so.
-BR_CTOR = re.compile(r'constructor\((\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+)\)\{super\(\1\),'
-                     r'(this\.telemetryService=\4,this\.logService=\5,this\.chatWidgetService=\6,this\.chatService=\7,)')
-BR_REVEAL = re.compile(r'async _revealChatWidgetForAttachment\((\w+)=!1\)\{const (\w+)=await this\.chatWidgetService\.revealWidget\(\1\)\?\?this\.chatWidgetService\.lastFocusedWidget;'
+# (VS Code 1.140's bundle writes statements with ";" where 1.135's used ",", and "let" for "const": both are accepted.)
+BR_CTOR = re.compile(r'constructor\((\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+),(\w+)\)\{super\(\1\)([,;])'
+                     r'(this\.telemetryService=\4[,;]this\.logService=\5[,;]this\.chatWidgetService=\6[,;]this\.chatService=\7[,;])')
+BR_REVEAL = re.compile(r'async _revealChatWidgetForAttachment\((\w+)=!1\)\{(?:const|let) (\w+)=await this\.chatWidgetService\.revealWidget\(\1\)\?\?this\.chatWidgetService\.lastFocusedWidget;'
                        r'return \2&&!\2\.viewModel&&await \w+\.toPromise\(\2\.onDidChangeViewModel\),\2\}')
+# VS Code 1.140+: a comment on an element is also written into the chat's input box as a reference
+# (_insertElementCommentReference). Kural's chat takes the comment with the element itself, so for Kural's stand-in
+# widget (`__kural`) that step just says "done". Older builds don't have it.
+BR_COMMENT = re.compile(r'_insertElementCommentReference\((\w+),\w+,\w+,\w+,\w+,\w+\)\{')
 BR_ELEMENT = re.compile(r'kind:"element",icon:(\w+\.fromId\(\w+\.layout\.id\)),ancestors:(\w+)\.ancestors')
 BR_MARK = '/*kural-browser*/'
 # The browser's "Add to Chat" actions (element, comment, console logs, screenshots) and their toolbar menu are shown only
@@ -248,15 +253,16 @@ def route_browser_to_kural(text):
         return text
     # The constructor's 3rd argument must be the instantiation service, and its 6th the chat widget service (the class's
     # decorators, after its long body, say so).
+    # (Decorators: "__decorate([__param(1,a),__param(2,b),…" in 1.135; minified "I([h(1,a),h(2,b),…" in 1.140.)
     chat = re.search(r'(\w+)=\w+\("chatWidgetService"\)', text)
-    if not chat or f"__param(2,{inst.group(1)}),__param(3," not in text or not re.search(
-            r"__decorate\(\[__param\(1,\w+\),__param\(2,%s\),__param\(3,\w+\),__param\(4,\w+\),__param\(5,%s\)," % (inst.group(1), chat.group(1)), text):
+    if not chat or not re.search(
+            r"\w+\(\[(\w+)\(1,\w+\),\1\(2,%s\),\1\(3,\w+\),\1\(4,\w+\),\1\(5,%s\)," % (re.escape(inst.group(1)), re.escape(chat.group(1))), text):
         print("::warning::VS Code's browser constructor changed; its 'Add to Chat' stays as it is")
         return text
     shim = (
         'async _revealChatWidgetForAttachment(e=!1){const k=this.__kural,'
         'b=u=>{u=u&&u.buffer instanceof Uint8Array?u.buffer:u;if(!u||!u.length)return"";let s="";for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));return btoa(s)};'
-        'return{viewModel:{},inputEditor:{getModel:()=>null},focusInput(){},attachmentModel:{delete(){},addContext:(...c)=>{'
+        'return{__kural:!0,viewModel:{},inputEditor:{getModel:()=>null},focusInput(){},attachmentModel:{delete(){},addContext:(...c)=>{'
         'const items=c.map(x=>({kind:x.kind,name:x.name,fullName:x.fullName,value:typeof x.value=="string"?x.value:"",innerText:x.innerText,comment:x.comment,'
         'mime:x.mimeType||x.imageMimeType,image:b(x.imageData||(typeof x.value=="string"?null:x.value))}));'
         f'k.invokeFunction(a=>a.get({cmd.group(1)}).executeCommand("kural.browser.attach",items))}}}}}}}}{BR_MARK}')
@@ -272,7 +278,8 @@ def route_browser_to_kural(text):
         text = text[:start.start()] + re.sub(r'\b' + re.escape(gate.group(2)) + r'\.enabled\b', gate.group(1) + ".true()", region) + text[end:]
         reveal = BR_REVEAL.search(text)
     text = text[:reveal.start()] + shim + text[reveal.end():]
-    text = BR_CTOR.sub(lambda m: m.group(0).replace("super(" + m.group(1) + "),", "super(" + m.group(1) + "),this.__kural=" + m.group(3) + ",", 1), text, count=1)
+    text = BR_CTOR.sub(lambda m: m.group(0).replace("super(" + m.group(1) + ")" + m.group(15), "super(" + m.group(1) + ")" + m.group(15) + "this.__kural=" + m.group(3) + m.group(15), 1), text, count=1)
+    text = BR_COMMENT.sub(lambda m: m.group(0) + f"if({m.group(1)}&&{m.group(1)}.__kural)return!0;", text, count=1)
     text = BR_ELEMENT.sub(lambda m: f'kind:"element",comment:{m.group(2)}.comment,icon:{m.group(1)},ancestors:{m.group(2)}.ancestors', text, count=1)
     return text
 
@@ -320,8 +327,9 @@ def hide_debug_views(text):
 # Added at the end of the file (everything it needs exists by then), found by shape; a miss -> ::warning::, and the
 # chat's notifications fall back to Kural's own (the command isn't there).
 TOAST_HOST = re.compile(r'(?<![\w$.])([\w$]+)=[\w$]+\("hostService"\)')
-TOAST_COMMANDS = re.compile(r'(?<![\w$.])([\w$]+)=new class\{constructor\(\)\{this\._commands=new Map,this\._onDidRegisterCommand=')
-TOAST_METHOD = re.compile(r'async showToast\([\w$]+,[\w$]+\)\{const [\w$]+=[\w$]+\(\),[\w$]+=[\w$]+\.onCancellationRequested\(\(\)=>this\.nativeHostService\.clearToast\(')
+# (1.140's bundle: ";" between statements and "let" where 1.135 had "," and "const": both accepted.)
+TOAST_COMMANDS = re.compile(r'(?<![\w$.])([\w$]+)=new class\{constructor\(\)\{this\._commands=new Map[,;]this\._onDidRegisterCommand=')
+TOAST_METHOD = re.compile(r'async showToast\([\w$]+,[\w$]+\)\{(?:const|let) [\w$]+=[\w$]+\(\),[\w$]+=[\w$]+\.onCancellationRequested\(\(\)=>this\.nativeHostService\.clearToast\(')
 TOAST_END = re.compile(r';(export\{[\w$]+ as main\})')
 TOAST_MARK = '/*kural-toast*/'
 # (C = the command registry, H = the host service's id; a cancellation token of its own, so no minified class is needed)

@@ -108,7 +108,7 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y ./dist/kural_*_amd64.deb
       - name: Start it
         run: |
-          ELECTRON_RUN_AS_NODE=1 /usr/share/kural/kural -e 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)'
+          ELECTRON_RUN_AS_NODE=1 /usr/share/kural/kural -e 'const assert=require("assert"),r=require("/usr/share/kural/resources/app/package.json").kuralRuntime;assert.equal(process.versions.electron,r.version);assert.equal(process.versions.modules,r.abi);console.log(process.versions)'
           kural --version
           grep -q '"nameLong": "Kural Code Editor"' /usr/share/kural/resources/app/product.json
           test -f /usr/share/kural/resources/app/extensions/kural/package.json
@@ -159,7 +159,7 @@ jobs:
           mount | grep -qF "$MP" && { echo "::error::Could not detach $MP"; hdiutil info; exit 1; }
           APP="$RUNNER_TEMP/Kural.app"
           codesign --verify --deep --strict "$APP"
-          ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/Kural" -e 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)'
+          APP="$APP" ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/Kural" -e 'const assert=require("assert"),r=require(process.env.APP+"/Contents/Resources/app/package.json").kuralRuntime;assert.equal(process.versions.electron,r.version);assert.equal(process.versions.modules,r.abi);console.log(process.versions)'
           "$APP/Contents/Resources/app/bin/kural" --version
           # The real window, not just the command line: it must still run after 25 s with its helper processes.
           # (Electron finds its helpers by the app's name; a wrong name makes it quit at once.)
@@ -260,7 +260,7 @@ jobs:
             Set-Content -LiteralPath $probe -Value 'process.exit(7)' -Encoding utf8
             $p = Start-Process -FilePath "$dir\Kural.exe" -ArgumentList ('"' + $probe + '"') -Wait -PassThru
             if ($p.ExitCode -ne 7) { throw "Runtime probe did not propagate a failing exit code" }
-            Set-Content -LiteralPath $probe -Value 'const assert=require("assert");assert.equal(process.versions.electron,"42.11.12");assert.equal(process.versions.modules,"146");console.log(process.versions)' -Encoding utf8
+            Set-Content -LiteralPath $probe -Value 'const assert=require("assert"),r=require(process.env.LOCALAPPDATA+"\\Programs\\Kural\\resources\\app\\package.json").kuralRuntime;assert.equal(process.versions.electron,r.version);assert.equal(process.versions.modules,r.abi);console.log(process.versions)' -Encoding utf8
             $p = Start-Process -FilePath "$dir\Kural.exe" -ArgumentList ('"' + $probe + '"') -Wait -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\electron-runtime.log" -RedirectStandardError "$env:RUNNER_TEMP\electron-runtime.err"
             Get-Content "$env:RUNNER_TEMP\electron-runtime.log"
             Get-Content "$env:RUNNER_TEMP\electron-runtime.err"
