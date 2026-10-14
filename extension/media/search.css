@@ -21,10 +21,10 @@ a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: 
 .pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 /* ---------- inputs (both tabs) ---------- */
-.box { display: flex; align-items: flex-start; gap: 2px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 4px; padding: 1px 2px 1px 6px; min-width: 0; }
+.box { display: flex; align-items: center; gap: 2px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 4px; padding: 1px 2px 1px 6px; min-width: 0; }
 .box:focus-within { border-color: var(--vscode-focusBorder); }
-.q { flex: 1; min-width: 0; overflow: hidden; border: 0; outline: 0; background: transparent; color: var(--vscode-input-foreground); font: inherit; resize: none; line-height: 1.45; padding: 2px 0; min-height: 20px; }
-.q::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted)); }
+.q { flex: 1; min-width: 0; overflow: hidden; border: 0; outline: 0; background: transparent; color: var(--vscode-input-foreground); font: inherit; resize: none; line-height: calc(20px * var(--fs, 1)); padding: 3px 0; min-height: calc(26px * var(--fs, 1)); display: block; }   /* one line = the box's height, so the text sits in the middle */
+.q::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted)); font-size: .92em; }
 .opts { display: flex; gap: 1px; align-items: center; align-self: center; }
 .opt { background: none; border: 1px solid transparent; border-radius: 3px; padding: 1px; width: calc(22px * var(--fs, 1)); height: calc(20px * var(--fs, 1)); display: grid; place-items: center; color: var(--vscode-foreground); opacity: .85; }
 .opt:hover { background: var(--vscode-inputOption-hoverBackground, var(--hover)); opacity: 1; }

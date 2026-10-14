@@ -66,7 +66,7 @@ body:
     id: log
     attributes:
       label: Kural log (optional)
-      description: View → Output → Kural. Paste the lines from around the time of the bug. Check them for anything private first.
+      description: Command Palette → "Kural: Show Log" (or Kural Settings → the log). Paste the lines from around the time of the bug. Check them for anything private first.
       render: text
   - type: checkboxes
     id: checks

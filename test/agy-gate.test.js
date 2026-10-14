@@ -231,24 +231,14 @@ const sample = { hookEventName: "PreToolUse", conversationId: "c-1", workspacePa
     }
   });
 
-  await check("Auto: an ordinary command runs; a dangerous one still asks, and denied it doesn't run", async () => {
+  await check("Auto: unrestricted: ordinary, dangerous-looking and outside commands run without a card", async () => {
     const s = session("auto");
+    const n = cards.length;
     assert.match((await s.ask(call("run_command", { CommandLine: "touch auto-ok", Cwd: proj }))).result, /run_command done/);
     assert.ok(exists(path.join(proj, "auto-ok")));
-    const n = cards.length;
-    const p = s.send(call("run_command", { CommandLine: "sudo touch auto-danger", Cwd: proj }));
-    await until(() => cards.length > n);
-    assert.ok(cards[cards.length - 1].risky);
-    assert.ok(!exists(path.join(proj, "auto-danger")));
-    s.answer(false);
-    await p;
-    assert.ok(!exists(path.join(proj, "auto-danger")));
-    // A command started in a folder outside the project asks too.
-    const n2 = cards.length;
-    const p2 = s.send(call("run_command", { CommandLine: "touch moved", Cwd: outside }));
-    await until(() => cards.length > n2);
-    s.answer(false); await p2;
-    assert.ok(!exists(path.join(outside, "moved")));
+    assert.match((await s.ask(call("run_command", { CommandLine: "touch moved", Cwd: outside }))).result, /run_command done/);
+    assert.ok(exists(path.join(outside, "moved")));
+    assert.strictEqual(cards.length, n, "no card in Auto");
     s.done();
   });
 
@@ -279,14 +269,12 @@ const sample = { hookEventName: "PreToolUse", conversationId: "c-1", workspacePa
     s.done();
   });
 
-  await check("an unknown tool asks even in Auto; agy's hooks file asks even in Auto", async () => {
+  await check("Auto: an unknown tool runs; agy's hooks file still asks", async () => {
     const s = session("auto");
     let n = cards.length;
-    let p = s.send(call("teleport", { Where: "moon" }));
-    await until(() => cards.length > n);
-    assert.ok(cards[cards.length - 1].risky);
-    s.answer(false);
-    assert.match((await p).result, /not allowed/);
+    await s.ask(call("teleport", { Where: "moon" }));
+    assert.strictEqual(cards.length, n, "an unknown tool doesn't ask in Auto");
+    let p;
     n = cards.length;
     const hooks = gate.hooksFile(), before = fs.readFileSync(hooks, "utf8");
     p = s.send(call("write_to_file", { TargetFile: hooks }));
