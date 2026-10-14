@@ -196,11 +196,46 @@ function mcpConfig(servers) {
   return out;
 }
 
+// Plan and Ask change nothing, and Agent mode asks before what changes things. Codex has tools that never reach Kural's
+// approval: its ChatGPT apps, its browser and computer use (in every mode), and in Plan and Ask (approval "never") the
+// tools of every connector (MCP server) you added to Codex. So outside Auto those features are off, and in Plan and Ask
+// each of your connectors is too: one -c option that sets enabled = false on each name, which Codex merges into your
+// settings (checked with codex-cli 0.160.1; `-c mcp_servers={}` alone changes nothing, and a name Codex doesn't have makes
+// it refuse its settings, so the names come from `codex mcp list`). Auto is unrestricted: nothing is switched off.
+// (Kural's own device tools are added after this and stay on: Kural asks before each of them itself.)
+const OFF_FEATURES = ["apps", "browser_use", "browser_use_external", "computer_use", "in_app_browser"];
+const tomlKey = (k) => /^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(String(k));
+function lockdownArgs(mode, connectors = []) {
+  if (mode === "auto") return [];
+  const out = OFF_FEATURES.flatMap((f) => ["-c", `features.${f}=false`]);
+  const names = (connectors || []).filter((n) => typeof n === "string" && n && n !== "device");
+  if ((mode === "plan" || mode === "ask") && names.length)
+    out.push("-c", `mcp_servers={ ${names.map((n) => `${tomlKey(n)} = { enabled = false }`).join(", ")} }`);
+  return out;
+}
+
+// The names of the connectors Codex has (its settings, a profile's own CODEX_HOME, a project's), exactly as Codex knows
+// them. null if it can't tell (then only the features are switched off).
+function connectorNames(bin, { env, cwd } = {}) {
+  return new Promise((resolve) => {
+    if (!bin) { resolve([]); return; }
+    const c = command(bin, ["mcp", "list", "--json"]);
+    execFile(c.file, c.args, { cwd: cwd || os.tmpdir(), env: { ...process.env, ...profileEnv(), ...(env || {}), ...c.env }, timeout: 15000,
+      windowsHide: true, maxBuffer: 1 << 20, encoding: "utf8" }, (err, stdout) => {
+      let list = null;
+      try { list = JSON.parse(String(stdout || "").trim() || "[]"); } catch { /* not JSON */ }
+      if (!Array.isArray(list)) { log(`codex: couldn't list its connectors (${err ? err.message : "unreadable answer"})`); resolve(null); return; }
+      resolve(list.map((s) => s && s.name).filter((n) => typeof n === "string" && n));
+    });
+  });
+}
+
 class AppServer {
   // handlers: onNotification(method, params), onRequest(method, params) -> Promise<result> (throw = an error answer),
   //   onExit(code, stderr)
   // mcpServers: { name: { command, args, env } }: MCP servers for this Codex only (Kural's device tools), as -c options.
-  constructor(bin, { cwd, env, name, mcpServers } = {}, handlers = {}) {
+  // config: more -c options, before those (lockdownArgs).
+  constructor(bin, { cwd, env, name, mcpServers, config } = {}, handlers = {}) {
     this.h = handlers;
     this.name = name || "codex";
     this.ids = 0;
@@ -210,7 +245,7 @@ class AppServer {
     this.exited = false;
     // Live web search in every mode (Codex's default is its cached index, so answers about new versions were stale).
     // Only Codex's own search tool: commands stay offline in the sandbox (networkAccess: false).
-    const c = command(bin, [...mcpConfig(mcpServers), "-c", 'web_search="live"', "app-server"]);
+    const c = command(bin, [...(config || []), ...mcpConfig(mcpServers), "-c", 'web_search="live"', "app-server"]);
     // Its own process group (not on Windows), so stopping it also stops the commands it started.
     this.proc = spawn(c.file, c.args, { cwd: cwd || privateTmp("codex"), env: { ...process.env, ...profileEnv(), ...(env || {}), ...c.env },
       stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
@@ -388,7 +423,8 @@ async function codexModels(bin) {
 
 // ---------- one question, one answer ----------
 
-// A thread that can't change anything and doesn't ask: no file changes, no commands outside the read-only sandbox.
+// A thread that can't change anything and doesn't ask: no file changes, no commands outside the read-only sandbox, and
+// (like Plan and Ask) none of your connectors or Codex's apps, browser and computer use (lockdownArgs).
 // Resolves { text, ms } or { error, login }.
 async function oneAnswer(bin, { model, system, prompt, cwd, signal, effort = "low", timeout = 180000 }) {
   const t0 = Date.now();
@@ -396,8 +432,9 @@ async function oneAnswer(bin, { model, system, prompt, cwd, signal, effort = "lo
   let finish;
   const done = new Promise((resolve) => { finish = resolve; });
   const state = { threadId: null, turnId: null, text: "", error: null };
+  const config = lockdownArgs("ask", await connectorNames(bin, { cwd }) || []);
   try {
-    s = new AppServer(bin, { cwd, name: "codex ask" }, {
+    s = new AppServer(bin, { cwd, name: "codex ask", config }, {
       onNotification: (method, p) => {
         if (p.threadId && p.threadId !== state.threadId) return;
         if (method === "item/completed" && p.item && p.item.type === "agentMessage") state.text = p.item.text || state.text;
@@ -571,14 +608,21 @@ class CodexAgent {
 
   start() {
     if (!this.opts.bin || !fs.existsSync(this.opts.bin)) return false;
-    try {
-      this.server = new AppServer(this.opts.bin, { cwd: this.cwd, env: this.opts.env, name: this.opts.name, mcpServers: this.opts.mcpServers }, {
-        onNotification: (m, p) => this.onNotification(m, p),
-        onRequest: (m, p) => this.onRequest(m, p),
-        onExit: (code, stderr) => this.onServerExit(code, stderr),
-      });
-    } catch (e) { log(`${this.opts.name}: could not start codex: ${e.message}`); return false; }
-    this.boot();
+    // Outside Auto, Codex's tools that can't ask Kural are switched off (lockdownArgs). Plan and Ask need the names of your
+    // connectors for that first (`codex mcp list`, well under a second); messages sent meanwhile wait (ready is false).
+    const plain = this.opts.mode === "plan" || this.opts.mode === "ask";
+    (plain ? connectorNames(this.opts.bin, { env: this.opts.env, cwd: this.cwd }) : Promise.resolve([])).then((names) => {
+      if (this.exited) return;   // (stopped while it looked)
+      try {
+        this.server = new AppServer(this.opts.bin, { cwd: this.cwd, env: this.opts.env, name: this.opts.name, mcpServers: this.opts.mcpServers,
+          config: lockdownArgs(this.opts.mode, names || []) }, {
+          onNotification: (m, p) => this.onNotification(m, p),
+          onRequest: (m, p) => this.onRequest(m, p),
+          onExit: (code, stderr) => this.onServerExit(code, stderr),
+        });
+      } catch (e) { log(`${this.opts.name}: could not start codex: ${e.message}`); this.onServerExit(1, e.message); return; }
+      this.boot();
+    });
     return true;
   }
 
@@ -946,4 +990,4 @@ function commandTool(item, cwd) {
 }
 
 module.exports = { CodexAgent, findCodex, codexVersion, codexAuth, codexLogout, codexRateLimits, codexModels, codexTest, askCodex,
-  loginCommand, codexLogin, setLog, NOT_LOGGED_IN, _test: { AppServer, unwrapShell, editInput, friendlyError, windowLabel, rateReport, resolveBin, command, limits } };
+  loginCommand, codexLogin, setLog, NOT_LOGGED_IN, _test: { AppServer, unwrapShell, editInput, friendlyError, windowLabel, rateReport, resolveBin, command, limits, lockdownArgs, connectorNames } };

@@ -219,9 +219,14 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   out, but check the file before sharing it; you pick what to import. Import never takes settings that pick a program,
   start a terminal, set a proxy or turn on Auto, nor shortcuts that type into the terminal; extensions install only
   after you agree to the list).
-  "Allow all" in a chat counts only for that mode, model and conversation: changing the mode or model (also when Auto
-  picks another one) or a handoff ends it, and Kural asks again. "Build it" switches to Agent (Auto only if the chat
-  is already in Auto). Kural's browser opens only http/https addresses.
+  "Allow all" on a card covers only that card's kind for the rest of the chat: commands, web searches and pages, or one
+  connector's tools (never a file outside the project: those are yes or no each time). It counts only for that mode,
+  model and conversation: changing the mode or model (also when Auto picks another one) or a handoff ends it, and Kural
+  asks again. In Ask and Plan, a connector's tools that change things (creating a pull request, a Notion page, a Jira
+  issue) are refused, also after "Allow all"; its lookups ask first. ChatGPT (Codex) runs Ask and Plan without your
+  connectors and its apps, and outside Auto without its browser and computer use (Kural can't ask before those).
+  "Build it" switches to Agent (Auto only if the chat is already in Auto). Kural's browser opens only http/https
+  addresses; without the editor's Integrated Browser a page opens in your web browser.
   Kural's log: "Kural: Show Log" (Command Palette) or Kural Settings → the log (an editor tab; Kural hides VS Code's
   Output tab; the Kural panel's title bar has no log button).
 - Crash reports: when Kural closed unexpectedly, the next start saves a report (macOS's crash reports, VS Code's logs, which

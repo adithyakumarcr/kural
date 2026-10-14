@@ -67,7 +67,7 @@ const deviceOk = (m) => ["claude", "codex"].includes(engineOf(m));
 const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
 
-const { decide, gatedMode, grantKey, allowAllNow, autoWarning, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
+const { decide, gatedMode, grantKey, allowAllNow, allowKind, allowLabel, allowedKinds, autoWarning, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
 // Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
 const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
@@ -90,7 +90,7 @@ const storeKey = () => scope.key(STORE_BASE, "data");
 const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / team, for new tabs
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
-const shortId = () => Math.random().toString(36).slice(2, 9);
+const shortId = () => require("crypto").randomBytes(8).toString("hex").slice(0, 9);   // (chat and card ids: never guessable)
 const valid = (list, v) => list.some((x) => x.id === v);
 // The kural.chat.mode setting for new chats. Auto (commands run without asking) only from YOUR settings: a project's
 // .vscode/settings.json can't turn it on for you (APP-8).
@@ -2333,8 +2333,10 @@ class ChatView {
     const pid = shortId();
     const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
     const detail = permDetail(req.tool_name, input) + (risky ? `\n\nAsks first: ${risky.why}` : "");
+    // ("Allow all" on this card covers only its kind of call: allowKind. None for a file or a tool Kural can't classify.)
     const block = { k: "perm", pid, tool: req.tool_name, detail, risky: !!risky || undefined, state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
-      where: input.device || undefined };   // (a linked device's name, for its commands and writes)
+      where: input.device || undefined,   // (a linked device's name, for its commands and writes)
+      allowLabel: input.device || req.unclassified ? undefined : allowLabel(req.tool_name) || undefined };
     if (turn) turn.reply.blocks.push(block);
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
@@ -2353,7 +2355,7 @@ class ChatView {
 
   // "Allow all" ends (a mode or model change, a handoff). A device's own "Allow all" (allowAllDevice) ends with its link.
   revokeAllowAll(tab) {
-    if (!tab.allowAll && !tab.allowAllFor) return;
+    if (!allowedKinds(tab.allowAll).length && !tab.allowAllFor) return;
     tab.allowAll = false; delete tab.allowAllFor;
     log(`chat ${tab.id}: "Allow all" ended (mode, model or conversation changed)`);
   }
@@ -2707,9 +2709,14 @@ class ChatView {
         const r = this.runtime.get(tab.id);
         if (m.always) {
           const b = r && r.turn && r.turn.reply.blocks.find((x) => x.k === "perm" && x.pid === m.pid);
+          const kind = b && allowKind(b.tool);
           if (b && b.where) tab.allowAllDevice = tab.device;   // only this device, only while it's linked
-          // (For this mode, model and conversation only: allowAllNow() in permission-policy.js.)
-          else { tab.allowAll = true; tab.allowAllFor = grantKey(tab); this.post({ type: "allowAll", tabId: tab.id }); }
+          // Only the card's kind (commands, web, one connector), for this mode, model and conversation (allowAllNow).
+          else if (b && b.allowLabel && kind) {
+            const now = allowAllNow(tab);
+            tab.allowAll = [...new Set([...now, kind])]; tab.allowAllFor = grantKey(tab);
+            this.post({ type: "allowAll", tabId: tab.id });
+          }
         }
         const res = r && r.perms.get(m.pid);
         if (res) { r.perms.delete(m.pid); res(!!m.allow); }
@@ -2790,16 +2797,6 @@ class ChatView {
   lastAsk(tab) {
     const u = [...tab.messages].reverse().find((x) => x.role === "user");
     return u ? ChatView.textOf(u.segments || []) : "";
-  }
-
-  // An element picked in the Kural Browser (lib/browser): a pill in the message you're writing, in the chat you used
-  // last; its details go to the model with the message (elementNote).
-  async addElement(info) {
-    const ctx = { kind: "element", path: info.url, label: `<${info.short}>`, element: info };
-    await this.reveal();
-    const pane = this.cur();
-    if (pane) this.postTo(pane, { type: "insertPill", ctx });
-    vscode.window.setStatusBarMessage(`Kural: added ${info.short} to the chat`, 3000);
   }
 
   // What VS Code's Integrated Browser sends ("Add Element to Chat", "Comment on Elements", screenshots, console logs;

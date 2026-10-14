@@ -1,7 +1,8 @@
 // Build supply chain and the Windows installer's folder checks (SUP-1, SUP-2, REL-4).
 // SUP-1: resedit (used by build-win.sh in the job that can hold the signing certificate) is an exact devDependency
 //        with lockfile checksums, installed with `npm ci --ignore-scripts`.
-// SUP-2: install.sh's Pillow comes from a hash-pinned requirements file, wheels only.
+// SUP-2: the build installs no Python packages: on a Mac the icon comes from macOS's sips and iconutil (an older Pillow
+//        pinned for macOS's Python 3.9 had published advisories); elsewhere the system's python3-pil.
 // REL-4: installer/kural.nsi deletes its folder (RMDir /r) only after KuralDirCheck; compiled with makensis when present.
 const assert = require("assert");
 const fs = require("fs");
@@ -33,17 +34,13 @@ check("SUP-1: build-win.sh installs from the lockfile without scripts (no unpinn
   assert.match(sh, /^npm ci --ignore-scripts\b/m);
   assert.ok(!/scripts\/node_modules/.test(sh), "the old never-true guard is gone");
 });
-check("SUP-2: install.sh's Pillow is hash-pinned, wheels only", () => {
+check("SUP-2: the build installs no Python packages; a Mac makes the icon with sips and iconutil", () => {
   const sh = read("install.sh");
-  assert.ok(!/pip install[^\n]*\bpillow\b(?!-)/i.test(sh.replace(/requirements-icons/g, "")), "no bare 'pip install pillow'");
-  assert.match(sh, /pip install -q --require-hashes --only-binary=:all: -r scripts\/requirements-icons\.txt/);
-  const req = read("scripts/requirements-icons.txt").replace(/\\\n/g, " ");
-  const lines = req.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
-  assert.ok(lines.length >= 1);
-  for (const l of lines) {
-    assert.match(l, /^pillow==\d+\.\d+\.\d+ ; python_version /, l);
-    assert.match(l, /--hash=sha256:[0-9a-f]{64}/, l);
-  }
+  assert.ok(!/pip install/i.test(sh), "install.sh installs nothing with pip");
+  assert.ok(!fs.existsSync(path.join(root, "scripts", "requirements-icons.txt")), "no pinned Pillow left");
+  const icons = read("scripts/make-icons.py");
+  assert.match(icons, /"sips", "-z"/); assert.match(icons, /"iconutil", "-c", "icns"/);
+  assert.match(icons, /except ImportError/);
 });
 check("REL-4: every RMDir /r in the installer comes after the folder check", () => {
   const nsi = read("installer/kural.nsi").split("\n").filter((l) => !/^\s*;/.test(l)).join("\n");   // (not comments)

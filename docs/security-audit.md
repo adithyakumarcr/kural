@@ -38,6 +38,23 @@ time or size limits, the Ubuntu update installing a file that could be swapped, 
 
 No secrets were found in the repository or its history.
 
+## Release assessment, 14 October 2026
+
+Found in 1.1.0-rc.1 and fixed for 1.1.0-rc.2:
+
+- In Ask and Plan, a connector's tools (creating a pull request, a Notion page, a Jira issue) were asked about instead
+  of refused. Now they're refused; a connector's lookups still ask.
+- "Allow all" on any card (a web search, say) covered everything that asks afterwards, also writing outside the project
+  and files that run code later. Now it covers only the card's kind: commands, web, or one connector.
+- ChatGPT (Codex) ran its connectors without asking in Ask and Plan, and its ChatGPT apps, browser and computer use never
+  asked Kural. Kural now starts Codex without them where Kural can't ask (Auto keeps everything).
+- Terminal Tab turned an AI-written commit message into a double-quoted command line, where `$(…)` would run.
+- Smaller items from CodeQL: text from ollama.com decoded twice; chat and card ids made with `Math.random`.
+- Files Kural wrote with an older version kept looser permissions; they're made private once per version.
+- The old fallback browser (a local proxy that removed pages' security headers) is gone.
+- The Mac build no longer installs an old Pillow (published advisories): macOS's own tools make the icon.
+- The author's work email was removed from the git history (commit metadata only; no file ever contained it).
+
 ## Accepted risks
 
 - **Auto mode is unrestricted** by choice: it asks about nothing, and the AI lists what it did. The dangerous-command

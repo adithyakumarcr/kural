@@ -295,8 +295,8 @@ function activate(context) {
   // You changed a name (typed over it, or a Tab suggestion changed it): offer to change it where else it's used
   // (lib/tab/rename.js notices, rename-offer.js offers: Review in Search & Ask, or Change all).
   new RenameOffers(context, searchView).register();
-  // Kural Browser: your app on localhost beside the code; "Select element" adds what you click to the chat.
-  const browser = new Browser(context, (info) => chat.addElement(info));
+  // Kural Browser (VS Code's Integrated Browser): your app beside the code; what you pick there goes to the chat.
+  const browser = new Browser(context);
   browser.onItems = (items) => chat.addBrowserItems(items);
   browser.register();
   triggerOnCursor(context);
@@ -381,6 +381,14 @@ function activate(context) {
       } catch (e) { log(`side bar: ${e.message}`); }
     }, 900);
   }
+
+  // Files an older version wrote with looser modes (a checkpoint, a crash report): private to you, once per version.
+  setTimeout(() => {
+    try {
+      require("./lib/private-data").tightenOnce(context.globalStorageUri.fsPath, version, {
+        done: () => context.globalState.get("kural.privateData"), mark: (v) => context.globalState.update("kural.privateData", v), log });
+    } catch (e) { log(`private data: ${e.message}`); }
+  }, 5000);
 
   // Set up (or once it is): warm up in the background so the first suggestion is quick.
   // (Claude's sessions only run once Claude is set up; with only your own model, Tab Completion uses Ollama.)

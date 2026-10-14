@@ -142,14 +142,8 @@ mac() {
   else
     [ "$(uname -m)" = arm64 ] || die "this Mac build is for Apple Silicon (M1–M5)."
     command -v python3 >/dev/null || die "python3 is missing. Install Apple's command-line tools: xcode-select --install"
-    # The build draws the app icon with Pillow. If it's missing, put it in a private folder (build/venv)
-    # instead of changing your system's Python.
-    if ! python3 -c "import PIL" 2>/dev/null; then
-      [ -x build/venv/bin/python3 ] || { echo "Setting up Pillow in build/venv (once) ..."; python3 -m venv build/venv; }
-      # (An exact Pillow, checked against the hashes in scripts/requirements-icons.txt; ready-made wheels only.)
-      build/venv/bin/python3 -c "import PIL" 2>/dev/null || build/venv/bin/python3 -m pip install -q --require-hashes --only-binary=:all: -r scripts/requirements-icons.txt
-      export PATH="$PWD/build/venv/bin:$PATH"
-    fi
+    # (The app icon: macOS's own sips and iconutil make it, or Pillow if your python3 has it: scripts/make-icons.py.
+    # Nothing is installed for the build.)
     ./build-mac.sh
     # (The new app is copied next to the old one and checked first, the old one is only renamed, never deleted before the
     # new one is in place and checked: lib/mac-swap.sh, the same code the in-app updater uses.)

@@ -850,13 +850,15 @@
       : b.tool === "Read" ? "Read this file?" : b.tool === "Grep" || b.tool === "Glob" ? "Look through this folder?" : `Use ${prettyTool(b.tool)}?`;
     const card = el("div", { class: `perm ${b.state}` }, el("div", { class: "perm-q" }, b.agent ? el("span", { class: "perm-agent" }, typeof b.agent === "number" ? `Agent ${b.agent}` : b.agent) : null, what), el("pre", {}, b.detail));
     if (b.state === "pending") {
-      // A file outside the project (read or change): yes or no for this one; "allow all" is only for commands.
-      const fileCard = /^(Read|Grep|Glob|Write|Edit|NotebookEdit)$/.test(b.tool);
-      const always = fileCard ? null : el("input", { type: "checkbox", id: `al-${b.pid}` });
+      // A file outside the project (read or change), or a tool Kural can't classify: yes or no for this one. Otherwise
+      // "Allow all" covers this card's kind only (commands, web, one connector, a device): Kural gives its words.
+      const label = b.where ? `Allow everything on ${b.where} in this chat` : b.allowLabel;
+      const always = label ? el("input", { type: "checkbox", id: `al-${b.pid}` }) : null;
+      const runs = b.tool === "Bash" || b.tool === "DeviceCommand";
       card.append(el("div", { class: "perm-row" },
-        el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: !!(always && always.checked) }) }, fileCard ? "Allow" : "Run"),
+        el("button", { class: "cb primary solid", onclick: () => post({ type: "permission", pid: b.pid, allow: true, always: !!(always && always.checked) }) }, runs ? "Run" : "Allow"),
         el("button", { class: "cb", onclick: () => post({ type: "permission", pid: b.pid, allow: false }) }, "Skip"),
-        always ? el("label", { class: "always", for: `al-${b.pid}` }, always, b.where ? ` Allow everything on ${b.where} in this chat` : " Allow all commands in this chat") : null));
+        always ? el("label", { class: "always", for: `al-${b.pid}` }, always, ` ${label}`) : null));
     } else card.append(el("div", { class: "perm-state" }, b.state === "allowed" ? [icon("check"), " Allowed"] : [icon("close"), " Skipped"]));
     return card;
   }

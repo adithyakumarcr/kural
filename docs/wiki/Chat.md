@@ -18,7 +18,7 @@ are listed: a note the AI writes in the temp folder, or Claude Code's own plans 
 
 **The web, in every mode.** Claude, Google Gemini and ChatGPT (Codex) can search the web and read web pages in all four
 modes, Plan and Ask too (a plan often needs current docs or versions). Claude and Gemini ask first (Allow, or Allow all
-for the rest of the chat), except in Auto: a search changes nothing on your computer, but a web address the AI opens can
+web searches and pages for the rest of the chat), except in Auto: a search changes nothing on your computer, but a web address the AI opens can
 carry your project's data away (for example after it read a page with hidden instructions). Codex uses live search (not
 its cached copy of the web) without asking; the commands it runs still have no internet. A model on this computer has no
 web tools.
@@ -41,8 +41,13 @@ answer with a **What I did** list of the commands it ran and the files it change
 mode (and after "Allow all") dangerous commands still ask: `sudo`, deleting outside the project
 or the whole project, `curl … | sh`, a forced push to main, `git reset --hard`, `git clean -f`, writing into `/etc`,
 `/usr` or `~/.ssh`, formatting a disk, shutting down. It's a best-effort check of the command's text, not a sandbox.
-Gemini (Antigravity) gets this check through Kural's approval gate (a hook in Antigravity's own settings). "Allow all" lasts only for the mode, model and conversation you gave it in: a new mode, another model (also one Auto
-picks) or a handoff ends it. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
+Gemini (Antigravity) gets this check through Kural's approval gate (a hook in Antigravity's own settings). "Allow all" covers only the kind of card you gave it on: commands, web searches and pages,
+or one connector's tools. A file outside the project is never covered: it's yes or no each time. It lasts only for the
+mode, model and conversation you gave it in: a new mode, another model (also one Auto picks) or a handoff ends it.
+In Ask and Plan, connectors can only look things up (and ask first); a connector tool that changes something (a pull
+request, a Notion page, a Jira issue) is refused there, also after "Allow all". ChatGPT (Codex) starts Ask and Plan
+without your connectors and its ChatGPT apps, and every mode but Auto without its browser and computer use, because
+Codex doesn't ask Kural before those. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.
 
 ## The model menu (bottom of the chat)
