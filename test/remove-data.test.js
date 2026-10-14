@@ -81,7 +81,10 @@ fs.mkdirSync(home);
     for (let i = 0; i < 50 && targets.some((t) => fs.existsSync(t)); i++) await new Promise((r) => setTimeout(r, 200));
     for (const t of targets) assert.ok(!fs.existsSync(t), `${t} deleted`);
     assert.strictEqual(fs.readFileSync(keep, "utf8"), "mine", "a file beside them stays");
-    const text = fs.readFileSync(logFile, "utf8");
+    // (The script writes "done" a moment after the last folder is gone: wait for it, don't race it.)
+    const logText = () => { try { return fs.readFileSync(logFile, "utf8"); } catch { return ""; } };
+    for (let i = 0; i < 50 && !/done/.test(logText()); i++) await new Promise((r) => setTimeout(r, 100));
+    const text = logText();
     assert.match(text, /deleted .*Kural Data's\/Kural/); assert.match(text, /done/);
   });
 
