@@ -331,9 +331,8 @@ jobs:
     needs: [test-mac-win, linux-check, macos, windows-check]
     runs-on: ubuntu-24.04
     # The GitHub environment "release" (deployment tags v* only): a workflow changed on a branch can't read its secrets.
-    # Releases up to 1.1.0 are still signed with key #0, the repository secret KURAL_RELEASE_PRIVATE_KEY (rc.1 and older
-    # trust only that key). After 1.1.0 this job signs with KURAL_RELEASE_PRIVATE_KEY_NEW (key #1, only in this
-    # environment) and the repository secret is deleted: docs/release-signing.md.
+    # Releases are signed with key #1, KURAL_RELEASE_PRIVATE_KEY_NEW, which exists only in this environment (key #0, a
+    # repository secret, signed releases up to 1.1.0 and was deleted after it: docs/release-signing.md).
     environment: release
     permissions:
       contents: write       # publish the release
@@ -354,13 +353,14 @@ jobs:
           fi
       - name: Sign the checksum list
         env:
-          KURAL_RELEASE_PRIVATE_KEY: ${{ secrets.KURAL_RELEASE_PRIVATE_KEY }}
+          KURAL_RELEASE_PRIVATE_KEY: ${{ secrets.KURAL_RELEASE_PRIVATE_KEY_NEW }}
         run: |
           # The updater installs nothing that isn't in this list (see docs/release-signing.md)
           node scripts/sbom-release.js dist   # refuses missing/source-only platform inventories
           (cd dist && sha256sum Kural-* kural_* kural-*.cdx.json > SHA256SUMS)
           node scripts/release-key.js sign dist/SHA256SUMS
-          node scripts/release-key.js verify dist/SHA256SUMS dist/SHA256SUMS.sig
+          node scripts/release-key.js verify dist/SHA256SUMS dist/SHA256SUMS.sig | tee verified.txt
+          grep -qx 'OK (key #1)' verified.txt || { echo "::error::The list must be signed with key #1"; exit 1; }
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with: { subject-path: "dist/*" }
       - name: Publish the release
