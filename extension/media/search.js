@@ -441,7 +441,7 @@
   askPane.append(el("div", { class: "top" }, el("div", { class: "box" }, input, goBtn)), status, askResults);
 
   function renderTop() {
-    input.placeholder = "Ask where something is…  e.g. where are the user's settings saved?";
+    input.placeholder = "Ask & Search";
     goBtn.replaceChildren(icon(S.running ? "debug-stop" : "arrow-up"));
     goBtn.title = S.running ? "Stop" : "Ask (Enter)";
   }
@@ -475,7 +475,7 @@
     const r = S.result;
     if (!r || r.error) {
       if (!r && !S.running) askResults.append(el("div", { class: "hint" },
-        "Ask in your own words. Kural searches your project and lists the exact places.", el("br"), el("br"), el("span", { class: "dim" }, "Example: where is the user logged in?")));
+        "Ask in your own words. Kural searches your project and lists the exact places."));
       return;
     }
     const byFile = new Map();

@@ -114,7 +114,7 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
       after.forEach((s, i) => {
         if (typeof s !== "string") return assert.strictEqual(s, before[i]);
         assert.ok(!BARE.test(s), s.slice(0, 100));
-        if (s !== before[i]) { changed++; assert.ok(BARE.test(before[i]) || /Submitting-Bugs-and-Suggestions/.test(before[i]), before[i].slice(0, 100)); }
+        if (s !== before[i]) { changed++; assert.ok(BARE.test(before[i]) || /Submitting-Bugs-and-Suggestions/.test(before[i]) || (before[i] === "Editing evolved" && /^Editing evolved \u00b7 (v\d|Unreleased version)/.test(s)), before[i].slice(0, 100)); }
       });
       console.log(`      (${changed} messages changed)`);
     });

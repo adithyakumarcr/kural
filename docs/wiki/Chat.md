@@ -36,11 +36,12 @@ into planting one, so writing one gets a card ("This file can make your computer
 isn't writable without asking either.
 
 You can change the mode while an answer is running. Agent → Auto: the commands waiting for your OK run at once, and
-later ones don't ask. Dangerous commands still ask in Auto (and after "Allow all"): `sudo`, deleting outside the project
+later ones don't ask. Auto is unrestricted: nothing asks, also not the dangerous commands below, and the AI ends each
+answer with a **What I did** list of the commands it ran and the files it changed, so you can see what happened. In Agent
+mode (and after "Allow all") dangerous commands still ask: `sudo`, deleting outside the project
 or the whole project, `curl … | sh`, a forced push to main, `git reset --hard`, `git clean -f`, writing into `/etc`,
 `/usr` or `~/.ssh`, formatting a disk, shutting down. It's a best-effort check of the command's text, not a sandbox.
-Gemini (Antigravity) gets this check through Kural's approval gate (a hook in Antigravity's own settings; not yet
-confirmed with the real program). "Allow all" lasts only for the mode, model and conversation you gave it in: a new mode, another model (also one Auto
+Gemini (Antigravity) gets this check through Kural's approval gate (a hook in Antigravity's own settings). "Allow all" lasts only for the mode, model and conversation you gave it in: a new mode, another model (also one Auto
 picks) or a handoff ends it. Auto → Agent: Kural asks before the next command. Switching to Plan or Ask (or back) applies from
 your next message, because which tools the model has is fixed when it starts.
 
@@ -233,8 +234,7 @@ With a Claude model, the chat uses your whole Claude Code setup: MCP servers, co
 2. **Connectors → Add connector.** Search, or pick one from Popular.
 3. **Add.** Fill in a token or a folder only if it asks. On a Mac and Linux Kural keeps the token in a private file and the
    connector reads it when it starts, so other programs on your computer never see it. A result from the public MCP directory (not one of the Popular ones) first shows the exact
-   command or address it will run, since nobody checked it: add it only if you trust it. Searching the directory is
-   **experimental**: tell us if a result doesn't work.
+   command or address it will run, since nobody checked it: add it only if you trust it.
 4. **Sign in**, if the connector needs your account. A terminal opens: type `/mcp`, pick the connector, then Authenticate.
 
 Connectors are added for all your projects, and your chats continue. **Add one by hand** at the bottom of the list takes a
