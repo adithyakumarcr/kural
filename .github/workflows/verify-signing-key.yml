@@ -1,5 +1,8 @@
-# Manual check (Actions → verify-signing-key → Run workflow): does the secret KURAL_RELEASE_PRIVATE_KEY really sign
-# for the public key inside Kural (extension/lib/release-keys.js)? Signs a sample file and verifies it. Never prints the key.
+# Manual check (Actions → verify-signing-key → Run workflow): do the signing secrets really sign for the public keys inside
+# Kural (extension/lib/release-keys.js)? Signs a sample with each key and verifies it. Never prints a key.
+# Key #1's private key lives only in the GitHub environment "release", which only v* tags may use: run it with
+# "Use workflow from" set to a tag (from the command line: gh workflow run verify-signing-key.yml --ref v1.1.0-rc.2).
+# Key #0 is the repository secret that signs releases up to 1.1.0; after the switch it's deleted and this skips it.
 name: verify-signing-key
 on: workflow_dispatch
 permissions:
@@ -7,15 +10,27 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
+    environment: release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 22 }
-      - name: Sign a sample and verify it with the public key in the app
+      - name: "Key #0 (repository secret: releases up to 1.1.0)"
         env:
           KURAL_RELEASE_PRIVATE_KEY: ${{ secrets.KURAL_RELEASE_PRIVATE_KEY }}
         run: |
-          echo "sample $(date -u +%s)" > sample.txt
-          node scripts/release-key.js sign sample.txt
-          node scripts/release-key.js verify sample.txt sample.txt.sig
-          echo "The secret signs for the key in release-keys.js."
+          if [ -z "$KURAL_RELEASE_PRIVATE_KEY" ]; then echo "Key #0's secret isn't there (deleted after the switch to key #1)."; exit 0; fi
+          echo "sample $(date -u +%s)" > sample0.txt
+          node scripts/release-key.js sign sample0.txt
+          node scripts/release-key.js verify sample0.txt sample0.txt.sig | tee out0.txt
+          grep -qx 'OK (key #0)' out0.txt || { echo "::error::The repository secret doesn't sign for key #0"; exit 1; }
+      - name: "Key #1 (environment \"release\": releases after 1.1.0)"
+        env:
+          KURAL_RELEASE_PRIVATE_KEY: ${{ secrets.KURAL_RELEASE_PRIVATE_KEY_NEW }}
+        run: |
+          [ -n "$KURAL_RELEASE_PRIVATE_KEY" ] || { echo "::error::KURAL_RELEASE_PRIVATE_KEY_NEW isn't available here: run this on a v* tag"; exit 1; }
+          echo "sample $(date -u +%s)" > sample1.txt
+          node scripts/release-key.js sign sample1.txt
+          node scripts/release-key.js verify sample1.txt sample1.txt.sig | tee out1.txt
+          grep -qx 'OK (key #1)' out1.txt || { echo "::error::KURAL_RELEASE_PRIVATE_KEY_NEW doesn't sign for key #1 in release-keys.js"; exit 1; }
+          echo "Both keys sign for the public keys inside Kural."

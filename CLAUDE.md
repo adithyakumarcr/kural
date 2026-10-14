@@ -524,9 +524,21 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   if the old checksum matches and the anchor ("Ask @vscode" Help item) is found; otherwise it skips with a
   `::warning::` (shows in the CI summary). Because a menu patch can silently miss, updates are also checked daily and
   reachable from the Chat panel's … menu and Kural Settings.
+- **Remove Kural's data** (`lib/remove-data/`: `core.js` no vscode, `index.js` the command `kural.removeData`, also Kural
+  Settings → More): before uninstalling. At once: `devices.remove` (returns whether the key came off), `core.removeGate`
+  (entry + `.kural-backup` + `~/.kural/agy-gate`), connectors with keys in `connector-keys` (`keyedConnectors`,
+  `connectors.remove`), other profiles' logout (`profiles.hooks.logout`). Then, if picked, `updates.afterQuit` (exported)
+  runs `core.wipeSteps(wipeTargets(...))` after every Kural process ended: the user data folder only when it's named
+  "Kural", `~/.kural`, `~/.kural-shared`, Mac caches/state/prefs/logs + "Kural Safe Storage" + `tccutil reset`; every
+  target inside home, never home. Log: `<tmp>/kural-removed-<date>.log`. Windows uninstaller: `un.Your Kural data` (/o,
+  `/REMOVEDATA`), `KuralClosedCheck` (a running Kural.exe can't be opened for writing; silent: exit 3) before every
+  `RMDir /r`; CI's windows-check runs the real uninstaller three ways. Test: `test/remove-data.test.js` (temp HOME; the
+  Mac keychain/tccutil steps never run in tests). Wiki: `Uninstall.md`.
 - **Updates** (`lib/updates.js`): `autoCheck()` once a day (globalState `kural.update.lastCheck`, setting
   `kural.updates.autoCheck`), quiet unless there's a newer version (non-modal offer, not awaited: an ignored
-  notification must not keep `busy` set, or Check for Updates silently does nothing); newest GitHub release incl. alpha/beta/rc (`compareVersions`), file per platform
+  notification must not keep `busy` set, or Check for Updates silently does nothing); newest GitHub release
+  (`compareVersions`): test versions (alpha/beta/rc, or GitHub's prerelease mark) only when the installed version is one
+  or `kural.updates.testVersions` is on (`offersTests`, "follows the install", decided 14 Oct 2026), file per platform
   (`assetFor`: .deb / mac .zip / win setup.exe). Ubuntu: `pkexec dpkg -i` (PATH set: dpkg needs /usr/sbin), then quit at once.
   Mac/Windows: `afterQuit` writes a script FILE (not `sh -c`: `pgrep -f <app>` would find itself) that waits for Kural's
   main process (`process.ppid`) AND every process running from inside the app (`<app>/Contents/`, the install folder on
@@ -763,6 +775,10 @@ mainly on it. `rebrand.py` copies `LICENSE` into the built-in extension, so ever
 blank issues are off.
 
 ## Release
+**Signing:** `SHA256SUMS.sig` is made by the release job. Up to and including 1.1.0 with key #0 (repository secret
+`KURAL_RELEASE_PRIVATE_KEY`; rc.1 and older trust only it); afterwards with key #1 (`KURAL_RELEASE_PRIVATE_KEY_NEW`, only
+in the environment "release"), then the repository secrets are deleted (docs/release-signing.md). `verify-signing-key`
+(run on a `v*` tag) proves each secret matches its public key in `extension/lib/release-keys.js`.
 **Version numbers:** don't bump the version (1.1.0-alpha.N) unless Adithya says so. If the current version isn't
 tagged yet, new changes go into its "What's new" block; if it's already released, they go under "## Not released yet"
 at the top of `RELEASE_NOTES.md` until he picks the next version.

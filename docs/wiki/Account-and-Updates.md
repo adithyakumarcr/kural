@@ -125,7 +125,9 @@ Kural's release key). A release without that list is not installed automatically
 **Kural: Verify this installation...** (Command Palette) checks the list of the version you run. See
 `docs/release-signing.md` in the repository for checking a download by hand.
 
-Updates include test versions (alpha, beta, rc). Installing:
+Which versions are offered follows what you have: a final version (1.1.0) gets only final versions; a test version
+(alpha, beta, rc) also gets newer test versions, and the final when it's out. The setting `kural.updates.testVersions`
+offers test versions to anyone who wants to try them. Installing:
 
 - **Ubuntu**: asks for your password, installs the new `.deb`, restarts Kural.
 - **Mac**: replaces Kural.app after Kural has fully closed, then starts it again. The new app is first copied next to

@@ -73,14 +73,17 @@ class Devices {
   }
 
   // Remove from Kural, and take Kural's key off the device if it's reachable (so nothing of Kural's stays there).
+  // → { ok } | { ok: false, error }: the device is gone from Kural either way; ok says whether its key came off.
   async remove(id) {
     const dev = this.get(id);
-    if (!dev) return;
+    if (!dev) return { ok: true };
     // (Not when another saved device is the same login: it uses the same key.)
     const same = this.list().some((d) => d.id !== id && d.host === dev.host && d.user === dev.user && Number(d.port) === Number(dev.port));
-    if (dev.auth === "key" && !same) await this.ssh.removeKey(dev).catch(() => {});
+    let r = { ok: true };
+    if (dev.auth === "key" && !same) r = await this.ssh.removeKey(dev).catch((e) => ({ ok: false, error: e.message }));
     this.ssh.close(dev);
     await this.save(this.list().filter((d) => d.id !== id));
+    return r || { ok: true };
   }
 
   // Put Kural's key on the device again (it was reinstalled, the key was removed, or it was saved by an older Kural).

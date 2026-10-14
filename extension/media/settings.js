@@ -491,6 +491,7 @@
         link("settings", "All settings", "Kural's, in VS Code's settings", "allSettings"),
         link("list-unordered", "Kural's log", "every request, with timings", "log"),
         link("bug", "Crash reports", "what went wrong when Kural closed unexpectedly", "crashes"),
+        link("trash", "Remove Kural's data", "before uninstalling: keys, logins, chats and settings", "removeData"),
         link("book", "Kural guide", "what every feature does", "guide"),
         link("lightbulb", "Ask for a feature", "on GitHub", "feature")));
   }

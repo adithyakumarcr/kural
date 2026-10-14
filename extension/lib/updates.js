@@ -33,11 +33,20 @@ function assetFor(assets, platform = process.platform, arch = process.arch) {
   return null;
 }
 
-// The newest published release (drafts skipped), with the version from its tag.
-function newestRelease(releases) {
+// A test version: alpha, beta or rc (1.2.0-beta.2).
+const isTestVersion = (v) => { const p = parseVersion(v); return !!p && p.pre.length > 0; };
+
+// Which releases are offered "follows the install" (decided 14 Oct 2026): a final version (1.1.0) gets only final
+// versions, a test version (1.1.0-rc.2) also newer test versions, so testers keep testing and reach the final; the
+// setting kural.updates.testVersions offers test versions to anyone.
+const offersTests = (installed, optedIn) => !!optedIn || isTestVersion(installed);
+
+// The newest published release (drafts skipped), with the version from its tag. tests: false leaves test versions out.
+function newestRelease(releases, { tests = true } = {}) {
   let best = null;
   for (const r of releases || []) {
     if (r.draft || !parseVersion(r.tag_name)) continue;
+    if (!tests && (r.prerelease || isTestVersion(r.tag_name))) continue;
     if (!best || compareVersions(r.tag_name, best.tag_name) > 0) best = r;
   }
   return best && { ...best, version: best.tag_name.replace(/^v/, "") };
@@ -193,8 +202,9 @@ class Updater {
   async run(quiet = false) {
     const releases = quiet ? await this.releases()
       : await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Checking for Kural updates…" }, () => this.releases());
-    const rel = newestRelease(releases);
-    log(`update: you have ${this.version}; newest on GitHub: ${rel ? rel.version : "none"}`);
+    const tests = offersTests(this.version, vscode.workspace.getConfiguration("kural").get("updates.testVersions"));
+    const rel = newestRelease(releases, { tests });
+    log(`update: you have ${this.version}; newest on GitHub${tests ? "" : " (final versions)"}: ${rel ? rel.version : "none"}`);
     if (!rel || compareVersions(rel.version, this.version) <= 0) {
       if (!quiet) vscode.window.showInformationMessage(require("./version").unreleased(this.context.extensionPath)
         ? `No release is newer than ${this.version}. You're on a version built from the code (${require("./version").versionLabel(this.context.extensionPath, this.version)}).`
@@ -376,4 +386,4 @@ class Updater {
   }
 }
 
-module.exports = { Updater, compareVersions, parseVersion, newestRelease, assetFor, downloadOk, unixScript, winScript, macSteps, _test: { MAC_SWAP } };
+module.exports = { Updater, compareVersions, parseVersion, newestRelease, offersTests, isTestVersion, assetFor, downloadOk, afterQuit, unixScript, winScript, macSteps, _test: { MAC_SWAP } };

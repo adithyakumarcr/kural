@@ -297,14 +297,43 @@ jobs:
             Write-Host "$f : $($s.Status) ($($s.SignerCertificate.Subject))"
             if ($s.Status -ne "Valid") { throw "$f isn't validly signed: $($s.StatusMessage)" }
           }
+      - name: Uninstall (refused while Kural runs; your data stays unless you ask)
+        shell: pwsh
+        run: |
+          $dir = "$env:LOCALAPPDATA\Programs\Kural"; $data = "$env:APPDATA\Kural"
+          # (The uninstaller copies itself to the temp folder and runs from there: wait for the program file to go.)
+          function Wait-Gone($p, $s) { for ($i = 0; $i -lt $s -and (Test-Path -LiteralPath $p); $i++) { Start-Sleep -Seconds 1 }; -not (Test-Path -LiteralPath $p) }
+          New-Item -ItemType Directory -Force -Path "$data\User" | Out-Null
+          Set-Content -LiteralPath "$data\User\settings.json" -Value '{}'
+          # Kural running: nothing is removed.
+          $k = Start-Process -FilePath "$dir\Kural.exe" -ArgumentList "--disable-workspace-trust", "--user-data-dir", "$env:RUNNER_TEMP\ud2", "$env:RUNNER_TEMP" -PassThru
+          Start-Sleep -Seconds 10
+          Start-Process -FilePath "$dir\Uninstall Kural.exe" -ArgumentList '/S'
+          Start-Sleep -Seconds 15
+          if (-not (Test-Path "$dir\Kural.exe")) { throw "the uninstaller removed Kural while it was running" }
+          Get-Process Kural -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 3
+          # Closed: the program goes, your data stays.
+          Start-Process -FilePath "$dir\Uninstall Kural.exe" -ArgumentList '/S'
+          if (-not (Wait-Gone "$dir\Kural.exe" 90)) { throw "the uninstaller didn't remove Kural" }
+          if (-not (Test-Path "$data\User\settings.json")) { throw "the uninstaller deleted your data without being asked" }
+          # Again with /REMOVEDATA (the "Your Kural data" box): the data goes too.
+          $setup = Get-ChildItem dist\Kural-*-setup.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S'
+          Start-Process -FilePath "$dir\Uninstall Kural.exe" -ArgumentList '/S', '/REMOVEDATA'
+          if (-not (Wait-Gone "$dir\Kural.exe" 90)) { throw "the uninstaller didn't remove Kural" }
+          if (-not (Wait-Gone $data 30)) { throw "/REMOVEDATA left $data" }
+          Write-Host "Uninstall checks passed"
 
   # ---------- Release (tags only) ----------
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test-mac-win, linux-check, macos, windows-check]
     runs-on: ubuntu-24.04
-    # The release key (KURAL_RELEASE_PRIVATE_KEY) lives in this GitHub environment, not in the repository's secrets:
-    # Settings -> Environments -> "release", deployment tags v*. A workflow changed on a branch can't read it then.
+    # The GitHub environment "release" (deployment tags v* only): a workflow changed on a branch can't read its secrets.
+    # Releases up to 1.1.0 are still signed with key #0, the repository secret KURAL_RELEASE_PRIVATE_KEY (rc.1 and older
+    # trust only that key). After 1.1.0 this job signs with KURAL_RELEASE_PRIVATE_KEY_NEW (key #1, only in this
+    # environment) and the repository secret is deleted: docs/release-signing.md.
     environment: release
     permissions:
       contents: write       # publish the release

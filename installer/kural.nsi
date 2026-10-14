@@ -8,6 +8,8 @@ RequestExecutionLevel user
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
+!include "Sections.nsh"
 !include "sign.nsh"   ; signed when a code signing certificate is set up (-DSIGN). (makensis reads from this folder)
 
 Name "Kural Code Editor"
@@ -29,6 +31,7 @@ BrandingText "Kural ${VERSION}"
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_COMPONENTS
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
@@ -79,6 +82,30 @@ FunctionEnd
 !insertmacro KURAL_DIR_CHECK ""
 !insertmacro KURAL_DIR_CHECK "un."
 
+; Kural must be closed: a running Kural.exe can't be replaced or deleted (files would be left half old, half new). A
+; running program can't be opened for writing, so that's the test (opening it changes nothing). Retry after closing
+; it, or Cancel. Silent (/S, the in-app updater, which waits for Kural to close first): Cancel, exit code 3.
+!macro KURAL_CLOSED_CHECK UN
+Function ${UN}KuralClosedCheck
+  Push $0
+  ${If} ${FileExists} "$INSTDIR\Kural.exe"
+    again:
+    ClearErrors
+    FileOpen $0 "$INSTDIR\Kural.exe" a
+    ${If} ${Errors}
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Kural is running. Close every Kural window, then click Retry." /SD IDCANCEL IDRETRY again
+      Pop $0
+      SetErrorLevel 3
+      Abort "Kural is running."
+    ${EndIf}
+    FileClose $0
+  ${EndIf}
+  Pop $0
+FunctionEnd
+!macroend
+!insertmacro KURAL_CLOSED_CHECK ""
+!insertmacro KURAL_CLOSED_CHECK "un."
+
 ; The folder page: say why and stay on the page.
 Function DirLeave
   Call KuralDirCheck
@@ -98,6 +125,7 @@ Section "Kural (required)" SecMain
     SetErrorLevel 2
     Abort
   ${EndIf}
+  Call KuralClosedCheck
   RMDir /r "$INSTDIR"
   SetOutPath "$INSTDIR"
   File /r "${SRC}\*.*"
@@ -138,7 +166,9 @@ SectionEnd
   !insertmacro MUI_DESCRIPTION_TEXT ${SecContext} "Right-click a file or folder in Explorer to open it in Kural."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
-Section "Uninstall"
+Section "un.Kural (the program)" UnSecMain
+  SectionIn RO
+  Call un.KuralClosedCheck
   Delete "$SMPROGRAMS\Kural.lnk"
   Delete "$DESKTOP\Kural.lnk"
   DeleteRegKey HKCU "Software\Classes\*\shell\Kural"
@@ -156,3 +186,26 @@ Section "Uninstall"
     MessageBox MB_ICONEXCLAMATION|MB_OK "Kural didn't delete $INSTDIR ($DirWhy). Delete Kural's files there yourself." /SD IDOK
   ${EndIf}
 SectionEnd
+
+; Off unless you tick it (or /REMOVEDATA): your settings, chats, History and checkpoints, Kural's SSH key and connector
+; keys, its extensions. Only Kural's own folders. (Kural: Remove Kural's Data... does more first: the key on your devices,
+; Gemini's gate, connectors. See the wiki's Uninstall page.)
+Section /o "un.Your Kural data (settings, chats, History)" UnSecData
+  RMDir /r "$APPDATA\Kural"
+  RMDir /r "$PROFILE\.kural"
+  RMDir /r "$PROFILE\.kural-shared"
+SectionEnd
+
+Function un.onInit
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/REMOVEDATA" $R1
+  ${IfNot} ${Errors}
+    !insertmacro SelectSection ${UnSecData}
+  ${EndIf}
+FunctionEnd
+
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${UnSecMain} "The Kural program, its shortcuts and its right-click menu items."
+  !insertmacro MUI_DESCRIPTION_TEXT ${UnSecData} "Also delete everything Kural keeps for you: settings, chats, History, checkpoints, its SSH key and connector keys, extensions. Can't be undone."
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_END
