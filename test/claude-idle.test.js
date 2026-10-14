@@ -4,6 +4,7 @@
 // A stand-in claude (stays running, answers each message) instead of the real one.
 const assert = require("assert");
 const fs = require("fs"), os = require("os"), path = require("path"), Module = require("module");
+if (process.platform === "win32") { console.log("claude-idle: skipped on Windows (the stand-in claude is a script, and Windows starts only .exe programs (like checks.test.js))"); process.exit(0); }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-idle-"));
 const bin = path.join(tmp, "claude");

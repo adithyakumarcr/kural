@@ -57,6 +57,9 @@ try {
       assert.ok(record.length <= 512);
       assert.ok(text.includes(tab.handoffFile));
     }
+    // A Windows path is written as it is (JSON's doubled backslashes name no file).
+    const win = journal.handoff(messages, 4096, { path: "C:\\Users\\Zoë\\AppData\\handoffs\\chat\\history.json", format: "kural-visible-history-v1" });
+    assert.ok(win.includes('saved at "C:\\Users\\Zoë\\AppData\\handoffs\\chat\\history.json".'), win.slice(0, 300));
   });
   check("each chat keeps one current record, without exposing another chat or accumulating copies", () => {
     const dir = path.dirname(tab.handoffFile);

@@ -67,9 +67,6 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # Windows: not blocking yet. Many tests still assume Mac/Linux (shell-script stand-ins, file modes, Unix paths);
-    # its failures show in the run until they're fixed, then this line goes.
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       # The files exactly as in git: Windows' git would turn line endings into CRLF, and the checked hashes
       # (vendored licenses, the release notes, rebrand's inputs) would no longer match.

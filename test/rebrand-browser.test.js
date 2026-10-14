@@ -24,7 +24,7 @@ import rebrand
 text = open(${JSON.stringify(src)}, encoding="utf-8").read()
 once = rebrand.route_browser_to_kural(text)
 twice = rebrand.route_browser_to_kural(once)
-open(${JSON.stringify(out)}, "w", encoding="utf-8").write(once)
+open(${JSON.stringify(out)}, "w", encoding="utf-8", newline="").write(once)
 print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 `], { encoding: "utf8" });
   await check("the patch runs without warnings", () => { assert.strictEqual(py.status, 0, py.stderr); assert.ok(!/::warning::/.test(py.stdout), py.stdout); });

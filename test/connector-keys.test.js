@@ -59,8 +59,9 @@ const SECRET = "s3cr'et $HOME `x` \"q\"";
 
   await check("adding writes the file before the program runs; a failure or a removal deletes it", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-keys-fake-")), log = path.join(dir, "log"), fake = path.join(dir, "fake.js");
+    // (On Windows there is no key folder: keys go to the program directly. The stand-in then lists nothing.)
     fs.writeFileSync(fake, `const a = process.argv.slice(2), fs = require("fs");
-      fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ a, files: fs.readdirSync(${JSON.stringify(keyDir)}) }) + "\\n");
+      fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ a, files: fs.existsSync(${JSON.stringify(keyDir)}) ? fs.readdirSync(${JSON.stringify(keyDir)}) : [] }) + "\\n");
       if (a.includes("bad")) process.exit(1);`);
     fs.rmSync(keyDir, { recursive: true, force: true });
     const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
