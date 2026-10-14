@@ -121,8 +121,9 @@ Kural notices and opens the page again. Open it any time: **Kural: Get Started**
 
 ### Updates
 
-Kural checks GitHub for a newer release once a day (alpha, beta and rc test versions included) and offers it in a
-small notification; it never installs without asking. Check yourself with **Help → Check for Updates…**, the Chat
+Kural checks GitHub for a newer release once a day and offers it in a small notification; it never installs without
+asking. A final version (1.1.0) is offered final versions only; a test version (alpha, beta, rc) also newer test
+versions, so testers reach the final. The setting `kural.updates.testVersions` offers test versions to anyone. Check yourself with **Help → Check for Updates…**, the Chat
 panel's **…** menu, or Kural Settings (person icon in the status bar). Kural downloads the new version, installs it
 and restarts: on Ubuntu it asks for your password; on a Mac it replaces Kural.app in place; on Windows it runs the
 setup. (Setting `kural.updates.autoCheck` turns the daily check off.)
@@ -378,8 +379,10 @@ installing anything. You can check a download yourself too: see [docs/release-si
 ## What Kural stores on your computer
 
 Kural keeps, on this computer only: your chat history (all chats, so you can reopen them), checkpoints for Restore code
-(30 days), the update log, crash reports, Kural's own SSH key for devices you link, and, only if you turn it on, what
-Tab Completion learns from your work. Nothing is sent to Kural's author. What you send to an AI goes to that AI's
+(30 days), the update log, crash reports, Kural's own SSH key for devices you link, the logins of your other profiles,
+connector keys you entered in Kural Settings, and, only if you turn it on, what Tab Completion learns from your work. All
+of it is readable only by you. Nothing is sent to Kural's author. **Kural: Remove Kural's Data...** removes it (also
+before uninstalling: [Uninstall](https://github.com/adithyakumarcr/kural/wiki/Uninstall)). What you send to an AI goes to that AI's
 company (Anthropic, Google or OpenAI), under your own account; a model on your computer sends nothing.
 
 ## Security

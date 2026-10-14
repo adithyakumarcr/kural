@@ -287,6 +287,15 @@ function activate(context) {
   profiles.register();
   profiles.openSetupIfNew(getStarted);
 
+  // "Kural: Remove Kural's Data…" (before uninstalling): device keys, Gemini's gate, keyed connectors, profile logins,
+  // then everything Kural keeps once it has closed (lib/remove-data).
+  new (require("./lib/remove-data").RemoveData)(context, {
+    devices, profileStore, profileHooks: profiles.hooks, claudeSafe: async () => !!(await profiles.claudeCheck()).ok,
+    program: (ai) => ai === "claude" ? { bin: findClaude(), env: require("./lib/ai/claude").cleanEnv() }
+      : { bin: brain.cli && brain.cli[ai] ? brain.cli[ai].bin : null, env: { ...process.env, ...profileEnv() } },
+    keyDir: () => scope.dir("connector-keys", "account"),
+  }).register();
+
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
   chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)

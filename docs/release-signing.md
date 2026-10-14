@@ -5,10 +5,24 @@ Kural isn't code-signed with an Apple or Microsoft certificate. Instead every re
 - `SHA256SUMS`: the SHA-256 of every download in the release.
 - `SHA256SUMS.sig`: a signature of that list, made with Kural's release key (Ed25519).
 
-The private key exists only as the GitHub Actions secret `KURAL_RELEASE_PRIVATE_KEY`. The public key is in
-`extension/lib/release-keys.js`, so it is inside every Kural. Kural's updater installs a download only when the list is
-signed by that key and the download's SHA-256 is in the list. A release without the two files is never installed
-automatically (download it from the releases page and install it by hand).
+The private keys exist only as GitHub Actions secrets. The public keys are in `extension/lib/release-keys.js`, so
+they are inside every Kural. Kural's updater installs a download only when the list is signed by one of those keys and
+the download's SHA-256 is in the list. A release without the two files is never installed automatically (download it
+from the releases page and install it by hand).
+
+**The key change (decided 14 Oct 2026).** Key #0's private key is the repository secret `KURAL_RELEASE_PRIVATE_KEY`,
+which any workflow could read, also one changed on a branch. Key #1's private key is `KURAL_RELEASE_PRIVATE_KEY_NEW`,
+only in the GitHub environment `release`, which only `v*` tags can use; it was made straight into the secret, so no
+copy exists anywhere else.
+
+1. 1.1.0-rc.2 and 1.1.0 ship both public keys and are still signed with key #0: rc.1 and older trust only key #0.
+2. Before switching, the workflow `verify-signing-key` (run on a `v*` tag) checks that each secret signs for its public
+   key in `release-keys.js`.
+3. After 1.1.0: the release job signs with `secrets.KURAL_RELEASE_PRIVATE_KEY_NEW`, and the repository secrets
+   `KURAL_RELEASE_PRIVATE_KEY` and `KURAL_RELEASE_PUBLIC_KEY` are deleted. Key #0 is then gone for good, and its public
+   key can come out of `release-keys.js`. Versions before 1.1.0-rc.2 trust only key #0: their updater refuses releases
+   signed with key #1 (it says the list isn't signed by Kural's key), so people still on them install a newer Kural by
+   hand once.
 
 ## Verify a download by hand
 
@@ -36,8 +50,8 @@ new version.
 ## Making and rotating the key (for the owner)
 
 1. `node scripts/release-key.js generate` prints a private and a public key.
-2. Save the private one as the repository secret `KURAL_RELEASE_PRIVATE_KEY` (Settings, Secrets and variables,
-   Actions). Never commit it or paste it anywhere else.
+2. Save the private one as a secret of the environment `release` (Settings, Environments, release; never a repository
+   secret: any workflow can read those). Never commit it or paste it anywhere else.
 3. Put the public one in `extension/lib/release-keys.js`.
 
 To rotate: generate a new pair, ADD the new public key to the list (keep the old one), release, change the secret to

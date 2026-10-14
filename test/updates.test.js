@@ -18,6 +18,20 @@ check("newest release, alpha/beta/rc included, drafts skipped", () => {
   assert.strictEqual(r.version, "1.1.0-beta.1");
   assert.strictEqual(newestRelease([]), null);
 });
+check("follows the install: a final version gets finals; a test version, or the setting, also test versions", () => {
+  const { offersTests } = require("../extension/lib/updates");
+  const list = [{ tag_name: "v1.1.0" }, { tag_name: "v1.2.0-alpha.1", prerelease: true }, { tag_name: "v1.1.1-rc.1" }];
+  assert.strictEqual(offersTests("1.1.0", false), false);
+  assert.strictEqual(offersTests("1.1.0", true), true);
+  assert.strictEqual(offersTests("1.1.0-rc.2", false), true);
+  assert.strictEqual(newestRelease(list, { tests: offersTests("1.1.0", false) }).version, "1.1.0", "1.1.0 isn't offered 1.2.0-alpha.1");
+  assert.strictEqual(newestRelease(list, { tests: offersTests("1.1.0-rc.2", false) }).version, "1.2.0-alpha.1");
+  assert.strictEqual(newestRelease(list, { tests: offersTests("1.1.0", true) }).version, "1.2.0-alpha.1");
+  // A tester on rc.2 gets the final when it's the newest.
+  assert.strictEqual(newestRelease([{ tag_name: "v1.1.0-rc.2" }, { tag_name: "v1.1.0" }], { tests: true }).version, "1.1.0");
+  // GitHub's own pre-release mark counts too (a tag without "-" marked as a pre-release by hand).
+  assert.strictEqual(newestRelease([{ tag_name: "v1.1.0" }, { tag_name: "v1.1.1", prerelease: true }], { tests: false }).version, "1.1.0");
+});
 const assets = ["kural_1.1.0-alpha.2+1.135.06055_amd64.deb", "Kural-1.1.0-alpha.2-macos-arm64.dmg", "Kural-1.1.0-alpha.2-macos-arm64.zip",
   "Kural-1.1.0-alpha.2-windows-x64-setup.exe", "Kural-1.1.0-alpha.2-windows-x64.zip"].map((name) => ({ name }));
 check("the right file for each computer", () => {

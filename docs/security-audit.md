@@ -54,6 +54,12 @@ Found in 1.1.0-rc.1 and fixed for 1.1.0-rc.2:
 - The old fallback browser (a local proxy that removed pages' security headers) is gone.
 - The Mac build no longer installs an old Pillow (published advisories): macOS's own tools make the icon.
 - The author's work email was removed from the git history (commit metadata only; no file ever contained it).
+- Uninstalling left Kural's SSH key (and its line on each device), other profiles' logins, connector keys, chats and
+  checkpoints behind, with nothing to remove them. **Kural: Remove Kural's Data...** does, the Windows uninstaller has
+  an opt-in data box, and the wiki's Uninstall page lists every folder.
+- The updater offered test versions to everyone; a final version now gets only final versions unless you opt in.
+- Releases were signed with a key any workflow could read; a second key lives only in the release environment, and
+  releases after 1.1.0 use it (`docs/release-signing.md`).
 
 ## Accepted risks
 

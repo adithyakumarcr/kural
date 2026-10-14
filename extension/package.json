@@ -339,6 +339,10 @@
         "title": "Kural: Export Settings"
       },
       {
+        "command": "kural.removeData",
+        "title": "Kural: Remove Kural's Data..."
+      },
+      {
         "command": "kural.settings.import",
         "title": "Kural: Import Settings"
       },
@@ -955,6 +959,12 @@
           "default": true,
           "scope": "application",
           "description": "Check for a new Kural version once a day (it asks before installing anything)."
+        },
+        "kural.updates.testVersions": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Also offer test versions of Kural (alpha, beta, rc), which come before each final version. A test version you have installed always gets newer test versions and the final one."
         },
         "kural.showDebugViews": {
           "type": "boolean",

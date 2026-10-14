@@ -164,9 +164,11 @@ class Ssh {
   }
 
   // Take Kural's key off the device (when you remove it from Kural). Best effort: the device may be off.
+  // → { ok } | { ok: false, error } (a device that can't be reached keeps the line: say so).
   async removeKey(dev) {
-    let pub; try { pub = fs.readFileSync(`${this.key}.pub`, "utf8").trim(); } catch { return; }
-    await this.run(dev, null, `f=~/.ssh/authorized_keys; [ -f "$f" ] || exit 0; umask 077; grep -vxF ${q(pub)} "$f" > "$f.kural"; rc=$?; [ $rc -le 1 ] && cat "$f.kural" > "$f"; rm -f "$f.kural"`, { timeout: 10000, reuse: false });
+    let pub; try { pub = fs.readFileSync(`${this.key}.pub`, "utf8").trim(); } catch { return { ok: true }; }   // (no key: nothing of Kural's there)
+    const r = await this.run(dev, null, `f=~/.ssh/authorized_keys; [ -f "$f" ] || exit 0; umask 077; grep -vxF ${q(pub)} "$f" > "$f.kural"; rc=$?; [ $rc -le 1 ] && cat "$f.kural" > "$f"; rm -f "$f.kural"`, { timeout: 10000, reuse: false });
+    return r && r.code === 0 ? { ok: true } : { ok: false, error: r && r.timedOut ? "it didn't answer" : (r && r.stderr) || "it couldn't be reached" };
   }
 
   // A device whose key changed (reinstalled, a new SD card): forget the old key, so the next connection trusts the new one.

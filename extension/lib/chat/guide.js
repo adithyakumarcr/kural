@@ -232,13 +232,20 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Crash reports: when Kural closed unexpectedly, the next start saves a report (macOS's crash reports, VS Code's logs, which
   windows ended) on this computer and offers Show report / Report a bug (copies it; you paste it into the bug form).
   "Kural: Show Crash Reports" lists them.
-- Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings. It
+- Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings. A
+  final version is offered final versions only, a test version (alpha, beta, rc) also newer test versions; the setting
+  kural.updates.testVersions offers test versions to anyone. It
   installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), checks the new copy is whole
   (on a Mac: the Electron Framework and helper apps) before it touches the old one, puts the old version back if the
   install fails, and says at the next start if it didn't finish. It installs only a release whose checksum list is signed
   by Kural's release key and matches the download; "Kural: Verify this installation..." checks the running version's list.
   After an update (also one installed by hand), the first start opens "What's New in Kural": the release notes of every
   version since the one you had. "Kural: What's New" opens it any time.
+- Uninstalling: first Command Palette "Kural: Remove Kural's Data..." (takes Kural's key off your devices and its gate
+  out of Gemini's settings, removes connectors whose key Kural keeps, logs out other profiles, then closes Kural and
+  deletes everything it keeps: chats, History, checkpoints, settings, extensions, caches). Then remove the program (Mac:
+  drag to the Trash; Ubuntu: sudo apt remove kural; Windows: Settings > Apps, with an optional "Your Kural data" box).
+  Claude Code, Codex, Antigravity and Ollama stay (programs of their own). Guide: the wiki's Uninstall page.
 - Installing on Windows: Windows says "Windows protected your PC" with only "Don't run", because the installer isn't
   code-signed yet: click the small "More info" link, then "Run anyway" ("Unknown publisher"). Kural's own updates don't
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.

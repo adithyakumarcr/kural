@@ -46,14 +46,23 @@ check("REL-4: every RMDir /r in the installer comes after the folder check", () 
   const nsi = read("installer/kural.nsi").split("\n").filter((l) => !/^\s*;/.test(l)).join("\n");   // (not comments)
   const sections = nsi.split(/\n(?=Section |Function )/);
   let seen = 0;
+  // Your Kural data (an uninstall option, off unless ticked): only these fixed folders of Kural's, never the install folder.
+  const DATA = new Set(['RMDir /r "$APPDATA\\Kural"', 'RMDir /r "$PROFILE\\.kural"', 'RMDir /r "$PROFILE\\.kural-shared"']);
   for (const s of sections) {
+    if (/^Section \/o "un\.Your Kural data/.test(s)) {
+      const rm = s.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("RMDir"));
+      assert.deepStrictEqual(new Set(rm), DATA, "the data option deletes only Kural's own data folders");
+      continue;
+    }
     const i = s.indexOf("RMDir /r");
     if (i < 0) continue;
     seen++;
     const before = s.slice(0, i);
     assert.match(before, /Call (un\.)?KuralDirCheck[\s\S]*\$\{If\} \$DirWhy (==|!=) ""/, s.split("\n")[0]);
+    assert.match(before, /Call (un\.)?KuralClosedCheck/, `${s.split("\n")[0]}: Kural must be closed first`);
   }
   assert.strictEqual(seen, 2, "the install and the uninstall");
+  assert.match(nsi, /Section \/o "un\.Your Kural data/, "the data option is off unless ticked");
   assert.match(nsi, /StrCpy \$0 "\$INSTDIR" "" -6\s+\$\{If\} \$0 != "\\Kural"/, "named Kural");
   for (const v of ["$PROFILE", "$DESKTOP", "$DOCUMENTS", "$WINDIR"]) assert.ok(nsi.includes(`"$INSTDIR" == "${v}"`), v);
   assert.match(nsi, /MUI_PAGE_CUSTOMFUNCTION_LEAVE DirLeave/);

@@ -14,5 +14,6 @@
 - [[Account and Updates]]
 - [[Settings and Shortcuts]]
 - [[Troubleshooting]]
+- [[Uninstall]]
 
 [Ask for a feature](https://github.com/adithyakumarcr/kural/issues/new?template=feature_request.yml)

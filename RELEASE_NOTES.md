@@ -14,6 +14,16 @@
 - **The old fallback browser is gone.** Kural always uses the editor's own browser; without it a page opens in your
   web browser.
 - The Mac build makes its icon with macOS's own tools and installs no Python package.
+- **Updates follow what you have.** A final version (1.1.0) is offered final versions only; a test version (alpha,
+  beta, rc) also newer test versions and the final. The new setting `kural.updates.testVersions` offers test versions
+  to anyone.
+- **Kural: Remove Kural's Data...** (also in Kural Settings → More), for uninstalling or a clean start: takes Kural's
+  key off your devices, its approval gate out of Gemini's settings, removes the connectors whose key Kural keeps, logs
+  your other profiles out, then closes Kural and deletes everything it keeps. The wiki has a new **Uninstall** page.
+- **Windows uninstaller:** a **Your Kural data** box (off by default) deletes your settings and chats too; it says so
+  when Kural is still running instead of leaving half the files behind. The setup checks that too.
+- **Kural's new release key.** This version trusts a second signing key, kept only where release builds can use it;
+  releases after 1.1.0 are signed with it.
 
 ## What's new in 1.1.0-rc.1
 

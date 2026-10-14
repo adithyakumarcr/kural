@@ -317,6 +317,7 @@ class SettingsPage {
       case "feature": open(ISSUES); break;
       case "exportSettings": vscode.commands.executeCommand("kural.settings.export"); break;
       case "crashes": vscode.commands.executeCommand("kural.showCrashReports"); break;
+      case "removeData": vscode.commands.executeCommand("kural.removeData"); break;
       case "importSettings": vscode.commands.executeCommand("kural.settings.import"); break;
       case "saveMood": {
         const error = await this.saveMood(m.mood || {});
