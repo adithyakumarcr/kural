@@ -1,4 +1,4 @@
-## What's new in 1.1.0-alpha.10
+## What's new in 1.1.0-rc.1
 
 - **Gemini needs Antigravity 1.3.4 or newer.** Kural's approval gate works only from that version; an older one never
   asked it, so its first change could run before Kural noticed. Kural no longer starts an older one: Get started and
