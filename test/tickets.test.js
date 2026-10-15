@@ -9,7 +9,7 @@ let fail = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
 
 check("reading Jira doesn't ask", () => {
-  for (const t of ["mcp__claude_ai_Atlassian_Rovo__getJiraIssue", "mcp__atlassian__searchJiraIssuesUsingJql", "mcp__jira__lookupJiraAccountId"]) assert.ok(isAtlassianRead(t), t);
+  for (const t of ["mcp__claude_ai_Atlassian_Rovo__getJiraIssue", "mcp__claude_ai_Atlassian_MCP__getJiraIssue", "mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql", "mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources", "mcp__atlassian__searchJiraIssuesUsingJql", "mcp__jira__lookupJiraAccountId"]) assert.ok(isAtlassianRead(t), t);
 });
 check("writing to Jira and other tools still ask", () => {
   for (const t of ["mcp__atlassian__addCommentToJiraIssue", "mcp__atlassian__transitionJiraIssue", "mcp__atlassian__createJiraIssue", "mcp__notion__search", "Bash", ""]) assert.ok(!isAtlassianRead(t), t);

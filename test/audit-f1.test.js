@@ -27,7 +27,7 @@ check("AGENT-12: only Atlassian's own servers and read tools run without asking"
     assert.ok(decide({ tool: t, input: {}, mode: "agent" }).allow, t);
   }
   for (const t of ["mcp__evil-jira__fetchAndRun", "mcp__my_jira_proxy__getSecrets", "mcp__notjira__listAll", "mcp__claude_ai_Atlassian__readAnything",
-    "mcp__claude_ai_Atlassian__getEverythingAndRun", "mcp__atlassian__createJiraIssue", "mcp__atlassian__editJiraIssue", "mcp__atlassian__transitionJiraIssue",
+    "mcp__claude_ai_Atlassian__getEverythingAndRun", "mcp__atlassian__createJiraIssue", "mcp__claude_ai_Atlassian_MCP__createJiraIssue", "mcp__claude_ai_Atlassian_MCP__editJiraIssue", "mcp__claude_ai_Atlassian_MCP__executeWrite", "mcp__atlassian__editJiraIssue", "mcp__atlassian__transitionJiraIssue",
     "mcp__atlassian__addCommentToJiraIssue", "mcp__atlassian__createConfluencePage", "mcp__atlassian__updateConfluencePage"]) {
     assert.ok(!isAtlassianRead(t), t);
     assert.ok(decide({ tool: t, input: {}, mode: "agent" }).ask, t);

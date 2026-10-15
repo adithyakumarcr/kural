@@ -4,10 +4,10 @@
 // connector to wait for (tickets.js); what runs without asking is the narrower list below.
 const IS_ATLASSIAN = /atlassian|jira/i;
 // The Atlassian servers whose read tools run without asking: the claude.ai connector (Claude Code names its tools
-// mcp__claude_ai_Atlassian__… or mcp__claude_ai_Atlassian_Rovo__…) and one you added yourself as "atlassian" or "jira"
+// mcp__claude_ai_Atlassian__…, …_Atlassian_Rovo__… or, since the connector is called "Atlassian MCP", …_Atlassian_MCP__…) and one you added yourself as "atlassian" or "jira"
 // (`claude mcp add atlassian …`). Not just any server with "jira" in its name: a project's server called "evil-jira" could
 // name a tool getAnything.
-const SERVERS = /^(claude_ai_Atlassian(_Rovo)?|atlassian|jira)$/i;
+const SERVERS = /^(claude_ai_Atlassian(_Rovo|_MCP)?|atlassian|jira)$/i;
 // Atlassian's own read-only tools (its Rovo MCP server): looking things up, never creating, editing or moving anything.
 const READS = new Set([
   "atlassianUserInfo", "getAccessibleAtlassianResources", "lookupJiraAccountId", "search", "fetch",
@@ -15,6 +15,7 @@ const READS = new Set([
   "getJiraIssueTypeMetaWithFields", "getJiraIssueRemoteIssueLinks", "getTransitionsForJiraIssue", "getIssueLinkTypes",
   "getConfluencePage", "getConfluenceSpaces", "getPagesInConfluenceSpace", "getConfluencePageDescendants",
   "getConfluencePageFooterComments", "getConfluencePageInlineComments", "searchConfluenceUsingCql",
+  "getConfluenceContent", "searchConfluence", "getGraphContext", "getGraphObject",   // (the "Atlassian MCP" connector's names)
 ]);
 // A read-only Atlassian tool: mcp__<atlassian server>__getJiraIssue, …__searchJiraIssuesUsingJql, …__lookupJiraAccountId
 function isAtlassianRead(tool) {
