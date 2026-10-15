@@ -102,6 +102,8 @@ function settingMode() {
 
 // Messages meant only for the pane you're using (see ChatView.post).
 const ONE_PANE = new Set(["full", "attached", "pasted", "insertPill", "focus", "showHistory", "flash"]);
+// At most this many chats side by side in the side panel (media/chat-columns.js MAX_COLS).
+const MAX_COLUMNS = 4;
 
 class ChatView {
   constructor(context, apply) {
@@ -111,8 +113,9 @@ class ChatView {
     this.tickets = new Tickets(() => vscode.workspace.isTrusted ? this.root() : ws.workDir());   // Jira search for "+ → Link ticket"
     // ("v1.1.0-alpha.3", or "Unreleased version · main (…)" when built from the code: lib/version.js)
     this.version = require("../version").versionLabel(context.extensionPath, context.extension.packageJSON.version);
-    // Where chats are shown: the side panel, plus any chats opened beside the code (Split). Each pane
-    // shows one tab: { id, kind: "side" | "editor", webview, panel?, ready, queue, activeId }.
+    // Where chats are shown: the side panel (and its other columns: chats side by side), plus any chats opened beside
+    // the code. Each pane shows one tab: { id, kind: "side" | "editor", webview, panel?, ready, queue, activeId,
+    // single? (one chat, no tab bar), col?/main? (a column of the side panel), layout? (the side panel: its columns) }.
     this.panes = [];
     this.pane = null;            // the pane whose message is being handled right now
     this.focusPane = null;       // the pane you used last (keyboard shortcuts and commands act on it)
@@ -381,8 +384,9 @@ class ChatView {
     const tab = forkConversation(source, index, { id: shortId(), sessionId: newSessionId() });
     if (!tab) return;
     this.tabs.push(tab);
-    // An editor containing a single chat keeps its original conversation in place.
-    if (pane && pane.single) { this.openSplit(tab.id); this.postTabs(); }
+    // An editor or a column containing a single chat keeps its original conversation in place.
+    if (pane && pane.col) { this.activate(tab.id, pane.main); this.postTo(pane.main, { type: "focus" }); }
+    else if (pane && pane.single) { this.openSplit(tab.id); this.postTabs(); }
     else { this.activate(tab.id, pane); if (pane) this.postTo(pane, { type: "focus" }); }
     this.postHistory();
     this.save();
@@ -392,7 +396,7 @@ class ChatView {
   // ---------- panes ----------
   // The pane a command or reply is for: the one that sent the message being handled, else the one you used last.
   cur() { return this.pane || this.focusPane || this.side() || null; }
-  side() { return this.panes.find((p) => p.kind === "side"); }
+  side() { return this.panes.find((p) => p.kind === "side" && !p.col); }   // (the side panel itself: its first column)
   get activeId() { const p = this.cur(); return p ? p.activeId : this._activeId; }
   set activeId(v) { const p = this.cur(); if (p) p.activeId = v; else this._activeId = v; }
   shown(id) { return this.panes.some((p) => p.activeId === id); }   // is this tab on screen somewhere?
@@ -402,9 +406,10 @@ class ChatView {
   activate(id, pane = this.cur()) {
     const tab = this.tab(id);
     if (!tab) return;
-    // Open in its own editor already (dragged out): go there instead of showing it twice.
+    // Open in its own editor already (dragged out), or in a column of the side panel: go there instead of showing it twice.
     const own = this.panes.find((p) => p.single && p.activeId === id && p !== pane);
     if (own && own.panel) { own.panel.reveal(); return; }
+    if (own) { this.focusPane = own; this.postTo(own, { type: "focus" }); return; }
     if (pane) pane.activeId = id; else this._activeId = id;
     tab.unread = false;
     this.clearNotice(id);   // (its notification, if any, is old news now)
@@ -441,8 +446,8 @@ class ChatView {
     this.tabs.splice(i, 1);
     if (keep && tab.messages.length) this.archive.save(tab, this.card(tab));
     if (!this.tabs.length) this.newTab(true);
-    // Its own editor (dragged out) closes with it; every other pane that showed it moves to the tab before it.
-    for (const p of this.panes.filter((q) => q.single && q.activeId === id)) { p.closing = true; p.panel.dispose(); }
+    // Its own editor (dragged out) or column closes with it; every other pane that showed it moves to the tab before it.
+    for (const p of this.panes.filter((q) => q.single && q.activeId === id)) { if (p.col) this.closeColumn(p); else { p.closing = true; p.panel.dispose(); } }
     const showing = this.panes.filter((p) => p.activeId === id && !p.single);
     for (const p of showing) this.activate(this.tabs[Math.max(0, Math.min(i - 1, this.tabs.length - 1))].id, p);
     if (!showing.length) this.postTabs();
@@ -621,6 +626,7 @@ class ChatView {
       });
       this._activeId = this.tab(saved.activeId) ? saved.activeId : this.tabs[0].id;
       this.splitIds = (saved.splitIds || []).filter((id) => this.tab(id));   // reopened by restoreSplit()
+      this.savedCols = Array.isArray(saved.cols) ? saved.cols : [];          // the side panel's columns (restoreCols)
     } else {
       this.tabs = [];
       const t = this.newTab(false);
@@ -639,19 +645,30 @@ class ChatView {
     // Keep the last ~150 KB of each conversation (60 KB for closed ones) so this stays quick.
     const trim = (t, max) => ({ ...t, messages: trimMessages(t.messages, max), status: "idle" });   // (chat/trim.js: sizes added up once)
     for (const t of this.tabs) if (t.messages.length) this.archive.save(t, this.card(t));   // History: in full
+    const side = this.side();
     return this.context.workspaceState.update(storeKey(), {
       tabs: this.tabs.map((t) => trim(t, 150000)),
-      activeId: this.side() ? this.side().activeId : this._activeId, splitIds: this.panes.filter((p) => p.kind === "editor").map((p) => p.activeId),
+      activeId: side ? side.activeId : this._activeId, splitIds: this.panes.filter((p) => p.kind === "editor").map((p) => p.activeId),
+      cols: side && side.layout ? this.layoutOf(side) : this.savedCols || [],
     });
   }
 
   // ---------- the panel ----------
   resolveWebviewView(view) {
     const old = this.side();
-    if (old) this.panes.splice(this.panes.indexOf(old), 1);
+    // (The old page's columns go with it, and come back in the new one.)
+    const cols = old && old.layout ? this.layoutOf(old) : this.savedCols;
+    if (old) for (const p of old.layout || [old]) if (this.panes.includes(p)) this.panes.splice(this.panes.indexOf(p), 1);
     const pane = this.attach(view.webview, "side", null, old ? old.activeId : this._activeId);
     pane.view = view;   // (is the side panel on screen: notifications, stopIdle)
-    view.onDidDispose(() => { this._activeId = pane.activeId; this.panes.splice(this.panes.indexOf(pane), 1); });
+    pane.layout = [pane];
+    this.restoreCols(pane, cols);
+    view.onDidDispose(() => {
+      this._activeId = pane.activeId;
+      this.savedCols = this.layoutOf(pane);
+      for (const p of pane.layout) if (this.panes.includes(p)) this.panes.splice(this.panes.indexOf(p), 1);
+      if (pane.layout.includes(this.focusPane)) this.focusPane = null;
+    });
     // The panel shown again: its chat's program back, ready for your next message (it may have stopped while idle).
     if (view.onDidChangeVisibility) view.onDidChangeVisibility(() => { const t = view.visible && this.tab(pane.activeId); if (t && t.status === "idle") this.warm(t); });
   }
@@ -693,8 +710,12 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script></body></html>`;
-    webview.onDidReceiveMessage((m) => this.onMessage(m, pane).catch((e) => log(`chat: ${e.stack}`)));
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
+    // (A message from a column of the side panel (split) says which: that column is a pane of its own.)
+    webview.onDidReceiveMessage((m) => {
+      const p = m && m.col ? (pane.layout || []).find((q) => q.col === m.col) : pane;
+      if (p) this.onMessage(m, p).catch((e) => log(`chat: ${e.stack}`));
+    });
     return pane;
   }
 
@@ -710,10 +731,9 @@ class ChatView {
   adoptDragged(panel, tabId) {
     const id = tabId && this.tab(tabId) ? tabId : (this.tabs[0] || this.newTab(false)).id;
     panel.title = this.tab(id).title;
-    for (const p of this.panes) {
+    for (const p of [...this.panes]) {
       if (p.kind === "editor" || p.activeId !== id) continue;
-      const other = this.tabs.find((t) => t.id !== id && !this.panes.some((q) => q.activeId === t.id)) || this.newTab(false);
-      this.activate(other.id, p);
+      if (p.col) this.closeColumn(p); else this.showOther(p, id);   // (a column of the side panel goes with it)
     }
     const pane = this.adoptSplit(panel, id);
     pane.single = true;
@@ -753,6 +773,95 @@ class ChatView {
     return pane;
   }
 
+  // ---------- columns: chats side by side in the side panel ----------
+  // The side panel's page can show several chats next to each other (when it's wide: maximized, say). The panel's own
+  // pane is the first column, with the tab bar; every other column is a "single" pane (one chat, its title above it,
+  // like a chat in the editor area) on the same page, whose messages carry `col` (media/chat-columns.js). The panel's
+  // pane keeps them all in `layout`, in order (itself included); Kural saves that with the open tabs.
+  addColumn(main, tabId, at = main.layout.length) {
+    const real = main.webview, col = main.colSeq = (main.colSeq || 0) + 1;
+    const webview = {   // (the same page: each message says which column it's for)
+      postMessage: (m) => real.postMessage({ ...m, col }),
+      asWebviewUri: (u) => real.asWebviewUri(u),
+      get cspSource() { return real.cspSource; },
+      get options() { return real.options; }, set options(_) { /* (the page's own: main.webview) */ },
+    };
+    const pane = { id: shortId(), kind: "side", col, main, view: main.view, webview, panel: null, ready: false, queue: [], activeId: tabId, single: true, size: 1 };
+    this.panes.push(pane);
+    main.layout.splice(Math.max(0, Math.min(at, main.layout.length)), 0, pane);
+    for (const p of main.layout) p.size = 1;   // (a column more or less: equal widths again, like VS Code's editor groups)
+    this.postCols(main);
+    return pane;
+  }
+  closeColumn(pane) {
+    const main = pane.main;
+    if (this.panes.includes(pane)) this.panes.splice(this.panes.indexOf(pane), 1);
+    if (main && main.layout.includes(pane)) { main.layout.splice(main.layout.indexOf(pane), 1); for (const p of main.layout) p.size = 1; }
+    if (this.focusPane === pane) this.focusPane = main || null;
+    if (main) this.postCols(main);
+    this.postTabs();   // (its chat is back among the tabs)
+    this.save();
+  }
+  postCols(main) { this.postTo(main, { type: "cols", cols: main.layout.map((p) => ({ col: p.col || 0, size: p.size || 1 })) }); }
+  layoutOf(main) { return main.layout.map((p) => p.col ? { id: p.activeId, size: p.size || 1 } : { main: true, size: p.size || 1 }); }
+  // The columns from last time (or from the page before): each chat that's still open and not in the editor area.
+  restoreCols(main, saved) {
+    let at = 0;
+    const sizes = new Map();
+    for (const c of Array.isArray(saved) ? saved : []) {
+      if (c && c.main) { sizes.set(main, c.size); at = main.layout.indexOf(main) + 1; continue; }
+      if (!c || !this.tab(c.id) || this.panes.some((p) => p.single && p.activeId === c.id) || main.layout.length >= MAX_COLUMNS) continue;
+      sizes.set(this.addColumn(main, c.id, at++), c.size);
+    }
+    for (const [p, size] of sizes) p.size = size > 0 ? size : 1;   // (after them all: adding one evens them out)
+    if (main.layout.some((p) => p.col && p.activeId === main.activeId)) this.showOther(main, main.activeId);
+  }
+  // This pane shows another chat than `id`: one that's not on screen anywhere, or a new one.
+  showOther(pane, id) {
+    const other = this.tabs.find((t) => t.id !== id && !this.panes.some((q) => q.activeId === t.id)) || this.newTab(false);
+    this.activate(other.id, pane);
+  }
+
+  // The Split button: a new chat in a column of its own when the side panel is wide enough (the page knows), else
+  // beside the code.
+  splitChat(pane, inPanel) {
+    const main = pane && (pane.main || (pane.layout ? pane : null));
+    if (!inPanel || !main || main.layout.length >= MAX_COLUMNS) { this.openSplit(); return; }
+    const col = this.addColumn(main, this.newTab(false).id);
+    this.focusPane = col;
+    this.postTo(col, { type: "focus" });
+    this.postTabs();
+    this.save();
+  }
+
+  // A chat tab, or a column's title, dropped (media/chat-columns.js). Outside the panel: beside the code. On a side of a
+  // column ("before"/"after"): a new column there, or that column moves there. On a column ("center"): it shows that
+  // chat (its own goes back among the tabs). On the first column: back among the tabs.
+  dropTab(pane, m) {
+    const main = pane && (pane.main || pane), tab = this.tab(m.id);
+    if (!tab || !main || !main.layout) return;
+    const at = (col) => main.layout.find((p) => (p.col || 0) === (col || 0));
+    const from = m.from ? at(m.from) : null;   // (a column; none: a tab of the first column)
+    if (m.from && (!from || from.activeId !== tab.id)) return;   // (that column changed meanwhile)
+    if (m.side === "outside") { this.openSplit(tab.id); return; }   // (adoptDragged takes it out of the panel)
+    const to = at(m.to);
+    if (!to || to === from) return;
+    if (m.side === "before" || m.side === "after") {
+      const index = () => main.layout.indexOf(to) + (m.side === "after" ? 1 : 0);
+      if (from) { main.layout.splice(main.layout.indexOf(from), 1); main.layout.splice(index(), 0, from); this.postCols(main); }
+      else if (main.layout.length < MAX_COLUMNS) { this.addColumn(main, tab.id, index()); if (main.activeId === tab.id) this.showOther(main, tab.id); }
+    } else if (to.col) {
+      if (from) this.closeColumn(from);
+      this.activate(tab.id, to);
+      if (main.activeId === tab.id) this.showOther(main, tab.id);
+    } else {
+      if (from) this.closeColumn(from);
+      this.activate(tab.id, main);
+    }
+    this.postTabs();
+    this.save();
+  }
+
   // Show the chat you're working in: the panel beside the code, or the side panel.
   reveal() {
     const p = this.cur();
@@ -763,20 +872,18 @@ class ChatView {
   // Replies to one pane (the tab it opened, a file it picked, focus, short notices) go only to that pane.
   // Everything else goes to all panes; each one keeps what's about the tab it shows.
   post(msg) {
-    if (msg.type === "tabs") {
-      // A chat dragged into the editor area (a "single" pane) shows only itself, and leaves the other panes' tab bars
-      // until its editor closes (like moving a tab in VS Code).
-      const out = new Set(this.panes.filter((p) => p.single).map((p) => p.activeId));
-      for (const p of this.panes) {
-        const tabs = p.single ? msg.tabs.filter((t) => t.id === p.activeId) : msg.tabs.filter((t) => !out.has(t.id) || t.id === p.activeId);
-        this.postTo(p, { ...msg, tabs, activeId: p.activeId, single: !!p.single });
-      }
-      return;
-    }
+    if (msg.type === "tabs") { for (const p of this.panes) this.postTo(p, this.tabsFor(p, msg.tabs)); return; }
     if (ONE_PANE.has(msg.type)) { const p = this.cur(); if (p) this.postTo(p, msg); return; }
     for (const p of this.panes) this.postTo(p, msg);
   }
   postTo(pane, msg) { if (pane.ready) pane.webview.postMessage(msg); else pane.queue.push(msg); }
+  // The tab bar a pane shows. A chat dragged out of the tabs (into the editor area, or a column of the side panel: a
+  // "single" pane) shows only itself, and leaves the other panes' tab bars until it goes back (like moving a tab in VS Code).
+  tabsFor(p, tabs = this.tabs.map((t) => this.summary(t))) {
+    const out = new Set(this.panes.filter((q) => q.single).map((q) => q.activeId));
+    return { type: "tabs", tabs: p.single ? tabs.filter((t) => t.id === p.activeId) : tabs.filter((t) => !out.has(t.id) || t.id === p.activeId),
+      activeId: p.activeId, single: !!p.single, column: !!p.col };
+  }
 
   async sendFiles() {
     if (!this.files) {
@@ -2509,9 +2616,10 @@ class ChatView {
   // A notification was clicked (Kural is in front already): show that chat, in its own editor or the side panel.
   async showChat(id) {
     if (!this.tab(id)) return;
-    const own = this.panes.find((p) => p.single && p.activeId === id && p.panel);
-    if (own) { own.panel.reveal(); return; }
+    const own = this.panes.find((p) => p.single && p.activeId === id);
+    if (own && own.panel) { own.panel.reveal(); return; }
     await vscode.commands.executeCommand("kural.chat.focus");
+    if (own) { this.postTo(own, { type: "focus" }); return; }   // (in a column of the side panel)
     const side = this.side();
     if (side) this.activate(id, side);
   }
@@ -2528,15 +2636,22 @@ class ChatView {
     switch (m.type) {
       case "ready": {
         if (!pane) break;
+        if (pane.col && !this.tab(pane.activeId)) { this.closeColumn(pane); break; }   // (its chat was closed meanwhile)
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
           moods: allMoods(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
-        w.postMessage({ type: "tabs", tabs: this.tabs.map((x) => this.summary(x)), activeId: pane.activeId });
+        w.postMessage(this.tabsFor(pane));
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
         pane.ready = true;
         for (const q of pane.queue.splice(0)) w.postMessage(q);
+        // The side panel's page (re)loaded: its columns start again in it (each says "ready" in turn). (Also with one
+        // column: "cols" tells the page it may split.)
+        if (pane.layout) {
+          for (const c of pane.layout) if (c !== pane) { c.ready = false; c.queue = []; }
+          this.postCols(pane);
+        }
         this.postHistory();
         this.sendFiles();
         this.warm(t);
@@ -2546,6 +2661,15 @@ class ChatView {
       case "focusChanged": this.chatFocused = !!m.focused; vscode.commands.executeCommand("setContext", "kural.chatFocused", !!m.focused); break;
       case "newTab": this.newTab(true); break;
       case "switchTab": this.activate(m.id, pane); break;
+      // Chats side by side in the side panel (media/chat-columns.js).
+      case "splitChat": this.splitChat(pane, !!m.inPanel); break;
+      case "dropTab": if (typeof m.id === "string") this.dropTab(pane, m); break;
+      case "closeColumn": if (pane && pane.col) this.closeColumn(pane); break;
+      case "colSizes": if (pane && pane.layout && Array.isArray(m.sizes)) {
+        for (const s of m.sizes) { const c = pane.layout.find((p) => (p.col || 0) === s.col); if (c && s.size > 0 && s.size < 100) c.size = s.size; }
+        this.save();
+        break;
+      }
       case "closeTab": this.closeTab(m.id); break;
       case "renameTab": this.rename(m.id, m.title); break;
       case "history": this.postHistory(true); break;

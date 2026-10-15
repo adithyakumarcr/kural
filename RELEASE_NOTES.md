@@ -6,6 +6,15 @@
 - **Save plan.** A plan in Plan mode has a "Save plan" button: it writes the plan to `plans/plan-<date>.md` in the project and opens it.
 - **Shell commands go to the terminal.** A bash/sh/zsh code block has a Terminal button (instead of Insert): it types the command into the terminal, and you press Enter.
 - **The chat stays in the middle on a wide window**, and the tagline on the empty chat is no longer italic.
+- **Dragging a chat tab into the editor area works.** It never did: the chat is a web page inside the editor, and
+  Chromium doesn't let a drag that starts in such a page be dropped on the editor around it, so the drop was silently
+  lost. Kural now sees where the drag ends: let go anywhere outside the panel and the chat opens beside the code.
+- **Chats side by side in the panel, also full screen.** Maximize the Kural panel (or make it wider) and drag a tab
+  onto the left or right side of the chat, or press the new **Split** button beside **+**: up to four chats side by
+  side, each with its own box. Drag a chat's title to move it, onto another chat to show it there, or back onto the
+  tabs; **×** puts it back among the tabs; drag the line between two to resize. In a narrow panel they stack, and
+  the layout comes back after a restart.
+- **Dropping a tab back onto the chat no longer attaches it** (it used to add a `kural-chat:` "file" to your message).
 
 ## What's new in 1.1.0
 

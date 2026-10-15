@@ -1,10 +1,9 @@
-// A chat beside the code, by dragging: drag a chat tab out of the Kural panel into the editor area and it opens there,
-// split the way VS Code splits (drop on a side of an editor: beside it, above or below; in the middle: as its tab).
-// How: the page's tab carries an address, kural-chat:/<tab id>.kuralchat (as "ResourceURLs", what VS Code's editor
-// area opens when something is dropped on it). That address opens in Kural's own editor ("kural.chatTab", a custom
-// editor: a chat page), so VS Code does the drop zones, the split, moving it around and bringing it back after a
-// restart. (No file system behind the address on purpose: with one, VS Code shows a breadcrumb bar with the made-up
-// file name above the chat.)
+// A chat beside the code: drag a chat tab out of the Kural panel and let go (in the editor area, usually), and it opens
+// there, in an editor group beside the one you're in. How: the page sees where the drag ended (media/chat-columns.js;
+// VS Code's editor area never gets the drop: Chromium doesn't let a drag from one site's frame be dropped on another's)
+// and Kural opens kural-chat:/<tab id>.kuralchat in its own editor ("kural.chatTab", a custom editor: a chat page). VS
+// Code then moves it around like any editor and brings it back after a restart. (No file system behind the address on
+// purpose: with one, VS Code shows a breadcrumb bar with the made-up file name above the chat.)
 
 const vscode = require("vscode");
 
@@ -22,7 +21,11 @@ function registerTabEditor(context, chat) {
     vscode.window.registerCustomEditorProvider(VIEW, editor, { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: false }));
 }
 
-// Open a chat tab beside the code (the command "Kural: Open a Chat Beside the Code"; dragging does the same).
-const openBeside = (id) => vscode.commands.executeCommand("vscode.openWith", tabUri(id), VIEW, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: false });
+// Open a chat tab beside the code (the command "Kural: Open a Chat Beside the Code"; dragging does the same). With no
+// editor open it takes the editor area itself (beside an empty group would leave that group empty on the left).
+const openBeside = (id) => {
+  const empty = vscode.window.tabGroups.all.every((g) => !g.tabs.length);
+  return vscode.commands.executeCommand("vscode.openWith", tabUri(id), VIEW, { viewColumn: empty ? vscode.ViewColumn.Active : vscode.ViewColumn.Beside, preserveFocus: false });
+};
 
 module.exports = { registerTabEditor, openBeside, tabUri, tabOf, SCHEME };
