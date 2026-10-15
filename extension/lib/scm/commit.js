@@ -8,11 +8,18 @@ const { isHomeOrAbove } = require("../paths");
 
 const DIFF_CHARS = 14000;   // enough to see what changed; long diffs are cut (the file list stays complete)
 
-const SYSTEM_PROMPT = `You write git commit messages. You get the changes (a diff, maybe cut) and the author's recent commit
-messages. Reply with ONLY the commit message inside <msg>...</msg>: a subject line of at most 72 characters in the
-imperative mood ("Add", "Fix", "Rename"), specific about what changed; for a bigger change, a blank line and a short body
-(a few lines or "- " bullets) saying what and why. Match the style of their recent messages (prefixes like "feat:", case,
-language). No quotes around it, no explanations, nothing outside the tags.`;
+const SYSTEM_PROMPT = `You write git commit messages in the Conventional Commits style. You get the changes (a diff, maybe cut), the
+list of every changed file and the author's recent commit messages. Reply with ONLY the commit message inside
+<msg>...</msg>:
+- Subject: "<type>(<optional scope>): <summary>", at most 72 characters, imperative mood, lower case after the colon, no
+  final period. Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert. Use "!" after the type for a
+  breaking change.
+- A blank line, then a body wrapped at 72 characters: a few "- " bullets (or short lines) saying WHAT changed and WHY, so
+  that together they cover every changed file and every kind of change in the diff (also files that are only listed).
+  Leave out the body only for a tiny change.
+- A footer ("BREAKING CHANGE: ..." or "Refs: ...") only when it applies.
+If their recent messages clearly use another style (other prefixes, language), keep their style but still follow these
+rules for length and structure. No quotes around it, no explanations, nothing outside the tags.`;
 
 function gitApi() {
   const ext = vscode.extensions.getExtension("vscode.git");
@@ -21,27 +28,58 @@ function gitApi() {
   return exports && exports.enabled !== false ? exports.getAPI(1) : null;
 }
 
-// The repository the button was pressed for (the panel passes its SourceControl), else the one of the active file, else
-// the only one.
-function repositoryFor(git, arg) {
-  const root = arg && arg.rootUri ? arg.rootUri.fsPath : null;
-  if (root) { const r = git.repositories.find((x) => x.rootUri.fsPath === root); if (r) return r; }
+// The repository the button was pressed for. The panel passes its SourceControl (or a repository, or a Uri), with
+// several folders open that is the only reliable answer; else the repository of the active file, else the only one,
+// else you pick (never a silent guess: the other folder's changes would end up in the wrong message).
+async function repositoryFor(git, arg) {
+  const uri = arg && (arg.rootUri || (arg.sourceControl && arg.sourceControl.rootUri) || (arg.fsPath ? arg : null));
+  const root = uri && uri.fsPath;
+  if (root) {
+    const same = (x) => x.rootUri.fsPath === root;
+    const r = git.repositories.find(same) || git.getRepository(vscode.Uri.file(root));
+    if (r) return r;
+  }
+  if (git.repositories.length === 1) return git.repositories[0];
+  if (!git.repositories.length) return null;
   const doc = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.uri;
-  if (doc && doc.scheme === "file") { const r = git.getRepository(doc); if (r) return r; }
-  return git.repositories.length === 1 ? git.repositories[0] : null;
+  const active = doc && doc.scheme === "file" ? git.getRepository(doc) : null;
+  const items = git.repositories.map((r) => ({ label: require("path").basename(r.rootUri.fsPath), description: r.rootUri.fsPath, repo: r }))
+    .sort((x, y) => (y.repo === active) - (x.repo === active));
+  const pick = await vscode.window.showQuickPick(items, { placeHolder: "Write the commit message for which repository?" });
+  return pick ? pick.repo : undefined;
 }
 
-// What the model reads: which changes (staged, or everything), the diff, the recent subjects.
+const STATUS = { 0: "modified", 1: "added", 2: "deleted", 3: "renamed", 4: "copied", 5: "modified", 6: "deleted", 7: "new file", 8: "new file", 9: "modified", 10: "both added", 11: "both deleted", 12: "added by us", 13: "added by them", 14: "deleted by us", 15: "deleted by them", 16: "both modified" };
+
+// What the model reads: which changes (staged, or everything), the diff, every changed file, the recent subjects.
+// The git extension's own state can be a moment behind (a file the AI just wrote), so it is refreshed first.
 async function changesText(repo) {
-  let staged = await repo.diff(true), which = "staged";
-  if (!staged.trim()) { staged = await repo.diff(false); which = "not staged (nothing is staged)"; }
-  const untracked = (repo.state.untrackedChanges || repo.state.workingTreeChanges.filter((c) => c.status === 7) || [])
-    .map((c) => vscode.workspace.asRelativePath(c.uri));
-  if (!staged.trim() && !untracked.length) return null;
+  try { await repo.status(); } catch { /* the diff below still works */ }
+  const st = repo.state;
+  const rel = (c) => vscode.workspace.asRelativePath(c.uri, false);
+  const rootRel = (c) => require("path").relative(repo.rootUri.fsPath, c.uri.fsPath);
+  const staged = (st.indexChanges || []);
+  const loose = [...(st.workingTreeChanges || []), ...(st.untrackedChanges || [])];
+  let diff = "", which = "staged";
+  if (staged.length) diff = await repo.diff(true);
+  else { which = "all changes (nothing is staged)"; try { diff = await repo.diffWithHEAD(); } catch { diff = await repo.diff(false); } }
+  const files = (staged.length ? staged : loose).map((c) => `${STATUS[c.status] || "changed"}: ${rootRel(c) || rel(c)}`);
+  const seen = new Set(), list = files.filter((f) => !seen.has(f) && seen.add(f));
+  // New files have no diff: show the start of small text ones.
+  let fresh = "";
+  if (!staged.length) {
+    for (const c of loose.filter((x) => x.status === 7 || x.status === 8).slice(0, 8)) {
+      try {
+        const buf = Buffer.from(await vscode.workspace.fs.readFile(c.uri));
+        if (buf.length < 20000 && !buf.includes(0)) fresh += `\n--- new file ${rootRel(c)} ---\n${buf.toString("utf8").slice(0, 1500)}`;
+      } catch { /* unreadable or gone */ }
+    }
+  }
+  if (!diff.trim() && !list.length) return null;
   let recent = [];
   try { recent = (await repo.log({ maxEntries: 8 })).map((c) => c.message.split("\n")[0]); } catch { /* a new repository */ }
-  return `Changes (${which}):\n${staged.slice(0, DIFF_CHARS)}${staged.length > DIFF_CHARS ? "\n… (the rest of the diff is cut)" : ""}` +
-    (untracked.length && which !== "staged" ? `\n\nNew files not in git yet: ${untracked.slice(0, 40).join(", ")}` : "") +
+  return `Repository: ${require("path").basename(repo.rootUri.fsPath)}\nChanged files (${which}):\n${list.slice(0, 80).join("\n")}` +
+    `\n\nDiff:\n${diff.slice(0, DIFF_CHARS)}${diff.length > DIFF_CHARS ? "\n… (the rest of the diff is cut; the file list above is complete)" : ""}` + fresh +
     (recent.length ? `\n\nTheir recent commit messages (match this style):\n${recent.join("\n")}` : "");
 }
 
@@ -56,8 +94,9 @@ function registerCommitMessages(context, session) {
     if (busy) return;
     const git = gitApi();
     if (!git) { vscode.window.showWarningMessage("Kural: Git isn't available here (the built-in Git extension is off)."); return; }
-    const repo = repositoryFor(git, arg);
-    if (!repo) { vscode.window.showInformationMessage("Kural: open a file of the repository first (there are several)."); return; }
+    const repo = await repositoryFor(git, arg);
+    if (repo === undefined) return;   // you closed the picker
+    if (!repo) { vscode.window.showInformationMessage("Kural: no Git repository is open."); return; }
     // (A repository at your home folder or above: git would look through all of it; macOS asks about each folder.)
     if (isHomeOrAbove(repo.rootUri.fsPath)) { vscode.window.showInformationMessage("Kural doesn't read repositories at your home folder or above."); return; }
     busy = true;

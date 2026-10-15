@@ -41,7 +41,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   message instead, also while the chat is open): tabs; modes Agent (edits files, asks before commands), Auto (unrestricted: no asking,
   also for dangerous commands and files outside the project; the AI ends each answer with a "What I did" list; the
   first switch to Auto explains this once; Gemini too, through Kural's gate), Plan
-  (a plan, then "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
+  (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
   your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket

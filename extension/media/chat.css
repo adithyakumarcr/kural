@@ -41,7 +41,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* ---------- conversation ---------- */
 .body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.list { flex: 1; overflow-y: auto; padding: 14px 14px 8px; }
+.list { flex: 1; overflow-y: auto; padding: 14px max(14px, calc((100% - 880px) / 2)) 8px; }   /* wide window: the chat stays in the middle */
 .msg { margin-bottom: 16px; }
 .msg.user .bubble { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 11px; white-space: pre-wrap; word-wrap: break-word; }
 /* Message actions appear on hover or keyboard focus. */
@@ -122,7 +122,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .logo { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); color: var(--on-accent); font-weight: 700; display: grid; place-items: center; font-family: var(--vscode-editor-font-family); }
 .brand { margin-top: 14px; font-size: calc(22px * var(--fs, 1)); font-weight: 650; letter-spacing: .01em; }
 .brand-sub { margin-top: 2px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
-.tagline { margin-top: 18px; font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); opacity: .85; font-style: italic; }
+.tagline { margin-top: 18px; font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); opacity: .85; }
 .hints { margin-top: 26px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); }
 .hint { display: inline-flex; align-items: center; gap: 6px; }
 .hint kbd { min-width: 0; font-family: var(--vscode-editor-font-family); font-size: calc(10.5px * var(--fs, 1)); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface); color: var(--vscode-foreground); }
@@ -131,7 +131,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(--fs, 1)); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--vscode-foreground); min-width: 64px; text-align: center; }
 
 /* ---------- composer ---------- */
-.composer { position: relative; margin: 0 10px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 6px 8px 6px; flex-shrink: 0; }
+.composer { position: relative; margin: 0 max(10px, calc((100% - 880px) / 2)) 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 6px 8px 6px; flex-shrink: 0; }
 .composer:focus-within { border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chips:empty { display: none; }

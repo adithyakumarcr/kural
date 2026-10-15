@@ -1821,6 +1821,23 @@ class ChatView {
     this.save();
   }
 
+  // "Save plan" under a plan: the answer's text as plans/plan-<date>.md in the project (the work folder with none open), then opened.
+  async savePlan(tab, index) {
+    const msg = tab.messages[index];
+    const text = msg ? (msg.blocks || []).filter((b) => b.k === "text" && String(b.text || "").trim()).map((b) => b.text.trim()).join("\n\n") : "";
+    if (!text) { vscode.window.showWarningMessage("Kural: there is no plan text to save."); return; }
+    const d = new Date(), pad = (n) => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const dir = path.join(ws.root() || ws.workDir(), "plans");
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `plan-${stamp}.md`);
+      fs.writeFileSync(file, `${text}\n`);
+      await vscode.window.showTextDocument(vscode.Uri.file(file), { preview: false });
+      vscode.window.setStatusBarMessage(`Plan saved to ${vscode.workspace.asRelativePath(file)}`, 3000);
+    } catch (e) { vscode.window.showWarningMessage(`Kural couldn't save the plan: ${e.message}`); }
+  }
+
   // "Build it" under a plan: switch to Agent and carry the plan out. Auto only when this chat is already in Auto: a plan
   // (shaped by whatever the AI read) must not start running commands unasked because another chat once used Auto.
   async buildPlan(tab) {
@@ -2610,6 +2627,7 @@ class ChatView {
         if (msg) { msg.planBuilt = true; this.post({ type: "patch", tabId: tab.id, index: m.msgIndex, msg: this.patchOf(msg) }); }
         await this.buildPlan(tab);
       } break;
+      case "savePlan": if (tab) await this.savePlan(tab, m.msgIndex); break;
       case "finishTeam": if (tab) this.finishTeam(tab); break;
       case "teamOfferAnswer": { const f = this.teamOffers.get(m.id); if (f) f(m.use ? "team" : "one"); break; }
       case "stop": {
@@ -2741,6 +2759,13 @@ class ChatView {
         await vscode.window.showTextDocument(ed.document, ed.viewColumn);
         await ed.edit((b) => b.replace(ed.selection, m.code));
         if (this.activity) this.activity.addWork("chat Insert", this.lastAsk(tab), [vscode.workspace.asRelativePath(ed.document.uri)]);
+        break;
+      }
+      // A shell command goes to the terminal (typed, not run: you press Enter), not into the open file.
+      case "terminal": {
+        const term = vscode.window.activeTerminal || vscode.window.createTerminal({ cwd: ws.root() || ws.workDir() });
+        term.show();
+        term.sendText(String(m.code || "").replace(/\s+$/, ""), false);
         break;
       }
       case "copy": await vscode.env.clipboard.writeText(m.code); vscode.window.setStatusBarMessage("Copied", 1500); break;
