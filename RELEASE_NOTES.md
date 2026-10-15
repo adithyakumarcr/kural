@@ -1,3 +1,7 @@
+## Not released yet
+
+- **Linking a Jira ticket works with the "Atlassian MCP" connector.** Its tools are named `claude_ai_Atlassian_MCP`, which Kural did not recognise, so even the read-only lookups were refused ("Only reading from Jira is allowed here"). Reads from it (and Confluence/graph lookups) now run; creating or editing still asks.
+
 ## What's new in 1.1.0-rc.3
 
 - **Commit messages follow Conventional Commits and see every change.** With several folders open, the sparkle button
