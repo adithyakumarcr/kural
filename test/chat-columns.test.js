@@ -315,5 +315,48 @@ check("a dragged tab carries no file address (a drop on the chat attached kural-
   assert.match(shell, /setData\(TAB, what\.id\)/);
 });
 
+// Every pane must show a chat that's still open (else Enter/send go to a chat the backend doesn't have and are dropped).
+const allOpen = (chat) => { for (const p of chat.panes) assert.ok(chat.tab(p.activeId), `pane ${p.id} shows a closed chat (${p.activeId})`); };
+
+check("closing the panel's chat when the tab before it is in a column: the panel moves to a chat that's open", () => {
+  const { chat, main } = fixture();
+  chat.dropTab(main, { id: "b", side: "after", to: 0 });
+  chat.closeTab("a");
+  allOpen(chat);
+  assert.strictEqual(main.activeId, "c");
+});
+
+check("the same when the tab before it is beside the code: no jump to the editor, the panel shows another chat", () => {
+  const { chat, main } = fixture();
+  chat.adoptDragged({}, "b");
+  chat.closeTab("a");
+  allOpen(chat);
+  assert.strictEqual(main.activeId, "c");
+  assert.notStrictEqual(chat.focusPane && chat.focusPane.kind, "editor");
+});
+
+check("reopening from History doesn't take the empty chat that a Split column shows", () => {
+  const { chat, main } = fixture();
+  chat.splitChat(main, true);
+  const col = main.layout[1], blank = col.activeId;
+  chat.focusPane = main;
+  chat.archive.read = (id) => ({ id, title: "old", status: "idle", messages: [{ role: "user" }] });
+  chat.clean = () => {};   // (the fixture has no settings for it)
+  chat.reopen("old");
+  allOpen(chat);
+  assert.strictEqual(col.activeId, blank);
+  assert.strictEqual(main.activeId, "old");
+});
+
+check("reopening still replaces an empty chat that no pane shows", () => {
+  const { chat, main } = fixture();
+  chat.tabs.push({ id: "e", title: "New chat", status: "idle", messages: [] });
+  chat.archive.read = (id) => ({ id, title: "old", status: "idle", messages: [{ role: "user" }] });
+  chat.clean = () => {};   // (the fixture has no settings for it)
+  chat.reopen("old");
+  allOpen(chat);
+  assert.ok(!chat.tab("e") && main.activeId === "old");
+});
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log("\nall passed");

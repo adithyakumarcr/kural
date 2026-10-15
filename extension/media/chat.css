@@ -143,7 +143,7 @@ body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 .card-foot { display: flex; justify-content: flex-end; gap: 6px; padding: 5px 8px; border-top: 1px solid var(--border); }
 
 /* empty state */
-.empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+.empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; user-select: none; }
 .logo { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--accent-hi), var(--accent)); color: var(--on-accent); font-weight: 700; display: grid; place-items: center; font-family: var(--vscode-editor-font-family); }
 .brand { margin-top: 14px; font-size: calc(22px * var(--fs, 1)); font-weight: 650; letter-spacing: .01em; }
 .brand-sub { margin-top: 2px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
