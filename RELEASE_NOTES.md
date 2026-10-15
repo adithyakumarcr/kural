@@ -1,3 +1,8 @@
+## Not released yet
+
+- **The Terminal button also shows on code blocks without a language.** A block whose lines all look like terminal
+  commands (git, npm, cd ...) gets Copy and **Terminal** (typed into the terminal, you press Enter) instead of Insert and Apply.
+
 ## What's new in 1.1.0-rc.3
 
 - **Commit messages follow Conventional Commits and see every change.** With several folders open, the sparkle button

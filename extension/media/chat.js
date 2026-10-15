@@ -223,7 +223,21 @@ window.KURAL_CHAT = function (app, port) {
   const HASH_LANGS = /^(py|python|sh|bash|zsh|shell|console|ruby|rb|yaml|yml|toml|r|perl|pl|makefile|make|dockerfile|conf|ini|cmake|nim|elixir|ex|powershell|ps1|coffee|graphql|gql|tf|hcl)$/i;
   const DASH_LANGS = /^(sql|lua|haskell|hs|elm|ada)$/i;
   const MARKUP_LANGS = /^(html|xml|svg|vue|svelte|jsx|tsx)$/i;
-  const SHELL_LANGS = /^(sh|bash|zsh|shell|console)$/i;
+  const SHELL_LANGS = /^(sh|bash|zsh|shell|console|terminal|shellsession|shell-session)$/i;
+  // The assistant often leaves the language off ("code"): such a block is a terminal command when every line starts like one.
+  const COMMANDS = /^(\$ )?(git|npm|npx|pnpm|yarn|node|python3?|pip3?|brew|cd|ls|cat|echo|export|mkdir|rm|mv|cp|touch|chmod|sudo|curl|wget|docker|kubectl|make|cargo|go|java|mvn|gradle|gh|ssh|scp|tar|unzip|grep|rg|sed|awk|find|open|code|source|\.\/|bash|sh|zsh|apt|apt-get|pkexec|kill|pkill|tccutil|dpkg|xcode-select|swift|ruby|gem|bundle|dotnet|npm run)(\s|$)/;
+  function isShellBlock(lang, code, file) {
+    if (file) return false;
+    if (lang) return SHELL_LANGS.test(lang);
+    const lines = code.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+    if (!lines.length) return false;
+    let more = false;   // the line before ended in "\" or an operator: this one continues it
+    for (const l of lines) {
+      if (!more && !COMMANDS.test(l)) return false;
+      more = /(\\|&&|\|\||\|)$/.test(l);
+    }
+    return true;
+  }
   const PLAIN_LANGS = /^(text|txt|plain|plaintext|output|log|diff|patch)$/i;
   // (# starts a comment only at the start of a word: "https://x.com/#a" isn't one. A ' with no closing ' on its line
   // isn't a string: Rust's 'a, "can't" in a sentence.)
@@ -271,16 +285,18 @@ window.KURAL_CHAT = function (app, port) {
     const lang = (info.split(/\s+/)[0] || "").replace(/^path=.*/, "");
     const pm = info.match(/path=(\S+)/), file = pm ? pm[1] : null;
     const btn = (label, title, onclick, cls) => el("button", { class: `cb ${cls || ""}`, title, onclick, disabled: !done }, label);
+    const shell = isShellBlock(lang, code, file);
     return el("div", { class: "code" },
       el("div", { class: "code-head" },
         file ? el("span", { class: "code-file", title: "Open file", onclick: () => post({ type: "openFile", path: file }) }, file)
           : el("span", { class: "code-lang" }, lang || "code"),
         el("span", { class: "spacer" }),
         btn("Copy", "Copy to clipboard", () => post({ type: "copy", code })),
-        SHELL_LANGS.test(lang)
-          ? btn("Terminal", "Paste into the terminal (you press Enter to run it)", () => post({ type: "terminal", code }))
-          : btn("Insert", "Insert at the cursor", () => post({ type: "insert", code })),
-        btn("Apply", file ? `Apply to ${file} and review` : "Apply to the open file and review", () => post({ type: "apply", code, path: file }), "primary")),
+        // A terminal command goes to the terminal (typed, not run); Apply makes no sense for it.
+        shell
+          ? btn("Terminal", "Paste into the terminal (you press Enter to run it)", () => post({ type: "terminal", code: code.replace(/^\$ /gm, "") }), "primary")
+          : [btn("Insert", "Insert at the cursor", () => post({ type: "insert", code })),
+            btn("Apply", file ? `Apply to ${file} and review` : "Apply to the open file and review", () => post({ type: "apply", code, path: file }), "primary")]),
       el("pre", {}, el("code", {}, highlight(code, lang))));
   }
 
