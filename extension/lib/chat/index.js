@@ -449,7 +449,11 @@ class ChatView {
     // Its own editor (dragged out) or column closes with it; every other pane that showed it moves to the tab before it.
     for (const p of this.panes.filter((q) => q.single && q.activeId === id)) { if (p.col) this.closeColumn(p); else { p.closing = true; p.panel.dispose(); } }
     const showing = this.panes.filter((p) => p.activeId === id && !p.single);
-    for (const p of showing) this.activate(this.tabs[Math.max(0, Math.min(i - 1, this.tabs.length - 1))].id, p);
+    for (const p of showing) {
+      const prev = this.tabs[Math.max(0, Math.min(i - 1, this.tabs.length - 1))].id;
+      // activate() won't move a pane to a chat that's open in a column or editor: it would stay on the closed one.
+      if (this.panes.some((q) => q.single && q.activeId === prev && q !== p)) this.showOther(p, id); else this.activate(prev, p);
+    }
     if (!showing.length) this.postTabs();
     this.postHistory();
     this.save();
@@ -466,7 +470,7 @@ class ChatView {
     this.clean(tab);
     tab.visiting = !!(tab.workspace && tab.workspace.key !== this.here.key);
     // A fresh, unused tab gets replaced instead of piling up.
-    const blank = this.tabs.find((t) => !t.messages.length && t.status === "idle");
+    const blank = this.tabs.find((t) => !t.messages.length && t.status === "idle" && !this.panes.some((p) => p !== this.cur() && p.activeId === t.id));
     if (blank) this.tabs.splice(this.tabs.indexOf(blank), 1, tab); else this.tabs.push(tab);
     this.activate(tab.id);
     this.postHistory();

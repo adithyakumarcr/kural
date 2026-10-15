@@ -93,6 +93,11 @@ const root = path.join(__dirname, "..", "extension");
     assert.ok(!/\.mood-chip\.add\b/.test(css));
     assert.match(css, /^\.add \{[^}]*font-family/m, "(the rule it clashed with is still there, for the diff)");
   });
+  await check("the home screen can't be selected (no \"Add to chat\" on it); the conversation can", () => {
+    const css = fs.readFileSync(path.join(root, "media", "chat.css"), "utf8");
+    assert.match(css, /^\.empty \{[^}]*user-select: none/m);
+    assert.ok(!/^\.list \{[^}]*user-select: none/m.test(css), "(answers must stay selectable: Add to chat, Ask)");
+  });
 
   console.log(failed ? `chat-context: ${failed} FAILED` : "chat-context: ALL PASS");
   process.exit(failed ? 1 : 0);
