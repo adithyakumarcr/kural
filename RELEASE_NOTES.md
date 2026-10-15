@@ -1,6 +1,8 @@
 ## Not released yet
 
 - **Linking a Jira ticket works with the "Atlassian MCP" connector.** Its tools are named `claude_ai_Atlassian_MCP`, which Kural did not recognise, so even the read-only lookups were refused ("Only reading from Jira is allowed here"). Reads from it (and Confluence/graph lookups) now run; creating or editing still asks.
+- **The Terminal button also shows on code blocks without a language.** A block whose lines all look like terminal
+  commands (git, npm, cd ...) gets Copy and **Terminal** (typed into the terminal, you press Enter) instead of Insert and Apply.
 
 ## What's new in 1.1.0-rc.3
 
