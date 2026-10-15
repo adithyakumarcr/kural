@@ -394,6 +394,27 @@ def add_workspace_color_item(text):
     return text[:start] + item + text[start:]
 
 
+# VS Code 1.140's speech-to-text (dictation) service asks for a GitHub login as soon as it's created, at EVERY start
+# (`getSessions("github", [], {silent: true})`: "silent" still wakes the GitHub login extension, which reads its saved
+# login from the keychain: "Kural wants to use ... Kural Safe Storage" on a Mac, again after every update). Kural has no
+# dictation, so the constructor's own first call is dropped; the service still looks again when the GitHub provider
+# registers or its sessions change (something else woke it: then there is nothing new to ask).
+SPEECH_PROBE_MARK = "/*kural-no-github-probe*/"
+SPEECH_PROBE = re.compile(r'(this\._updateConfiguredContextKey\(\),)this\._refreshGitHubSession\(\),'
+                          r'(?=this\._register\(this\._authenticationService\.onDidChangeSessions\()')
+
+
+def skip_github_probe(text):
+    if SPEECH_PROBE_MARK in text:
+        return text
+    found = SPEECH_PROBE.findall(text)
+    if len(found) != 1:
+        print(f"::warning::VS Code's dictation service not found as expected ({len(found)} matches); it may ask the keychain for a "
+              "GitHub login at every start (a Mac's 'Kural Safe Storage' prompt)")
+        return text
+    return SPEECH_PROBE.sub(lambda m: SPEECH_PROBE_MARK + m.group(1), text, count=1)
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -405,7 +426,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = add_workspace_color_item(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))
+    new = skip_github_probe(add_workspace_color_item(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))
     if new == text:
         return
     data = new.encode("utf-8")

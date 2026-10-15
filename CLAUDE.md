@@ -63,7 +63,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   app (package.json `name` → Kural; it was "VSCodium", whose name Electron gives its keychain item). The main
   trigger, at EVERY start in any folder: VS Code's DefaultAccount service (Copilot's account) asks for GitHub sessions,
   which activates github-authentication, which reads `github.auth` from secret storage. `rebrand.py` points
-  product.json `defaultChatAgent.provider.{default,enterprise}.id` at a provider that doesn't exist. Check: start
+  product.json `defaultChatAgent.provider.{default,enterprise}.id` at a provider that doesn't exist. A second one since
+  VS Code 1.140 (found 15 Oct 2026 in the log "Reading sessions from keychain...", activation `onAuthenticationRequest:github`
+  before any extension): the dictation service's constructor calls `_refreshGitHubSession()` (`getSessions("github",[],{silent:true})`);
+  `skip_github_probe` drops that call (`test/rebrand-github-probe.test.js`). Look for `GitHub Authentication.log` in a window's
+  logs after a start: it must not exist. Check: start
   with `--log trace`; no `[mainThreadSecretState]` lines in the logs (Linux shows the same calls).
 - **Google Gemini = Antigravity** (`lib/ai/agy.js`, id/prefix `agy`; shown as "Google Gemini", short "Gemini"):
   Google's `agy` CLI. Google's Gemini CLI (`gemini --acp`) was a provider until Oct 2026; it was removed because it
