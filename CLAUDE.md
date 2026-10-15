@@ -39,7 +39,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/chat/` — `index.js` the chat backend (tabs, modes, models, questions, permissions, panes); `prompts.js`
     (modes, `MOODS`, mood prompts); `team.js` (roles, team prompts) + `team-mcp.js` (the agents' board); `guide.js`
     (what Kural can do, appended to every chat's prompt); `archive.js` (History), `attachments.js`, `tickets.js`
-    (Jira), `changes.js`. UI: `media/chat.js` + `media/chat.css` (a webview).
+    (Jira), `changes.js`. UI (a webview): `media/chat-columns.js` (the page: chats side by side, the tab drag) +
+    `media/chat.js` (one chat) + `media/chat.css`.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
@@ -309,17 +310,34 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   webview's address (`S.pics` = `{base, root}` from `filesFor()`; `localResourceRoots` = media, project folders,
   globalStorage, tmp, home; the CSP lets the page load pictures only); web pictures load only on click (a picture URL can carry data away). Don't reuse `S.files`: it's
   the @-mention file list (a clash there hid every picture). Links: `a.link[data-url]` → `openUrl` (http/https only).
-- **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel and chat editors beside the code.
-  Dragging a chat tab into the editor area makes one (`lib/chat/tab-editor.js`): the page's tab sets `ResourceURLs`
-  = `kural-chat:/<id>.kuralchat` (what VS Code's editor drop target opens), which opens in the custom editor
-  "kural.chatTab" (`adoptDragged`: the side panel moves on to another chat), so VS Code does the split zones, moving and
-  restoring after a restart. Such a pane is `single`: its page hides its tab bar (`tabs` message `single`), `post("tabs")`
-  gives it only its own tab and leaves that tab out of the other panes' lists, `activate()` of it from elsewhere reveals
-  its editor, `cycle()`/new tab skip it, closing the chat disposes the editor (Adithya: the split showed "New chat" twice
-  and his other chats). No FileSystemProvider for that scheme on purpose: with one, VS Code shows a breadcrumb bar
-  with the made-up file name. A drop on top of a webview (another chat, Get started) lands in that webview instead: drop
-  on an editor's tab bar or a text editor. Checked in the app with DOM drag events (CDP can't start a native drag in a
-  background window). Older split panels (WebviewPanel "kural.chatEditor") still come back through their serializer
+- **Panes** (`lib/chat/index.js`): a chat can show in several webviews: the side panel (and its columns, below) and
+  chat editors beside the code. **A drag from a webview never reaches VS Code's editor area**: Chromium blocks drag
+  events between cross-site frames of one page (the webview is `vscode-webview://`, the workbench `vscode-file://`), so
+  the old way (the tab's dragstart set `ResourceURLs` = `kural-chat:/<id>.kuralchat` for VS Code's editor drop target)
+  silently did nothing, though synthetic DOM drag events in the workbench "passed". Now the page (`media/chat-columns.js`)
+  decides from the drag's `dragend`: its clientX/Y are correct in the page's own coordinates even outside it (no
+  `dragleave` when the drag leaves the frame, and `dropEffect` differs per platform: don't use either) → `dropTab
+  {side: "outside"}` → `openBeside` (`lib/chat/tab-editor.js`: ViewColumn.Beside, Active when no editor is open) opens
+  that address in the custom editor "kural.chatTab" (`adoptDragged`: the side panel moves on to another chat). VS Code's
+  own drop zones never show; Escape outside the panel also opens it (its dragend looks the same). Such a pane is
+  `single`: its page hides its tab bar (`tabsFor`: `single`), it gets only its own tab and that tab leaves the other
+  panes' lists, `activate()` of it from elsewhere reveals its editor, `cycle()`/new tab skip it, closing the chat
+  disposes the editor (Adithya: the split showed "New chat" twice and his other chats). No FileSystemProvider for that
+  scheme on purpose: with one, VS Code shows a breadcrumb bar with the made-up file name. **Columns** (Adithya: split
+  also when the panel is maximized, where there's no editor area): the side panel's page shows up to `MAX_COLUMNS` chats
+  side by side. `chat.js` is one chat per column (`window.KURAL_CHAT(el, port)`: page-wide listeners take `on`, its
+  AbortController; menus/notices are placed in the column: `.col` has `contain: layout`); `chat-columns.js` is the page
+  (takes `acquireVsCodeApi`, routes messages by `col`, dividers, stacks columns when narrow, the drag and its drop zones
+  `dropZone`). Each extra column is a `single` pane with `col`, `main` and a proxy webview that adds `col` to what it
+  posts; the side pane's `layout` lists them in order (`addColumn`, `closeColumn`, `dropTab`, `splitChat`; saved as
+  `cols`, `restoreCols`); its "ready" resends `cols` (that also tells the page it may split). Adding or closing one
+  makes widths equal again. During a tab drag the page accepts the drop anywhere on itself and its drop handler decides
+  (accepting only over a zone missed quick drops on X11: the "accepted" answer reaches the drag one mouse move late).
+  Checked with a real mouse drag on X11, 15 Oct 2026: Xvfb unpacked from `apt-get download xvfb`, input through XTEST
+  (python3 + ctypes on libXtst), the app started with `--extensionDevelopmentPath` and driven over CDP; CDP's own
+  `Input.dispatchDragEvent` skips Chromium's cross-site check, so it can't show this bug. Synthetic X input faster than
+  a hand lags behind in Xvfb's drag protocol (a bare X server, no window manager): move at a human pace there. Older
+  split panels (WebviewPanel "kural.chatEditor") still come back through their serializer
   (`restoreSplit`, `splitIds`). Each pane has its own
   `activeId`; `this.activeId` is a getter for the pane being handled (`this.pane`) or the one you used last
   (`focusPane`). `post()` goes to every pane (each shows what's about its own tab), except `ONE_PANE` replies

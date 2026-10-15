@@ -95,10 +95,17 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   files in an answer (and file names in \`code\`) open the file (at the line), also when the answer gives only its name
   or a path from another folder: Kural finds it in the project (several with that name: you pick one); web links open
   in Kural's browser tab. The clock
-  button: every chat from every workspace (search, pin, delete). Drag a chat tab into the editor area to open it there,
-  split like VS Code's editors (drop on a side: beside, above or below); it then shows only that chat, and leaves the
-  side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code"). To bring it back: the button in
-  that editor's title bar, "Move Chat Back to the Kural Panel" (or close its editor tab).
+  button: every chat from every workspace (search, pin, delete). Drag a chat tab out of the Kural panel and let go (in
+  the editor area, say) to open it beside the code, in an editor group next to the one you're in (VS Code's own
+  above/below drop zones don't show for it: move its editor tab afterwards for that); it then shows only that chat, and
+  leaves the side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code"). To bring it back:
+  the button in that editor's title bar, "Move Chat Back to the Kural Panel" (or close its editor tab).
+  Chats side by side in the panel itself (also when it's maximized: the Maximize button on its title bar, or the panel
+  dragged wider): drag a tab onto the left or right side of the chat ("Split left/right" shows), or press the Split
+  button beside + (a new chat; a narrow panel opens it beside the code instead). Up to four, each with its title and
+  × (back among the tabs); drag a title to move that chat (to a side, onto another chat, onto the first column: back
+  among the tabs, or out of the panel: beside the code); drag the line between two to resize. Made narrower, they stack
+  above each other. They come back after a restart.
 - Source Control panel: the sparkle button in the commit message box writes a commit message from your staged changes
   (or all changes), in the style of your recent commits, with the chat's model; edit it and commit as usual.
 - Kural's browser (Command Palette "Kural: Open Browser", or + in the chat: "Pick from a browser", or ANY web link in an

@@ -15,7 +15,15 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; padding: 0; }
 body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 1)); line-height: 1.55; color: var(--vscode-foreground); background: var(--vscode-sideBar-background); }
-#app { display: flex; flex-direction: column; height: 100vh; position: relative; }
+/* The page: chats side by side in columns (media/chat-columns.js); stacked when they don't fit. */
+#app { display: flex; height: 100vh; position: relative; }
+#app.stacked { flex-direction: column; }
+/* One chat. Layout containment: its menus, quote button and notices (position: fixed) are placed inside it. */
+.col { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; position: relative; contain: layout; }
+/* The divider between two columns: a line; drag it to resize. */
+.sash { flex: 0 0 5px; padding: 0 2px; background: var(--border); background-clip: content-box; cursor: col-resize; touch-action: none; }
+#app.stacked > .sash { padding: 2px 0; cursor: row-resize; }
+.sash:hover, .sash.on { background: var(--accent); background-clip: border-box; }
 button { font: inherit; color: inherit; cursor: pointer; }
 .booting { margin: auto; color: var(--muted); }
 .spacer { flex: 1; }
@@ -38,6 +46,23 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tab-x:hover { opacity: 1 !important; background: var(--hover); }
 .tab-new { background: none; border: 0; padding: 2px 7px; color: var(--muted); border-radius: 6px; margin-bottom: 3px; display: grid; place-items: center; }
 .tab-new:hover { background: var(--hover); color: var(--vscode-foreground); }
+.tab { user-select: none; }
+/* A chat in a column of its own: its title (drag it to move the chat), × back to the tabs. */
+/* (As tall as the tab bar beside it: a tab's padding and text, plus the tab strip's 6px on top.) */
+.col-head { display: flex; align-items: center; gap: 7px; padding: 10px 6px 5px 12px; line-height: 1.55; border-bottom: 1px solid var(--border); flex-shrink: 0; font-size: calc(12px * var(--fs, 1)); cursor: grab; user-select: none; }
+.col-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--muted); opacity: .45; }
+.col-dot.running { background: var(--accent); opacity: 1; animation: pulse 1.1s infinite ease-in-out; }
+.col-dot.waiting { background: var(--yellow); opacity: 1; }
+.col-dot.unread { background: var(--vscode-foreground); opacity: 1; }
+.col-head .col-x { margin: -3px 0; padding: 3px 4px; }
+/* Dragging a chat: where it would go (like the editor's drop zones), and what you can do (below the tab bar: not over the tabs). */
+.drop-zone { position: fixed; z-index: 40; pointer-events: none; display: grid; place-items: center; border-radius: 6px; font-weight: 600; font-size: calc(12px * var(--fs, 1));
+  background: color-mix(in srgb, var(--accent) 18%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 65%, transparent); color: var(--vscode-foreground); }
+.drag-hint { position: fixed; top: calc(20px + 20px * var(--fs, 1)); left: 50%; transform: translateX(-50%); z-index: 41; pointer-events: none; max-width: calc(100% - 16px); padding: 3px 10px; border-radius: 12px;
+  background: var(--menu); border: 1px solid var(--border); color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+.drag-hint.out { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 
 /* ---------- conversation ---------- */
 .body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
@@ -220,7 +245,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .pop-empty { padding: 4px 8px; color: var(--muted); font-size: calc(12px * var(--fs, 1)); }
 
 /* menus */
-.menu { position: fixed; min-width: 250px; max-width: calc(100vw - 12px); background: var(--menu); border: 1px solid var(--border); border-radius: 9px; padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4); z-index: 20; }
+.menu { position: fixed; min-width: 250px; max-width: calc(100% - 12px); background: var(--menu); border: 1px solid var(--border); border-radius: 9px; padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4); z-index: 20; }
 .mh-key { float: right; text-transform: none; letter-spacing: 0; opacity: .8; }
 .mh { font-size: calc(10.5px * var(--fs, 1)); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 5px 8px 3px; }
 .mi { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: calc(12.5px * var(--fs, 1)); }
@@ -431,7 +456,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .agent-role { font-size: calc(10.5px * var(--fs, 1)); padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-hi); white-space: nowrap; }
 
 /* + menu and "Link ticket" */
-.menu.wide { width: min(440px, calc(100vw - 12px)); }
+.menu.wide { width: min(440px, calc(100% - 12px)); }   /* (100%: the column, .col) */
 .mi-icon { width: 18px; text-align: center; flex-shrink: 0; }
 .ticket-search { padding: 2px 8px 6px; }
 .ticket-q { width: 100%; box-sizing: border-box; background: var(--surface); color: var(--vscode-foreground); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: calc(12.5px * var(--fs, 1)); outline: none; }

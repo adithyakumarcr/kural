@@ -211,15 +211,24 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
   as they were at that message (in the original chat those changes then show as Undone), **Keep Code** leaves your
   files as they are now; closing the question doesn't fork. File-change cards inherited from the original can be
   reviewed, but **Keep**, **Undo** and **Restore code** in the fork act only on its own changes. Both chats are saved
-  in History. Forking a chat in its own editor opens another editor beside it.
+  in History. Forking a chat in its own editor opens another editor beside it; in a column of the panel, among the tabs.
 - **History** (clock button): every chat from every workspace, in full. Search, **pin** chats to the top, delete
   them. A chat from another workspace opens to read; **Open its folder**, or **Continue here** (a new chat here that knows
   the old conversation).
-- **Two chats at once**: drag a chat tab out of the Kural panel into the editor area. It opens there, split the way VS
-  Code splits editors: drop it on a side of an editor to put it beside, above or below, or in the middle to add it as a
-  tab. It shows only that chat (its editor tab is its tab), and the side panel stops listing it until you close the
-  editor. Both chats can work at the same time; move it anywhere, even to another screen. It comes back after a restart.
+- **A chat beside the code**: drag a chat tab out of the Kural panel and let go in the editor area. It opens there, in
+  an editor group beside the one you're in (VS Code's own drop zones don't light up for it: a web page inside VS Code,
+  like the chat, can't hand a drag to the editor; move its editor tab afterwards to put it above or below). It shows
+  only that chat (its editor tab is its tab), and the side panel stops listing it until you close the editor. Both
+  chats can work at the same time; move it anywhere, even to another screen. It comes back after a restart.
   (Command Palette: **Kural: Open a Chat Beside the Code** does the same with a new chat.)
+- **Chats side by side in the panel** (also when it's full screen: the **Maximize** button on the panel's title bar):
+  drag a tab onto the left or right side of the chat (the side lights up: **Split left** / **Split right**), or press
+  the **Split** button beside **+** for a new chat next to it. Up to four, when the panel is wide enough (in a narrow
+  panel, Split opens the new chat beside the code instead). Each extra chat has its title and **×** above it: × puts it
+  back among the tabs. Drag a title to move that chat: to a side of another one, onto another one (it shows there
+  instead), onto the first column (back among the tabs), or out of the panel (beside the code). Drag the line between
+  two to give one more room. When the panel gets too narrow for them side by side, they stack above each other. The
+  layout comes back after a restart.
 - **Back to the panel**: the button in that chat editor's title bar, **Move Chat Back to the Kural Panel** (also on its
   tab's right-click menu): the editor closes and the side panel shows the chat among its tabs. Closing the editor tab
   also puts it back among the side panel's tabs.

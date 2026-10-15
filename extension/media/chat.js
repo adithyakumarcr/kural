@@ -1,15 +1,10 @@
 // The Kural chat panel UI. A small web page inside the editor that talks to
 // lib/chat.js through postMessage. No outside libraries, so it works offline.
-(function () {
-  const vscode = acquireVsCodeApi();
-  const app = document.getElementById("app");
-  // Text size follows the code editor's font (set by Kural; see lib/ui.js).
-  const setFs = (v) => { if (v) document.documentElement.style.setProperty("--fs", v); };
-  setFs(document.documentElement.dataset.fs);
-  // Tell Kural when the chat has the keyboard, so its shortcuts (Ctrl+M, Ctrl+P, …) apply only here.
-  window.addEventListener("focus", () => vscode.postMessage({ type: "focusChanged", focused: true }));
-  window.addEventListener("blur", () => vscode.postMessage({ type: "focusChanged", focused: false }));
-  window.addEventListener("error", (e) => vscode.postMessage({ type: "log", message: `${e.message} (${e.filename}:${e.lineno})` }));
+// One chat, drawn into `app` (a column of the page: media/chat-columns.js shows one or more side by side). `port` is
+// its line to lib/chat: post (a message from this column), active (it has the keyboard), the tab drag, split.
+window.KURAL_CHAT = function (app, port) {
+  // Listeners on the whole page end with the column (`on`); the column's own elements go with it.
+  const off = new AbortController(), on = { signal: off.signal };
 
   const S = {
     offers: {},   // tab id -> { id, agents, until }: "Use N agents?" above the box
@@ -39,7 +34,7 @@
   const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const base = (p) => (p || "").split("/").pop();
   const dir = (p) => { const i = (p || "").lastIndexOf("/"); return i > 0 ? p.slice(0, i) : ""; };
-  const post = (m) => vscode.postMessage(m);
+  const post = (m) => port.post(m);
   // "Sonnet", or for a model on this computer (Ollama) "qwen3-coder:30b · local".
   // "opus" → "Opus"; "ollama:qwen3:8b" → "qwen3:8b · local"; "codex:gpt-6.1-sol" → its name in Codex's list.
   const modelLabel = (id) => {
@@ -294,8 +289,17 @@
   const historyBtn = el("button", { class: "icon-btn", title: "All chats (history)", onclick: () => toggleHistory() }, icon("clock"));
   // "+" and the clock stay put; only the tabs scroll (mouse wheel scrolls them sideways).
   const newTabBtn = el("button", { class: "tab-new", title: keys("New chat (Ctrl+Alt+N)"), onclick: () => { S.focusNext = true; closeHistory(); post({ type: "newTab" }); } }, icon("plus"));
-  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, historyBtn);
+  // Split: a new chat beside this one, in this panel when it's wide enough (maximized), else beside the code.
+  const NO_ROOM = "No room for another chat side by side: close one (its ×), or drag a tab out of this panel";
+  const splitBtn = el("button", { class: "icon-btn", "aria-label": "Split",
+    onmouseenter: () => { splitBtn.title = port.canSplit() ? "Split: a new chat beside this one (or drag a tab to a side of the chat)" : port.full() ? NO_ROOM : "Open a new chat beside the code (or drag a tab out of this panel)"; },
+    onclick: () => { closeHistory(); if (!port.split()) flash(NO_ROOM, 2600); } }, icon("split-horizontal"));
+  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn);
   tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+  // A chat in a column of its own (split): its title instead of the tab bar. Drag the title to move it; × puts it back
+  // among the tabs.
+  const colHead = el("div", { class: "col-head hidden", draggable: "true",
+    ondragstart: (e) => S.tab ? port.dragStart(e, { id: S.tab.id, title: S.tab.title }) : e.preventDefault(), ondragend: (e) => port.dragEnd(e) });
   const listEl = el("div", { class: "list" });
   // Follow new text only while you're at the bottom. Scrolled up to read? It stays put, and "Jump to latest" appears.
   let stick = true;
@@ -329,7 +333,7 @@
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
   const visitBar = el("div", { class: "visit hidden" });
   const body = el("div", { class: "body" }, listEl, historyEl, localEl, jumpBtn);
-  app.replaceChildren(tabBar, body, visitBar, composer, menuEl);
+  app.replaceChildren(tabBar, colHead, body, visitBar, composer, menuEl);
 
   // ---------- tabs ----------
   const lastClick = { id: null, at: 0 };
@@ -359,15 +363,10 @@
             if (t.id !== S.activeId) { S.focusNext = true; post({ type: "switchTab", id: t.id }); }
           },
           onauxclick: (e) => { if (e.button === 1) post({ type: "closeTab", id: t.id }); },
-          // Drag a tab into the editor area: it opens there, split like VS Code's own editors (lib/chat/tab-editor.js).
+          // Drag a tab to a side of the chat (split), or out of the panel: it opens beside the code (media/chat-columns.js).
           draggable: "true",
-          ondragstart: (e) => {
-            const uri = `kural-chat:/${t.id}.kuralchat`;
-            e.dataTransfer.effectAllowed = "copyMove";
-            e.dataTransfer.setData("ResourceURLs", JSON.stringify([uri]));
-            e.dataTransfer.setData("text/uri-list", uri);
-            e.dataTransfer.setData("text/plain", t.title);
-          },
+          ondragstart: (e) => port.dragStart(e, { id: t.id, title: t.title }),
+          ondragend: (e) => port.dragEnd(e),
         },
         el("span", { class: "dot" }),
         el("span", { class: "tab-title" }, t.title),
@@ -375,6 +374,9 @@
       }));
     const a = tabsEl.querySelector(".tab.active");
     if (a) a.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const t = S.tabs.find((x) => x.id === S.activeId);
+    if (t) colHead.replaceChildren(el("span", { class: `col-dot ${t.status} ${t.unread ? "unread" : ""}` }), el("span", { class: "col-title", title: `${t.title}\nDrag to move it: to a side, onto another chat, or out of this panel` }, t.title),
+      el("button", { class: "icon-btn col-x", title: "Close this split (the chat goes back to the tabs)", onclick: () => post({ type: "closeColumn" }) }, icon("close")));
   }
   function finishRename(id, value) {
     if (S.renaming !== id) return;
@@ -552,7 +554,7 @@
     return files.size;
   }
   // Editing an earlier message: its text (and @ mentions) go into the input box, with a bar saying what sending does.
-  const flash = (text, ms = 1600) => { const f = document.querySelector(".flash") || document.body.appendChild(el("div", { class: "flash" }));
+  const flash = (text, ms = 1600) => { const f = app.querySelector(".flash") || app.appendChild(el("div", { class: "flash" }));
     f.textContent = text; f.classList.add("on"); clearTimeout(S.flashTimer); S.flashTimer = setTimeout(() => f.classList.remove("on"), ms); };
   const busyNote = () => flash("Wait for the answer to finish (or stop it) first");
   function startEdit(i) {
@@ -1053,7 +1055,7 @@
     const sel = window.getSelection();
     if (sel.rangeCount && input.contains(sel.getRangeAt(0).startContainer)) savedRange = sel.getRangeAt(0).cloneRange();
   }
-  document.addEventListener("selectionchange", saveRange);
+  document.addEventListener("selectionchange", saveRange, on);
   function caretRange() {
     if (savedRange && input.contains(savedRange.startContainer)) return savedRange;
     const r = document.createRange(); r.selectNodeContents(input); r.collapse(false); return r;
@@ -1105,11 +1107,11 @@
     const rects = s.r.getClientRects(), at = rects[rects.length - 1] || s.r.getBoundingClientRect();
     askBtn.classList.toggle("hidden", askTarget(s) < 0);
     quoteBar.classList.remove("hidden");
-    const w = quoteBar.offsetWidth, h = quoteBar.offsetHeight, box = listEl.getBoundingClientRect();
-    // Under the selection's last line; above it when that's off the bottom of the chat.
+    const w = quoteBar.offsetWidth, h = quoteBar.offsetHeight, box = listEl.getBoundingClientRect(), col = app.getBoundingClientRect();
+    // Under the selection's last line; above it when that's off the bottom of the chat. (Placed in the column: chat.css .col.)
     const top = at.bottom + 6 + h <= box.bottom ? at.bottom + 6 : Math.max(box.top + 4, at.top - h - 6);
-    quoteBar.style.top = `${top}px`;
-    quoteBar.style.left = `${Math.max(6, Math.min(at.right - w, window.innerWidth - w - 6))}px`;
+    quoteBar.style.top = `${top - col.top}px`;
+    quoteBar.style.left = `${Math.max(6, Math.min(at.right - col.left - w, col.width - w - 6))}px`;
   }
   function addQuote() {
     const s = chatSelection();
@@ -1126,8 +1128,8 @@
     getSelection().removeAllRanges();
     side.start(i, text);
   }
-  document.addEventListener("mouseup", () => setTimeout(placeQuoteBtn, 0));   // (after the click has set the selection)
-  document.addEventListener("selectionchange", () => { if (!quoteBar.classList.contains("hidden") && !chatSelection()) quoteBar.classList.add("hidden"); });
+  document.addEventListener("mouseup", () => setTimeout(placeQuoteBtn, 0), on);   // (after the click has set the selection)
+  document.addEventListener("selectionchange", () => { if (!quoteBar.classList.contains("hidden") && !chatSelection()) quoteBar.classList.add("hidden"); }, on);
   listEl.addEventListener("scroll", () => quoteBar.classList.add("hidden"));
   // Side chat: a quick question under an answer (media/side.js). "Add to chat" under a side answer joins it to your message as a quote.
   const side = window.KURAL_SIDE({ el, icon, markdown, post, tab: () => S.tab, rerender: (i) => rerender(i), root: () => listEl,
@@ -1239,16 +1241,17 @@
       r.readAsDataURL(f);
     }
   }
-  const dropTarget = document.body;
+  const dropTarget = app;
   // (Drags from the editor's own file explorer reach here when you hold Shift. Files from Finder or another
-  // file manager can't: VS Code blocks those from web pages like this chat, so use + or paste instead.)
+  // file manager can't: VS Code blocks those from web pages like this chat, so use + or paste instead. A dragged chat
+  // tab never gets here: media/chat-columns.js takes it first.)
   dropTarget.addEventListener("dragover", (e) => {
     e.preventDefault();
     const ok = e.dataTransfer.effectAllowed || "all";
     e.dataTransfer.dropEffect = /copy|all/i.test(ok) ? "copy" : /move/i.test(ok) ? "move" : "link";
     composer.classList.add("drop");
   });
-  dropTarget.addEventListener("dragleave", (e) => { if (!e.relatedTarget || !document.body.contains(e.relatedTarget)) composer.classList.remove("drop"); });
+  dropTarget.addEventListener("dragleave", (e) => { if (!e.relatedTarget || !app.contains(e.relatedTarget)) composer.classList.remove("drop"); });
   dropTarget.addEventListener("drop", (e) => {
     e.preventDefault();
     composer.classList.remove("drop");
@@ -1332,9 +1335,9 @@
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");
-    const a = anchor.getBoundingClientRect();
-    menuEl.style.left = Math.max(6, Math.min(a.left, window.innerWidth - menuEl.offsetWidth - 6)) + "px";
-    menuEl.style.bottom = (window.innerHeight - a.top + 6) + "px";
+    const a = anchor.getBoundingClientRect(), col = app.getBoundingClientRect();   // (placed in the column: chat.css .col)
+    menuEl.style.left = Math.max(6, Math.min(a.left - col.left, col.width - menuEl.offsetWidth - 6)) + "px";
+    menuEl.style.bottom = (col.bottom - a.top + 6) + "px";
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }
@@ -1597,8 +1600,9 @@ ${d.system}` : ""}`,
   openMenu.refresh = () => { const k = S.menu; S.menu = null; if (k) openMenu(k, openMenu.anchor); };
   function closeMenu() { S.menu = null; menuEl.classList.add("hidden"); }
   // Clicking outside the panel (in the editor) or pressing Esc closes menus and the @ list.
-  window.addEventListener("blur", () => { closeMenu(); closePopup(); });
+  window.addEventListener("blur", () => { closeMenu(); closePopup(); }, on);
   document.addEventListener("keydown", (e) => {
+    if (!port.active()) return;   // (another column has the keyboard)
     if (e.key === "Escape" && S.menu) { e.preventDefault(); closeMenu(); input.focus(); return; }
     if (e.key === "Escape" && S.showHistory) { e.preventDefault(); closeHistory(); input.focus(); return; }
     // Tab shortcuts work while you're typing in the chat, too.
@@ -1606,14 +1610,14 @@ ${d.system}` : ""}`,
     if (mod && e.altKey && (e.key === "n" || e.key === "N")) { e.preventDefault(); S.focusNext = true; post({ type: "newTab" }); }
     else if (mod && e.key === "PageDown") { e.preventDefault(); cycleTab(1); }
     else if (mod && e.key === "PageUp") { e.preventDefault(); cycleTab(-1); }
-  });
+  }, on);
   function cycleTab(d) {
     const i = S.tabs.findIndex((t) => t.id === S.activeId);
     if (i >= 0 && S.tabs.length > 1) { S.focusNext = true; post({ type: "switchTab", id: S.tabs[(i + d + S.tabs.length) % S.tabs.length].id }); }
   }
   document.addEventListener("mousedown", (e) => {
     if (S.menu && !menuEl.contains(e.target) && !modeBtn.contains(e.target) && !modelBtn.contains(e.target) && !attachBtn.contains(e.target)) closeMenu();
-  });
+  }, on);
   listEl.addEventListener("click", (e) => {
     const remote = e.target.closest && e.target.closest(".img-remote");
     if (remote) { remote.replaceWith(el("img", { class: "md-img", src: remote.dataset.url, "data-url": remote.dataset.url, alt: remote.dataset.alt || "", title: "Click to open it full size" })); return; }
@@ -1657,10 +1661,9 @@ ${d.system}` : ""}`,
   };
   const findAgent = (id) => { const i = lastAssistant(); return i >= 0 ? [i, S.tab.messages[i].blocks.find((b) => b.k === "agent" && b.id === id)] : [i, null]; };
 
-  window.addEventListener("message", (ev) => {
-    const m = ev.data;
+  // (media/chat-columns.js hands each column the messages that are for it.)
+  function onMessage(m) {
     const mine = S.tab && m.tabId === S.tab.id;
-    if (m.type === "fontScale") { setFs(m.value); return; }
     switch (m.type) {
       case "config":
         S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false; S.clis = m.clis || [];
@@ -1669,8 +1672,10 @@ ${d.system}` : ""}`,
       case "moods": S.moods = m.moods || S.moods; renderFoot(); if (S.menu === "model") openMenu.refresh(); break;
       case "tabs":
         S.tabs = m.tabs; S.activeId = m.activeId;
-        // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own.
+        // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own. In a column of the
+        // side panel (split): its title above it.
         tabBar.classList.toggle("hidden", !!m.single);
+        colHead.classList.toggle("hidden", !m.column);
         if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
           mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device, queued: s.queued,
           autoRoute: s.autoRoute,routingProfile: s.routingProfile,routingState: s.routingState,modelName: s.modelName,tokens: s.tokens,context: s.context }); }
@@ -1772,15 +1777,16 @@ ${d.system}` : ""}`,
         for (let i = S.tab.messages.length - 1; i >= 0; i--) if (S.tab.messages[i].role === "user") { S.tab.messages[i].attachments = m.attachments; scheduleRerender(i); break; }
       } break;
       case "flash": {   // a shortcut changed the model / intensity / mode: say so briefly
-        let f = document.querySelector(".flash");
-        if (!f) { f = el("div", { class: "flash" }); document.body.append(f); }
+        let f = app.querySelector(".flash");
+        if (!f) { f = el("div", { class: "flash" }); app.append(f); }
         f.textContent = m.text; f.classList.add("on");
         clearTimeout(S.flashTimer); S.flashTimer = setTimeout(() => f.classList.remove("on"), 1300);
         break;
       }
     }
-  });
+  }
 
   renderTabs(); renderAll(); renderChips();
   post({ type: "ready" });
-})();
+  return { onMessage, close: () => off.abort() };
+};
