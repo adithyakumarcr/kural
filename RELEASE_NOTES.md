@@ -1,3 +1,8 @@
+## Not released yet
+
+- **No more "Kural wants to use ... Safe Storage" prompt at start on a Mac.** VS Code 1.140's dictation feature asked for a GitHub login
+  every time Kural started, which woke the GitHub login extension and made the Mac ask for the keychain. Kural removes that call.
+
 ## What's new in 1.1.0-rc.3
 
 - **Commit messages follow Conventional Commits and see every change.** With several folders open, the sparkle button
