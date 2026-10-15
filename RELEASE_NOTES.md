@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.1.0-rc.3
 
 - **Commit messages follow Conventional Commits and see every change.** With several folders open, the sparkle button
   writes the message for the repository you pressed it in (or asks which one), never another folder's. It refreshes
