@@ -1,3 +1,12 @@
+## Not released yet
+
+- **Commit messages follow Conventional Commits and see every change.** With several folders open, the sparkle button
+  writes the message for the repository you pressed it in (or asks which one), never another folder's. It refreshes
+  Git first, so files the AI just wrote are seen, lists every changed file, and shows the start of new files.
+- **Save plan.** A plan in Plan mode has a "Save plan" button: it writes the plan to `plans/plan-<date>.md` in the project and opens it.
+- **Shell commands go to the terminal.** A bash/sh/zsh code block has a Terminal button (instead of Insert): it types the command into the terminal, and you press Enter.
+- **The chat stays in the middle on a wide window**, and the tagline on the empty chat is no longer italic.
+
 ## What's new in 1.1.0
 
 Kural 1.1.0 is the first final version of **Kural Code Editor** (it was ClaudeX): VSCodium with an AI assistant built

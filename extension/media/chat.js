@@ -282,7 +282,9 @@
           : el("span", { class: "code-lang" }, lang || "code"),
         el("span", { class: "spacer" }),
         btn("Copy", "Copy to clipboard", () => post({ type: "copy", code })),
-        btn("Insert", "Insert at the cursor", () => post({ type: "insert", code })),
+        SHELL_LANGS.test(lang)
+          ? btn("Terminal", "Paste into the terminal (you press Enter to run it)", () => post({ type: "terminal", code }))
+          : btn("Insert", "Insert at the cursor", () => post({ type: "insert", code })),
         btn("Apply", file ? `Apply to ${file} and review` : "Apply to the open file and review", () => post({ type: "apply", code, path: file }), "primary")),
       el("pre", {}, el("code", {}, highlight(code, lang))));
   }
@@ -628,6 +630,7 @@
       m.planBuilt ? el("span", { class: "row-state" }, icon("check"), " Building it") : [
         el("span", { class: "plan-q" }, "Happy with this plan?"),
         el("span", { class: "spacer" }),
+        el("button", { class: "cb", title: "Save this plan as a Markdown file in the project", onclick: () => post({ type: "savePlan", tabId: S.tab.id, msgIndex: i }) }, icon("save"), " Save plan"),
         el("button", { class: "cb primary solid big", disabled: S.tab.status !== "idle", onclick: () => post({ type: "buildPlan", tabId: S.tab.id, msgIndex: i }) }, "Build it")]));
     if (m.changes && m.changes.length) out.append(changesNode(m, i));
     side.nodes(m, i).forEach((n) => out.append(n));   // side chats: quick questions about parts of this answer
