@@ -7,7 +7,6 @@
 - **Shell commands go to the terminal.** A bash/sh/zsh code block has a Terminal button (instead of Insert): it types the command into the terminal, and you press Enter.
 - **The chat stays in the middle on a wide window**, and the tagline on the empty chat is no longer italic.
 
-## What's new in 1.1.0-alpha.10
 ## What's new in 1.1.0
 
 Kural 1.1.0 is the first final version of **Kural Code Editor** (it was ClaudeX): VSCodium with an AI assistant built
