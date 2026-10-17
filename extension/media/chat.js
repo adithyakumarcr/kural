@@ -696,10 +696,10 @@ window.KURAL_CHAT = function (app, port) {
     const count = {};
     for (const k of ks) {
       const b = m.blocks[k];
-      const kind = b.k === "think" ? "thought" : b.k === "tool" ? STEP_KIND[(b.name || "").replace(/^mcp__device__/, "")] || "step" : null;
+      const kind = b.k === "think" ? "thought" : b.k === "tool" ? STEP_KIND[(b.name || "").replace(/^mcp__device__/, "")] || (browserVerb(b.name) ? "browser step" : "step") : null;
       if (kind) count[kind] = (count[kind] || 0) + 1;
     }
-    const order = ["thought", "read", "search", "edit", "command", "web search", "web page", "step"];
+    const order = ["thought", "read", "search", "edit", "command", "web search", "web page", "browser step", "step"];
     const kinds = order.filter((k) => count[k]).map((k) => plural(count[k], k));
     const secs = m.ms && live ? Math.max(1, Math.round(m.ms / 1000)) : 0;   // (the time: the whole answer's, on its last part)
     return `${m.running && live ? "Working…" : secs ? `Worked for ${secs} s` : "Worked"}${kinds.length ? ` · ${kinds.join(", ")}` : ""}`;
@@ -709,7 +709,7 @@ window.KURAL_CHAT = function (app, port) {
     const b = ks.length && m.blocks[ks[ks.length - 1]];
     if (!b || !m.running) return "";
     if (b.k === "think") return lastLine(b.text);
-    if (b.k === "tool") return `${TOOL_VERB[b.name] || deviceVerb(b.name) || prettyTool(b.name)} ${b.detail || ""}`;
+    if (b.k === "tool") return `${TOOL_VERB[b.name] || deviceVerb(b.name) || browserVerb(b.name) || prettyTool(b.name)} ${b.detail || ""}`;
     if (b.k === "text") return lastLine(b.text);
     return "";
   }
@@ -731,6 +731,10 @@ window.KURAL_CHAT = function (app, port) {
   // A linked device's tools.
   const DEVICE_VERB = { run_command: "Device command", read_file: "Read on device", write_file: "Wrote on device", list_dir: "Listed on device" };
   const deviceVerb = (name) => { const m = /^mcp__device__(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
+  // Kural's browser (its details: browserDetail in lib/chat/index.js).
+  const BROWSER_VERB = { tabs: "Browser tabs", open: "Opened", navigate: "Went to", snapshot: "Read the page", click: "Clicked", type: "Typed", press: "Pressed",
+    select: "Chose", upload: "Uploaded", drag: "Dragged", scroll: "Scrolled", screenshot: "Took a picture of the page", wait: "Waited", dialog: "Answered the page" };
+  const browserVerb = (name) => { const m = /^mcp__kural_browser__(\w+)$/.exec(name || ""); return m ? BROWSER_VERB[m[1]] || null : null; };
   // "mcp__claude_ai_Notion__notion-search" -> "Notion · notion-search"
   function prettyTool(name) {
     const m = /^mcp__(.+?)__(.+)$/.exec(name || "");
@@ -746,7 +750,7 @@ window.KURAL_CHAT = function (app, port) {
     const file = ["Read", "Edit", "Write", "NotebookEdit"].includes(b.name) ? b.detail.split("  (")[0] : null;
     const pic = file && b.name === "Read" && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file) ? fileSrc(file) : null;
     return el("div", { class: `tool ${b.name}` },
-      el("span", { class: "tool-name" }, TOOL_VERB[b.name] || deviceVerb(b.name) || prettyTool(b.name)), " ",
+      el("span", { class: "tool-name" }, TOOL_VERB[b.name] || deviceVerb(b.name) || browserVerb(b.name) || prettyTool(b.name)), " ",
       file ? el("span", { class: "tool-file", onclick: () => post({ type: "openFile", path: file }) }, b.detail)
         : b.name === "Bash" || /run_command$/.test(b.name) ? el("code", {}, b.detail) : el("span", {}, b.detail),
       pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), title: "Click to open it full size", onclick: () => post({ type: "openImage", path: file }) }) : null);
@@ -867,6 +871,10 @@ window.KURAL_CHAT = function (app, port) {
   function permNode(b) {
     const what = b.tool === "Bash" ? "Run this command?" : b.tool === "WebFetch" ? "Open this web page?"
       : b.tool === "DeviceCommand" ? `Run this on ${b.where || "the device"}?` : b.tool === "DeviceWrite" ? `Write this file on ${b.where || "the device"}?`
+      : b.tool === "BrowserSite" ? `Let the AI ${b.reads ? "read" : "use"} ${b.site || "this site"} in Kural's browser?`
+      : b.tool === "BrowserAction" ? `Click "${b.label || ""}" on ${b.site || "the page"}?`
+      : b.tool === "BrowserUpload" ? `Upload this file to ${b.site || "the page"}?`
+      : b.tool === "Browser" ? "Let Gemini use its own browser?"
       : b.tool === "Write" || b.tool === "Edit" || b.tool === "NotebookEdit" ? "Change this file?"
       : b.tool === "Read" ? "Read this file?" : b.tool === "Grep" || b.tool === "Glob" ? "Look through this folder?" : `Use ${prettyTool(b.tool)}?`;
     const card = el("div", { class: `perm ${b.state}` }, el("div", { class: "perm-q" }, b.agent ? el("span", { class: "perm-agent" }, typeof b.agent === "number" ? `Agent ${b.agent}` : b.agent) : null, what), el("pre", {}, b.detail));
@@ -1337,17 +1345,7 @@ window.KURAL_CHAT = function (app, port) {
           "aria-pressed": String(t.mood === md.id), onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label)),
           el("button", { class: "mood-chip mood-add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
             onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own mood…")),
-        el("div", { class: "sep" }),
-        // Claude Code teams, or Kural's team runner for Codex and Gemini.
-        el("div", { class: `mi toggle-row ${local ? "dim off" : ""}`, onclick: () => { if (!local) post({ type: "setTeam", tabId: t.id, team: teamOn ? 0 : (S.teamSizes[1] || 3) }); } },
-          el("div", { class: "tr-text" },
-            el("div", { class: "mi-label" }, "Multiple agents"),
-            el("div", { class: "tr-hint" }, local ? "Choose Claude, ChatGPT or Gemini" : teamOn ? teamHint(t) : "Split a task across agents, or let them discuss and decide")),
-          el("span", { class: `switch ${teamOn && !local ? "on" : ""}` }, el("span"))),
-        teamOn && !local ? el("div", { class: "seg team" }, S.teamStyles.map((st) => el("button", { class: t.teamStyle === st.id ? "on" : "", title: st.hint, onclick: () => post({ type: "setTeamStyle", tabId: t.id, style: st.id }) }, st.label))) : null,
-        teamOn && !local ? el("div", { class: "roles" }, el("span", { class: "roles-h" }, "Roles"),
-          S.roles.map((r) => el("button", { class: `role ${(t.roles || []).includes(r.id) ? "on" : ""}`, title: r.desc, onclick: () => post({ type: "toggleRole", tabId: t.id, role: r.id }) }, r.label))) : null,
-        teamOn && !local && !(t.roles || []).length ? el("div", { class: "seg team" }, S.teamSizes.map((n) => el("button", { class: t.team === n ? "on" : "", onclick: () => post({ type: "setTeam", tabId: t.id, team: n }) }, `${n} agents`))) : null];
+        ];
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");

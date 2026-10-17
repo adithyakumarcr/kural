@@ -25,6 +25,7 @@ const { GetStarted } = require("./lib/getstarted");
 const { Account } = require("./lib/account");
 const { SettingsPage } = require("./lib/settings-page");
 const { Browser } = require("./lib/browser");
+const { BrowserControl } = require("./lib/browser/control");
 const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
 const { ModelRouter } = require("./lib/router");
@@ -308,6 +309,11 @@ function activate(context) {
   const browser = new Browser(context);
   browser.onItems = (items) => chat.addBrowserItems(items);
   browser.register();
+  // ...and the chat's AI can use it: open pages, read them, click, type, upload (lib/browser/control.js). It never
+  // publishes, posts or sends anything (lib/browser/guard.js); it stops at a draft.
+  const browserAi = new BrowserControl(context);
+  browserAi.register();
+  chat.browserAi = browserAi;
   triggerOnCursor(context);
 
   context.subscriptions.push(

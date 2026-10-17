@@ -21,6 +21,8 @@ extension/build.json
 /docs/linkedin/
 /video/
 *.html
+# (…but the browser test's stand-in pages are Kural's: test/browser-page.live.js)
+!/test/fixtures/browser/*.html
 
 # Notes and research made here, not part of Kural
 /AGENTS.md

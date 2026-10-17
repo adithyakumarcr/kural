@@ -376,6 +376,29 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Overlay inspector). Without `workbench.action.browser.open` (an editor with no Integrated Browser) a page opens in the
   web browser (`openExternal`) and picking says why it can't. The old proxy browser (it removed pages' security headers
   to add its own picker) was removed in 1.1.0-rc.2.
+- **The AI in the browser** (`lib/browser/`: `guard.js` the rule, `snapshot.js` the outline, `keys.js`, `cdp.js`, `page.js`
+  the driver, all no vscode; `control.js` tabs/asking/the network stop; `bridge.js` + `browser-mcp.js` the MCP server
+  `kural_browser`, like the device's): Adithya's rule, **the AI never publishes, posts, shares or sends anything** (in
+  every mode, also when asked; drafts are fine). Not a VS Code patch: VS Code 1.140's proposed `browser` API
+  (package.json `enabledApiProposals`; `vscode.window.browserTabs`, `openBrowserTab`, `tab.startCDPSession()`). That CDP
+  connection is browser-level, served by VS Code's main process (`Target.getTargets` → the tab's page, `attachToTarget`
+  flatten; page commands go to Electron's debugger); its targetInfo has `vscodeBrowserViewId` (= the editor's
+  `vscode-browser:/<id>` resource: `show()`). Clicks/keys are `Input.dispatch*` events; `DOM.getNodeForLocation` takes PAGE
+  coordinates (+ cssVisualViewport.pageX/Y) while input takes screen ones (a narrow tab scrolls sideways: it broke there
+  first). Kural's page code runs in an isolated world (`Page.createIsolatedWorld`, helpers as `globalThis.__kural`).
+  The guard (`classifyClick` on the hit element's clickable ancestors, `classifyKey` for Enter/Space, `classifyDialog`,
+  `NETWORK` = Instagram's `/api/v1/media/configure*` and comment-add POSTs failed with `Fetch` while attached: from the
+  community's notes, not watched live) is the spec in `test/browser-guard.test.js`. No tool runs the AI's own JavaScript
+  (it would bypass the guard): don't add one. A click/key that opens confirm() only returns once it's answered:
+  `untilAsked`. File choosers are intercepted only around Kural's own clicks (`withChooser`). Kural lets go of a tab
+  (closes its CDP connection: Fetch and the stop end) when the chat's answer ends (`finishReply` → `release`). Asking:
+  `approveBrowser` → BrowserSite (once per site per grantKey, `tab.browserSites`), BrowserAction (Submit/Pay/Delete/
+  Discard/Leave), BrowserUpload (writeRoots or attached go; temp/globalStorage ask) in permission-policy.js. Codex's own
+  browsers + computer use are off in EVERY mode (`ALWAYS_OFF`), Gemini's own `Browser` asks in Auto too, no Allow all.
+  Tests: `test/browser-guard.test.js`, `browser-bridge.test.js`, `browser-chat.test.js`; live: `node test/browser-page.live.js`
+  (headless Chrome on `test/fixtures/browser/reel.html`, a 2x screen, a sideways-scrolled tab). Checked 17 Oct 2026 in a real
+  Kural browser tab (a throwaway extension copying lib/browser, its own --user-data-dir): the whole reel flow. NOT checked:
+  a real Claude/Codex chat driving it, and instagram.com itself (Instagram's website has no drafts: the AI stops before Share).
 - **Account names** (`lib/ai/names.js`, no vscode): the status item shows the name on the chat's AI's account, from the
   programs' own plain files only when their email is the account's: `~/.claude.json` oauthAccount.displayName (Claude
   Code's `auth status` has no name), `~/.gemini/oauth_creds.json`'s id_token `name` (Antigravity's own login is in the

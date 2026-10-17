@@ -201,14 +201,17 @@ function mcpConfig(servers) {
 // tools of every connector (MCP server) you added to Codex. So outside Auto those features are off, and in Plan and Ask
 // each of your connectors is too: one -c option that sets enabled = false on each name, which Codex merges into your
 // settings (checked with codex-cli 0.160.1; `-c mcp_servers={}` alone changes nothing, and a name Codex doesn't have makes
-// it refuse its settings, so the names come from `codex mcp list`). Auto is unrestricted: nothing is switched off.
-// (Kural's own device tools are added after this and stay on: Kural asks before each of them itself.)
-const OFF_FEATURES = ["apps", "browser_use", "browser_use_external", "computer_use", "in_app_browser"];
+// it refuse its settings, so the names come from `codex mcp list`). Auto is unrestricted, except: Codex's own browsers and
+// computer use are off in every mode, Auto too (ALWAYS_OFF). Kural's rule is that the AI never publishes, posts or sends
+// anything, and Kural can't see what those click; the AI uses Kural's browser instead (lib/browser), where the rule holds.
+// (Kural's own device and browser tools are added after this and stay on: Kural asks before them itself.)
+const ALWAYS_OFF = ["browser_use", "browser_use_external", "computer_use", "in_app_browser"];
+const OFF_FEATURES = ["apps", ...ALWAYS_OFF];
 const tomlKey = (k) => /^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(String(k));
 function lockdownArgs(mode, connectors = []) {
-  if (mode === "auto") return [];
+  if (mode === "auto") return ALWAYS_OFF.flatMap((f) => ["-c", `features.${f}=false`]);
   const out = OFF_FEATURES.flatMap((f) => ["-c", `features.${f}=false`]);
-  const names = (connectors || []).filter((n) => typeof n === "string" && n && n !== "device");
+  const names = (connectors || []).filter((n) => typeof n === "string" && n && n !== "device" && n !== "kural_browser");
   if ((mode === "plan" || mode === "ask") && names.length)
     out.push("-c", `mcp_servers={ ${names.map((n) => `${tomlKey(n)} = { enabled = false }`).join(", ")} }`);
   return out;

@@ -842,6 +842,11 @@
           "default": true,
           "description": "While a chat is working, the Mac doesn't go to sleep by itself (the screen may still turn off; closing the lid still sleeps it). macOS only."
         },
+        "kural.browser.aiControl": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Let the chat's AI use Kural's browser: open pages, read them, click, type, choose files to upload (Claude and ChatGPT models). Agent mode asks before a new site and before Submit, Pay or Delete. It never publishes, posts, shares or sends anything (it stops at a draft), in any mode."
+        },
         "kural.welcomeWhenEmpty": {
           "type": "boolean",
           "default": true,
@@ -1231,6 +1236,7 @@
   "enabledApiProposals": [
     "terminalCompletionProvider",
     "terminalDataWriteEvent",
-    "contribSourceControlInputBoxMenu"
+    "contribSourceControlInputBoxMenu",
+    "browser"
   ]
 }
