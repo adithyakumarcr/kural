@@ -323,6 +323,11 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
 - **Browser with Design Mode.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
   answer opens there). Click the inspect button, click an element, and it's added to the chat with its HTML, CSS and a
   picture; add a comment ("make this bigger") and Kural finds the code behind it and changes it, like Cursor.
+- **The AI uses the browser.** Ask it to do something on a website ("make a reel from `videos/run.mp4` on Instagram up
+  to the caption", "fill in this form", "answer the quiz") and it opens the page beside the code and clicks, types,
+  uploads and drags there while you watch (Claude and ChatGPT models). Kural's rule: **it never publishes, posts,
+  shares or sends anything**, in any mode, not even when asked; it stops at a draft and you press Share yourself.
+  Agent mode asks once per site and before Submit, Pay or Delete.
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **AI Usage** (bottom panel, next to Terminal). One compact summary per AI, showing its most used limit and reset
   time. **Details** expands other limits and token history. Click the chat's context ring to open it; hover the ring

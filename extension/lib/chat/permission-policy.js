@@ -12,6 +12,11 @@ const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for s
 const DEVICE_TOOLS = ["run_command", "read_file", "write_file", "list_dir"];   // a linked device's tools (lib/devices)
 const DEVICE_TOOL_RE = new RegExp(`^mcp__device__(${DEVICE_TOOLS.join("|")})$`);
 const WEB_TOOLS = new Set(["WebSearch", "WebFetch"]);
+// Kural's browser (lib/browser), asked through the chat's approveBrowser: BrowserSite = the AI may use a site in this chat
+// (read it, in Ask and Plan); BrowserAction = Submit, Pay, Delete, Discard and the like; BrowserUpload = a file from this
+// computer for a page. Nothing that publishes ever gets here: Kural refuses that itself, in every mode (browser/guard.js).
+// "Browser" is Gemini's own browser (Antigravity's, through its gate): Kural can't see what it clicks, so it can't keep the
+// AI from publishing there; each action asks, in Auto too, with no "Allow all".
 
 // A connector's (MCP server's) tool: mcp__<server>__<tool> → { server, name }.
 function connectorTool(tool) {
@@ -39,12 +44,14 @@ function isLookup(tool) {
 }
 
 // What "Allow all" on a card covers: one kind of call, for the rest of this chat (in this mode, with this model and
-// conversation: allowAllNow). Commands; web searches and pages; one connector's tools; Gemini's browser actions.
-// null: a card that never gets "Allow all" (a file outside the project, a tool Kural can't classify: yes or no each time).
+// conversation: allowAllNow). Commands; web searches and pages; one connector's tools; Kural's browser (every site, and
+// Submit and the like; never an upload from outside the project, never publishing).
+// null: a card that never gets "Allow all" (a file outside the project, a tool Kural can't classify, Gemini's own browser:
+// yes or no each time).
 function allowKind(tool) {
   if (tool === "Bash") return "command";
   if (WEB_TOOLS.has(tool)) return "web";
-  if (tool === "Browser") return "browser";
+  if (tool === "BrowserSite" || tool === "BrowserAction") return "browser";
   const c = connectorTool(tool);
   if (c && !DEVICE_TOOL_RE.test(tool)) return `connector:${c.server}`;
   return null;
@@ -63,8 +70,9 @@ const allowedKinds = (allowAll) => Array.isArray(allowAll) ? allowAll : allowAll
 //   that keep an approval gate working (agy's hooks, Kural's launcher): writing one asks, even in Auto. Auto runs everything else.
 function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false, unclassified = false, guard = null }) {
   // Enforce read-only modes here, even after a live transition or a provider sends an unexpected call.
-  if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite", "Browser"].includes(tool)))
+  if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite", "Browser", "BrowserAction", "BrowserUpload"].includes(tool)))
     return { deny: true, message: `${mode} mode cannot run commands or change files.` };
+  if (tool === "Browser") return { ask: true, risky: { why: "This is Gemini's own browser, not Kural's: Kural can't see what it clicks, so it can't keep it from publishing, posting or sending something." } };
   // Auto is unrestricted (Adithya, 14 Oct 2026): nothing asks, not a dangerous command, not a file outside the project,
   // not a tool Kural can't classify. The chat reports what was done instead (PROMPTS.auto). Two things stay: a question
   // the AI asks you (AskUserQuestion), and a write to the files that keep Gemini's approval gate working (otherwise one
@@ -95,6 +103,10 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
     const where = input.file_path || input.path;
     if (!where || within(where, readRoots) || within(where, granted.filter(Boolean))) return { allow: true };
   }
+  // A file for a page in Kural's browser leaves this computer: from the project (or one you attached) it may; anywhere else
+  // (the temp folder, Kural's own chats, Claude Code's transcripts: places the AI may read but that aren't yours to send),
+  // yes or no each time.
+  if (tool === "BrowserUpload" && input.file_path && (within(input.file_path, writeRoots) || within(input.file_path, granted.filter(Boolean)))) return { allow: true };
   if (SUBAGENT_TOOLS.has(tool)) return { allow: true };
   // A linked device's tools: Kural asks before each command itself (approveDevice), so the program's own ask is a yes.
   if (device && DEVICE_TOOL_RE.test(tool)) return { allow: true };
@@ -142,8 +154,8 @@ const allowAllNow = (tab) => tab.allowAllFor === grantKey(tab) ? allowedKinds(ta
 // commands reach Kural's checks a different way, so the sentence about dangerous commands differs.
 function autoWarning(engine, fullSetup = false) {
   const base = "Auto mode is unrestricted: it runs commands and edits files without asking, also dangerous ones (sudo, deleting outside the project, a forced push to main…). The chat tells you what it did";
-  if (engine === "agy") return `${base}. Only a change to Gemini's own approval gate (its hook settings) still asks.`;
-  return `${base}.`;
+  if (engine === "agy") return `${base}. Only a change to Gemini's own approval gate (its hook settings) and Gemini's own browser still ask.`;
+  return `${base}. It still never publishes, posts or sends anything in the browser.`;
 }
 
 // The words beside "Allow all" on a card of this kind (allowKind). null: no "Allow all" on it.

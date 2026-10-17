@@ -36,11 +36,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   answer says which it didn't run); in Auto it runs them. A mode change stops approvals for the running answer and
   applies from the next message. If a change runs without the gate being asked (an Antigravity version without hooks),
   Kural stops Gemini and says so; if the hooks file can't be read, Kural doesn't start Gemini. Needs agy 1.3.4 or
-  newer (checked with that one): an older one isn't started, and Kural says to run "agy update". Multiple agents work with Gemini; devices do not.
+  newer (checked with that one): an older one isn't started, and Kural says to run "agy update". Devices do not work with Gemini.
 - Chat (panel on the right; Ctrl+L shows or hides it; with code selected in the editor, Ctrl+L adds that code to your
   message instead, also while the chat is open): tabs; modes Agent (edits files, asks before commands), Auto (unrestricted: no asking,
   also for dangerous commands and files outside the project; the AI ends each answer with a "What I did" list; the
-  first switch to Auto explains this once; Gemini too, through Kural's gate), Plan
+  first switch to Auto explains this once; Gemini too, through Kural's gate; but the AI still never publishes in the
+  browser, and Gemini's own browser still asks), Plan
   (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
   your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
@@ -59,11 +60,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
   there; built-in moods you don't use (Default too) can be removed there with their ×, and Restore brings one back; the
   menu keeps at least one, and a new chat starts with the first mood left; a changed mood or mode applies from the next
-  message); Multiple agents (Claude, ChatGPT and Gemini: a project
-  team led by a PM, or a discussion; Kural shares Codex/Gemini agents' reports between phases; with Claude the
-  developers start on Haiku, since the plan is agreed by then, and the Tester keeps your model). In Auto mode with
-  one agent, a big task shows "This looks like a big task. Use 3 agents?" above the box: Use 3 agents turns the team on;
-  One agent (or no answer within 15 s) goes on alone, and "One agent" isn't asked again in that chat. The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
+  message); Multiple agents are switched off for now (one agent per chat). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
   this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and Kural-managed teams always do
@@ -116,6 +113,21 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   screenshot, an area or the full page, and the console logs. Then Kural finds the code behind the element in the project
   and changes it; reload the page to see it. (If nothing is added when you click an element,
   use a screenshot of the area instead.)
+- The AI uses Kural's browser (Claude and ChatGPT (Codex) models; setting kural.browser.aiControl, on by default): ask
+  it to do something on a site ("open instagram.com and make a reel from videos/run.mp4 up to the caption", "fill in
+  this form", "answer the quiz on this page"). It opens pages in a tab beside the code (with your logins: log in there
+  yourself first; it never asks for passwords), reads them, clicks, types, chooses, uploads files, drags (a slider, a
+  trim handle), scrolls and takes pictures of the page while you watch; its steps show in the answer ("Clicked Next").
+  Kural's rule: the AI NEVER publishes, posts, shares or sends anything (Share, Post, Publish, Send, a comment, a
+  message, an email), in any mode, not even when you ask: it goes as far as a draft ("Save draft" is fine), stops and
+  says what's ready, and you press Share yourself. Kural checks every click, Enter key and page question first (in many
+  languages); on Instagram the publish request itself is also stopped while the AI works in that tab (your own Share
+  too, until its answer ends). Agent mode asks once per site in a chat ("Let the AI use instagram.com in Kural's
+  browser?") and before Submit, Pay, Delete or Discard; Auto doesn't ask; Plan and Ask only read pages. A file from
+  outside the project asks before it's uploaded (Auto doesn't). Instagram's website doesn't save drafts (Instagram keeps
+  them in its phone app), so there the AI stops before Share and the reel waits in that tab for you; Meta Business
+  Suite offers Save as draft / Finish later for some accounts. Gemini and a model on this computer can't use Kural's
+  browser; Gemini's own browser (Antigravity's) asks before every action, in Auto too: Kural can't check it for publishing.
 - Devices over SSH (a Raspberry Pi, a board computer…): + → Link device → add one (name, address, username, password).
   Kural uses the password once to put its own SSH key on the device and doesn't save it anywhere (no keychain); after
   that it logs in with the key. A chat linked to a device can run commands and read/write files on it (asking first in
@@ -226,12 +238,14 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   out, but check the file before sharing it; you pick what to import. Import never takes settings that pick a program,
   start a terminal, set a proxy or turn on Auto, nor shortcuts that type into the terminal; extensions install only
   after you agree to the list).
-  "Allow all" on a card covers only that card's kind for the rest of the chat: commands, web searches and pages, or one
-  connector's tools (never a file outside the project: those are yes or no each time). It counts only for that mode,
+  "Allow all" on a card covers only that card's kind for the rest of the chat: commands, web searches and pages, Kural's
+  browser (every site, and Submit and the like; never publishing), or one connector's tools (never a file outside the
+  project, never Gemini's own browser: those are yes or no each time). It counts only for that mode,
   model and conversation: changing the mode or model (also when Auto picks another one) or a handoff ends it, and Kural
   asks again. In Ask and Plan, a connector's tools that change things (creating a pull request, a Notion page, a Jira
   issue) are refused, also after "Allow all"; its lookups ask first. ChatGPT (Codex) runs Ask and Plan without your
-  connectors and its apps, and outside Auto without its browser and computer use (Kural can't ask before those).
+  connectors, outside Auto without its apps, and never with its own browser and computer use, in Auto too (Kural can't
+  see what those click, so it couldn't keep the AI from publishing; it uses Kural's browser instead).
   "Build it" switches to Agent (Auto only if the chat is already in Auto). Kural's browser opens only http/https
   addresses; without the editor's Integrated Browser a page opens in your web browser.
   Kural's log: "Kural: Show Log" (Command Palette) or Kural Settings → the log (an editor tab; Kural hides VS Code's
@@ -289,7 +303,7 @@ that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows o
 Ask; @ mentions a file; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
 Fork from here; the clock button has every chat); Ctrl+K proposes changes to selected code in a read-only diff; Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Kural's browser; devices over SSH; the Model Router (Auto);
-Kural Settings (accounts, usage switching, moods, updates). Agent teams work with Claude, ChatGPT and Gemini; Jira
+Kural Settings (accounts, usage switching, moods, updates). Jira
 tickets and Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
 link [Ask for this feature](${ISSUES}).`;
 

@@ -35,6 +35,7 @@ const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
 const { excludedModel, completionModel } = require("../ai/model-policy");
 const { Notifier, notifyDecision, message: notifyText } = require("./notify");
+const { NAME: BROWSER_SERVER, TOOLS: BROWSER_TOOLS } = require("../browser/bridge");
 
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
@@ -77,7 +78,8 @@ const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for s
 
 // An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
 const BUILD_TEXT = "Go ahead and implement the plan above.";
-const MAX_NUDGES = 4;   // how often Kural may wake a paused lead for one question (a project team has phases)
+const TEAMS_ENABLED = false;   // Multiple agents are switched off (Adithya): no team toggle, no "Use 3 agents?" offer
+const MAX_NUDGES = 4;  // how often Kural may wake a paused lead for one question (a project team has phases)
 const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
 // Memory: a chat's program (Claude Code ~120 MB, Ross measured) stops when that chat isn't on screen and has been idle
 // this long; at most this many such idle ones stay warm. It starts again with the same conversation when needed.
@@ -319,7 +321,7 @@ class ChatView {
     const lv = cliOf(tab.model) === "agy" && splitLevel(cliModel(tab.model));
     if (lv) { tab.model = `agy:${lv.base}`; tab.effort = { minimal: "low", xhigh: "max" }[lv.level] || lv.level; }
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
-    if (!TEAM_SIZES.includes(tab.team)) tab.team = 0;
+    if (!TEAMS_ENABLED || !TEAM_SIZES.includes(tab.team)) tab.team = 0;
     if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)
     // (A mood of yours that you deleted: the first mood in the menu.)
     if (!valid(allMoods(), tab.mood)) tab.mood = /^custom-/.test(tab.mood || "") ? firstMood() : d.mood;
@@ -441,6 +443,7 @@ class ChatView {
     if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
     this.endDevice(r);
+    if (this.browserAi) this.browserAi.end(id);
     this.runtime.delete(id);
     const i = this.tabs.indexOf(tab);
     this.tabs.splice(i, 1);
@@ -508,10 +511,12 @@ class ChatView {
     vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(where), { forceNewWindow: true });
   }
 
-  // The running model's way to the linked device ends (its token stops working in the bridge).
-  endDevice(r) {
+  // The running model's way to the linked device ends (its token stops working in the bridge). With the program itself
+  // (all), also its way to Kural's browser, and Kural lets go of the tabs it used.
+  endDevice(r, all = true) {
     if (r && r.deviceToken && this.devices) this.devices.endSession(r.deviceToken);
     if (r) r.deviceToken = null;
+    if (all && r && r.browserToken && this.browserAi) { this.browserAi.endSession(r.browserToken, r.browserChat); r.browserToken = null; }
   }
 
   // Delete a chat for good: from this window, History, and every workspace.
@@ -945,7 +950,7 @@ class ChatView {
   }
 
   teamSize(tab) {
-    if (!(tab.team > 1) || isLocal(tab.model)) return 0;
+    if (!TEAMS_ENABLED || !(tab.team > 1) || isLocal(tab.model)) return 0;
     const editing = tab.mode === "agent" || tab.mode === "auto";
     if (tab.teamStyle !== "discuss" && !editing) return 0;
     const roles = tab.roles || [];
@@ -958,7 +963,7 @@ class ChatView {
     // (The mood's text too: editing one of your moods restarts its chats with the new instructions.)
     const mood = `${tab.mood}:${require("crypto").createHash("sha1").update(moodPrompt(tab.mood, customMoods(userMoods()))).digest("hex").slice(0, 8)}`;
     return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
-      (claude ? `|${fullSetup()}|${this.setupVersion}` : "");
+      `|${this.browserOn(tab) ? "browser" : ""}` + (claude ? `|${fullSetup()}|${this.setupVersion}` : "");
   }
 
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
@@ -1293,6 +1298,11 @@ class ChatView {
     const dev = tab.device && this.devices && deviceOk(tab.model) ? this.devices.session(tab.device, (tool, args) => this.approveDevice(tab, r, tool, args)) : null;
     if (dev) { r.deviceToken = dev.token; r.deviceDevice = tab.device; }
     const deviceTools = dev ? DEVICE_TOOLS.map((t) => `mcp__device__${t}`) : [];
+    // Kural's browser (lib/browser): the AI opens, reads and uses pages there, never publishing. Kural asks you per your mode
+    // (approveBrowser), so the tools are pre-allowed like the device's. Claude and Codex (an MCP server, like the device's).
+    const brw = this.browserOn(tab) ? this.browserAi.session(tab.id, (req) => this.approveBrowser(tab, r, req), this.root() || ws.workDir()) : null;
+    if (brw) { r.browserToken = brw.token; r.browserChat = tab.id; }
+    const browserTools = brw ? BROWSER_TOOLS.map((t) => `mcp__${BROWSER_SERVER}__${t}`) : [];
     const local = isLocal(tab.model);
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
@@ -1304,9 +1314,9 @@ class ChatView {
       addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
-      tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools],
-      mcpServers: nativeTeam || dev ? { ...(nativeTeam ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
-        ...(dev ? { device: dev.server } : {}) } : null,
+      tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools, ...browserTools],
+      mcpServers: nativeTeam || dev || brw ? { ...(nativeTeam ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
+        ...(dev ? { device: dev.server } : {}), ...(brw ? { [BROWSER_SERVER]: brw.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root() || ws.workDir(), persist: true, handoffChars: this.handoffBudget(tab.model),
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
@@ -1690,7 +1700,7 @@ class ChatView {
   // not offered).
   // (Checked first without waiting: a send that isn't offered anything goes on in the same step.)
   bigTask(tab, text) {
-    if (tab.mode !== "auto" || tab.team || tab.noTeamOffer || isLocal(tab.model) || (!tab.autoRoute && !brain.providerOf(tab.model).ready())) return false;
+    if (!TEAMS_ENABLED || tab.mode !== "auto" || tab.team || tab.noTeamOffer || isLocal(tab.model) || (!tab.autoRoute && !brain.providerOf(tab.model).ready())) return false;
     const task = require("../router/policy").classify(text);
     return task.complexity === "complex" && task.sizeProbs.complex >= 0.8 && ["edit", "other"].includes(task.intent);
   }
@@ -2365,6 +2375,8 @@ class ChatView {
       log(`chat ${tab.id}: no notification: ${reply.notified ? "already notified for this answer" : queued ? "a queued message is answered next" : "carried on by another AI"}`);
     }
     this.finishTurn(tab, r);
+    // The answer is done: Kural lets go of the browser tabs it used (its network stop is lifted; the tab is yours again).
+    if (this.browserAi) this.browserAi.release(tab.id);
     // Tab learns what you're working on, and which files the chat changed for it.
     if (this.activity && r.turn.ask && reply.error !== "stopped") this.activity.addWork("chat", r.turn.ask, (reply.changes || []).map((c) => c.rel));
     this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
@@ -2464,12 +2476,14 @@ class ChatView {
     // ("Allow all" on this card covers only its kind of call: allowKind. None for a file or a tool Kural can't classify.)
     const block = { k: "perm", pid, tool: req.tool_name, detail, risky: !!risky || undefined, state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
       where: input.device || undefined,   // (a linked device's name, for its commands and writes)
+      site: /^Browser(Site|Action|Upload)$/.test(req.tool_name) ? input.site : undefined, label: req.tool_name === "BrowserAction" ? input.label : undefined,
+      reads: req.tool_name === "BrowserSite" && input.reads ? true : undefined,   // (Kural's browser: the site, the button, reading only)
       allowLabel: input.device || req.unclassified ? undefined : allowLabel(req.tool_name) || undefined };
     if (turn) turn.reply.blocks.push(block);
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
-    this.notify(tab, "permission", { tool: req.tool_name, detail: block.detail, where: block.where });
+    this.notify(tab, "permission", { tool: req.tool_name, detail: block.detail, where: block.where, site: block.site, label: block.label });
     const allow = await new Promise((resolve) => r.perms.set(pid, resolve));
     this.clearNotice(tab.id);
     if (allow) await prepareEdit();
@@ -2486,6 +2500,45 @@ class ChatView {
     if (!allowedKinds(tab.allowAll).length && !tab.allowAllFor) return;
     tab.allowAll = false; delete tab.allowAllFor;
     log(`chat ${tab.id}: "Allow all" ended (mode, model or conversation changed)`);
+  }
+
+  // Does this chat's AI get Kural's browser? (Claude and Codex take Kural's MCP servers; setting kural.browser.aiControl.)
+  browserOn(tab) {
+    return !!this.browserAi && this.browserAi.available() && deviceOk(tab.model) && cfg().get("browser.aiControl") !== false && vscode.workspace.isTrusted !== false;
+  }
+
+  // The AI in Kural's browser (lib/browser/control.js asks): your mode decides, as for a command. req.kind:
+  //   site     the first use of a site in this chat: reading it (Ask, Plan) or using it (Agent); Auto doesn't ask
+  //   commit   Submit, Pay, Delete, Discard, Leave the page…: asks in Agent (Allow all browser actions covers it)
+  //   upload   files for a page: like reading them, but only the project's (and attached ones) go without asking
+  //   refused  Kural stopped something that publishes (it never happens, in any mode): you see that it tried
+  async approveBrowser(tab, r, req) {
+    if (req.kind === "refused") {
+      log(`chat ${tab.id}: Kural stopped the AI before "${req.label}" on ${req.site} (it publishes)`);
+      this.post({ type: "flash", text: `Kural stopped the AI before "${String(req.label || "").slice(0, 40)}" on ${req.site}: the AI never publishes` });
+      return { allow: false };
+    }
+    if (!r.turn || !r.turn.reply.running) return { allow: false, message: "The answer was stopped." };
+    const plain = tab.mode === "plan" || tab.mode === "ask";
+    const site = String(req.site || "this page");
+    if (req.kind === "site") {
+      if (plain && !req.readOnly) return { allow: false, message: `${tab.mode === "plan" ? "Plan" : "Ask"} mode only reads pages: it doesn't click, type or go anywhere in the browser. Say what you'd do instead, or ask the user to switch to Agent mode.` };
+      // Once per site in this chat (in this mode, with this model and conversation, like "Allow all").
+      const said = tab.browserSites && tab.browserSites.key === grantKey(tab) ? tab.browserSites.sites : [];
+      if (said.includes(site)) return { allow: true };
+      const v = await this.onPermission(tab, r, { tool_name: "BrowserSite", input: { site, url: req.url, reads: plain } });
+      if (v.allow) tab.browserSites = { key: grantKey(tab), sites: [...said, site] };
+      return v;
+    }
+    if (req.kind === "commit") return this.onPermission(tab, r, { tool_name: "BrowserAction", input: { site, label: String(req.label || req.word || "") } });
+    if (req.kind === "upload") {
+      for (const f of req.files || []) {
+        const v = await this.onPermission(tab, r, { tool_name: "BrowserUpload", input: { file_path: f, site } });
+        if (!v.allow) return v;
+      }
+      return { allow: true };
+    }
+    return { allow: false, message: "Kural doesn't know this browser request." };
   }
 
   // A command or a file write on the linked device: your mode decides, like a command here. (Reads just happen.)
@@ -2721,9 +2774,10 @@ class ChatView {
       case "linkDevice": if (tab) {
         tab.device = m.id && this.devices && this.devices.get(m.id) ? m.id : null;
         tab.allowAllDevice = null;   // a new link asks again
-        // Unlinked (or another device) mid-answer: the running model loses the device at once, not at the next message.
+        // Unlinked (or another device) mid-answer: the running model loses the device at once, not at the next message
+        // (not the browser: endDevice(run, false)).
         const run = this.runtime.get(tab.id);
-        if (run && run.deviceDevice !== tab.device) this.endDevice(run);
+        if (run && run.deviceDevice !== tab.device) this.endDevice(run, false);
         log(`chat ${tab.id}: ${tab.device ? `linked device ${this.devices.get(tab.device).name}` : "device unlinked"}`);
         this.save(); this.postTabs();
         if (tab.status === "idle") this.warm(tab); else this.post({ type: "flash", text: "The device is linked from your next message" });
@@ -2837,20 +2891,20 @@ class ChatView {
       case "setMood": if (valid(allMoods(), m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
       // "Add your own mood…" in the model menu: Kural Settings, at Moods (lib/settings-page.js).
       case "editMoods": vscode.commands.executeCommand("kural.settings.moods"); break;
-      case "toggleRole": if (valid(ROLES, m.role)) {
+      case "toggleRole": if (TEAMS_ENABLED && valid(ROLES, m.role)) {
         const roles = tab.roles || [];
         tab.roles = roles.includes(m.role) ? roles.filter((r) => r !== m.role) : [...roles, m.role].slice(0, FRIENDS.length);
         if (tab.roles.length && !tab.team) tab.team = TEAM_SIZES[1];   // picking a role turns the team on
         this.afterTeamChange(tab, true);
       } break;
-      case "setTeamStyle": if (valid(TEAM_STYLES, m.style)) { tab.teamStyle = m.style; if (!tab.team) tab.team = TEAM_SIZES[1]; this.afterTeamChange(tab, true); } break;
+      case "setTeamStyle": if (TEAMS_ENABLED && valid(TEAM_STYLES, m.style)) { tab.teamStyle = m.style; if (!tab.team) tab.team = TEAM_SIZES[1]; this.afterTeamChange(tab, true); } break;
       case "reloadSetup": this.setupChanged("reload asked for"); break;
       case "getStarted": vscode.commands.executeCommand("kural.getStarted", m.path); break;
       case "useFullSetup":
         await cfg().update("chat.fullClaudeCodeSetup", !!m.on, vscode.ConfigurationTarget.Global);
         this.setupChanged(m.on ? "switched to your full setup" : "switched to the minimal setup");
         break;
-      case "setTeam": tab.team = TEAM_SIZES.includes(m.team) ? m.team : 0; this.afterTeamChange(tab, true); break;
+      case "setTeam": tab.team = TEAMS_ENABLED && TEAM_SIZES.includes(m.team) ? m.team : 0; this.afterTeamChange(tab, true); break;
       case "permission": {
         const r = this.runtime.get(tab.id);
         if (m.always) {
@@ -3061,10 +3115,30 @@ function toolDetail(name, input, root) {
     case "mcp__device__read_file": case "mcp__device__write_file": case "mcp__device__list_dir": return input.path || "~";
     case "mcp__team__post": return `${cap(input.from)} → ${input.to === "all" ? "everyone" : cap(input.to)}: ${input.message || ""}`;
     case "mcp__team__read": return `${cap(input.name)} checks messages${input.wait_seconds ? " and waits for a reply" : ""}`;
-    default: return "";
+    default: return name.startsWith(`mcp__${BROWSER_SERVER}__`) ? browserDetail(name.slice(`mcp__${BROWSER_SERVER}__`.length), input) : "";
   }
 }
 const lines = (s) => (s ? String(s).split("\n").length : 0);
+// A step in Kural's browser, after its verb (media/chat.js BROWSER_VERB): "Clicked" + "Next", "Typed" + "Morning run".
+function browserDetail(tool, i) {
+  const short = (s, n = 70) => { s = String(s == null ? "" : s).replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const at = i.element ? short(i.element) : i.ref ? i.ref : i.x !== undefined ? `${Math.round(i.x)}, ${Math.round(i.y)}` : "";
+  switch (tool) {
+    case "open": return short(i.url, 90);
+    case "navigate": return i.url ? short(i.url, 90) : i.back ? "back" : i.forward ? "forward" : "reload";
+    case "snapshot": return i.find ? `looking for "${short(i.find, 40)}"` : "";
+    case "click": return at;
+    case "type": return `"${short(i.text, 50)}"${i.ref ? ` in ${i.ref}` : ""}`;
+    case "press": return `${short(i.key, 30)}${i.ref ? ` on ${i.ref}` : ""}`;
+    case "select": return (Array.isArray(i.values) ? i.values : [i.values]).map((v) => `"${short(v, 30)}"`).join(", ");
+    case "upload": return (Array.isArray(i.files) ? i.files : [i.files]).filter(Boolean).map((f) => path.basename(String(f))).join(", ");
+    case "drag": return at;
+    case "scroll": return Number(i.dy) < 0 ? "up" : "down";
+    case "wait": return i.text ? `for "${short(i.text, 40)}"` : i.gone ? `until "${short(i.gone, 40)}" is gone` : `${Number(i.seconds) || 2} s`;
+    case "dialog": return i.accept ? "OK" : "Cancel";
+    default: return "";
+  }
+}
 const cap = (s) => { s = String(s || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) : "?"; };
 
 // The team's message board, run by Kural's own executable as plain Node.
@@ -3074,6 +3148,11 @@ function permDetail(tool, input) {
   if (tool === "DeviceCommand") return input.command || "";
   if (tool === "DeviceWrite") return `${input.path || ""}\n\n${String(input.content || "").slice(0, 600)}${String(input.content || "").length > 600 ? "\n…" : ""}`;
   if (tool === "WebFetch") return input.url || "";
+  // Kural's browser.
+  if (tool === "BrowserSite") return `${input.url || input.site || ""}\n\n${input.reads ? "It can read this site's pages (Ask and Plan only read)." :
+    "It can read this site's pages and click and type there, with your login."} Kural never lets it publish, post, share or send anything.`;
+  if (tool === "BrowserAction") return `"${input.label || ""}" on ${input.site || "the page"}\n\nThis can send a form or change something on the site.`;
+  if (tool === "BrowserUpload") return `${input.file_path || ""}\n(from outside this project) → ${input.site || "the page"}`;
   if (EDIT_TOOLS.has(tool)) {
     const f = input.file_path || input.notebook_path || "";
     return `${f}\n${runsLater(f) ? "This file can make your computer run something later." : "(outside this project)"}`;

@@ -1,5 +1,7 @@
 # Multiple Agents
 
+> **Switched off for now.** The model menu has no Multiple agents toggle, and Auto no longer offers "Use 3 agents?". Every chat uses one agent. The text below describes how it worked.
+
 Turn on **Multiple agents** in the chat's model menu (Claude, ChatGPT or Google Gemini). Instead of one assistant, a team works on your
 request. The lead is always the **Project Manager**; you pick the other roles:
 

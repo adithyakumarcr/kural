@@ -29,9 +29,62 @@ message. Pictures arrive as attachments; click one in the chat to see it full si
 Sharing: the first time you pick from a site that isn't your own computer, VS Code asks whether you're happy to put its
 content in the chat.
 
+## The AI uses the browser
+
+Ask the chat to do something on a website and it does it in Kural's browser, like you would: open the page, read it,
+click, type, choose from lists, upload a file, drag a slider or a trim handle, scroll, look at a picture of the page.
+
+- "Open instagram.com and make a reel from `videos/run.mp4`: trim it, pick a cover, write the caption."
+- "Fill in the form on this page with my details from `notes/me.md`."
+- "Answer the quiz in the browser tab."
+
+It works in a tab beside the code, so you can watch; each step shows in the answer ("Clicked Next", "Typed …"). The tab
+has your logins: if a site asks to log in, log in there yourself (the AI never asks for passwords). Claude and ChatGPT
+(Codex) models can do this; Gemini and a model on your computer can't. Turn it off with the setting
+`kural.browser.aiControl`.
+
+### It never publishes
+
+Kural's rule: **the AI never publishes, posts, shares or sends anything**: no post, reel, story, comment, message or
+email, in any mode, not even when you ask it to. It goes as far as a draft and stops, saying what's ready; pressing
+**Share** is yours.
+
+- Before every click Kural checks what's really under the pointer (and the buttons around it): Share, Post, Publish,
+  Send, Reply, Go live, Boost… are refused, in many languages. "Save draft", "Save as draft" and "Finish later" are fine.
+  "Post" in a menu (Instagram's Create → Post) only opens the composer, so that's fine too.
+- Enter in a caption, comment or message box is refused (it can post what's in it); new lines in a text are typed
+  as part of it. Enter in a search box is fine.
+- OK on the page's own "Publish this?" question is refused (Cancel is fine).
+- On Instagram, the request that publishes is also stopped in the network while the AI works in that tab, even if
+  something got past the labels. That includes your own Share in that tab until the AI's answer is done; then Kural lets
+  go of the tab and it's all yours.
+
+Instagram's website doesn't save drafts (Instagram keeps drafts in its phone app), so there the AI prepares the reel up
+to the caption and stops before **Share**: the reel waits in that tab for you. Meta Business Suite offers
+**Save as draft** / **Finish later** for some accounts.
+
+### When it asks
+
+| Mode | A site, the first time in a chat | Submit, Pay, Delete, Discard… | Upload a file from outside the project | Publish |
+|---|---|---|---|---|
+| Agent | asks | asks | asks | never |
+| Auto | doesn't ask | doesn't ask | doesn't ask | never |
+| Plan, Ask | asks (reading only) | refused | refused | never |
+
+"Allow all browser actions in this chat" on a card covers every site and the Submit kind, never an upload from outside
+the project, and never publishing. Like every "Allow all", it ends when the mode, the model or the conversation changes.
+
+ChatGPT's own browser and computer use are off in every mode (Kural can't see what they click); Gemini's own browser
+(Antigravity's) asks before every action, in Auto too.
+
 ## Under the hood
 
 VS Code's browser sends what you pick to VS Code's own chat panel, which Kural doesn't have. A small build-time change
 (`scripts/rebrand.py`) makes it call Kural instead, and turns on the "Add to Chat" buttons that VS Code hides when its
 own chat is off. If a future VS Code changes that code, the build prints a warning and the browser works as plain
 browser, without the buttons.
+
+The AI's hands are VS Code's own browser API for extensions (its browser tabs, and a DevTools connection to one), not a
+change to VS Code: the chat's program gets Kural's browser tools (an MCP server, `extension/lib/browser/`), each call
+comes to Kural, and Kural clicks and types with real input events. The page outline the AI reads is the page's
+accessibility tree (what a screen reader gets), with a ref for each thing on it.

@@ -1,5 +1,17 @@
 ## Not released yet
 
+- **The AI uses the browser, and never publishes.** Ask the chat to do something on a website ("make a reel from
+  `videos/run.mp4` on Instagram up to the caption", "fill in this form", "answer the quiz in the browser tab") and it
+  works in Kural's browser beside the code, with your logins: it reads the page, clicks, types, chooses, uploads files,
+  drags a slider or a trim handle, scrolls and takes pictures of the page, and each step shows in the answer (Claude and
+  ChatGPT models; setting `kural.browser.aiControl`). Kural's rule: it **never publishes, posts, shares or sends
+  anything**, in any mode, not even when you ask; it stops at a draft and you press Share yourself. Every click, Enter
+  key and page question is checked first, in many languages, and on Instagram the publish request itself is stopped
+  while the AI works in that tab. Agent mode asks once per site in a chat and before Submit, Pay, Delete or Discard;
+  Plan and Ask only read pages; a file from outside the project asks before it's uploaded. (Instagram's website doesn't
+  save drafts: there the reel waits in the tab for you.)
+- **ChatGPT's own browser and computer use are off in Auto too, and Gemini's own browser asks before every action**:
+  Kural can't see what they click, so it couldn't keep them from publishing. The AI uses Kural's browser instead.
 - **No more "Kural wants to use ... Safe Storage" prompt at start on a Mac.** VS Code 1.140's dictation feature asked for a GitHub login
   every time Kural started, which woke the GitHub login extension and made the Mac ask for the keychain. Kural removes that call.
 - **Linking a Jira ticket works with the "Atlassian MCP" connector.** Its tools are named `claude_ai_Atlassian_MCP`, which Kural did not recognise, so even the read-only lookups were refused ("Only reading from Jira is allowed here"). Reads from it (and Confluence/graph lookups) now run; creating or editing still asks.

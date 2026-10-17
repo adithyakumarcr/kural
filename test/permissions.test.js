@@ -53,6 +53,16 @@ const table = [
   ["mcp__claude_ai_Notion__notion-search", {}, "ask run ask ask"],          // ("notion-" is the server's own prefix)
   ["mcp__claude_ai_Notion__notion-create-pages", {}, "ask run deny deny"],
   ["mcp__x__get_or_create_page", {}, "ask run deny deny"],                  // a lookup verb with a change in it: not a lookup
+  // Kural's browser: a site the first time in a chat (reading it in Ask and Plan); Submit / Pay / Delete; a file to upload.
+  // (Publishing never gets here: browser/guard.js refuses it in every mode.)
+  ["BrowserSite", { site: "instagram.com", url: "https://www.instagram.com/" }, "ask run ask ask"],
+  ["BrowserAction", { site: "forms.example", label: "Submit" }, "ask run deny deny"],
+  ["BrowserUpload", { file_path: path.join(proj, "media", "reel.mp4"), site: "instagram.com" }, "run run deny deny"],   // the project's own file
+  ["BrowserUpload", { file_path: P.granted, site: "instagram.com" }, "run run deny deny"],                              // you attached it
+  ["BrowserUpload", { file_path: P.tmp, site: "instagram.com" }, "ask run deny deny"],                                  // readable, but not yours to send
+  ["BrowserUpload", { file_path: P.zshrc, site: "instagram.com" }, "ask run deny deny"],
+  // Gemini's own browser: Kural can't check it for publishing, so every action asks (Auto too).
+  ["Browser", { action: "browser_click" }, "ask ask deny deny"],
 ];
 let rows = 0;
 for (const [tool, input, want] of table) {
@@ -84,8 +94,16 @@ assert.strictEqual(run("WebSearch", { query: "x" }, "ask", all), "run");
 assert.strictEqual(run("Bash", { command: "ls" }, "ask", all), "deny");
 // Each card says what its "Allow all" covers; a file card and a device's tools have none.
 const { allowLabel, allowKind } = require("../extension/lib/chat/permission-policy");
-assert.deepStrictEqual(["Bash", "WebFetch", "WebSearch", "Browser", "mcp__claude_ai_Notion__notion-search", "Write", "Read", "mcp__device__run_command"].map(allowKind),
-  ["command", "web", "web", "browser", "connector:claude_ai_Notion", null, null, null]);
+assert.deepStrictEqual(["Bash", "WebFetch", "WebSearch", "BrowserSite", "BrowserAction", "BrowserUpload", "Browser", "mcp__claude_ai_Notion__notion-search", "Write", "Read", "mcp__device__run_command"].map(allowKind),
+  ["command", "web", "web", "browser", "browser", null, null, "connector:claude_ai_Notion", null, null, null]);
+assert.strictEqual(allowLabel("BrowserSite"), "Allow all browser actions in this chat");
+// "Allow all browser actions": every site and Submit; never an upload from outside the project, never Gemini's own browser.
+const br = { allowAll: ["browser"] };
+assert.strictEqual(run("BrowserSite", { site: "a.example" }, "agent", br), "run");
+assert.strictEqual(run("BrowserAction", { label: "Pay now" }, "agent", br), "run");
+assert.strictEqual(run("BrowserUpload", { file_path: P.zshrc }, "agent", br), "ask");
+assert.strictEqual(run("Browser", { action: "browser_click" }, "agent", br), "ask");
+assert.strictEqual(run("BrowserSite", { site: "a.example" }, "agent", cmd), "ask", "commands don't cover the browser");
 assert.strictEqual(allowLabel("mcp__claude_ai_Notion__notion-search"), "Allow everything from Notion in this chat");
 assert.strictEqual(allowLabel("WebSearch"), "Allow all web searches and pages in this chat");
 assert.strictEqual(allowLabel("Edit"), null);
@@ -123,11 +141,12 @@ try {
   assert.strictEqual(run("Write", { file_path: path.join(proj, "src", "fine.js") }, "agent"), "run", "a normal project file still runs");
 } catch (e) { if (e.code !== "EPERM") throw e; }
 
-// Gemini's approval gate: a call Kural can't classify is refused in Ask/Plan and asks in Agent AND Auto; a browser
-// action is refused in Ask/Plan; files that keep a gate working ask even in Auto; a command in another folder asks.
+// Gemini's approval gate: a call Kural can't classify is refused in Ask/Plan and asks in Agent AND Auto; its own browser's
+// actions are refused in Ask/Plan and ask in Agent and Auto (Kural can't check them for publishing); files that keep a
+// gate working ask even in Auto; a command in another folder asks.
 const modeRow = (tool, input, extra) => modes.map((m) => run(tool, input, m, extra)).join(" ");
 assert.strictEqual(modeRow("mcp__agy__teleport", {}, { unclassified: true }), "ask run deny deny");
-assert.strictEqual(modeRow("Browser", { action: "browser_click" }), "ask run deny deny");
+assert.strictEqual(modeRow("Browser", { action: "browser_click" }), "ask ask deny deny");
 const guard = (f) => f.endsWith("hooks.json");
 assert.strictEqual(modeRow("Write", { file_path: path.join(proj, ".agents", "hooks.json") }, { guard }), "ask ask deny deny");
 assert.strictEqual(modeRow("Write", { file_path: P.project }, { guard }), "run run deny deny");

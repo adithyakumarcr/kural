@@ -48,14 +48,19 @@ function plainLine(md, max = 140) {
 }
 
 // The words: { title, body }. kind: done | plan | permission | question | error | login.
-// info: { chat (the chat's title), text (the answer), tool, detail (a command, a file), where (a device), question, error, who }
+// info: { chat (the chat's title), text (the answer), tool, detail (a command, a file), where (a device), site and label (Kural's
+//   browser: the site, the button), question, error, who }
 function message(kind, info = {}) {
   const chat = plainLine(info.chat || "Your chat", 60);
   switch (kind) {
     case "plan": return { title: `${chat}: the plan is ready`, body: "Build it, or tell Kural what to change." };
     case "permission": {
+      const site = plainLine(info.site || "a site", 60);
+      if (info.tool === "BrowserSite") return { title: `${chat} needs your OK`, body: `Let the AI use ${site} in Kural's browser?` };
+      if (info.tool === "BrowserAction") return { title: `${chat} needs your OK`, body: `Click "${plainLine(info.label || "", 60)}" on ${site}?` };
       const what = info.tool === "Bash" || info.tool === "DeviceCommand" ? (info.where ? `Run this on ${info.where}?` : "Run this command?")
         : /^(Write|Edit|NotebookEdit|DeviceWrite)$/.test(info.tool || "") ? "Change this file?"
+        : info.tool === "BrowserUpload" ? `Upload this file to ${site}?`
         : /^(Read|Grep|Glob)$/.test(info.tool || "") ? "Read this file?" : "Allow this?";
       const detail = plainLine(String(info.detail || "").split("\n")[0], 110);
       return { title: `${chat} needs your OK`, body: detail ? `${what} ${detail}` : what };

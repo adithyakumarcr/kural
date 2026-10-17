@@ -214,15 +214,17 @@ const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatM
   });
 
   // Codex's tools that never reach Kural's approval: off outside Auto; in Plan and Ask your connectors too (lockdownArgs).
-  await check("Plan and Ask switch off your connectors and Codex's apps, browser and computer use; Agent the features; Auto nothing", async () => {
+  // Its own browsers and computer use are off in Auto too: Kural can't keep them from publishing (Kural's browser can).
+  await check("Plan and Ask switch off your connectors and Codex's apps, browser and computer use; Agent the features; Auto only the browsers", async () => {
     const { lockdownArgs } = codex._test;
     const features = ["apps", "browser_use", "browser_use_external", "computer_use", "in_app_browser"].map((f) => `features.${f}=false`);
+    const browsers = features.filter((f) => f !== "features.apps=false");
     const opts = (args) => args.filter((a, i) => i % 2 === 1);
-    assert.deepStrictEqual(lockdownArgs("auto", ["notion"]), []);
+    assert.deepStrictEqual(opts(lockdownArgs("auto", ["notion"])), browsers);
     assert.deepStrictEqual(opts(lockdownArgs("agent", ["notion"])), features);
     assert.deepStrictEqual(opts(lockdownArgs("plan", [])), features);
     // (A name with a dot is quoted: Codex's -c paths can't address it, an inline table can. Kural's own "device" stays on.)
-    assert.deepStrictEqual(opts(lockdownArgs("ask", ["notion", "my.server", "device"])), [...features, 'mcp_servers={ notion = { enabled = false }, "my.server" = { enabled = false } }']);
+    assert.deepStrictEqual(opts(lockdownArgs("ask", ["notion", "my.server", "device", "kural_browser"])), [...features, 'mcp_servers={ notion = { enabled = false }, "my.server" = { enabled = false } }']);
     process.env.FAKE_CODEX_MCP = "notion,my.server";
     try {
       assert.deepStrictEqual(await codex._test.connectorNames(BIN, { cwd: proj }), ["notion", "my.server"]);
@@ -233,7 +235,8 @@ const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatM
       const agent = await said("agent");
       assert.ok(agent.includes("features.computer_use=false") && !agent.some((c) => c.startsWith("mcp_servers=")), agent.join("\n"));
       const auto = await said("auto");
-      assert.ok(!auto.some((c) => c.startsWith("features.") || c.startsWith("mcp_servers=")), auto.join("\n"));
+      assert.ok(!auto.some((c) => c === "features.apps=false" || c.startsWith("mcp_servers=")), auto.join("\n"));
+      for (const f of browsers) assert.ok(auto.includes(f), `auto: ${f}`);
       // One-shot answers (Ask, commit messages) are read-only too.
       assert.ok((await codex.askCodex(BIN, { prompt: "config", cwd: proj })).includes('"my.server" = { enabled = false }'));
     } finally { delete process.env.FAKE_CODEX_MCP; }
