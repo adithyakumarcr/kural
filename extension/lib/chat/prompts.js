@@ -59,6 +59,34 @@ const MOOD_PROMPTS = {
     "clearly. Keep every part short.",
 };
 
+// Learn mood's lesson pages (lib/learn): when you ask for an explanation on a webpage, the AI writes a slide deck into the
+// chat's lesson folder (`dir`) and Kural shows it beside the chat. Writing needs Agent or Auto; in Plan and Ask it says so.
+function lessonPrompt(dir, mode) {
+  const head = "\n\nLesson pages: when the user asks you to explain something on a webpage (visually, as slides, a presentation, " +
+    "\"show me\"), ";
+  if (mode !== "agent" && mode !== "auto") return head + "say in one line that lesson pages need Agent or Auto mode (the mode menu under " +
+    "the chat), then explain in the chat for now.";
+  return head + "build a lesson page instead of a long answer:\n" +
+    `- Write ONE self-contained HTML file with your Write tool to ${dir}/<short-topic-name>.html (only that folder; a new name ` +
+    "for a new topic). To change a lesson, edit its file: the open page reloads by itself. Kural opens it beside the chat.\n" +
+    "- One <section class=\"slide\"> per slide, 5 to 9 slides, one idea each, basics first. Kural adds the slide controls " +
+    "(arrows, dots), the styles and \"Add to chat\"; don't add your own navigation.\n" +
+    "- Very few words: a heading of at most 6 words and at most 15 more words per slide. Show it instead: inline SVG " +
+    "diagrams, CSS shapes, small CSS animations, before/after, comparisons, a code snippet of at most 8 lines. Like a " +
+    "presentation, not a document.\n" +
+    "- Ready-made classes: big (one huge number or word), muted, accent, good, bad, cards + card, flow (boxes joined by " +
+    "arrows), row, vs (left | vs | right), reveal (appears on the next arrow press: build a diagram step by step), " +
+    "<pre><code> for code, <mark> to highlight. Colors: var(--fg), --muted, --accent, --accent-2, --card, --line, --bg " +
+    "(light and dark both work); in SVG use currentColor and these variables.\n" +
+    "- Put data-concept=\"<the idea>\" on each key visual: the user can click it and ask about it.\n" +
+    "- Nothing from outside: no external scripts, fonts, pictures or links (they're blocked). Inline SVG, CSS and small " +
+    "scripts only.\n" +
+    "- The last slide: one question or a tiny exercise.\n" +
+    "Then teach in the chat beside it, briefly, like a teacher at the board: go slide by slide (\"Slide 2: watch the " +
+    "arrow…\"), say what to notice, don't repeat the page's words, and ask when they're ready to go on. When the user " +
+    "adds part of the page to the chat, explain that part; if a visual would help, add or change a slide.";
+}
+
 // Your own moods (Kural Settings → Moods; setting kural.chat.moods, user level only: a project's settings can't add one,
 // since its instructions go into the AI's prompt): [{ id, name, hint, instructions }]. Cleaned up here: a name and
 // instructions are needed, each kept short; an id is made from the name when there's none. They show after the four
@@ -109,4 +137,4 @@ const MOOD_EXAMPLES = [
       "detail. When you change code, add a short comment on each part you changed." },
 ];
 
-module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS, MOOD_LIMITS, MOOD_EXAMPLES, customMoods, shownMoods, moodPrompt, moodId };
+module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS, MOOD_LIMITS, MOOD_EXAMPLES, customMoods, shownMoods, moodPrompt, moodId, lessonPrompt };

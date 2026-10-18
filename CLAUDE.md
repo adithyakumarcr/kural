@@ -743,6 +743,17 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   it (a fork copies the threads). One question at a time per thread; 90 s timeout; closing the tab stops it (`stopAll`);
   `clean()` marks running ones stopped. Tests: `test/side-chat.test.js`, `test/side-page.test.js`; live:
   `node test/side-chat.live.js` (real Haiku, ~2 s).
+- **Lesson pages** (`lib/learn/`: `server.js` no vscode, `index.js`; `media/lesson.css|js`; Adithya, 18 Oct 2026: Learn
+  mood, "explain it on a webpage", like a presentation, few words, visuals). `chat.moodText(tab)` = the mood + in Learn
+  `lessonPrompt(dir, mode)` (Plan/Ask: "needs Agent or Auto"). The chat's folder `scope.dir("lessons","data")/<chat id>`
+  goes into `addDirs` and the permission's `writeRoots`; deleted with the chat. A `fs.watch` on it (not the tool calls:
+  every program writes its own way) → `show()`: closes the Explorer and the bottom panel, opens the page in the active
+  group (beside when the chat is in an editor), maximizes the group once when the code is split. The server: 127.0.0.1,
+  token in every path, Host checked, only that chat's folder (realpath), a CSP with no outside loads; it adds the runtime
+  after `<head>`; `POST …/add` (same Origin, ≤16 KB) → `addLessonItem` → a `quote` pill with `source: "lesson"`
+  (`buildPrompt`: "From the lesson page (slide N…)"). The page polls `__v` and reloads on a change. Motion only after
+  `kl-live` (else every slide fades out as the page opens). Test: `test/lessons.test.js`. NOT checked live: a real chat
+  writing one, the layout commands and a click in the Integrated Browser.
 - **Workspace Color** (`lib/workspace-color.js`, `rebrand.py` `add_workspace_color_item`): palettes `DARK` (deep, muted)
   and `LIGHT` (pastel) by `activeColorTheme.kind` (Adithya: not too bright); six `activityBar*` keys in
   `workbench.colorCustomizations` + `kural.workspaceColor`, Workspace target, merged; Remove deletes only keys still equal

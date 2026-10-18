@@ -26,6 +26,7 @@ const { Account } = require("./lib/account");
 const { SettingsPage } = require("./lib/settings-page");
 const { Browser } = require("./lib/browser");
 const { BrowserControl } = require("./lib/browser/control");
+const { Lessons } = require("./lib/learn");
 const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
 const { ModelRouter } = require("./lib/router");
@@ -314,6 +315,12 @@ function activate(context) {
   const browserAi = new BrowserControl(context);
   browserAi.register();
   chat.browserAi = browserAi;
+  // Learn mood's lesson pages: the AI writes a slide deck, Kural shows it next to the chat (lib/learn).
+  chat.lessons = new Lessons(context, {
+    add: (id, item) => chat.addLessonItem(id, item),
+    inEditor: (id) => chat.inEditor(id),
+    keepChat: (id) => chat.showChat(id),
+  });
   triggerOnCursor(context);
 
   context.subscriptions.push(

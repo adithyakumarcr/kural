@@ -511,7 +511,7 @@ window.KURAL_CHAT = function (app, port) {
     return el("span", { class: `pill ${ctx.kind}`, contenteditable: "false", "data-ctx": JSON.stringify(ctx),
       title: quote ? String(ctx.text || "").slice(0, 600) : ctx.kind === "element" ? `${ctx.label} on ${ctx.path}${ctx.element && ctx.element.text ? `\n"${ctx.element.text.slice(0, 80)}"` : ""}` : openable ? `Open ${ctx.path}` : ctx.path,
       onclick: !openable || quote ? null : ctx.kind === "element" ? () => post({ type: "browser", url: ctx.path }) : () => post({ type: "openFile", path: ctx.path, line: ctx.startLine, endLine: ctx.endLine }) },
-      ctx.kind === "element" || quote ? el("span", { class: "pill-icon" }, icon(quote ? "quote" : "inspect")) : el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"),
+      ctx.kind === "element" || quote ? el("span", { class: "pill-icon" }, icon(ctx.source === "lesson" ? "mortar-board" : quote ? "quote" : "inspect")) : el("span", { class: "pill-icon" }, ctx.kind === "selection" ? "{ }" : "@"),
       quote ? el("span", { class: "pill-text" }, pillLabel(ctx)) : pillLabel(ctx));
   }
 

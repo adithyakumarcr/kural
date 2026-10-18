@@ -80,6 +80,15 @@ your next message, because which tools the model has is fixed when it starts.
   - **Critic**: questions the request and the code, finds flaws.
   - **Learn**: teaches you. It first asks which of the ideas behind your question you already know, explains only the
     ones you don't, then answers the question, and ends with a short question to check you got it.
+    **Lesson pages**: in Learn, ask it to *explain it on a webpage* (or "show me as slides") and the AI builds a short
+    slide deck: one idea per slide, diagrams and small animations, very few words. It opens in Kural's browser beside
+    the chat, and the Explorer and the terminal close so the screen is just the chat and the lesson. Move with the
+    arrow keys, Space, the dots or the buttons; some slides build up step by step. The AI teaches it in the chat, slide
+    by slide. Select text on the page, or click a highlighted visual, and press **Add to chat**: it goes into your
+    message (nothing is sent until you send), so you can ask about exactly that part. When the AI changes a slide the
+    page reloads by itself. Lesson pages need Agent or Auto mode (the AI writes the page; in Plan and Ask it explains in
+    the chat). They're kept privately in Kural's storage (not in your project), served only to this computer, can't load
+    anything from the internet, and are deleted with the chat.
   - **Your own moods**: **Add your own mood…** (at the end of the moods) opens **Kural Settings → Moods**. A mood has a
     name, a one-line hint (shown when you point at it) and instructions for the AI. What works best: who the AI should
     be and how it works with you ("Work like a pair programmer sitting next to me"), concrete behaviors (what to do

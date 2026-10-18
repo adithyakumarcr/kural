@@ -225,20 +225,22 @@ const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatM
     assert.deepStrictEqual(opts(lockdownArgs("plan", [])), features);
     // (A name with a dot is quoted: Codex's -c paths can't address it, an inline table can. Kural's own "device" stays on.)
     assert.deepStrictEqual(opts(lockdownArgs("ask", ["notion", "my.server", "device", "kural_browser"])), [...features, 'mcp_servers={ notion = { enabled = false }, "my.server" = { enabled = false } }']);
+    // A plugin's stdio server has no config.toml entry to merge into: its command goes along (else "invalid transport").
+    assert.deepStrictEqual(opts(lockdownArgs("ask", [{ name: "code-review", command: "/bin/sh" }])), [...features, 'mcp_servers={ code-review = { command = "/bin/sh", enabled = false } }']);
     process.env.FAKE_CODEX_MCP = "notion,my.server";
     try {
-      assert.deepStrictEqual(await codex._test.connectorNames(BIN, { cwd: proj }), ["notion", "my.server"]);
+      assert.deepStrictEqual(await codex._test.connectorNames(BIN, { cwd: proj }), [{ name: "notion", command: "npx" }, { name: "my.server", command: "npx" }]);
       const said = async (mode) => (await ask({ mode }, "config")).result.result.split("\n");
       const plan = await said("plan");
       for (const f of features) assert.ok(plan.includes(f), `plan: ${f}`);
-      assert.ok(plan.includes('mcp_servers={ notion = { enabled = false }, "my.server" = { enabled = false } }'), plan.join("\n"));
+      assert.ok(plan.includes('mcp_servers={ notion = { command = "npx", enabled = false }, "my.server" = { command = "npx", enabled = false } }'), plan.join("\n"));
       const agent = await said("agent");
       assert.ok(agent.includes("features.computer_use=false") && !agent.some((c) => c.startsWith("mcp_servers=")), agent.join("\n"));
       const auto = await said("auto");
       assert.ok(!auto.some((c) => c === "features.apps=false" || c.startsWith("mcp_servers=")), auto.join("\n"));
       for (const f of browsers) assert.ok(auto.includes(f), `auto: ${f}`);
       // One-shot answers (Ask, commit messages) are read-only too.
-      assert.ok((await codex.askCodex(BIN, { prompt: "config", cwd: proj })).includes('"my.server" = { enabled = false }'));
+      assert.ok((await codex.askCodex(BIN, { prompt: "config", cwd: proj })).includes('"my.server" = { command = "npx", enabled = false }'));
     } finally { delete process.env.FAKE_CODEX_MCP; }
     // Codex can't list its connectors: the features are still off, and the chat still starts.
     const broken = path.join(tmp, "codex-no-list.js");
