@@ -211,9 +211,12 @@ const tomlKey = (k) => /^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(String(k)
 function lockdownArgs(mode, connectors = []) {
   if (mode === "auto") return ALWAYS_OFF.flatMap((f) => ["-c", `features.${f}=false`]);
   const out = OFF_FEATURES.flatMap((f) => ["-c", `features.${f}=false`]);
-  const names = (connectors || []).filter((n) => typeof n === "string" && n && n !== "device" && n !== "kural_browser");
-  if ((mode === "plan" || mode === "ask") && names.length)
-    out.push("-c", `mcp_servers={ ${names.map((n) => `${tomlKey(n)} = { enabled = false }`).join(", ")} }`);
+  // A connector is a name, or { name, command } for a stdio server: one that comes from a Codex plugin (not from config.toml)
+  // has no settings to merge into, so a bare { enabled = false } is refused ("invalid transport"); its command completes it.
+  const list = (connectors || []).map((c) => typeof c === "string" ? { name: c } : c)
+    .filter((c) => c && typeof c.name === "string" && c.name && c.name !== "device" && c.name !== "kural_browser");
+  if ((mode === "plan" || mode === "ask") && list.length)
+    out.push("-c", `mcp_servers={ ${list.map((c) => `${tomlKey(c.name)} = { ${c.command ? `command = ${JSON.stringify(c.command)}, ` : ""}enabled = false }`).join(", ")} }`);
   return out;
 }
 
@@ -228,7 +231,8 @@ function connectorNames(bin, { env, cwd } = {}) {
       let list = null;
       try { list = JSON.parse(String(stdout || "").trim() || "[]"); } catch { /* not JSON */ }
       if (!Array.isArray(list)) { log(`codex: couldn't list its connectors (${err ? err.message : "unreadable answer"})`); resolve(null); return; }
-      resolve(list.map((s) => s && s.name).filter((n) => typeof n === "string" && n));
+      resolve(list.filter((s) => s && typeof s.name === "string" && s.name)
+        .map((s) => s.transport && s.transport.type === "stdio" && typeof s.transport.command === "string" ? { name: s.name, command: s.transport.command } : s.name));
     });
   });
 }
