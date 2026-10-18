@@ -18,7 +18,8 @@ const P = {
 const writeRoots = [proj, work];                   // what ws.aiRoots(true) gives (no temp folder)
 const readRoots = [proj, work, os.tmpdir()];       // ws.aiRoots(): reading the temp folder is fine
 const run = (tool, input, mode, extra = {}) => {
-  const v = decide({ tool, input, mode, writeRoots, readRoots, granted: [attached], cwd: proj, ...extra });
+  // (The private-folder rule, on a Mac only, has its own table: test/private-folders.test.js. This one is the same everywhere.)
+  const v = decide({ tool, input, mode, writeRoots, readRoots, granted: [attached], cwd: proj, privateFolders: false, ...extra });
   return v.deny ? "deny" : v.allow ? "run" : v.question ? "Q" : "ask";
 };
 

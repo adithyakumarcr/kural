@@ -41,7 +41,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   message instead, also while the chat is open): tabs; modes Agent (edits files, asks before commands), Auto (unrestricted: no asking,
   also for dangerous commands and files outside the project; the AI ends each answer with a "What I did" list; the
   first switch to Auto explains this once; Gemini too, through Kural's gate; but the AI still never publishes in the
-  browser, and Gemini's own browser still asks), Plan
+  browser, Gemini's own browser still asks, and so does a look into your Desktop, Documents, Downloads, Music, Pictures
+  or Movies), Plan
   (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
   your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
@@ -112,11 +113,13 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   on Elements" adds what you want changed ("make this bigger") as the start of your message; its dropdown also adds a
   screenshot, an area or the full page, and the console logs. Then Kural finds the code behind the element in the project
   and changes it; reload the page to see it. (If nothing is added when you click an element,
-  use a screenshot of the area instead.)
+  use a screenshot of the area instead.) It keeps nothing: no cookies, logins, history of sites' data or cache are saved;
+  each time Kural starts the browser is fresh (logins last until that window closes). Data older versions saved is
+  deleted once.
 - The AI uses Kural's browser (Claude and ChatGPT (Codex) models; setting kural.browser.aiControl, on by default): ask
   it to do something on a site ("open instagram.com and make a reel from videos/run.mp4 up to the caption", "fill in
-  this form", "answer the quiz on this page"). It opens pages in a tab beside the code (with your logins: log in there
-  yourself first; it never asks for passwords), reads them, clicks, types, chooses, uploads files, drags (a slider, a
+  this form", "answer the quiz on this page"). It opens pages in a tab beside the code (log in there yourself first;
+  the login lasts until the window closes, since Kural's browser keeps nothing; it never asks for passwords), reads them, clicks, types, chooses, uploads files, drags (a slider, a
   trim handle), scrolls and takes pictures of the page while you watch; its steps show in the answer ("Clicked Next").
   Kural's rule: the AI NEVER publishes, posts, shares or sends anything (Share, Post, Publish, Send, a comment, a
   message, an email), in any mode, not even when you ask: it goes as far as a draft ("Save draft" is fine), stops and
@@ -212,7 +215,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Inside the project it doesn't ask, except for files that run code later (git hooks, .vscode/tasks.json, package.json,
   .env, Makefile, Dockerfile, workflows, shell profiles) and the temp folder (Agent mode still asks before commands).
   That's Agent mode: Auto asks about none of these. Kural never looks through Desktop,
-  Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural).
+  Documents, Downloads, Music or Photos by itself (on a Mac that would make macOS ask about Kural). On a Mac the AI's
+  own look there (a command, a read, a search over your whole home folder) asks first, in every mode, Auto too, with
+  no "Allow all": "It looks in your Downloads folder…"; not for a file you attached, nor a project you opened inside
+  Documents or Desktop. ChatGPT (Codex) runs simple read-only commands without asking Kural, so for it only its
+  instructions keep it out.
 - Trust a workspace before using Kural AI; Kural is unavailable in Restricted Mode. Ask and Plan reject mutating
   requests handled by Kural's permission policy. Provider-native reads are not confined by this policy. Gemini's
   approval gate (Antigravity hooks) relies on Antigravity running its hooks; use a separately isolated account for

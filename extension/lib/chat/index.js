@@ -2475,10 +2475,11 @@ class ChatView {
     const detail = permDetail(req.tool_name, input) + (risky ? `\n\nAsks first: ${risky.why}` : "");
     // ("Allow all" on this card covers only its kind of call: allowKind. None for a file or a tool Kural can't classify.)
     const block = { k: "perm", pid, tool: req.tool_name, detail, risky: !!risky || undefined, state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
+      private: verdict.private || undefined,   // (your Desktop, Downloads, Music…: asks in Auto too, no "Allow all")
       where: input.device || undefined,   // (a linked device's name, for its commands and writes)
       site: /^Browser(Site|Action|Upload)$/.test(req.tool_name) ? input.site : undefined, label: req.tool_name === "BrowserAction" ? input.label : undefined,
       reads: req.tool_name === "BrowserSite" && input.reads ? true : undefined,   // (Kural's browser: the site, the button, reading only)
-      allowLabel: input.device || req.unclassified ? undefined : allowLabel(req.tool_name) || undefined };
+      allowLabel: input.device || req.unclassified || verdict.private ? undefined : allowLabel(req.tool_name) || undefined };
     if (turn) turn.reply.blocks.push(block);
     tab.status = "waiting";
     this.post({ type: "block", tabId: tab.id, block });
@@ -2558,7 +2559,8 @@ class ChatView {
     if (tab.mode === "auto" && r) {
       const turn = r.turn;
       for (const b of (turn && turn.reply.blocks) || []) {
-        if (b.k !== "perm" || b.state !== "pending") continue;   // (Auto is unrestricted: a risky one runs too)
+        // (Auto is unrestricted: a risky one runs too. Not a look into your private folders: that asks in Auto as well.)
+        if (b.k !== "perm" || b.state !== "pending" || b.private) continue;
         const resolve = r.perms.get(b.pid);
         if (resolve) { r.perms.delete(b.pid); resolve(true); }
       }

@@ -43,15 +43,18 @@
   edge or corner; double-click the title bar to fill the screen; or **Window → Move & Resize** in the menu bar (halves,
   quarters, fill), also by dragging the window against a screen edge.
 - **Mac asks for access to Music, Photos or other folders:** Kural only needs your project folder, and it doesn't look
-  into Desktop, Documents, Downloads, Music or Photos by itself; the AI asks you in the chat before it reads a file
-  outside the project. So this should only come after you said **Allow** to such a file (or opened that folder as your
-  project, or ran something there in the terminal). Otherwise click **Don't Allow**. Things your shell's startup files
+  into Desktop, Documents, Downloads, Music or Photos by itself. The AI asks you in the chat first, in every mode (Auto
+  too), before a command, a read or a search goes into those folders or through your whole home folder ("It looks in
+  your Downloads folder…"); Kural 1.1.0-rc.3 and older let such a command run in Auto, and an AI looking for a project
+  with `ls ~/*/*/` set off all of these questions at once. So this should only come after you said **Allow** to such a
+  card (or opened that folder as your project, or ran something there in the terminal). Otherwise click **Don't Allow**.
+  ChatGPT (Codex) runs simple read-only commands like `ls` without asking Kural: there only its instructions keep it out. Things your shell's startup files
   (`~/.zshrc`) do are also put down to Kural when it asks the shell where a program is. If it keeps asking, [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you
   were doing.
 - **Mac asks for your login keychain password ("Kural wants to use … Safe Storage"):** Kural itself keeps nothing
   in the keychain any more, and it turns off VS Code's silent GitHub sign-in checks that caused this at every start (the
   Copilot account lookup; branch protection, avatars and the GitHub login for `git push` in GitHub projects); pushing uses Git's own login, like in
-  a terminal. Click **Deny**. If it still appears,
+  a terminal. Kural's browser doesn't save cookies any more (1.1.0-rc.4), so it doesn't need the keychain either. Click **Deny**. If it still appears,
   [report it](https://github.com/adithyakumarcr/kural/issues/new?template=bug_report.yml) with what you were doing.
 - **"This client is no longer supported for Gemini Code Assist for individuals":** that's Google's old Gemini CLI,
   which stopped serving personal Google accounts on 26 Sept 2026. Kural's **Google Gemini** uses Google's newer

@@ -2,7 +2,7 @@
   "name": "kural",
   "displayName": "Kural",
   "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude, Google Gemini, ChatGPT (Codex), or your own model on this computer (Ollama, offline).",
-  "version": "1.1.0-rc.3",
+  "version": "1.1.0-rc.4",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -1184,6 +1184,7 @@
       "workbench.welcomePage.walkthroughs.openOnInstall": false,
       "workbench.tips.enabled": false,
       "workbench.browser.openLocalhostLinks": true,
+      "workbench.browser.dataStorage": "ephemeral",
       "chat.commandCenter.enabled": false,
       "chat.disableAIFeatures": true,
       "editor.fontSize": 14,

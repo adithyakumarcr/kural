@@ -60,6 +60,56 @@ function isHomeOrAbove(dir) {
   return within(os.homedir(), [dir]);
 }
 
+// The folders macOS asks about ("Kural would like to access files in your Downloads folder", Apple Music for ~/Music,
+// Photos for the library in ~/Pictures). An AI command in a chat with no folder open once ran `ls -d ~/*/ ~/*/*/` to look
+// for a project, and macOS asked about all of them at once. So the AI's own looks there ask you first, in every mode
+// (permission-policy.js), unless you attached what it reads.
+const PRIVATE = ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Movies", "Library/Mobile Documents"];
+const HOME_RE = () => `(?:~|\\$HOME|\\$\\{HOME\\}|${os.homedir().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`;
+// Programs that go through every folder under the one they're given (ls/grep only with their recursive flag).
+// (Not mdfind or locate: they ask an index, they don't open the folders.)
+const WALKERS = new Set(["find", "fd", "du", "tree", "rg", "ag", "rsync", "tar"]);
+const RECURSIVE = new Set(["ls", "grep", "egrep", "fgrep", "cp", "scp", "zip", "chmod", "chown", "rm"]);
+
+// Which private folder `p` is in ("Downloads"), or null.
+function privateFolder(p) {
+  if (!p) return null;
+  const f = real(String(p)), h = os.homedir();
+  for (const name of PRIVATE) if (within(f, [path.join(h, name)])) return name;
+  return null;
+}
+
+// Why a shell command would make macOS ask about your private folders, or null. Best effort (a script can still look
+// anywhere): what the command says in so many words. found: [{ folder, path? }]; a path only for a named one, so a file
+// you attached there needn't ask.
+function privateUse(command, cwd = "/") {
+  const cmd = String(command || ""), found = [];
+  const named = new RegExp(`${HOME_RE()}/(${PRIVATE.map((n) => n.replace(" ", "\\\\? ")).join("|")})(?=$|[/\\s'"*;|&)])([^\\s'";|&)]*)`, "g");
+  for (const m of cmd.matchAll(named)) found.push({ folder: m[1].replace("\\", ""), path: expand(m[0].replace(/^\$\{?HOME\}?/, "~").replace(/\\ /g, " ")) });
+  // A wildcard right in the home folder (~/*, $HOME/*/): it can mean any of them. (~/.* means only the dot files.)
+  if (new RegExp(`${HOME_RE()}/+(?!\\.)[^/\\s'";|&]*[*?[{]`).test(cmd)) found.push({ folder: "home" });
+  // A program that walks through everything below your home folder (or "/"), or below the folder it runs in when that is one.
+  for (const part of cmd.split(/&&|\|\||[;|&\n]/)) {
+    const words = part.trim().split(/\s+/).filter((w) => !/^\w+=/.test(w));
+    while (words[0] === "sudo" || words[0] === "command" || words[0] === "exec" || words[0] === "time") words.shift();
+    const prog = path.basename(words[0] || "");
+    const flags = words.slice(1).filter((w) => w.startsWith("-")), args = words.slice(1).filter((w) => !w.startsWith("-"));
+    const walks = WALKERS.has(prog) || (RECURSIVE.has(prog) && flags.some((f) => /^-[a-zA-Z]*[rR]/.test(f) || f === "--recursive"));
+    if (!walks) continue;
+    const targets = args.length ? args : ["."];
+    if (targets.some((t) => { const u = t.replace(/^['"]|['"]$/g, "").replace(/^\$\{?HOME\}?/, "~"); return !/[*?]/.test(u) && isHomeOrAbove(path.resolve(cwd, expand(u))); }))
+      { found.push({ folder: "home" }); break; }
+  }
+  return found.length ? found : null;
+}
+
+// Words for a card: "your Downloads folder", "the folders in your home folder (Desktop, Downloads, Music…)".
+function privateWords(found) {
+  if (found.some((f) => f.folder === "home")) return "the folders in your home folder (Desktop, Documents, Downloads, Music, Pictures…)";
+  const names = [...new Set(found.map((f) => f.folder === "Library/Mobile Documents" ? "iCloud Drive" : f.folder))];
+  return `your ${names.join(" and ")} folder${names.length > 1 ? "s" : ""}`;
+}
+
 // Files that make the computer run something later, even inside the project (a git hook, a task, a workflow, a shell
 // profile…). A model tricked by a README or web page could plant one, so writing one asks, like a command does.
 const RUNS_LATER = [
@@ -110,4 +160,4 @@ function privateTmp(sub) {
   return d;
 }
 
-module.exports = { runsLater, privateTmp, real, within, isProtected, isHomeOrAbove, hasControl, expand, HOME_PROTECTED };
+module.exports = { runsLater, privateTmp, real, within, isProtected, isHomeOrAbove, hasControl, expand, HOME_PROTECTED, PRIVATE, privateFolder, privateUse, privateWords };

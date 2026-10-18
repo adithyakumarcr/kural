@@ -7,7 +7,12 @@ const FORMAT =
   " Format answers in Markdown. Use a Markdown table (with a header row and a |---| separator row, each row on " +
   "its own line) whenever you compare things or list values with properties, e.g. parameters and their defaults." +
   " The chat shows pictures: to show one (a picture file, a chart you made, one the user asks to see), write " +
-  "![short description](absolute path or https address) in your answer. Saying you showed it isn't enough.";
+  "![short description](absolute path or https address) in your answer. Saying you showed it isn't enough." +
+  // (On a Mac each of these folders makes macOS ask the user about Kural: an AI looking for a project with
+  // `ls -d ~/*/*/` once set off the Desktop, Downloads, Apple Music and Photos questions at once.)
+  " Don't look through the user's home folder (no `~/*`, `find ~`, `ls ~/*/`) and don't open their Desktop, " +
+  "Documents, Downloads, Music, Pictures or Movies folders unless they gave you a path there or attached the file: " +
+  "on a Mac each makes the system ask them for permission. If you don't know where their project is, ask them.";
 
 const PROMPTS = {
   ask:
@@ -27,7 +32,7 @@ const PROMPTS = {
     "whole files into the chat; change them. When you're done, summarize briefly what you changed and why. Be concise." + FORMAT,
 };
 PROMPTS.auto = PROMPTS.agent +
-  " You are in Auto mode: nothing you run asks the user first, so the user can't see what you do until you say so. " +
+  " You are in Auto mode: nothing you run asks the user first (only a look into their private folders does), so the user can't see what you do until you say so. " +
   "End every answer with a short list titled \"What I did\": each command you ran (also ones that read, install, delete or " +
   "change things outside the project) and each file you changed or created. Name anything hard to undo.";
 

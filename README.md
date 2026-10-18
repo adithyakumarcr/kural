@@ -46,6 +46,23 @@ Every feature is explained in the **[Kural wiki](https://github.com/adithyakumar
 
 ## Install
 
+**Two ways to install:**
+
+- **If you're comfortable with a terminal, install with `install.sh`.** On a Mac with Apple Silicon or Ubuntu / Debian:
+
+  ```bash
+  git clone https://github.com/adithyakumarcr/kural.git && cd kural && ./install.sh
+  ```
+
+  It builds Kural on your own computer from this code and installs it (details in [Build it yourself](#build-it-yourself)).
+  `./install.sh` again later updates it.
+- **If not, install with the `.dmg` (Mac), `.exe` (Windows) or `.deb` (Ubuntu) file** from
+  [Releases](https://github.com/adithyakumarcr/kural/releases), described below. But be aware of the warnings and
+  permission questions from your operating system: Kural isn't signed with a paid Apple or Microsoft certificate yet, so
+  macOS and Windows warn about it before its first start (the steps below get you past them), and Ubuntu asks for your
+  password to install the package. On a Mac, macOS also asks before Kural uses a folder it guards, such as Documents or
+  Downloads: Kural doesn't look there by itself, and the AI asks you in the chat first.
+
 ### 1. Download Kural
 
 Get the file for your computer from [Releases](https://github.com/adithyakumarcr/kural/releases). Versions marked
@@ -144,7 +161,7 @@ The chat sits on the right and has tabs. Pick how much freedom Kural gets:
 | Mode | What Kural may do |
 |---|---|
 | **Agent** | edits files (you keep or undo each one) and asks before running commands |
-| **Auto** | unrestricted: edits and runs commands without asking, also dangerous ones; the AI ends each answer with a **What I did** list |
+| **Auto** | unrestricted: edits and runs commands without asking, also dangerous ones (on a Mac, a look into your Desktop, Downloads, Music, Pictures… still asks); the AI ends each answer with a **What I did** list |
 | **Plan** | writes a plan without changing anything; **Build it** carries it out |
 | **Ask** | only answers |
 
@@ -322,7 +339,8 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
   updates, the guide, in one tab.
 - **Browser with Design Mode.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
   answer opens there). Click the inspect button, click an element, and it's added to the chat with its HTML, CSS and a
-  picture; add a comment ("make this bigger") and Kural finds the code behind it and changes it, like Cursor.
+  picture; add a comment ("make this bigger") and Kural finds the code behind it and changes it, like Cursor. It keeps
+  nothing: no cookies, logins or cache are saved, so it's fresh every time Kural starts.
 - **The AI uses the browser.** Ask it to do something on a website ("make a reel from `videos/run.mp4` on Instagram up
   to the caption", "fill in this form", "answer the quiz") and it opens the page beside the code and clicks, types,
   uploads and drags there while you watch (Claude and ChatGPT models). Kural's rule: **it never publishes, posts,
@@ -423,7 +441,7 @@ The separate build scripts, if you only want the files in `dist/`:
 | Computer | Command | Makes |
 |---|---|---|
 | Ubuntu (x64) | `./make-deb.sh` | `dist/kural_*_amd64.deb` |
-| Mac, Apple Silicon | `./build-mac.sh` | `dist/Kural-*-macos-arm64.zip` and `.dmg` (needs Pillow: `python3 -m pip install Pillow`) |
+| Mac, Apple Silicon | `./build-mac.sh` | `dist/Kural-*-macos-arm64.zip` and `.dmg` (the icon is made with macOS's own `sips` and `iconutil`) |
 | Windows (built on Linux) | `./build-win.sh` | `dist/Kural-*-windows-x64-setup.exe` + portable `.zip` (needs `nsis`, `node`; signed when a code signing certificate is set up: [docs/windows-signing.md](docs/windows-signing.md)) |
 
 To run the tests (no Claude needed), use `npm test`.

@@ -4,6 +4,10 @@ Kural has a browser inside it: your app on localhost, or any website, in a tab b
 Integrated Browser (a real browser: logins, dev tools, everything), with Kural's chat plugged into it, so you can do what
 Cursor calls Design Mode: **click an element on the page and tell Kural what to change**.
 
+**It keeps nothing.** No cookies, logins, site data or cache are saved on your computer: each time Kural starts, the
+browser is fresh, and a login lasts until that window closes. (Kural 1.1.0-rc.3 and older saved them; that data is
+deleted once.) On a Mac this also means the browser never needs the keychain.
+
 ## Open it
 
 - **Kural: Open Browser** (Command Palette), or **+ → Pick from a browser** in the chat (it asks for the address, e.g.
@@ -38,8 +42,8 @@ click, type, choose from lists, upload a file, drag a slider or a trim handle, s
 - "Fill in the form on this page with my details from `notes/me.md`."
 - "Answer the quiz in the browser tab."
 
-It works in a tab beside the code, so you can watch; each step shows in the answer ("Clicked Next", "Typed …"). The tab
-has your logins: if a site asks to log in, log in there yourself (the AI never asks for passwords). Claude and ChatGPT
+It works in a tab beside the code, so you can watch; each step shows in the answer ("Clicked Next", "Typed …"). If a
+site asks to log in, log in there yourself (the AI never asks for passwords); the login lasts until the window closes. Claude and ChatGPT
 (Codex) models can do this; Gemini and a model on your computer can't. Turn it off with the setting
 `kural.browser.aiControl`.
 

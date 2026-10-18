@@ -27,7 +27,14 @@ web tools.
 project without asking. A file anywhere else gets a card first: **Read this file?** or **Change this file?** (Allow /
 Skip). Files you attached are fine. That keeps the AI out of your other folders, and on a Mac it means macOS never asks
 "Kural would like to access your Documents folder" (or Music, Photos…) unless you said yes to such a file. In Auto mode
-nothing asks.
+nothing asks, with one exception:
+
+**Your private folders always ask first (Mac).** A command, read or search that goes into your Desktop, Documents,
+Downloads, Music, Pictures, Movies or iCloud Drive, or through your whole home folder (`ls ~/*/`, `find ~`), gets a card
+in every mode, Auto too, with no "Allow all" ("It looks in your Downloads folder…"): each of those makes macOS ask you
+about Kural. A file you attached, and a project you opened inside one of them, don't ask. The AI is also told to ask
+you where your project is instead of looking around. ChatGPT (Codex) runs simple read-only commands like `ls` without
+asking Kural, so for it only those instructions apply.
 
 **Files that run code later ask too, even in your project** (Agent mode): git hooks, `.vscode/tasks.json`, `package.json`,
 `.env`, a Makefile, a Dockerfile, GitHub workflows, shell profiles, `CLAUDE.md`, `.mcp.json`, `.npmrc`, Python/Gradle/
@@ -35,8 +42,8 @@ Maven/Cargo build files and editor settings (in any upper/lower case). A page or
 into planting one, so writing one gets a card ("This file can make your computer run something later."). The temp folder
 isn't writable without asking either.
 
-You can change the mode while an answer is running. Agent → Auto: the commands waiting for your OK run at once, and
-later ones don't ask. Auto is unrestricted: nothing asks, also not the dangerous commands below, and the AI ends each
+You can change the mode while an answer is running. Agent → Auto: the commands waiting for your OK run at once (not a
+look into your private folders), and later ones don't ask. Auto is unrestricted: nothing asks, also not the dangerous commands below, and the AI ends each
 answer with a **What I did** list of the commands it ran and the files it changed, so you can see what happened. In Agent
 mode (and after "Allow all") dangerous commands still ask: `sudo`, deleting outside the project
 or the whole project, `curl … | sh`, a forced push to main, `git reset --hard`, `git clean -f`, writing into `/etc`,
