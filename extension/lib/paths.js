@@ -85,7 +85,7 @@ function privateFolder(p) {
 function privateUse(command, cwd = "/") {
   const cmd = String(command || ""), found = [];
   const named = new RegExp(`${HOME_RE()}/(${PRIVATE.map((n) => n.replace(" ", "\\\\? ")).join("|")})(?=$|[/\\s'"*;|&)])([^\\s'";|&)]*)`, "g");
-  for (const m of cmd.matchAll(named)) found.push({ folder: m[1].replace("\\", ""), path: expand(m[0].replace(/^\$\{?HOME\}?/, "~").replace(/\\ /g, " ")) });
+  for (const m of cmd.matchAll(named)) found.push({ folder: m[1].replace("\\", ""), path: path.normalize(expand(m[0].replace(/^\$\{?HOME\}?/, "~").replace(/\\ /g, " "))) });
   // A wildcard right in the home folder (~/*, $HOME/*/): it can mean any of them. (~/.* means only the dot files.)
   if (new RegExp(`${HOME_RE()}/+(?!\\.)[^/\\s'";|&]*[*?[{]`).test(cmd)) found.push({ folder: "home" });
   // A program that walks through everything below your home folder (or "/"), or below the folder it runs in when that is one.
