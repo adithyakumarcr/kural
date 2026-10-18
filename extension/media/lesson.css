@@ -1,0 +1,80 @@
+/* Kural's lesson pages (Learn mood): the slide runtime's look. The AI writes <section class="slide"> elements; this makes
+   them a presentation. Its own styles come after these, so it can override anything. Light and dark follow the system. */
+:root {
+  --bg: #16151c; --fg: #ecebf2; --muted: #9b99ab; --accent: #a78bfa; --accent-2: #5eead4; --warn: #fbbf24; --bad: #f87171;
+  --good: #4ade80; --card: #211f2b; --line: #34313f; --code: #1d1b25;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #fbfaff; --fg: #1d1b26; --muted: #646173; --accent: #6d28d9; --accent-2: #0f766e; --warn: #b45309; --bad: #b91c1c;
+    --good: #15803d; --card: #f1eefb; --line: #dcd7ec; --code: #f4f2fa; color-scheme: light; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+  font: 22px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif; overflow: hidden; }
+body.kl-deck .slide { position: absolute; inset: 0 0 64px 0; display: flex; flex-direction: column; justify-content: center;
+  align-items: center; gap: 28px; padding: 40px 7vw; text-align: center; opacity: 0; pointer-events: none;
+  transform: translateX(24px); overflow: auto; }
+body.kl-deck .slide.kl-on { opacity: 1; pointer-events: auto; transform: none; }
+body.kl-deck .slide.kl-back { transform: translateX(-24px); }
+/* Motion only once the deck is set up (kl-live), so the page doesn't fade every slide out as it opens. */
+body.kl-live .slide { transition: opacity .35s ease, transform .35s ease; }
+body.kl-live .slide.kl-enter > * { animation: kl-in .5s ease both; }
+body.kl-live .slide.kl-enter > *:nth-child(2) { animation-delay: .08s; }
+body.kl-live .slide.kl-enter > *:nth-child(3) { animation-delay: .16s; }
+body.kl-live .slide.kl-enter > *:nth-child(4) { animation-delay: .24s; }
+body.kl-live .slide.kl-enter > *:nth-child(n+5) { animation-delay: .32s; }
+@keyframes kl-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { body.kl-live .slide, body.kl-live .slide.kl-enter > * { transition: none; animation: none; transform: none; } }
+
+h1 { font-size: 2.6em; line-height: 1.1; margin: 0; letter-spacing: -.02em; }
+h2 { font-size: 1.9em; line-height: 1.15; margin: 0; letter-spacing: -.01em; }
+h3 { font-size: 1.2em; margin: 0; color: var(--accent); }
+p { margin: 0; max-width: 34em; }
+svg { max-width: 100%; height: auto; }
+.big { font-size: 4.5em; font-weight: 700; line-height: 1; color: var(--accent); }
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+.good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+.cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; min-width: 180px; max-width: 320px; }
+.card > :first-child { margin-top: 0; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0; }
+.flow > * { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 20px; }
+.flow > * + * { margin-left: 52px; }
+.flow > * + *::before { content: ""; position: absolute; left: -44px; top: 50%; width: 30px; height: 2px; background: var(--accent); }
+.flow > * + *::after { content: ""; position: absolute; left: -18px; top: calc(50% - 5px); border: 6px solid transparent;
+  border-left: 8px solid var(--accent); border-right: 0; }
+.row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 32px; }
+.vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; align-items: center; }
+.vs > :nth-child(2) { color: var(--muted); font-weight: 600; }
+pre { text-align: left; background: var(--code); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin: 0;
+  font: 0.8em/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: auto; max-width: 100%; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; border-radius: 4px; padding: 0 .15em; }
+.reveal { transition: opacity .3s ease, transform .3s ease; }
+.reveal:not(.kl-shown) { opacity: 0; transform: translateY(8px); pointer-events: none; }
+[data-concept] { cursor: pointer; border-radius: 8px; transition: outline-color .15s ease; outline: 2px solid transparent; outline-offset: 4px; }
+[data-concept]:hover { outline-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+
+/* The bar: back, dots, next, slide number. */
+.kl-bar { position: fixed; left: 0; right: 0; bottom: 0; height: 64px; display: flex; align-items: center; justify-content: center; gap: 18px;
+  font-size: 15px; color: var(--muted); user-select: none; }
+.kl-bar button { all: unset; cursor: pointer; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: var(--fg); }
+.kl-bar button:hover { background: var(--card); }
+.kl-bar button:disabled { opacity: .3; cursor: default; background: none; }
+.kl-bar button:focus-visible { outline: 2px solid var(--accent); }
+.kl-dots { display: flex; gap: 8px; }
+.kl-dot { width: 8px; height: 8px; border-radius: 4px; background: var(--line); cursor: pointer; transition: width .25s ease, background .25s ease; }
+.kl-dot.kl-on { width: 24px; background: var(--accent); }
+.kl-count { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; }
+.kl-progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); transition: width .35s ease; }
+
+/* "Add to chat" beside a selection or a clicked visual, and the note after it. */
+.kl-add { position: fixed; z-index: 10; display: none; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  font: 600 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--accent); color: var(--bg);
+  border: none; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.kl-add.kl-show { display: inline-flex; }
+.kl-toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); background: var(--card); border: 1px solid var(--line);
+  color: var(--fg); padding: 9px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.kl-toast.kl-show { opacity: 1; }

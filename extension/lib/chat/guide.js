@@ -57,7 +57,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   The gear beside each name opens its settings: Auto's opens the Model Router; Claude's, Gemini's, ChatGPT's and your
   own model's open Kural Settings at that AI's card (connectors, when to switch away near a limit); intensity Low to Max (for Gemini it picks the model's thinking
   level); moods (Explorer, Critic, Learn: teaches you
-  step by step and checks what you know first; and your own: "Add your own mood…" at the end of the moods opens Kural
+  step by step and checks what you know first; in Learn, ask "explain it on a webpage" (Agent or Auto mode) and the AI
+  builds a lesson page, a short slide deck with diagrams and few words, shown in Kural's browser beside the chat (the
+  Explorer and the terminal close for a big screen; arrows or the dots move; the AI teaches it slide by slide in the
+  chat; select text or click a visual on the page, then "Add to chat"; the page reloads when the AI changes it; kept
+  privately, deleted with the chat); and your own: "Add your own mood…" at the end of the moods opens Kural
   Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
   there; built-in moods you don't use (Default too) can be removed there with their ×, and Restore brings one back; the
   menu keeps at least one, and a new chat starts with the first mood left; a changed mood or mode applies from the next

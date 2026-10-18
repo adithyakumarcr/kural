@@ -22,7 +22,7 @@ const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote } = require("./tickets");
-const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt } = require("./prompts");
+const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt, lessonPrompt } = require("./prompts");
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
@@ -524,6 +524,7 @@ class ChatView {
     if (this.tab(id)) this.closeTab(id, false);
     this.archive.remove(id);
     try { fs.rmSync(this.handoffDir({ id }), { recursive: true, force: true }); } catch { /* best effort, like History */ }
+    if (this.lessons) this.lessons.forget(id);
     this.postHistory();
   }
 
@@ -1303,15 +1304,17 @@ class ChatView {
     const brw = this.browserOn(tab) ? this.browserAi.session(tab.id, (req) => this.approveBrowser(tab, r, req), this.root() || ws.workDir()) : null;
     if (brw) { r.browserToken = brw.token; r.browserChat = tab.id; }
     const browserTools = brw ? BROWSER_TOOLS.map((t) => `mcp__${BROWSER_SERVER}__${t}`) : [];
+    // Learn mood: the chat's lesson folder (lib/learn), watched from now on; the AI writes lesson pages there.
+    const lessonDir = this.lessonDir(tab, true);
     const local = isLocal(tab.model);
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
       name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode,
       // (A model on this computer gets the short guide: each word of the instructions costs it time before it answers.)
-      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + moodPrompt(tab.mood, customMoods(userMoods())) +
+      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + this.moodText(tab) +
         (nativeTeam ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
       teamConfig: team && !nativeTeam ? { size: team, roles: tab.roles || [], style: tab.teamStyle } : null,
-      addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : [])],
+      addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : []), ...(lessonDir ? [lessonDir] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
       tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools, ...browserTools],
@@ -1470,6 +1473,11 @@ class ChatView {
       if (seen.has(key)) continue; seen.add(key);
       if (c.kind === "selection") {
         parts.push(`${c.path} (lines ${c.startLine}-${c.endLine}):\n\`\`\`${c.lang || ""}\n${c.code}\n\`\`\``);
+      } else if (c.kind === "quote" && c.source === "lesson") {
+        // Part of a lesson page (Learn mood): "Add to chat" on a selection or on a visual marked data-concept.
+        const where = `${c.slide ? ` (slide ${c.slide}${c.title ? `, "${String(c.title).slice(0, 120)}"` : ""})` : ""}${c.concept ? `, the visual "${String(c.concept).slice(0, 120)}"` : ""}`;
+        const said = String(c.text || "").slice(0, 8001).trim();
+        parts.push(`From the lesson page${where}, I picked:${said ? `\n${said.split("\n").map((l) => `> ${l}`).join("\n")}` : ""}`);
       } else if (c.kind === "quote") {
         // Text you selected in this chat ("Add to chat"); the page keeps it to 8,000 characters.
         parts.push(`Part of this chat I selected:\n${String(c.text || "").slice(0, 8001).split("\n").map((l) => `> ${l}`).join("\n")}`);
@@ -1731,7 +1739,7 @@ class ChatView {
   // What the AI is told for this chat's mode, mood and team (the parts of its instructions you can change mid-chat).
   instructionsOf(tab) {
     const team = this.teamSize(tab);
-    return { mode: PROMPTS[tab.mode] || "", mood: moodPrompt(tab.mood, customMoods(userMoods())).trim(),
+    return { mode: PROMPTS[tab.mode] || "", mood: this.moodText(tab).trim(),
       team: team ? (isClaude(tab.model) ? teamPrompt(team, tab.roles || [], tab.teamStyle).trim() :
         `Kural manages ${tab.teamStyle === "discuss" ? "a discussion" : "a project team"} with ${team} agents. Roles: ${(tab.roles || []).join(", ") || "general"}. Follow the phase and assignment given to you.`) : "" };
   }
@@ -1751,6 +1759,17 @@ class ChatView {
     if (was.team !== print(now.team)) changed.push(now.team || "No agent team any more: answer by yourself, without starting agents.");
     return changed.length ? "<kural_instructions_update>\nI changed how you should work in this chat. These replace your earlier instructions about the " +
       "same things (mode, mood, team):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
+  }
+
+  // The mood's instructions, and in Learn mood how to make a lesson page (lib/learn) in this chat's own folder.
+  moodText(tab) {
+    const dir = this.lessonDir(tab);
+    return moodPrompt(tab.mood, customMoods(userMoods())) + (dir ? lessonPrompt(dir, tab.mode) : "");
+  }
+  // Learn mood's lesson folder for this chat (null in other moods); `make`: create it and watch it for lesson pages.
+  lessonDir(tab, make = false) {
+    if (!this.lessons || tab.mood !== "learn") return null;
+    return make ? this.lessons.ensure(tab.id) : this.lessons.dir(tab.id);
   }
 
   // ---------- carrying the conversation over (another AI, a new session) ----------
@@ -2446,7 +2465,7 @@ class ChatView {
       if (!turn || !turn.reply.running) return { allow: false, message: "The answer was stopped." };
     }
     const verdict = decide({ tool: req.tool_name, input, mode, allowAll: allowAllNow(tab), allowAllDevice: tab.allowAllDevice, device: tab.device,
-      writeRoots: ws.aiRoots(true), readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice,
+      writeRoots: [...ws.aiRoots(true), ...(this.lessonDir(tab) ? [this.lessonDir(tab)] : [])], readRoots: ws.aiRoots(), granted: [...(tab.granted || []), tab.handoffFile], cwd: this.root() || ws.workDir(), notice: req.notice,
       unclassified: !!req.unclassified, guard: isGateFile });
     if (verdict.deny) return { allow: false, message: verdict.message };
     const prepareEdit = async () => {
@@ -3031,6 +3050,31 @@ class ChatView {
     }
     if (added.length) vscode.window.setStatusBarMessage(`Kural: added ${added.join(", ")} to the chat`, 3000);
   }
+
+  // "Add to chat" on a lesson page (lib/learn): what you selected, or a visual you clicked, becomes a pill in that chat's
+  // message box (the chat comes on screen first). Nothing goes to the AI until you send. false: no such chat any more.
+  async addLessonItem(id, item) {
+    const tab = this.tab(id);
+    if (!tab) return false;
+    await this.showChat(id);
+    const pane = this.panes.find((p) => p.activeId === id) || this.cur();
+    if (!pane) return false;
+    const line = String(item.concept || item.text || "").split("\n").map((l) => l.trim()).find(Boolean) || "lesson";
+    const ctx = { kind: "quote", source: "lesson", text: item.text || "", concept: item.concept || "", slide: item.slide || null, title: item.title || "",
+      label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line };
+    this.postTo(pane, { type: "insertPill", ctx });
+    vscode.window.setStatusBarMessage("Kural: added part of the lesson to the chat", 3000);
+    return true;
+  }
+  // This chat on screen (in Kural's panel, or its own editor) for a lesson beside it.
+  async showChat(id) {
+    if (!this.shown(id)) this.activate(id, this.side() || this.cur());
+    const own = this.panes.find((p) => p.single && p.activeId === id && p.panel);
+    if (own) own.panel.reveal(undefined, true);
+    else await vscode.commands.executeCommand("kural.chat.focus");
+  }
+  // The chat shows in the editor area (dragged out of the panel): a lesson opens beside it instead of over it.
+  inEditor(id) { return this.panes.some((p) => p.single && p.activeId === id && !!p.panel); }
 
   // A file the chat mentions or links: open it (at the line). A folder: show it in the Explorer. A picture or another
   // file that isn't text: VS Code's own viewer. Just a name ("devices.test.js") or a path from another folder: the

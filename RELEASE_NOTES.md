@@ -1,3 +1,11 @@
+## Not released yet
+
+- **Lesson pages in Learn mood.** Ask a chat in Learn mood to "explain it on a webpage" and the AI builds a short slide
+  deck (diagrams, small animations, very few words) and shows it in Kural's browser beside the chat; the Explorer and
+  the terminal close so you get a big screen with just the chat and the lesson. The AI teaches it slide by slide in the
+  chat. Select text or click a visual on the page and press **Add to chat** to ask about exactly that part; when the AI
+  changes a slide, the page reloads by itself. Needs Agent or Auto mode.
+
 ## What's new in 1.1.0-rc.4
 
 - **Kural's browser keeps nothing.** No cookies, logins, site data or cache are saved on your computer any more: each
