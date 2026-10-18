@@ -17,6 +17,7 @@ const { terminalTab, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT } = require(".
 const { ReviewManager } = require("./lib/edit/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
+const { Plugins } = require("./lib/plugins");
 const { TabPanel } = require("./lib/tab/panel");
 const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
@@ -300,7 +301,11 @@ function activate(context) {
 
   // The AI Usage panel (bottom); the status bar shows the chat's AI in words, so it redraws when the chat's model changes.
   new UsagePanel(context, account, getStarted).register();
-  chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); }, 0);   // (and whose account it is)
+  // Plugins (beside Extensions: "Extensions | Plugins"): the plugins of the chat's AI, from its own plugin manager.
+  const plugins = new Plugins(context, { getStarted, chat });
+  plugins.register();
+  // (The chat's model changed: the meters, whose account it is, and whose plugins the Plugins tab shows.)
+  chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); plugins.chatChanged(); }, 0);
   const searchView = new SearchView(context,router,() => chat.active());
   searchView.register();
   // You changed a name (typed over it, or a Tab suggestion changed it): offer to change it where else it's used

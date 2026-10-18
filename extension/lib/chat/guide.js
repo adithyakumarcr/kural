@@ -152,6 +152,23 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Ask (Ctrl+Alt+A): describe what you're looking for in plain words; Kural lists the exact places. Ask always uses the
   fastest model you have (Claude's Haiku, or the lightest Gemini or Codex model; your own model if that's all), not the
   chat's model; each result list shows which. An empty box shows no results (in both tabs).
+- Extensions & Plugins (the Extensions icon on the left, Ctrl+Shift+X), two tabs like Search & Ask: Extensions is VS
+  Code's own (Open VSX: search, install, update, turn off); Plugins: the AI plugins (skills, commands, agents, hooks, MCP
+  servers) of the chat's AI, from that AI's own plugin manager. It follows the chat's model (Claude's plugins for a
+  Claude model, ChatGPT's for Codex, Gemini's for Gemini; a model on this computer has none); "Plugins for" shows another
+  AI's without changing the chat. Search filters them. Claude: Installed, Available (Anthropic's plugin directory, a few
+  thousand, and the marketplaces you add), Marketplaces (Add a Marketplace…: owner/repo such as
+  obra/superpowers-marketplace, an https Git address, or a folder); Install, Turn Off / On, Remove; click a plugin for
+  its page: where it comes from, what it adds (skills, agents, hooks, MCP servers), how many tokens it adds to every
+  chat, Update. ChatGPT (Codex): plugins come from the marketplaces you add (none at first); Install and Remove (Codex
+  can't turn one off). Gemini (Antigravity): no catalog: Add a plugin from a folder or a Git address (https; Antigravity
+  checks it first), Turn Off / On, Remove. Installing always asks first and says where it comes from: a plugin runs code
+  as you (its hooks and MCP servers start with that AI, and Kural's approval cards don't ask about them); one its
+  marketplace installs with a command shows that command first. The chats pick a change up by themselves (Claude's at
+  once, ChatGPT's and Gemini's at their next message). Claude's chats use plugins only with "Use my Claude Code setup"
+  on (Kural Settings → Claude). Claude's and ChatGPT's plugins belong to the profile; Gemini's are the same in every
+  profile. "Kural: Show Plugins" opens it. (If VS Code's Extensions side bar can't take the tab, Plugins has a side bar
+  of its own: the plug icon.)
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review a read-only red/green diff, Accept or Reject. The original file changes only on Accept.
 - Model Router (Auto in the model menu, like Cursor's): Balance, Cost (saves your usage limits: lightest model that can
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
@@ -313,7 +330,8 @@ work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on
 that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
 Ask; @ mentions a file; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
 Fork from here; the clock button has every chat); Ctrl+K proposes changes to selected code in a read-only diff; Tab Completion; plain words in
-the terminal ("push this to main", then Tab); Search & Ask; Kural's browser; devices over SSH; the Model Router (Auto);
+the terminal ("push this to main", then Tab); Search & Ask; Extensions & Plugins (the chat's AI's plugins beside VS
+Code's extensions); Kural's browser; devices over SSH; the Model Router (Auto);
 Kural Settings (accounts, usage switching, moods, updates). Jira
 tickets and Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
 link [Ask for this feature](${ISSUES}).`;
