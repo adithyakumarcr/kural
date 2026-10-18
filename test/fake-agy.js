@@ -35,6 +35,9 @@ if (process.env.FAKE_AGY_LOG) fs.appendFileSync(process.env.FAKE_AGY_LOG, JSON.s
 const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const notLoggedIn = () => { process.stderr.write("Print mode: not logged in and no controlling terminal; cannot complete interactive login\n"); process.exit(1); };
+// `plugin …` (Kural's Plugins tab): test/fake-plugins.js, state next to this one's. (Loaded only then: tests copy this
+// file elsewhere, where ./fake-plugins isn't.)
+if ((args[0] === "plugin" || args[0] === "plugins") && require("./fake-plugins").agy(args, file)) return;
 
 // `agy` alone: its interactive screen. Logged out:
 //   FAKE_AGY_LOGIN=browser  "opens the browser" (calls open / xdg-open from PATH) and is logged in 2 s later

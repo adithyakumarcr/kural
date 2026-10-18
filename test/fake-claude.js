@@ -14,6 +14,9 @@ const file = process.env.FAKE_CLAUDE_FILE || (process.env.CLAUDE_CONFIG_DIR ? pa
 const read = () => { try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; } };
 const state = process.env.FAKE_CLAUDE_STATE || read() || "ok";
 const args = process.argv.slice(2);
+// `plugin …` (Kural's Plugins tab): test/fake-plugins.js, state next to this one's. (Loaded only then: tests copy this
+// file elsewhere, where ./fake-plugins isn't.)
+if ((args[0] === "plugin" || args[0] === "plugins") && require("./fake-plugins").claude(args, file)) return;
 
 if (args[0] === "--version") { console.log(state === "old" ? "1.0.30 (Claude Code)" : "2.1.300 (Claude Code)"); process.exit(0); }
 if (args[0] === "auth" && args[1] === "status") {

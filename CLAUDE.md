@@ -46,7 +46,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
   - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item, usage meter,
     log in/out), `lib/settings-page.js` (Kural Settings tab, `media/settings.*`), `lib/usage-panel.js` (AI Usage panel), `lib/paths.js` (what the AI may touch without asking),
-    `lib/updates.js` (updates), `lib/search/` (Search & Ask side bar), `lib/workspace.js` (folders; `workDir()` when none is open),
+    `lib/updates.js` (updates), `lib/search/` (Search & Ask side bar), `lib/plugins/` (the Plugins tab beside Extensions), `lib/workspace.js` (folders; `workDir()` when none is open),
     `lib/crash/` (crash reports), `lib/settings-io.js` (export/import), `lib/scm/commit.js` (Source Control commit message),
     `lib/log.js`, `lib/ui.js` (font size).
   - `media/codicons/` — the Codicons icon font (CC BY 4.0) for every Kural page.
@@ -539,6 +539,42 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   file's final `export{… as main}`; the command registry and `hostService` are found by shape, with its own
   cancellation token. VS Code's `showToast` is an Electron Notification from the main process, so it shows as Kural.
   A click brings the window to the front. Test: `test/rebrand-toast.test.js` (also on the real workbench file).
+- **Extensions | Plugins** (`lib/plugins/`: `core.js` no vscode, `index.js` the view + a plugin's page (WebviewPanel
+  "kural.pluginDetails"); `media/plugins.*`, `media/plugin-details.js`; Adithya, 18 Oct 2026: like Search & Ask, VS Code's
+  feature and Kural's side by side; the plugins of whichever AI the chat's model is). Each AI's own plugin manager does the
+  work. Claude: `claude plugin list --json --available` (Anthropic's built-in directory `anthropic-plugin-directory`, a few
+  thousand, isn't in `marketplace list`; installed plugins aren't in `available`, their descriptions come from
+  `<installPath>/.claude-plugin/plugin.json`), `install|uninstall|enable|disable|update <id> --json` (one JSON line,
+  `outcome`; a marketplace-declared command comes back as `shownCommand {sha256}`: Kural shows the command, then
+  `--accept-command <sha>`), `details <id>` (text, installed only: `parseDetails`). Codex: `plugin list --json --available
+  | add | remove` (no enable/disable; no descriptions: from each marketplace root's catalog and the plugin's manifest in
+  `<CODEX_HOME>/plugins/cache/<mp>/<name>/<version>`; Codex refuses a CODEX_HOME that doesn't exist). agy: `plugin list
+  --json | install <folder> | uninstall|enable|disable <name> | validate <folder> --json`, no catalog: a folder, or an https
+  Git address cloned with `protocol.allow=never` + https + `core.symlinks=false` (Git from PATH/Homebrew; on a Mac
+  /usr/bin/git only when `xcode-select -p` works, else Apple's install window opens); enable/disable print nothing and
+  uninstall exits 0 either way, so the list decides. Ids and marketplace sources are checked (`validId`, `marketSource`)
+  and passed after `--`. Checked live on 18 Oct 2026 (Claude Code 2.1.296, codex 0.160.0, agy 1.4.2) in throwaway
+  CLAUDE_CONFIG_DIR / CODEX_HOME / HOME folders. The page follows `chat.onChoice` → `brain.engineOf(currentModel())`;
+  Install always asks first (source, "runs code as you"). Chats pick changes up: Claude's by `watchSetup`
+  (installed_plugins.json, settings.json), Codex's and agy's by `chat.pluginsChanged` (`pluginVersion` in `procKey`).
+  **The tab is a workbench patch** (`rebrand.py add_plugins_tab`, all or nothing, after `hide_debug_views`: both insert in
+  the views registry's `addViews`): `getViewContainer` accepts "extensions" (package.json `views.extensions` =
+  `kural.plugins`, `when kural.extensionsTab == plugins`; `rejectAddedViews` on that container only stops drag and drop);
+  VS Code's views there get `kural.extensionsTab != plugins`, Kural's view `singleViewPaneContainerTitle` (else the title
+  read "Extensions & Plugins: Plugins"); `create()` adds the switch (plain DOM, a padded row: a first child's top margin
+  escaped the side bar and 6 px went missing), lined up with the header's computed padding (8px in 1.140; the CSS file
+  says 20px); `layout()` subtracts it (and the hidden search box on Plugins), plus CSS for `.extensions` (VS Code hardcodes
+  `100% - 41px`); `refresh()` → `kural.plugins.refresh` on Plugins (one Refresh in the title bar); the choice is kept in
+  the side bar's memento (`searchViewletState["kural.tab"]`); command `_kural.extensionsTabs`: Kural detects the patch by
+  it, else the view `kural.pluginsAlone` in its own container (context `kural.pluginsAlone`). The title "Extensions &
+  Plugins" is the side bar's own nls message (`EXT_TITLE`), only with the patch. Tests: `test/plugins.test.js` (fakes:
+  `test/fake-plugins.js`, hooked into fake-claude/codex/agy), `plugins-page.test.js`, `rebrand-plugins-tab.test.js`.
+  Checked in a patched copy of the app driven over CDP (both tabs' layout, install with its question, turn off, the
+  command-declared install, a marketplace, search, the details page, the fallback side bar). A test copy started from
+  Kural's own terminal inherits `ELECTRON_RUN_AS_NODE` ("bad option: --user-data-dir"): start it with `env -i`. NOT
+  checked: a real Gemini chat using a plugin's skills (agy wasn't logged in; Kural starts agy with
+  `--disable-slash-commands`, which agy's help says also stops "skill expansion" in print mode), a real Codex chat with
+  a plugin, Windows and Linux.
 - **Search & Ask** (`lib/search/`: `index.js` the view and Ask (always `brain.fastestModel()`: Haiku, or the lightest
   Codex/Gemini model by router `traits`, the chat's AI first; a local model only with no cloud AI; Adithya: Ask should
   be fast; no Auto routing there), `find.js` text search in the editor, `text.js` no

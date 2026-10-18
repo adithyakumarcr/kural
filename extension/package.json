@@ -17,6 +17,9 @@
     "onStartupFinished",
     "onView:kural.chat",
     "onView:kural.search",
+    "onView:kural.plugins",
+    "onView:kural.pluginsAlone",
+    "onWebviewPanel:kural.pluginDetails",
     "onWebviewPanel:kural.chatEditor",
     "onCustomEditor:kural.chatTab"
   ],
@@ -262,6 +265,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "kural.plugins.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "kural.search.clear",
         "title": "Clear Search Results",
         "icon": "$(clear-all)"
@@ -349,6 +357,10 @@
       {
         "command": "kural.showCrashReports",
         "title": "Kural: Show Crash Reports"
+      },
+      {
+        "command": "kural.plugins.show",
+        "title": "Kural: Show Plugins"
       }
     ],
     "viewsContainers": {
@@ -357,6 +369,11 @@
           "id": "kural-search",
           "title": "Search & Ask",
           "icon": "media/search-icon.svg"
+        },
+        {
+          "id": "kural-plugins",
+          "title": "Plugins",
+          "icon": "media/plugins-icon.svg"
         }
       ],
       "secondarySidebar": [
@@ -390,6 +407,22 @@
           "type": "webview",
           "id": "kural.search",
           "name": "Search & Ask"
+        }
+      ],
+      "extensions": [
+        {
+          "type": "webview",
+          "id": "kural.plugins",
+          "name": "Plugins",
+          "when": "kural.extensionsTab == plugins"
+        }
+      ],
+      "kural-plugins": [
+        {
+          "type": "webview",
+          "id": "kural.pluginsAlone",
+          "name": "Plugins",
+          "when": "kural.pluginsAlone"
         }
       ],
       "kural": [
@@ -442,6 +475,11 @@
         {
           "command": "kural.search.refresh",
           "when": "view == kural.search && kural.searchTab != ask",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kural.plugins.refresh",
+          "when": "view == kural.pluginsAlone",
           "group": "navigation@1"
         },
         {
@@ -517,6 +555,10 @@
         },
         {
           "command": "kural.search.refresh",
+          "when": "false"
+        },
+        {
+          "command": "kural.plugins.refresh",
           "when": "false"
         },
         {

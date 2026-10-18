@@ -31,6 +31,9 @@ const state = () => process.env.FAKE_CODEX_STATE || read(file) || "ok";
 const config = [];
 const args = process.argv.slice(2);
 while (args[0] === "-c") config.push(args.splice(0, 2)[1]);
+// `plugin …` (Kural's Plugins tab): test/fake-plugins.js, state next to this one's (installed plugins in $CODEX_HOME).
+// (Loaded only then: tests copy this file elsewhere, where ./fake-plugins isn't.)
+if (args[0] === "plugin" && require("./fake-plugins").codex(args, file)) return;
 
 if (args[0] === "--version") { console.log("codex-cli 0.160.0"); process.exit(0); }
 if (args[0] === "mcp" && args[1] === "list") {

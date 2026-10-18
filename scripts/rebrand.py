@@ -114,8 +114,8 @@ def main(app, platform):
         except ImportError:
             pass
     # 6. VS Code's own code: Help → Check for Updates… (Kural's updater), VS Code's Search and Output views hidden
-    #    (Kural's Search & Ask side bar does text search; Kural's log opens with "Kural: Show Log"), and VSCodium's own
-    #    content off the Welcome page.
+    #    (Kural's Search & Ask side bar does text search; Kural's log opens with "Kural: Show Log"), Extensions | Plugins,
+    #    and VSCodium's own content off the Welcome page.
     patch_workbench(app)
     # 7. The editor's own texts (menus, settings, messages) say "VSCodium": they say Kural.
     rebrand_messages(app)
@@ -127,6 +127,7 @@ def main(app, platform):
 #   - the Integrated Browser's "Add to Chat" goes to Kural's chat (route_browser_to_kural).
 #   - notifications from the system for Kural's chat (add_os_toast).
 #   - VS Code's Run and Debug, Debug Console and Ports hidden unless kural.showDebugViews is on (hide_debug_views).
+#   - the Extensions side bar's second tab, Plugins: Kural's AI plugins view (add_plugins_tab).
 #   - Help → Check for Updates…: extensions can't add items to the Help menu, so the item goes next to VS Code's
 #     "Ask @vscode" Help item.
 #   - VS Code's Search view and Output view never show: Kural's Search & Ask side bar has text search (find and
@@ -316,6 +317,108 @@ def hide_debug_views(text):
     return text[:run.end()] + "hideIfEmpty:!0," + text[run.end():]
 
 
+# Extensions | Plugins: VS Code's Extensions side bar gets a second tab, Plugins (Kural's view "kural.plugins": the AI
+# plugins of the chat's AI, extension/lib/plugins), with the same switch as Kural's Search & Ask. Four parts:
+#   1. the views extension point lets an extension add views to "extensions" (VS Code allows only explorer, debug, scm,
+#      remote); Kural's package.json adds kural.plugins there, shown when `kural.extensionsTab == plugins`.
+#   2. VS Code's own views in that side bar (Installed, Popular, search results…) get `kural.extensionsTab != plugins`,
+#      in the views registry's addViews (after hide_debug_views' code there, so apply this one after it).
+#      Kural's own view gets the side bar's title for when it's the only view showing (else "Extensions & Plugins: Plugins").
+#   3. the side bar's create() puts the switch above its search box (lined up with it: the header's own padding) and keeps
+#      the choice in the side bar's own saved state; layout() leaves room for it, and on Plugins the search box hides (its
+#      height counts 0); refresh() (the title bar's Refresh) refreshes the plugins while Plugins shows.
+#   4. a command `_kural.extensionsTabs` ("plugins" | "extensions" → switches; → {tab}): "Kural: Show Plugins" uses it,
+#      and Kural looks for it to know this patch is there (without it, Plugins has a side bar of its own).
+# The side bar's title becomes "Extensions & Plugins" (rebrand_messages). All four parts are found by shape; if one is
+# missing (another VSCodium), nothing is changed and a ::warning:: says so. Applying it again changes nothing.
+PT_MARK = "/*kural-plugins-tab*/"
+PT_CONTAINER = re.compile(r'getViewContainer\(([\w$]+)\)\{switch\(\1\)\{(?=case"explorer":return this\.viewContainersRegistry\.get\()')
+PT_ADD_VIEWS = re.compile(r'addViews\(([\w$]+),([\w$]+)\)\{')
+PT_CREATE = re.compile(r'create\(([\w$]+)\)\{\1\.classList\.add\("extensions-viewlet"\)[,;]this\.root=\1;')
+PT_LAYOUT = re.compile(r'this\.header\.style\.height=`\$\{([\w$]+)\}px`([,;])super\.layout\(new ([\w$]+)\(([\w$]+)\.width,\4\.height-\1\)\)')
+PT_REFRESH = re.compile(r'async refresh\(\)\{(?=await this\.updateInstalledExtensionsContexts\(\))')
+# (The outer row has padding, not a margin: a first child's top margin escapes its parent, and 6 px went missing below.)
+PT_CSS = (".extensions-viewlet>.kural-ext-tabs{height:34px;box-sizing:border-box;padding:6px 8px 0}"
+          ".kural-ext-seg{display:flex;gap:2px;height:28px;box-sizing:border-box;padding:2px;"
+          "border:1px solid var(--vscode-widget-border,rgba(128,128,128,.22));border-radius:7px;background:var(--vscode-input-background)}"
+          ".kural-ext-tab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:0;padding:0 4px;border:0;"
+          "border-radius:5px;background:none;color:var(--vscode-descriptionForeground);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden}"
+          ".kural-ext-tab:hover{color:var(--vscode-foreground)}.kural-ext-tab:focus-visible{outline:1px solid var(--vscode-focusBorder);outline-offset:-1px}"
+          ".kural-ext-tab.on{background:color-mix(in srgb,#8b6cef 25%,transparent);color:var(--vscode-foreground);font-weight:600}"
+          ".vs .kural-ext-tab.on,.hc-light .kural-ext-tab.on{background:color-mix(in srgb,#6447d6 25%,transparent)}"
+          ".kural-ext-tab .codicon{font-size:14px}.extensions-viewlet.kural-plugins-on>.header{display:none}"
+          # (VS Code sizes the views' area as 100% minus its 41 px header in CSS: minus the switch's 34 px too.)
+          ".extensions-viewlet.kural-tabs>.extensions{height:calc(100% - 75px)}.extensions-viewlet.kural-tabs.kural-plugins-on>.extensions{height:calc(100% - 34px)}")
+# (Inside create(): `this` is the side bar. Plain DOM calls, no minified helpers, so nothing else has to be found.)
+PT_CREATE_CODE = PT_MARK + (
+    'try{const r=this.root,doc=r.ownerDocument,bar=doc.createElement("div"),seg=doc.createElement("div");bar.className="kural-ext-tabs";'
+    'seg.className="kural-ext-seg";seg.setAttribute("role","tablist");seg.setAttribute("aria-label","Extensions or Plugins");'
+    'const mk=(id,ic,label)=>{const b=doc.createElement("button");b.className="kural-ext-tab";b.setAttribute("role","tab");b.dataset.tab=id;b.title=label;'
+    'const i=doc.createElement("span");i.className="codicon codicon-"+ic;b.append(i,doc.createTextNode(label));return b};'
+    'const be=mk("extensions","extensions","Extensions"),bp=mk("plugins","sparkle","Plugins");seg.append(be,bp);bar.append(seg);r.append(bar);r.classList.add("kural-tabs");'
+    'const key=this.contextKeyService.createKey("kural.extensionsTab","extensions");'
+    'const set=(t,focus)=>{t=t==="plugins"?"plugins":"extensions";this.__kuralTab=t;key.set(t);try{this.searchViewletState["kural.tab"]=t}catch{}'
+    'be.classList.toggle("on",t==="extensions");bp.classList.toggle("on",t==="plugins");'
+    'be.setAttribute("aria-selected",String(t==="extensions"));bp.setAttribute("aria-selected",String(t==="plugins"));'
+    'r.classList.toggle("kural-plugins-on",t==="plugins");if(this._dimension)this.layout(this._dimension);'
+    'if(focus)t==="plugins"?this.commandService.executeCommand("kural.plugins.focus"):this.searchBox&&this.searchBox.focus()};'
+    'be.addEventListener("click",()=>set("extensions",!0));bp.addEventListener("click",()=>set("plugins",!0));'
+    'seg.addEventListener("keydown",x=>{if(x.key==="ArrowLeft"||x.key==="ArrowRight"){x.preventDefault();'
+    'const n=this.__kuralTab==="plugins"?"extensions":"plugins";set(n,!1);(n==="plugins"?bp:be).focus()}});'
+    'this.__kuralTabs=bar;this.__kuralSet=set;'
+    # (Lined up with the search box below: the header's own side padding, read once it exists.)
+    'this.__kuralLayout=h=>{if(!this.__kuralAligned&&this.header)try{const cs=doc.defaultView.getComputedStyle(this.header);'
+    'bar.style.paddingLeft=cs.paddingLeft;bar.style.paddingRight=cs.paddingRight;this.__kuralAligned=!0}catch{}'
+    'return(this.__kuralTab==="plugins"?0:h)+(bar.offsetHeight||34)};'
+    'globalThis.__kuralExtView=this;const want=globalThis.__kuralExtWant;globalThis.__kuralExtWant=void 0;'
+    'set(want||this.searchViewletState&&this.searchViewletState["kural.tab"],!1);'
+    'if(!doc.getElementById("kural-ext-tabs-css")){const s=doc.createElement("style");s.id="kural-ext-tabs-css";s.textContent='
+    + json.dumps(PT_CSS) + ';doc.head.append(s)}}catch(x){console.error("kural: the Plugins tab",x)}')
+PT_COMMAND_CODE = PT_MARK + (
+    'C.registerCommand("_kural.extensionsTabs",(a,t)=>{const v=globalThis.__kuralExtView;'
+    'if(t==="plugins"||t==="extensions"){if(v&&v.__kuralSet)v.__kuralSet(t,!0);else globalThis.__kuralExtWant=t}'
+    'return{tab:v&&v.__kuralTab||globalThis.__kuralExtWant||"extensions"}});')
+
+
+def add_plugins_tab(text):
+    if PT_MARK in text:
+        return text
+    never, container, create, layout = NEVER.search(text), list(PT_CONTAINER.finditer(text)), list(PT_CREATE.finditer(text)), list(PT_LAYOUT.finditer(text))
+    refresh, commands, end = list(PT_REFRESH.finditer(text)), TOAST_COMMANDS.findall(text), list(TOAST_END.finditer(text))
+    # The views registry's addViews: the one that reads this._views.get(<container>) first (after hide_debug_views' code).
+    adds = []
+    for m in PT_ADD_VIEWS.finditer(text):
+        nxt = re.compile(r'let [\w$]+=this\._views\.get\(' + re.escape(m.group(2)) + r'\);').search(text, m.end(), m.end() + 3000)
+        if nxt and (nxt.start() == m.end() or text.startswith(DEBUG_MARK, m.end())):
+            adds.append((m, nxt))
+    found = {"condition class": bool(never), "views extension point": len(container) == 1, "addViews": len(adds) == 1,
+             "side bar create": len(create) == 1, "side bar layout": len(layout) == 1, "side bar refresh": len(refresh) == 1,
+             "command registry": len(commands) == 1, "end": len(end) == 1}
+    if not all(found.values()):
+        print("::warning::VS Code's Extensions side bar not found as expected; no Plugins tab there (Plugins gets its own side bar) ("
+              + ", ".join(f"{k} {'ok' if v else 'missing'}" for k, v in found.items()) + ")")
+        return text
+    c = never.group(1)
+    views, cont = adds[0][0].group(1), adds[0][0].group(2)
+    view_code = (f'{PT_MARK}try{{const _kx=globalThis.__kuralExtViews||(globalThis.__kuralExtViews=new WeakSet);'
+                 f'if({cont}&&{cont}.id==="workbench.view.extensions")for(const _kv of {views})try{{if(!_kv||_kx.has(_kv))continue;'
+                 f'if(_kv.id==="kural.plugins"){{const _kt={cont}.title;_kv.singleViewPaneContainerTitle=typeof _kt=="string"?_kt:_kt&&_kt.value||"Extensions";_kx.add(_kv);continue}}'
+                 f'const _kn={c}.notEquals("kural.extensionsTab","plugins");_kv.when=_kv.when?{c}.and(_kv.when,_kn):_kn;_kx.add(_kv)}}catch{{}}}}catch{{}}')
+    # From the end of the file backwards, so each place found above stays where it was.
+    edits = [
+        (end[0].start() + 1, end[0].start() + 1, PT_COMMAND_CODE.replace("C.registerCommand", commands[0] + ".registerCommand")),
+        (layout[0].start(), layout[0].end(), f'this.header.style.height=`${{{layout[0].group(1)}}}px`{layout[0].group(2)}super.layout(new {layout[0].group(3)}('
+                                             f'{layout[0].group(4)}.width,{layout[0].group(4)}.height-(this.__kuralLayout?this.__kuralLayout({layout[0].group(1)}):{layout[0].group(1)})))'),
+        (refresh[0].end(), refresh[0].end(), 'if(this.__kuralTab==="plugins")return void await this.commandService.executeCommand("kural.plugins.refresh");'),
+        (create[0].end(), create[0].end(), PT_CREATE_CODE),
+        (adds[0][1].start(), adds[0][1].start(), view_code),
+        (container[0].end(), container[0].end(), 'case"extensions":return this.viewContainersRegistry.get("workbench.view.extensions");'),
+    ]
+    for start, stop, new in sorted(edits, key=lambda e: e[0], reverse=True):
+        text = text[:start] + new + text[stop:]
+    return text
+
+
 # Notifications from the system (a Mac banner, a Windows toast, a Linux notification) that say Kural: VS Code's own
 # `hostService.showToast` (its chat uses it when an answer arrives in a window you aren't looking at) shows an Electron
 # notification from Kural's main process. Extensions can't reach it, so a command is added that does:
@@ -447,7 +550,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = fresh_browser(skip_github_probe(add_workspace_color_item(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))
+    new = fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))))
     if new == text:
         return
     data = new.encode("utf-8")
@@ -483,6 +586,25 @@ def version_label():
     return f"Unreleased version \u00b7 {b.get('branch') or 'local'}{commit}"
 
 
+# The Extensions side bar's title, "Extensions & Plugins" once it has the Plugins tab (add_plugins_tab): its message's
+# number is read from the side bar's registration (`title:O(16887,"Extensions")`: message 16887 of nls.messages.json).
+EXT_TITLE = re.compile(r'registerViewContainer\(\{id:[\w$]+,title:[\w$]+\((\d+),"Extensions"\),openCommandActionDescriptor:')
+EXT_TITLE_NEW = "Extensions & Plugins"
+
+
+def extensions_title_index(app):
+    """The number of the Extensions side bar's title message, when the workbench has the Plugins tab; else None."""
+    try:
+        with open(os.path.join(app, "out", "vs", "workbench", "workbench.desktop.main.js"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    found = EXT_TITLE.findall(text)
+    if PT_MARK not in text or len(found) != 1:
+        return None
+    return int(found[0])
+
+
 def rebrand_messages(app):
     p = os.path.join(app, "out", "nls.messages.json")
     if not os.path.exists(p):
@@ -492,6 +614,7 @@ def rebrand_messages(app):
     if not isinstance(messages, list):
         print("::warning::out/nls.messages.json looks different; the editor's texts keep saying VSCodium")
         return
+    title = extensions_title_index(app)
     def kural(m):
         for wiki in GUIDANCE_WIKIS:
             m = m.replace(wiki, f"{REPO}/blob/main/CONTRIBUTING.md")
@@ -499,6 +622,10 @@ def rebrand_messages(app):
             return f"{m} \u00b7 {version_label()}"
         return VSCODIUM_WORD.sub(TITLE, m)
     new = [kural(m) if isinstance(m, str) else m for m in messages]
+    if title is not None and title < len(new) and new[title] in ("Extensions", EXT_TITLE_NEW):
+        new[title] = EXT_TITLE_NEW
+    elif title is not None:
+        print(f"::warning::the Extensions side bar's title isn't message {title} as expected; it stays \"Extensions\"")
     if new == messages:
         return
     with open(p, "w", encoding="utf-8") as f:

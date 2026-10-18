@@ -335,6 +335,11 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
 - **Search & Ask** (magnifier icon). **Search** (Ctrl+Shift+F): find and replace in your files, with everything VS
   Code's own Search had (Kural hides that one). **Ask** (Ctrl+Alt+A): ask "where is the retry limit set?" and get the
   exact `file:line` places, from the fastest model you have (Claude's Haiku, or Gemini's or Codex's lightest).
+- **Extensions & Plugins** (the Extensions icon, Ctrl+Shift+X), two tabs like Search & Ask: VS Code's **Extensions**,
+  and **Plugins**, the AI plugins of the AI your chat uses (skills, commands, agents, hooks, MCP servers: Superpowers,
+  say). Search Anthropic's plugin directory and your marketplaces, install, turn off, remove; a plugin's page says what
+  it adds and how many tokens it costs every chat. It follows the chat's model: Claude's, ChatGPT's (Codex) or
+  Gemini's (Antigravity) plugins. Installing always asks first: a plugin runs code as you.
 - **Kural Settings** (person icon in the status bar, which shows your account's name): your accounts and usage,
   updates, the guide, in one tab.
 - **Browser with Design Mode.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
@@ -502,6 +507,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
                       rename-offer.js (change a name in the other files too)
   lib/edit/           Ctrl+K and Apply (inline.js), red/green review, diff
   lib/getstarted.js   Get started; lib/account.js accounts, lib/settings-page.js Kural Settings; lib/updates.js updates; lib/search/ Search & Ask
+  lib/plugins/        the Plugins tab beside Extensions: core.js (each AI's plugin manager), index.js (the view, a plugin's page)
   media/              the panels' pages (HTML/CSS/JS) and the Codicons icon font
   themes/             Kural Dark, Kural Light (written by scripts/make-themes.py)
 scripts/              shared rebranding (rebrand.py), logo, icons (make-status-icons.js), release notes, push-wiki.sh,

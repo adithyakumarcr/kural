@@ -26,6 +26,7 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 | [[Devices]] | A Raspberry Pi or board computer over SSH: link it to a chat, a terminal on it |
 | [[Inline Edit]] | Ctrl+K, and Apply from the chat |
 | [[Search and Ask]] | Find and replace text; find code by describing it |
+| [[Plugins]] | Extensions & Plugins: your chat's AI plugins (skills, agents, hooks, MCP servers) beside VS Code's extensions |
 | [[Browser]] | Your app beside the code; select an element to add it to the chat; the AI uses pages there (it never publishes) |
 | [[Account and Updates]] | The usage meter; who's logged in, switch account, log out; updates |
 | [[Settings and Shortcuts]] | Every Kural setting and keyboard shortcut |

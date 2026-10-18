@@ -22,6 +22,8 @@ in, now with four ways to get its AI.
 - **Devices over SSH.** A Raspberry Pi or board computer the chat can run commands on, asking first.
 - **Tab Completion everywhere.** In the editor (local model or Claude), in the terminal (whole commands, also from plain
   words), and renames across files.
+- **Extensions & Plugins.** The Extensions side bar has a **Plugins** tab beside VS Code's Extensions: the AI plugins
+  (skills, commands, agents, hooks, MCP servers) of the AI your chat uses, to search, install, turn off and remove.
 - **Search & Ask, inline edit (Ctrl+K), commit messages** in Source Control, the **AI Usage** panel and status bar,
   **Kural Settings** with connectors (MCP) and **profiles** for a personal and a work account.
 - **Safe by default.** Agent mode asks before commands and before files outside your project; Ask and Plan change
@@ -33,6 +35,13 @@ The 1.1.0 test versions below have every detail.
 
 **Since 1.1.0-rc.4**
 
+- **Extensions & Plugins.** The Extensions side bar has two tabs, like Search & Ask: VS Code's **Extensions**, and
+  **Plugins**: the AI plugins (skills, commands, agents, hooks, MCP servers, Superpowers for example) of the AI your chat
+  uses. It follows the chat's model: Claude's plugins (Anthropic's plugin directory and your marketplaces), ChatGPT's
+  (Codex: your marketplaces) or Gemini's (Antigravity: from a folder or a Git address). Search, install, turn off,
+  remove, add marketplaces; a plugin's page says what it adds and how many tokens it adds to every chat. Installing
+  always asks first and says where the plugin comes from: a plugin runs code as you. Chats pick up the change by
+  themselves. "Kural: Show Plugins" opens it.
 - **Lesson pages in Learn mood.** Ask a chat in Learn mood to "explain it on a webpage" and the AI builds a short slide
   deck (diagrams, small animations, very few words) and shows it in Kural's browser beside the chat; the Explorer and
   the terminal close so you get a big screen with just the chat and the lesson. The AI teaches it slide by slide in the

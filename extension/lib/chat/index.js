@@ -148,6 +148,7 @@ class ChatView {
     this.changes = new ChangeTracker(scope.dir("checkpoints", "data"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
+    this.pluginVersion = {};                // codex / agy: goes up when the Plugins tab changes that AI's plugins
     this.lastEditor = vscode.window.activeTextEditor;
     this.lastSelection = null;   // for turning pasted code into a "main.py (L3-9)" reference
     this.files = null;
@@ -964,7 +965,7 @@ class ChatView {
     // (The mood's text too: editing one of your moods restarts its chats with the new instructions.)
     const mood = `${tab.mood}:${require("crypto").createHash("sha1").update(moodPrompt(tab.mood, customMoods(userMoods()))).digest("hex").slice(0, 8)}`;
     return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
-      `|${this.browserOn(tab) ? "browser" : ""}` + (claude ? `|${fullSetup()}|${this.setupVersion}` : "");
+      `|${this.browserOn(tab) ? "browser" : ""}` + (claude ? `|${fullSetup()}|${this.setupVersion}` : `|${(this.pluginVersion || {})[engineOf(tab.model)] || 0}`);
   }
 
   // Your Claude Code setup changed (a connector or MCP server added, a plugin, a skill…), or you
@@ -1188,6 +1189,19 @@ class ChatView {
     const t = this.active();
     const r = t && this.runtime.get(t.id);
     if (t && r && r.proc && t.status === "idle") this.warm(t);
+  }
+
+  // The Plugins tab added, removed or turned one of an AI's plugins on or off (lib/plugins). Claude's chats reload by
+  // themselves (watchSetup sees Claude Code's plugin files change); Codex and Gemini read their plugins when they
+  // start, so their chats start again in the same conversation: the open one now if it's idle, the others when used.
+  pluginsChanged(ai) {
+    if (ai !== "codex" && ai !== "agy") return;
+    this.pluginVersion = this.pluginVersion || {};
+    this.pluginVersion[ai] = (this.pluginVersion[ai] || 0) + 1;
+    log(`chat: ${ai}'s plugins changed; its chats start again in the same conversation when they're not busy`);
+    const t = this.active();
+    const r = t && this.runtime.get(t.id);
+    if (t && r && r.proc && t.status === "idle" && engineOf(t.model) === ai) this.warm(t);
   }
 
   root() { return ws.root(); }
