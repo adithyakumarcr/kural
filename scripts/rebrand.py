@@ -415,6 +415,27 @@ def skip_github_probe(text):
     return SPEECH_PROBE.sub(lambda m: SPEECH_PROBE_MARK + m.group(1), text, count=1)
 
 
+# Kural's browser keeps nothing (Adithya, 18 Oct 2026): no cookies, logins, cache or site data on disk, a fresh browser every
+# time Kural starts. VS Code saves them by default (workbench.browser.dataStorage "default" = "global" = the partition
+# "persist:vscode-browser"), and on a Mac Chromium encrypts saved cookies with the "Kural Safe Storage" keychain item, which
+# asked for the keychain again after every update. Every browser tab, the AI's too (vscode.window.openBrowserTab), gets
+# its storage from the workbench's _resolveStorageScope(): it now always says "ephemeral" (kept in memory, for that
+# window, until it closes). package.json sets the setting to "ephemeral" as well, so a miss here still starts fresh.
+FRESH_BROWSER_MARK = "/*kural-fresh-browser*/"
+FRESH_BROWSER = re.compile(r'async _resolveStorageScope\(\)\{(?=let \w+=this\.configurationService\.getValue\("workbench\.browser\.dataStorage"\))')
+
+
+def fresh_browser(text):
+    if FRESH_BROWSER_MARK in text:
+        return text
+    found = FRESH_BROWSER.findall(text)
+    if len(found) != 1:
+        print(f"::warning::the browser's storage choice not found as expected ({len(found)} matches); Kural's browser keeps its data "
+              "only as the setting workbench.browser.dataStorage says")
+        return text
+    return FRESH_BROWSER.sub(lambda m: m.group(0) + FRESH_BROWSER_MARK + 'return"ephemeral";', text, count=1)
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -426,7 +447,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = skip_github_probe(add_workspace_color_item(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))
+    new = fresh_browser(skip_github_probe(add_workspace_color_item(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))
     if new == text:
         return
     data = new.encode("utf-8")

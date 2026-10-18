@@ -2,6 +2,12 @@
 
 ## 1. Install Kural
 
+Two ways: if you're comfortable with a terminal, install with `./install.sh` from the repository (Mac with Apple Silicon
+or Ubuntu: it builds Kural on your computer; see the end of this section). If not, install with the `.dmg`, `.exe` or
+`.deb` file below, but be aware of the warnings and permission questions from your operating system: Kural isn't signed
+with a paid Apple or Microsoft certificate yet, so macOS and Windows warn before its first start (the table says how to
+get past them), and Ubuntu asks for your password to install it.
+
 Download the file for your computer from [Releases](https://github.com/adithyakumarcr/kural/releases). Versions marked
 **Pre-release** (like `1.1.0-alpha.3`) are test versions.
 

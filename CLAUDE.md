@@ -239,6 +239,14 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   folder open, AI work runs in `ws.workDir()`, never `~`; shell lookups and checks run with `cwd: os.tmpdir()`, and the
   `$SHELL -ilc` lookup only when claude isn't found otherwise. `build-mac.sh` keeps Info.plist's usage texts (without
   them macOS kills the app when any extension touches that device).
+  **The AI's own looks** (Adithya, 18 Oct 2026: an Auto chat with no folder open ran `ls -d ~/*/ ~/*/*/` to find a project
+  and set off Desktop, Downloads, Apple Music and Photos at once): `paths.privateUse(command, cwd)` (named `~/Desktop`…,
+  a wildcard in home, a walker such as find/rg/du/`ls -R` on home or above, or a command whose cwd is in one) and
+  `privateFolder(p)` → `decide({privateFolders})` (default: darwin only) returns `{ask, private, risky}` BEFORE the Auto
+  shortcut, in every mode, unless the path is attached or inside the project roots (a project in ~/Documents). The card
+  has no Allow all and a switch to Auto mid-answer doesn't answer it (`block.private`). `FORMAT` in prompts.js tells
+  every mode not to look there. Codex runs its "safe" read-only commands without asking Kural: only the prompt covers
+  those. Tests: `test/private-folders.test.js`; `test/permissions.test.js` pins `privateFolders: false`.
 - **Untrusted folders** (VS Code's Restricted Mode): package.json `untrustedWorkspaces.supported: false` (Kural is off until the folder is trusted; CI starts the app with `--disable-workspace-trust`), with
   `restrictedConfigurations` (program paths, Ollama URL, chat mode/model, full setup) and `scope: machine` for the paths;
   `fullSetup()` = the setting AND `vscode.workspace.isTrusted` (a project's .claude/settings.json hooks would run, and
@@ -375,7 +383,12 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   open Google inside Kural. NOT checked: a real mouse click on the page's element (CDP synthetic clicks don't reach the
   Overlay inspector). Without `workbench.action.browser.open` (an editor with no Integrated Browser) a page opens in the
   web browser (`openExternal`) and picking says why it can't. The old proxy browser (it removed pages' security headers
-  to add its own picker) was removed in 1.1.0-rc.2.
+  to add its own picker) was removed in 1.1.0-rc.2. **It keeps nothing** (Adithya, 18 Oct 2026): `rebrand.py
+  fresh_browser` makes the workbench's `_resolveStorageScope()` return "ephemeral" (an in-memory partition per window;
+  every tab, the AI's `openBrowserTab` too; "global" was `persist:vscode-browser`, whose cookies Chromium encrypts with
+  the "Kural Safe Storage" keychain item), package.json sets `workbench.browser.dataStorage` "ephemeral" as a fallback,
+  and `lib/browser/fresh.js` deletes `<user data>/Partitions/vscode-browser` and `workspaceStorage/*/browserStorage` at
+  start (`test/rebrand-fresh-browser.test.js`).
 - **The AI in the browser** (`lib/browser/`: `guard.js` the rule, `snapshot.js` the outline, `keys.js`, `cdp.js`, `page.js`
   the driver, all no vscode; `control.js` tabs/asking/the network stop; `bridge.js` + `browser-mcp.js` the MCP server
   `kural_browser`, like the device's): Adithya's rule, **the AI never publishes, posts, shares or sends anything** (in

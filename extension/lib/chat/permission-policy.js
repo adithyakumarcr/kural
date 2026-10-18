@@ -2,7 +2,7 @@
 // the chat's onPermission() does the rest (saving the file, the checkpoint, the card). test/permissions.test.js has the
 // whole table: it is the specification.
 
-const { within, runsLater } = require("../paths");
+const { within, runsLater, expand, isHomeOrAbove, privateFolder, privateUse, privateWords } = require("../paths");
 const { dangerous } = require("../ai/danger");
 const { isAtlassianRead } = require("./atlassian");
 
@@ -68,11 +68,19 @@ const allowedKinds = (allowAll) => Array.isArray(allowAll) ? allowAll : allowAll
 //   uses it any more; Gemini asks through Kural's gate). unclassified: a call Kural can't classify (Gemini's gate: an
 //   unknown tool, or one whose file couldn't be found): refused in Ask/Plan, asks in Agent, runs in Auto. guard(file): files
 //   that keep an approval gate working (agy's hooks, Kural's launcher): writing one asks, even in Auto. Auto runs everything else.
-function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false, unclassified = false, guard = null }) {
+//   privateFolders: check the AI's looks into Desktop, Documents, Downloads, Music, Pictures… (on a Mac, where macOS asks).
+function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false, unclassified = false, guard = null, privateFolders = process.platform === "darwin" }) {
   // Enforce read-only modes here, even after a live transition or a provider sends an unexpected call.
   if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite", "Browser", "BrowserAction", "BrowserUpload"].includes(tool)))
     return { deny: true, message: `${mode} mode cannot run commands or change files.` };
   if (tool === "Browser") return { ask: true, risky: { why: "This is Gemini's own browser, not Kural's: Kural can't see what it clicks, so it can't keep it from publishing, posting or sending something." } };
+  // Your private folders: on a Mac the AI looking there makes macOS ask about Kural ("…would like to access files in your
+  // Downloads folder", Apple Music, Photos), so Kural asks first, in every mode (Auto too: Adithya, 18 Oct 2026), and
+  // "Allow all" doesn't cover it. Not for what you attached.
+  if (privateFolders) {
+    const why = privateWhy(tool, input, cwd, [...granted, ...readRoots, ...writeRoots]);
+    if (why) return { ask: true, private: true, risky: { why } };
+  }
   // Auto is unrestricted (Adithya, 14 Oct 2026): nothing asks, not a dangerous command, not a file outside the project,
   // not a tool Kural can't classify. The chat reports what was done instead (PROMPTS.auto). Two things stay: a question
   // the AI asks you (AskUserQuestion), and a write to the files that keep Gemini's approval gate working (otherwise one
@@ -133,6 +141,33 @@ function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = nul
   const kind = allowKind(tool);
   if (mode === "auto" || (onDevice ? !!device && allowAllDevice === device : !!kind && kinds.includes(kind))) return { allow: true };
   return { ask: true };   // Agent mode: running commands asks you first.
+}
+
+// Why this call would look in your private folders (a card's "Asks first: …"), or null. ok: what you attached and the
+// project folders (a project in ~/Documents is already allowed there: you opened it).
+function privateWhy(tool, input, cwd, ok) {
+  const P = require("path");
+  const attached = (p) => within(p, ok.filter(Boolean));
+  const at = (p) => P.resolve(cwd, expand(String(p)));
+  let found = null;
+  if (tool === "Bash") {
+    const runIn = input.cwd ? at(input.cwd) : cwd;
+    found = privateUse(input.command, runIn);
+    if (found && found.every((f) => f.path && attached(f.path))) found = null;
+    // (A command started inside one of them reads it, whatever it says: Gemini's run_command has its own folder.)
+    const inside = privateFolder(runIn);
+    if (inside && !attached(runIn)) found = [...(found || []), { folder: inside }];
+  } else if (READ_TOOLS.includes(tool) || EDIT_TOOLS.has(tool) || tool === "BrowserUpload") {
+    // (Glob's pattern can carry the folder itself: "~/Downloads/*.pdf".)
+    const pat = tool === "Glob" && /^[~/]/.test(String(input.pattern || "")) ? String(input.pattern).split(/[*?[{]/)[0] : null;
+    const where = input.file_path || input.notebook_path || input.path || pat;
+    const walks = tool === "Grep" || tool === "Glob";
+    const abs = where ? at(where) : cwd;
+    const folder = where ? privateFolder(abs) : null;
+    if (folder && !attached(abs)) found = [{ folder }];
+    else if (walks && !folder && isHomeOrAbove(abs) && !attached(abs)) found = [{ folder: "home" }];
+  }
+  return found && `It looks in ${privateWords(found)}. On a Mac that makes macOS ask you about Kural too.`;
 }
 
 // The mode a call through Gemini's gate is decided in. startedFor: the mode that agy was started for. The same as the

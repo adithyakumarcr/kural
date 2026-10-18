@@ -403,6 +403,9 @@ function activate(context) {
       require("./lib/private-data").tightenOnce(context.globalStorageUri.fsPath, version, {
         done: () => context.globalState.get("kural.privateData"), mark: (v) => context.globalState.update("kural.privateData", v), log });
     } catch (e) { log(`private data: ${e.message}`); }
+    // Kural's browser starts fresh every time: what older versions saved (cookies, logins, cache) goes.
+    if (vscode.workspace.getConfiguration("workbench.browser").get("dataStorage") === "ephemeral")
+      require("./lib/browser/fresh").forgetSaved(context.globalStorageUri.fsPath, log).catch((e) => log(`browser: ${e.message}`));
   }, 5000);
 
   // Set up (or once it is): warm up in the background so the first suggestion is quick.

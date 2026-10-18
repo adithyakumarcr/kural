@@ -1,5 +1,16 @@
-## Not released yet
+## What's new in 1.1.0-rc.4
 
+- **Kural's browser keeps nothing.** No cookies, logins, site data or cache are saved on your computer any more: each
+  time Kural starts the browser is fresh (a login lasts until that window closes), for your tabs and the AI's. What
+  older versions saved is deleted once. On a Mac this also takes away the browser's need for the keychain ("Kural
+  wants to use … Kural Safe Storage" after an update).
+- **Your private folders ask first, in every mode.** On a Mac, an AI command in Auto mode could look through your home
+  folder (one looking for a project ran `ls ~/*/*/`) and set off macOS's questions for Desktop, Documents, Downloads,
+  Apple Music and Photos at once. Now a command, read or search that goes into those folders (also Pictures, Movies,
+  iCloud Drive) or through your whole home folder gets a card first ("It looks in your Downloads folder…"), Auto too,
+  with no "Allow all"; a file you attached and a project you opened there don't ask. The AI is also told to ask where
+  your project is instead of looking around (the only thing that applies to ChatGPT's simple read-only commands, which
+  it runs without asking Kural).
 - **The AI uses the browser, and never publishes.** Ask the chat to do something on a website ("make a reel from
   `videos/run.mp4` on Instagram up to the caption", "fill in this form", "answer the quiz in the browser tab") and it
   works in Kural's browser beside the code, with your logins: it reads the page, clicks, types, chooses, uploads files,
