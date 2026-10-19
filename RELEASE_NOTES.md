@@ -1,3 +1,7 @@
+## Not released yet
+
+- Kural is built on VSCodium 1.140.06880 with Electron 43.8.0: the latest editor and browser security fixes.
+
 ## What's new in 1.1.0
 
 Kural 1.1.0 is the first final version of **Kural Code Editor** (it was ClaudeX): VSCodium with an AI assistant built
