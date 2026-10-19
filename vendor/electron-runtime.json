@@ -1,16 +1,16 @@
 {
-  "version": "43.7.11",
+  "version": "43.8.0",
   "replaces": "43.7.3",
   "abi": "148",
   "fuses": "101100011",
   "platforms": {
-    "linux-x64": "37342601dc246db0269487b786856044b2476e58cdd07d00a57ac155329c5130",
-    "darwin-arm64": "e60ad7fb9c030ddfb5005a6bc54712bc78c2d3e760f7f010fa5b997e956aaefa",
-    "win32-x64": "4948fb44c6d466b361734f43252846286728adb0bd2f348a95c7fbf5fae21122"
+    "linux-x64": "c7b7077d5f5c5389d68d2de1afd80493c3db8668ec9bebdbd72f1a8262b5d6f4",
+    "darwin-arm64": "092782de0f28b64f0f3d72117f61b2757808ca87d83eefb3d81fd46afc2fb0d5",
+    "win32-x64": "7d9854c412a12224e69eae191a0d7b673dc0903dbca040e3d35ed949ad70e5da"
   },
   "bundles": {
     "chromium": "150.0.7871.250",
-    "node": "24.21.0",
+    "node": "24.22.0",
     "v8": "15.0.245.31-electron.0",
     "libuv": "1.52.1",
     "icu": "78.2",
@@ -20,8 +20,8 @@
     "undici": "7.29.1",
     "brotli": "1.2.0",
     "c-ares": "1.34.8",
-    "simdjson": "4.6.7",
+    "simdjson": "4.6.11",
     "zstd": "1.6.0"
   },
-  "bundlesSource": "process.versions of electron-v43.7.11-linux-x64 (ELECTRON_RUN_AS_NODE=1); checked again at each Linux/Mac build"
+  "bundlesSource": "process.versions of electron-v43.8.0-linux-x64 (ELECTRON_RUN_AS_NODE=1); checked again at each Linux/Mac build"
 }
