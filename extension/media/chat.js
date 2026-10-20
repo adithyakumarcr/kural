@@ -349,9 +349,14 @@ window.KURAL_CHAT = function (app, port) {
   const enhanceBtn = el("button", { class: "enhance-btn", "aria-label": "Enhance prompt",
     title: "Enhance prompt\nA quicker model (Claude Sonnet, or ChatGPT's or Gemini's equivalent) looks through this project, read only, and rewrites what you typed into a clearer prompt with pointers to the right files. You check it, then send.",
     onclick: () => startEnhance() }, icon("wand"));
-  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, enhanceBar, chipsEl, input,
+  // Voice input (media/voice.js + lib/voice): the mic beside the wand. What you said goes in at the cursor.
+  const voice = window.KURAL_VOICE({ el, icon, post, tab: () => S.tab, insertText: insertVoiceText, now: () => Date.now(),
+    every: (fn, ms) => setInterval(fn, ms), stopEvery: (id) => clearInterval(id), isMac: /Mac/i.test(navigator.platform || navigator.userAgent),
+    media: { getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c), MediaRecorder: window.MediaRecorder,
+      AudioContext: window.AudioContext, OfflineAudioContext: window.OfflineAudioContext } });
+  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, enhanceBar, voice.bar, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }), ctxEl,
-      enhanceBtn, queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
+      voice.button, enhanceBtn, queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
   const visitBar = el("div", { class: "visit hidden" });
   const body = el("div", { class: "body" }, listEl, historyEl, localEl, jumpBtn);
@@ -607,6 +612,21 @@ window.KURAL_CHAT = function (app, port) {
     closePopup();
     post({ type: "enhance", tabId: t.id, requestId: id, segments });
     renderEnhance();
+  }
+  // The text from your voice into the box at the cursor (at the end when the cursor isn't in the box), with a space before
+  // it when needed. Returns its text node, so Undo can put back exactly what Whisper heard.
+  function insertVoiceText(text) {
+    const sel = window.getSelection();
+    let range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+    if (!range || !input.contains(range.startContainer)) { range = document.createRange(); range.selectNodeContents(input); range.collapse(false); }
+    range.deleteContents();
+    const before = (() => { const r = range.cloneRange(); r.setStart(input, 0); return r.toString(); })();
+    const node = document.createTextNode((before && !/\s$/.test(before) ? " " : "") + text);
+    range.insertNode(node);
+    range.setStartAfter(node); range.collapse(true);
+    sel.removeAllRanges(); sel.addRange(range);
+    input.focus(); requestAnimationFrame(caretIntoView); renderQueueBtn();
+    return node;
   }
   function stopEnhance() { if (S.enh && S.enh.state === "running") post({ type: "enhanceStop", tabId: S.enh.tabId }); }
   function unlockInput() { input.setAttribute("contenteditable", "plaintext-only"); input.classList.remove("enh-locked"); }
@@ -1138,6 +1158,7 @@ window.KURAL_CHAT = function (app, port) {
     post({ type: "send", tabId: t.id, requestId, segments, contexts, attachments: S.pendingSend.attachments, editIndex });
     closePopup(); closeHistory();
     if (S.enh && S.enh.state !== "running") { S.enh = null; renderEnhance(); }
+    voice.typed();   // (the "From your voice" note goes with the message)
   }
 
   // Kural took the message you sent (as a new message, or into the queue): the box and its attachments empty (only if
@@ -1335,7 +1356,7 @@ window.KURAL_CHAT = function (app, port) {
   }
   function closePopup() { S.popup = null; popupEl.classList.add("hidden"); }
 
-  input.addEventListener("input", () => { checkMention(); requestAnimationFrame(caretIntoView); renderQueueBtn(); });
+  input.addEventListener("input", () => { checkMention(); requestAnimationFrame(caretIntoView); renderQueueBtn(); voice.typed(); });
   // A new line (Shift+Enter) or typing past the box's height: keep the line you're on in view. The box scrolls inside
   // (max-height); without this the caret went below its edge. At the end of the text, go to the very bottom (a caret on
   // an empty last line has no size to measure).
@@ -1362,6 +1383,7 @@ window.KURAL_CHAT = function (app, port) {
       if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(); return; }
       if (e.key === "Escape") { e.preventDefault(); closePopup(); return; }
     }
+    if (e.key === "Escape" && voice.escape()) { e.preventDefault(); e.stopPropagation(); return; }   // (a recording first)
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
     else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); document.execCommand("insertText", false, "\n"); requestAnimationFrame(caretIntoView); }
     else if (e.key === "Escape" && S.tab && S.tab.status !== "idle") post({ type: "stop", tabId: S.tab.id });
@@ -1744,6 +1766,7 @@ ${d.system}` : ""}`,
   window.addEventListener("blur", () => { closeMenu(); closePopup(); }, on);
   document.addEventListener("keydown", (e) => {
     if (!port.active()) return;   // (another column has the keyboard)
+    if (e.key === "Escape" && voice.escape()) { e.preventDefault(); return; }   // (cancels a recording: nothing is kept)
     if (e.key === "Escape" && S.menu) { e.preventDefault(); closeMenu(); input.focus(); return; }
     if (e.key === "Escape" && S.showHistory) { e.preventDefault(); closeHistory(); input.focus(); return; }
     // Tab shortcuts work while you're typing in the chat, too.
@@ -1825,7 +1848,7 @@ ${d.system}` : ""}`,
         break;
       case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
-      case "full": S.tab = m.tab; renderAll(); renderEditBar(); renderEnhance(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
+      case "full": S.tab = m.tab; renderAll(); renderEditBar(); renderEnhance(); voice.tabChanged(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "openLocal": closeMenu(); openLocal(); break;
       // Auto mode, a big task: "Use 3 agents?" for 15 s above the box; no answer = one agent.
       case "teamOffer": S.offers[m.tabId] = { id: m.id, agents: m.agents, until: Date.now() + m.seconds * 1000 }; renderOffer(); break;
@@ -1914,6 +1937,8 @@ ${d.system}` : ""}`,
       case "focus": input.focus(); break;
       case "setup": S.setups[m.tabId] = m.setup; if (S.menu === "model") openMenu.refresh(); break;
       case "enhanceState": onEnhanceState(m); break;
+      case "voiceState": voice.onState(m); break;
+      case "voiceToggle": voice.toggle(); break;
       case "slash": S.slash[m.tabId] = m.slash; if (S.popup && S.popup.kind === "slash" && S.tab && S.tab.id === m.tabId) renderPopup(); break;
       case "attached": S.attachments.push(...m.items); renderChips(); input.focus(); break;
       case "userAttachments": if (mine) {

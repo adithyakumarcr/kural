@@ -92,6 +92,18 @@ body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 .enh-bar .codicon { flex-shrink: 0; }
 .enh-bar .enh-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .enh-bar .cb.x { padding: 0 2px; }
+/* Voice input (media/voice.js): the mic beside the wand; while recording a red dot, the time and a level meter. */
+.mic-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; margin-right: 2px; flex-shrink: 0; }
+.mic-btn:hover:not(:disabled) { color: var(--vscode-foreground); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.mic-btn:disabled { opacity: 0.5; cursor: default; }
+.mic-btn.hidden { display: none; }
+.mic-btn.recording { color: var(--vscode-errorForeground, #f14c4c); background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 14%, transparent); }
+.voice-bar .enh-text { white-space: normal; }
+.voice-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--vscode-errorForeground, #f14c4c); animation: voice-pulse 1.2s ease-in-out infinite; }
+@keyframes voice-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .voice-dot { animation: none; } }
+.voice-level { width: 56px; height: 4px; border-radius: 2px; flex-shrink: 0; background: color-mix(in srgb, var(--muted) 30%, transparent); overflow: hidden; }
+.voice-level-fill { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s linear; }
 .input.enh-locked { opacity: .6; cursor: progress; }
 .ctx-line { margin-bottom: 4px; }
 .ctx { font-size: calc(11px * var(--fs, 1)); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 4px; }
