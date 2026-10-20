@@ -42,7 +42,13 @@
   // text nodes, but no tag should be left in it either.)
   const stripTags = (s) => {
     let prev;
-    do { prev = s; s = s.replace(/<!--[\s\S]*?-->/g, "").replace(/<\/?(?!https?:)[A-Za-z][^>]*>/g, ""); } while (s !== prev);
+    do {
+      prev = s;
+      s = s
+        .replace(/<!--[\s\S]*?-->/g, "")
+        .replace(/<\/?(?!https?:)[A-Za-z][^>]*>/g, "")
+        .replace(/[<>]/g, "");
+    } while (s !== prev);
     return s;
   };
   const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", copy: "©", mdash: "—", ndash: "–", hellip: "…" };
