@@ -113,6 +113,9 @@ jobs:
           grep -q '"nameLong": "Kural Code Editor"' /usr/share/kural/resources/app/product.json
           test -f /usr/share/kural/resources/app/extensions/kural/package.json
           test -f /usr/share/applications/kural.desktop
+          # Only Kural's own menu entries (VSCodium's com.visualstudio.CodeOSS.desktop made a second dock icon)
+          test "$(dpkg -L kural | grep '\.desktop$' | sort | tr '\n' ' ')" = "/usr/share/applications/kural-url-handler.desktop /usr/share/applications/kural.desktop "
+          grep -q '"linuxDesktopName": "kural"' /usr/share/kural/resources/app/product.json
       - name: Open the window
         run: |
           sudo apt-get install -y -qq xvfb

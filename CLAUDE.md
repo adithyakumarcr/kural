@@ -652,6 +652,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   product.json `reportIssueUrl`/`licenseUrl` → Kural's repository. Other VSCodium links (`serverDownloadUrlTemplate`,
   tunnel mutex names) are internal and stay. Test: `test/rebrand-welcome.test.js` (a stand-in app folder, and a real
   workbench file when one is around).
+- **One dock icon on Linux**: VS Code names the window (Wayland app_id) after product.json `linuxDesktopName` when
+  `/usr/share/applications/<it>.desktop` exists. VSCodium 1.140 ships `com.visualstudio.CodeOSS.desktop` (pointing at
+  /usr/share/codium, icon "vscodium"): left in the .deb, it made a second, gear-shaped dock icon. `rebrand.py` sets
+  `linuxDesktopName` to `kural` and `make-deb.sh` deletes every desktop/appdata file VSCodium ships; CI checks that only
+  kural.desktop and kural-url-handler.desktop are installed.
 - **Mac helper apps**: Electron finds them by the app's CFBundleName ("Kural" → `Kural Helper (GPU).app` …). `build-mac.sh`
   renames the program, the 4 helpers and `bin/kural` together; a mismatch crashes the app at launch. CI opens the real
   app on all three systems (not just `--version`, which never starts the helpers).

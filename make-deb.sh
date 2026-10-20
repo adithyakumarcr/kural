@@ -41,7 +41,9 @@ python3 scripts/rebrand.py "$A/resources/app" linux
 python3 scripts/sbom.py "dist/kural-${VER%%+*}-linux-x64.cdx.json" --app-root "$A/resources/app" --platform linux-x64
 
 # 4. Desktop menu entries, icon, shell completions, mime
-rm -f "$R"/usr/share/applications/codium*.desktop "$R/usr/share/pixmaps/vscodium.png" "$R/usr/share/appdata/codium.appdata.xml"
+# (Every menu entry VSCodium ships: newer ones are com.visualstudio.CodeOSS*.desktop, which pointed at the missing
+#  /usr/share/codium and showed as a second, gear-shaped dock icon. Kural writes its own two below.)
+rm -f "$R"/usr/share/applications/*.desktop "$R/usr/share/pixmaps/vscodium.png" "$R"/usr/share/appdata/*.xml "$R"/usr/share/metainfo/*.xml
 cp assets/icon.png "$R/usr/share/pixmaps/$NAME.png"
 # Icons in every size the desktop asks for (dock, app grid, window switcher)
 for s in 16 24 32 48 64 128 256 512; do

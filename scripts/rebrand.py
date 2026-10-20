@@ -34,6 +34,9 @@ def main(app, platform):
     d = load(p)
     d.update(nameShort=TITLE, nameLong=LONG, applicationName=NAME,
              dataFolderName=f".{NAME}", sharedDataFolderName=f".{NAME}-shared", linuxIconName=NAME, urlProtocol=NAME,
+             # The window's id on Linux (Wayland app_id): VS Code names it after /usr/share/applications/<this>.desktop.
+             # VSCodium's "com.visualstudio.CodeOSS" gave Kural a second dock icon (a gear) beside kural.desktop's.
+             linuxDesktopName=NAME,
              serverApplicationName=f"{NAME}-server", serverDataFolderName=f".{NAME}-server",
              tunnelApplicationName=f"{NAME}-tunnel", darwinBundleIdentifier=f"com.{NAME}",
              win32DirName=TITLE, win32NameVersion=LONG, win32RegValueName=TITLE,

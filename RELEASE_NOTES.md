@@ -16,6 +16,8 @@
 - **See what a plugin adds before you install it.** A plugin's page lists each skill, command and agent with its
   description, the hooks it runs by itself and its MCP servers (with the program or address each one uses), and shows
   its README. For a plugin that isn't installed yet, Kural reads this from its GitHub repository.
+- **Fixed on Linux:** a second, gear-shaped icon showed in the dock while Kural ran (VSCodium's own menu entry was
+  left in the package); now Kural opens in its own icon.
 
 ## What's new in 1.1.0
 
