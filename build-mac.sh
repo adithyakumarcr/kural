@@ -53,13 +53,15 @@ def edit(path, **changes):
 edit(f"{app}/Contents/Info.plist", CFBundleName="Kural", CFBundleDisplayName="Kural", CFBundleExecutable="Kural",
      CFBundleIdentifier="com.kural", CFBundleIconFile="Kural.icns")
 # The texts macOS shows if something asks for a permission. They don't ask for anything by themselves, and they stay:
-# without one, macOS closes the whole app when an extension tries that device. Kural itself uses none of them, so
-# macOS never shows them. (Built on Linux, the signature also doesn't allow camera or microphone at all; built on a Mac
-# it's a plain ad-hoc signature, where macOS would ask first.) The prompts people saw (Music, Photos, Documents…) came
-# from looking through the home folder, which Kural doesn't do (lib/paths.js).
+# without one, macOS closes the whole app when an extension tries that device. Kural itself uses only the microphone,
+# and only while you record a voice prompt in the chat (lib/voice): macOS asks once, at the first recording. (Built on
+# Linux, the signature allows the microphone and not the camera; built on a Mac it's a plain ad-hoc signature, where
+# macOS asks first.) The prompts people saw (Music, Photos, Documents…) came from looking through the home folder, which
+# Kural doesn't do (lib/paths.js).
 with open(f"{app}/Contents/Info.plist", "rb") as f: d = plistlib.load(f)
 for k in [k for k in d if k.endswith("UsageDescription")]:
     d[k] = d[k].replace("Visual Studio Code", "Kural")
+d["NSMicrophoneUsageDescription"] = "Kural uses the microphone only while you record a voice prompt in the chat."
 with open(f"{app}/Contents/Info.plist", "wb") as f: plistlib.dump(d, f)
 for h in glob.glob(f"{app}/Contents/Frameworks/Kural Helper*.app"):
     name = os.path.basename(h)[:-4]                       # "Kural Helper (GPU)"
@@ -91,7 +93,7 @@ else
       echo '</dict></plist>'; } > "$f"; }
   E="$WORK/entitlements"; mkdir -p "$E"
   DLV=cs.disable-library-validation
-  ent "$E/main.plist"     cs.allow-jit automation.apple-events $DLV   # (no camera or microphone: Kural doesn't use them)
+  ent "$E/main.plist"     cs.allow-jit automation.apple-events device.audio-input $DLV   # (the microphone for voice input; no camera)
   ent "$E/renderer.plist" cs.allow-jit $DLV
   ent "$E/plugin.plist"   cs.allow-jit cs.allow-unsigned-executable-memory $DLV
   ent "$E/plain.plist"    $DLV
