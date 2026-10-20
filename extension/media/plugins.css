@@ -106,3 +106,44 @@ body.details { background: var(--vscode-editor-background); }
 .inv .v { line-height: 1.5; word-break: break-word; }
 .page .cost { margin: 10px 0 0; color: var(--muted); font-size: calc(12.5px * var(--fs, 1)); }
 .page .gone { color: var(--muted); margin-top: 20px; }
+.page .cost.loading .codicon { font-size: calc(13px * var(--fs, 1)); animation: spin 1s linear infinite; vertical-align: -2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.page .summary { margin: 0 0 4px; color: var(--muted); font-size: calc(12.5px * var(--fs, 1)); }
+.grp { margin: 16px 0 0; }
+.grp h3 { font-size: calc(13.5px * var(--fs, 1)); font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; }
+.grp h3 .count { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 9px; font-size: calc(10.5px * var(--fs, 1)); padding: 0 6px; line-height: 1.6; font-weight: 400; }
+.grp .hint { margin: 3px 0 8px; color: var(--muted); font-size: calc(12px * var(--fs, 1)); }
+.grp .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.grp .item { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; min-width: 0; background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent); }
+.grp .iname { font-weight: 600; font-family: var(--vscode-editor-font-family, monospace); font-size: calc(12.5px * var(--fs, 1)); word-break: break-word; }
+.grp .iname a { color: inherit; }
+.grp .iabout { margin-top: 3px; color: var(--muted); font-size: calc(12px * var(--fs, 1)); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.grp .idetail { margin: 6px 0 0; padding: 5px 7px; border-radius: 4px; background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.12)); font-family: var(--vscode-editor-font-family, monospace);
+  font-size: calc(11.5px * var(--fs, 1)); white-space: pre-wrap; word-break: break-all; }
+.grp .more { margin-top: 8px; background: none; border: 0; padding: 0; color: var(--vscode-textLink-foreground); font-size: calc(12.5px * var(--fs, 1)); }
+.grp .more:hover { text-decoration: underline; }
+
+/* ---------- the README (drawn as plain DOM by plugin-details.js) ---------- */
+.md { line-height: 1.6; font-size: calc(13px * var(--fs, 1)); word-wrap: break-word; }
+.md > :first-child { margin-top: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table { margin: 0 0 12px; }
+.md .md-h { font-weight: 600; margin: 22px 0 8px; line-height: 1.3; }
+.md h3.md-h { font-size: calc(19px * var(--fs, 1)); padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+.md h4.md-h { font-size: calc(16px * var(--fs, 1)); padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.md h5.md-h { font-size: calc(14px * var(--fs, 1)); }
+.md h6.md-h { font-size: calc(13px * var(--fs, 1)); color: var(--muted); }
+.md ul, .md ol { padding-left: 24px; }
+.md li { margin: 2px 0; }
+.md li > p, .md li > ul, .md li > ol { margin: 4px 0; }
+.md .md-task { font-size: calc(13px * var(--fs, 1)); margin-right: 6px; vertical-align: -2px; color: var(--muted); }
+.md code { font-family: var(--vscode-editor-font-family, monospace); font-size: .92em; background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.15)); padding: 1px 4px; border-radius: 3px; }
+.md pre { background: var(--vscode-textCodeBlock-background, rgba(128,128,128,.12)); padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; font-size: calc(12px * var(--fs, 1)); white-space: pre; }
+.md blockquote { border-left: 3px solid var(--border); padding: 0 12px; color: var(--muted); }
+.md hr { border: 0; border-top: 1px solid var(--border); margin: 18px 0; }
+.md .md-table { overflow-x: auto; }
+.md table { border-collapse: collapse; font-size: calc(12.5px * var(--fs, 1)); }
+.md th, .md td { border: 1px solid var(--border); padding: 4px 10px; text-align: left; vertical-align: top; }
+.md th { font-weight: 600; background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent); }
+.md a .codicon { font-size: calc(13px * var(--fs, 1)); margin-right: 3px; vertical-align: -2px; }
+.md .md-alt { color: var(--muted); font-style: italic; }

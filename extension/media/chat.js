@@ -11,6 +11,7 @@ window.KURAL_CHAT = function (app, port) {
     tabs: [], activeId: null, tab: null,
     models: [], efforts: [], modes: [], teamSizes: [2, 3, 4, 5], version: "",
     attachments: [], setups: {},
+    slash: {},    // tab id -> { items: [{ name, description, hint, aliases, builtin }], why? }: the "/" list (lib/chat/slash.js)
     files: [], popup: null, menu: null,
     history: [], showHistory: false, historyQuery: "", historyScope: "all", hereName: "", confirmDelete: null, renaming: null,
   };
@@ -343,9 +344,14 @@ window.KURAL_CHAT = function (app, port) {
   const ctxEl = el("button", { class: "ctx-meter hidden", "aria-label": "Open AI Usage", onclick: () => post({ type: "showUsage" }) });
   const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
   const editBar = el("div", { class: "edit-bar hidden" });   // "Editing an earlier message …" (startEdit)
-  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, chipsEl, input,
+  // Enhance prompt (lib/enhance): what it's doing while it looks through the project, then Undo; or what went wrong.
+  const enhanceBar = el("div", { class: "enh-bar hidden", role: "status", "aria-live": "polite" });
+  const enhanceBtn = el("button", { class: "enhance-btn", "aria-label": "Enhance prompt",
+    title: "Enhance prompt\nA quicker model (Claude Sonnet, or ChatGPT's or Gemini's equivalent) looks through this project, read only, and rewrites what you typed into a clearer prompt with pointers to the right files. You check it, then send.",
+    onclick: () => startEnhance() }, icon("wand"));
+  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, enhanceBar, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }), ctxEl,
-      queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
+      enhanceBtn, queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
   const visitBar = el("div", { class: "visit hidden" });
   const body = el("div", { class: "body" }, listEl, historyEl, localEl, jumpBtn);
@@ -464,7 +470,7 @@ window.KURAL_CHAT = function (app, port) {
         el("div", { class: "brand" }, "Kural"),
         el("div", { class: "brand-sub" }, "AI-powered code editor"),
         el("div", { class: "tagline" }, "A weapon, a voice for your ideas."),
-        el("div", { class: "hints" }, hint("@", "mention a file"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
+        el("div", { class: "hints" }, hint("@", "mention a file"), hint("/", "skills"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
         S.version ? el("div", { class: "version" }, S.version) : null));
     } else {
       t.messages.forEach((m, i) => listEl.append(messageNode(m, i)));
@@ -584,6 +590,76 @@ window.KURAL_CHAT = function (app, port) {
     const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
   }
   function cancelEdit() { if (!S.editing) return; S.editing = null; input.replaceChildren(); renderEditBar(); renderAll(); }
+
+  // --- Enhance prompt ---
+  // S.enh: { tabId, id, state: running | done | error, status, before (the box as it was), key (what was sent), label, … }.
+  // The box is locked while it works; the result replaces your text (the @ mentions stay, after it); Undo puts back what
+  // you had. Nothing is sent: you check it and press Send.
+  function startEnhance() {
+    const t = S.tab;
+    if (!t || t.visiting) return;
+    if (S.enh && S.enh.state === "running") return;
+    const segments = readInput();
+    if (!segments.some((x) => x.t === "text" && x.v.trim())) { flash("Write your request first, then enhance it", 2200); input.focus(); return; }
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    S.enh = { tabId: t.id, id, state: "running", status: "Starting…", before: [...input.childNodes].map((n) => n.cloneNode(true)), key: JSON.stringify(segments), t0: Date.now() };
+    input.setAttribute("contenteditable", "false"); input.classList.add("enh-locked");
+    closePopup();
+    post({ type: "enhance", tabId: t.id, requestId: id, segments });
+    renderEnhance();
+  }
+  function stopEnhance() { if (S.enh && S.enh.state === "running") post({ type: "enhanceStop", tabId: S.enh.tabId }); }
+  function unlockInput() { input.setAttribute("contenteditable", "plaintext-only"); input.classList.remove("enh-locked"); }
+  // The improved prompt into the box: your @ mentions (pills) stay, after it.
+  function putPrompt(text) {
+    const pills = [...input.querySelectorAll(".pill")].map((n) => n.cloneNode(true));
+    input.replaceChildren(document.createTextNode(text), ...(pills.length ? [document.createTextNode("\n"), ...pills.flatMap((p) => [p, document.createTextNode(" ")])] : []));
+    input.focus();
+    const r = document.createRange(); r.selectNodeContents(input); r.collapse(true);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    input.scrollTop = 0;
+    renderQueueBtn();
+  }
+  function undoEnhance() {
+    if (!S.enh || !S.enh.before) return;
+    input.replaceChildren(...S.enh.before.map((n) => n.cloneNode(true)));
+    S.enh = null; renderEnhance(); input.focus(); renderQueueBtn();
+  }
+  function onEnhanceState(m) {
+    const E = S.enh;
+    if (!E || m.id !== E.id || E.state !== "running") return;
+    if (m.state === "running") { E.status = m.status || E.status; renderEnhance(); return; }
+    unlockInput();
+    if (m.state === "done") {
+      Object.assign(E, { state: "done", label: m.label, calls: m.calls, ms: m.ms, dropped: (m.dropped || []).length, flagged: (m.flagged || []).length, prompt: m.prompt });
+      putPrompt(m.prompt);
+    } else Object.assign(E, { state: "error", kind: m.kind, message: m.message || "It didn't work.", label: m.label });
+    renderEnhance();
+  }
+  function renderEnhance() {
+    const E = S.enh;
+    enhanceBtn.classList.toggle("busy", !!(E && E.state === "running"));
+    enhanceBtn.classList.toggle("hidden", !!(S.tab && S.tab.visiting));
+    enhanceBar.classList.toggle("hidden", !E);
+    enhanceBar.classList.toggle("err", !!(E && E.state === "error"));
+    if (!E) { enhanceBar.replaceChildren(); return; }
+    const secs = (ms) => `${Math.max(1, Math.round(ms / 1000))} s`;
+    if (E.state === "running") {
+      enhanceBar.replaceChildren(el("i", { class: "codicon codicon-loading codicon-modifier-spin", "aria-hidden": "true" }),
+        el("span", { class: "enh-text", title: E.status }, E.status), el("button", { class: "cb", onclick: () => stopEnhance() }, "Stop"));
+    } else if (E.state === "done") {
+      const what = `Rewritten by ${E.label || "the enhancer"} (${E.calls} look${E.calls === 1 ? "" : "s"}, ${secs(E.ms)})` +
+        (E.dropped ? ` · ${E.dropped} unverified pointer${E.dropped === 1 ? "" : "s"} removed` : "") +
+        (E.flagged ? ` · ${E.flagged} file${E.flagged === 1 ? "" : "s"} with suspicious instructions marked` : "") + " · check it, then send";
+      enhanceBar.replaceChildren(icon("wand"), el("span", { class: "enh-text", title: what }, what),
+        el("button", { class: "cb", title: "Put back what you had typed", onclick: () => undoEnhance() }, "Undo"),
+        el("button", { class: "cb x", "aria-label": "Close", title: "Keep it and close this note", onclick: () => { S.enh = null; renderEnhance(); } }, icon("close")));
+    } else {
+      enhanceBar.replaceChildren(icon("warning"), el("span", { class: "enh-text", title: E.message }, E.message),
+        E.kind !== "empty" && E.kind !== "unavailable" && E.kind !== "stopped" && el("button", { class: "cb", onclick: () => { S.enh = null; startEnhance(); } }, "Try again"),
+        el("button", { class: "cb x", "aria-label": "Close", onclick: () => { S.enh = null; renderEnhance(); } }, icon("close")));
+    }
+  }
   function renderEditBar() {
     const on = S.editing && S.tab && S.editing.tabId === S.tab.id;
     editBar.classList.toggle("hidden", !on);
@@ -1051,6 +1127,7 @@ window.KURAL_CHAT = function (app, port) {
     const t = S.tab;
     if (!t || t.visiting) return;
     if (isEmptyInput() && !S.attachments.length) return;
+    if (S.enh && S.enh.state === "running") { flash("Enhance is still working on it: wait, or press Stop", 2200); return; }
     if (t.status !== "idle" && S.editing && S.editing.tabId === t.id) return busyNote();   // (an edit waits for the answer)
     const segments = readInput();
     const contexts = segments.filter((s) => s.t === "pill").map((s) => s.ctx);
@@ -1060,6 +1137,7 @@ window.KURAL_CHAT = function (app, port) {
     const editIndex = S.editing && S.editing.tabId === t.id ? S.editing.index : undefined;
     post({ type: "send", tabId: t.id, requestId, segments, contexts, attachments: S.pendingSend.attachments, editIndex });
     closePopup(); closeHistory();
+    if (S.enh && S.enh.state !== "running") { S.enh = null; renderEnhance(); }
   }
 
   // Kural took the message you sent (as a new message, or into the queue): the box and its attachments empty (only if
@@ -1160,7 +1238,7 @@ window.KURAL_CHAT = function (app, port) {
     addToChat: ({ text, label }) => { const line = label.replace(/\s+/g, " "), t = text.length > MAX_QUOTE ? `${text.slice(0, MAX_QUOTE)}…` : text;
       insertPill({ kind: "quote", text: t, label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line }); input.focus(); } });
 
-  // --- @ mentions ---
+  // --- @ mentions, and "/" for your skills and commands ---
 
   function checkMention() {
     const sel = window.getSelection();
@@ -1169,11 +1247,33 @@ window.KURAL_CHAT = function (app, port) {
     const node = r.startContainer;
     if (node.nodeType !== 3 || !input.contains(node)) return closePopup();
     const before = node.data.slice(0, r.startOffset);
+    // "/" as the first thing in the box: Claude runs a skill or command only when the message starts with it.
+    const sl = before.match(/^\/([^\s/]*)$/);
+    if (sl && atStart(node)) {
+      S.popup = { kind: "slash", node, start: 0, end: r.startOffset, query: sl[1], index: 0, items: [] };
+      return renderPopup();
+    }
     const m = before.match(/(?:^|\s)@([^\s@]*)$/);
     if (!m) return closePopup();
     if (!S.files.length) post({ type: "files" });
-    S.popup = { node, start: r.startOffset - m[1].length - 1, end: r.startOffset, query: m[1], index: 0, items: [] };
+    S.popup = { kind: "file", node, start: r.startOffset - m[1].length - 1, end: r.startOffset, query: m[1], index: 0, items: [] };
     renderPopup();
+  }
+  // Nothing before this text node in the box (no pill, no earlier line).
+  function atStart(node) {
+    const r = document.createRange(); r.selectNodeContents(input); r.setEnd(node, 0);
+    return !r.toString().trim() && !r.cloneContents().querySelector(".pill");
+  }
+
+  // Best first: the name (or an alias, or the part after "plugin:") starting with what you typed, then names containing
+  // it, then descriptions containing it.
+  function slashScore(c, q) {
+    if (!q) return 1;
+    const ql = q.toLowerCase(), names = [c.name, ...(c.aliases || []), c.name.split(":").pop()].map((n) => n.toLowerCase());
+    if (names.some((n) => n === ql)) return 100;
+    if (names.some((n) => n.startsWith(ql))) return 90 - c.name.length / 100;
+    if (names.some((n) => n.includes(ql))) return 70 - c.name.length / 100;
+    return (c.description || "").toLowerCase().includes(ql) ? 30 : 0;
   }
 
   function score(path, q) {
@@ -1189,6 +1289,7 @@ window.KURAL_CHAT = function (app, port) {
   function renderPopup() {
     const P = S.popup;
     if (!P) return;
+    if (P.kind === "slash") return renderSlash(P);
     P.items = S.files.map((f) => [score(f, P.query), f]).filter((x) => x[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 12).map((x) => x[1]);
     P.index = Math.min(P.index, Math.max(0, P.items.length - 1));
     popupEl.classList.remove("hidden");
@@ -1199,9 +1300,33 @@ window.KURAL_CHAT = function (app, port) {
     popupEl.replaceChildren(...rows);
   }
 
+  function renderSlash(P) {
+    const list = S.tab && S.slash[S.tab.id] || { items: [], why: "Loading your skills…" };
+    P.items = list.items.map((c) => [slashScore(c, P.query), c]).filter((x) => x[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 50).map((x) => x[1]);
+    P.index = Math.min(P.index, Math.max(0, P.items.length - 1));
+    popupEl.classList.remove("hidden");
+    const rows = P.items.length
+      ? P.items.map((c, i) => el("div", { class: `pop-item pop-cmd ${i === P.index ? "sel" : ""}`, title: c.description || c.name, onmousedown: (e) => { e.preventDefault(); P.index = i; pickMention(); } },
+        el("span", { class: "pop-name" }, `/${c.name}`), c.hint && el("span", { class: "pop-hint" }, c.hint), el("span", { class: "pop-desc" }, c.description || "")))
+      : [el("div", { class: "pop-empty" }, list.items.length ? "No skill or command matches" : list.why || "No skills or commands")];
+    popupEl.replaceChildren(...rows);
+    const sel = popupEl.querySelector(".pop-item.sel");
+    if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: "nearest" });
+  }
+
   function pickMention() {
     const P = S.popup;
     if (!P || !P.items.length) return;
+    if (P.kind === "slash") {
+      // "/brain" → "/superpowers:brainstorming " (what you typed after it stays).
+      const c = P.items[P.index], r = document.createRange();
+      r.setStart(P.node, 0); r.setEnd(P.node, Math.min(P.node.data.length, P.end));
+      closePopup();
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      const after = P.node.data.slice(Math.min(P.node.data.length, P.end));
+      document.execCommand("insertText", false, `/${c.name}${/^\s/.test(after) ? "" : " "}`);
+      return;
+    }
     const file = P.items[P.index];
     const r = document.createRange();
     r.setStart(P.node, Math.max(0, P.start)); r.setEnd(P.node, Math.min(P.node.data.length, P.end));
@@ -1229,7 +1354,9 @@ window.KURAL_CHAT = function (app, port) {
   new ResizeObserver(() => { if (stick) toBottom(); }).observe(composer);
   input.addEventListener("keydown", (e) => {
     const P = S.popup;
-    if (P) {
+    // (No skill matches what you typed: Enter sends it as it is.)
+    if (P && P.kind === "slash" && !P.items.length && e.key === "Enter") closePopup();
+    else if (P) {
       if (e.key === "ArrowDown") { e.preventDefault(); P.index = Math.min(P.items.length - 1, P.index + 1); renderPopup(); return; }
       if (e.key === "ArrowUp") { e.preventDefault(); P.index = Math.max(0, P.index - 1); renderPopup(); return; }
       if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(); return; }
@@ -1698,7 +1825,7 @@ ${d.system}` : ""}`,
         break;
       case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
-      case "full": S.tab = m.tab; renderAll(); renderEditBar(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
+      case "full": S.tab = m.tab; renderAll(); renderEditBar(); renderEnhance(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "openLocal": closeMenu(); openLocal(); break;
       // Auto mode, a big task: "Use 3 agents?" for 15 s above the box; no answer = one agent.
       case "teamOffer": S.offers[m.tabId] = { id: m.id, agents: m.agents, until: Date.now() + m.seconds * 1000 }; renderOffer(); break;
@@ -1786,6 +1913,8 @@ ${d.system}` : ""}`,
         pasteRange = null; break;
       case "focus": input.focus(); break;
       case "setup": S.setups[m.tabId] = m.setup; if (S.menu === "model") openMenu.refresh(); break;
+      case "enhanceState": onEnhanceState(m); break;
+      case "slash": S.slash[m.tabId] = m.slash; if (S.popup && S.popup.kind === "slash" && S.tab && S.tab.id === m.tabId) renderPopup(); break;
       case "attached": S.attachments.push(...m.items); renderChips(); input.focus(); break;
       case "userAttachments": if (mine) {
         for (let i = S.tab.messages.length - 1; i >= 0; i--) if (S.tab.messages[i].role === "user") { S.tab.messages[i].attachments = m.attachments; scheduleRerender(i); break; }

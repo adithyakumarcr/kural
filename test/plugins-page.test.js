@@ -49,7 +49,11 @@ function load() {
 }
 
 const CAN = { claude: { available: true, toggle: true, update: true, marketplaces: true }, codex: { available: true, toggle: false, marketplaces: true }, agy: { toggle: true, folder: true, git: true } };
-const P = (name, o = {}) => ({ id: `${name}@anthropic-plugin-directory`, name, marketplace: "anthropic-plugin-directory", version: "1.0.0", description: `About ${name}`, author: "", installed: false, enabled: false, readOnly: false, installable: true, ...o });
+const P = (name, o = {}) => {
+  const id = `${name}@anthropic-plugin-directory`, scope = o.scope || (o.installed ? "user" : "");
+  return { id, key: o.installed && scope !== "user" ? `${id}#${scope}` : id, name, marketplace: "anthropic-plugin-directory", version: "1.0.0", description: `About ${name}`, author: "",
+    installed: false, enabled: false, readOnly: false, installable: true, scope, ...o };
+};
 const base = (o = {}) => ({ type: "state", ai: "claude", chatAI: "claude", names: { claude: "Claude", codex: "ChatGPT (Codex)", agy: "Google Gemini" },
   ais: [{ id: "claude", name: "Claude" }, { id: "codex", name: "ChatGPT (Codex)" }, { id: "agy", name: "Google Gemini" }], loading: false, error: "", notSetUp: false, can: CAN.claude,
   fullSetupOff: false, installed: [], marketplaces: [{ name: "anthropic-plugin-directory", label: "Anthropic's plugin directory", source: "built in", removable: false }],
@@ -104,14 +108,26 @@ const kinds = (rows) => rows.kids.map((r) => r._cls.has("head") ? `head:${byClas
     assert.deepStrictEqual(p.posted.slice(1), [{ type: "install", id: "elements-of-style@anthropic-plugin-directory" }, { type: "disable", id: "superpowers@anthropic-plugin-directory" }, { type: "uninstall", id: "superpowers@anthropic-plugin-directory" }]);
   });
 
-  await check("a click on the row opens its page; one a project set up has no buttons", () => {
+  await check("a click on the row opens its page; one your organisation set up (managed) has no buttons", () => {
     const p = load();
-    p.send(base({ installed: [P("team-tool", { installed: true, enabled: true, readOnly: true })] }));
+    p.send(base({ installed: [P("team-tool", { installed: true, enabled: true, readOnly: true, scope: "managed" })] }));
     const row = p.rows.kids.find((r) => r._cls.has("plugin"));
     assert.deepStrictEqual(all(row, (k) => k.tag === "button"), []);
-    assert.strictEqual(byClass(row, "tag")[0].textContent, "This project");
+    assert.strictEqual(byClass(row, "tag")[0].textContent, "Organisation");
     row.fire("click");
-    assert.deepStrictEqual(p.posted.slice(-1)[0], { type: "details", id: "team-tool@anthropic-plugin-directory" });
+    assert.deepStrictEqual(p.posted.slice(-1)[0], { type: "details", id: "team-tool@anthropic-plugin-directory#managed" });
+  });
+
+  await check("Claude: one plugin installed for all projects and for this one: two rows, each says where, each acts on its own", () => {
+    const p = load();
+    p.send(base({ project: "kural", installed: [P("superpowers", { installed: true, enabled: true }), P("superpowers", { installed: true, enabled: true, scope: "local" }),
+      P("team-tool", { installed: true, enabled: true, scope: "project" })] }));
+    const rows = p.rows.kids.filter((r) => r._cls.has("plugin"));
+    assert.deepStrictEqual(rows.map((r) => byClass(r, "tag").map((t) => t.textContent).join()), ["", "This project, only me", "This project"]);
+    assert.match(byClass(rows[1], "tag")[0].attrs.title, /\(kural\), only for you/);
+    all(rows[1], (k) => k.tag === "button")[1].fire("click");   // (Remove)
+    all(rows[0], (k) => k.tag === "button")[0].fire("click");   // (Turn Off)
+    assert.deepStrictEqual(p.posted.slice(1), [{ type: "uninstall", id: "superpowers@anthropic-plugin-directory#local" }, { type: "disable", id: "superpowers@anthropic-plugin-directory" }]);
   });
 
   await check("a section folds, and stays folded (kept in the page's state)", () => {

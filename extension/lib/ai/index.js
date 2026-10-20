@@ -91,7 +91,7 @@ function cliAgent(id, model, opts, handlers) {
   const json = opts.jsonSchema ? `\n\nAnswer with only one JSON object (no other text, no code fence) that matches this JSON schema: ${JSON.stringify(opts.jsonSchema)}` : "";
   const options = { name: opts.name, bin: c.bin, model: cliModel(model), models: c.models, effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
     cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs, appendSystemPrompt: (opts.appendSystemPrompt || "") + json,
-    mcpServers: opts.mcpServers, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStores[id] || cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
+    mcpServers: opts.mcpServers, lockTools: opts.lockTools, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStores[id] || cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
   if (opts.teamConfig) return new (require("../chat/team-agent").TeamAgent)({ ...options, teamConfig: opts.teamConfig }, handlers,
     (o, h) => new CLIS[id].Agent(o, h));
   return new CLIS[id].Agent(options, handlers);

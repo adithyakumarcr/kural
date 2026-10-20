@@ -7,13 +7,15 @@
 //   - without that patch (another VSCodium's code): in a side bar of its own, view "kural.pluginsAlone".
 // The page (media/plugins.js) follows the chat's model: Claude's plugins for a Claude model, Codex's for ChatGPT,
 // Antigravity's for Gemini; a model on this computer has none. You can look at another AI's without changing the chat.
-// Installing asks first (where it comes from; a plugin runs code as you). The AI's chats then pick it up: Claude's
+// Installing asks first (where it comes from; a plugin runs code as you; Claude: where it goes, all your projects or the
+// open one). The AI's chats then pick it up: Claude's
 // reload by themselves (lib/ai/claude-setup.js watches Claude Code's plugin files), Codex's and Gemini's at their next
 // message (chat.pluginsChanged).
 const vscode = require("vscode");
 const os = require("os");
 const crypto = require("crypto");
 const core = require("./core");
+const contents = require("./contents");
 const brain = require("../ai");
 const { withProfileEnv } = require("../profiles/env");
 const { fontScale, watchFontScale } = require("../ui");
@@ -23,6 +25,9 @@ const NAMES = { claude: "Claude", codex: "ChatGPT (Codex)", agy: "Google Gemini"
 const SHORT = { claude: "Claude", codex: "ChatGPT", agy: "Gemini" };
 const FRESH_MS = 60000;   // a list read less than a minute ago is shown as it is (Refresh reads it again)
 const DOING = { install: "Installing…", uninstall: "Removing…", enable: "Turning on…", disable: "Turning off…", update: "Updating…" };
+// Where a Claude plugin is installed (core.SCOPES), in words and on the Install question's buttons.
+const WHERE = { user: "all your projects", project: "this project, shared", local: "this project, only you" };
+const WHERE_BUTTON = { user: "All My Projects", project: "This Project (Shared)", local: "This Project, Only Me" };
 const RISK = (ai) => `A plugin runs code on your computer as you: its hooks and MCP servers start with ${SHORT[ai]}, and Kural's ` +
   "approval cards don't ask about them. Install only plugins you trust.";
 // "15 skills, 1 hook" (from agy's validate: { skills, agents, hooks, mcpServers, rules })
@@ -43,6 +48,7 @@ class Plugins {
     this.picked = null;       // an AI you picked on the page (null: the chat's)
     this.followed = this.chatAI();
     this.details = null;      // the details tab: { panel, ai, id, seq }
+    this.remote = new Map();  // what plugins that aren't installed hold, read from GitHub (contents.fromGitHub)
     this.patched = false;     // the Extensions side bar has the Plugins tab (rebrand.py)
   }
 
@@ -78,15 +84,16 @@ class Plugins {
 
   // Each AI's program and the environment to run it in (the profile's own Claude / Codex folders).
   program(ai) {
-    if (ai === "claude") { const c = require("../ai/claude"); return { bin: c.findClaude(), env: c.cleanEnv(), cwd: this.projectDir() }; }
+    if (ai === "claude") { const c = require("../ai/claude"), dir = this.projectDir(); return { bin: c.findClaude(), env: c.cleanEnv(), cwd: dir || os.tmpdir(), project: !!dir }; }
     const cli = brain.cli && brain.cli[ai];
     return { bin: cli && cli.bin ? cli.bin : null, env: withProfileEnv(), cwd: os.tmpdir() };
   }
-  // The project folder, when you trust it: Claude then lists the plugins that project set up too.
+  // The project folder, when you trust it (else null): Claude then lists, and can install, the plugins of that project.
   projectDir() {
     const f = vscode.workspace.workspaceFolders;
-    return vscode.workspace.isTrusted && f && f.length && f[0].uri.scheme === "file" ? f[0].uri.fsPath : os.tmpdir();
+    return vscode.workspace.isTrusted && f && f.length && f[0].uri.scheme === "file" ? f[0].uri.fsPath : null;
   }
+  projectName() { const d = this.projectDir(); return d ? require("path").basename(d) : ""; }
   // The chat's AI: claude | codex | agy | local.
   chatAI() { try { const e = brain.engineOf(brain.currentModel()); return core.AIS.includes(e) ? e : "local"; } catch { return "claude"; } }
   current() { return this.picked || (core.AIS.includes(this.chatAI()) ? this.chatAI() : null); }
@@ -128,7 +135,7 @@ class Plugins {
       loading: !!c.loading, error: c.error && c.error !== "not installed" ? c.error : "", notSetUp: !!ai && !this.program(ai).bin,
       can: ai ? core.CAN[ai] : null, fullSetupOff: ai === "claude" && !fullSetup,
       installed: c.data ? c.data.installed : [], marketplaces: c.data ? c.data.marketplaces : [], availableCount: c.data ? c.data.available.length : 0,
-      version: c.version || 0, busy: (ai && this.busy[ai]) || {} };
+      version: c.version || 0, busy: (ai && this.busy[ai]) || {}, project: ai === "claude" ? this.projectName() : "" };
   }
   // To every view: the state, and the list of plugins to add when it changed (3,500 for Claude: sent once per version).
   push() {
@@ -163,9 +170,10 @@ class Plugins {
 <body data-vscode-context='{"preventDefaultContextMenuItems": true}'><div id="app"></div><script nonce="${nonce}" src="${uri(script)}"></script></body></html>`;
   }
 
-  find(ai, id) {
+  // A row of the list by its key (a plugin installed in two places is two rows: see core.plugin).
+  find(ai, key) {
     const d = this.cache[ai] && this.cache[ai].data;
-    return d ? d.installed.find((x) => x.id === id) || d.available.find((x) => x.id === id) || null : null;
+    return d ? d.installed.find((x) => x.key === key) || d.available.find((x) => x.key === key) || null : null;
   }
 
   async onMessage(m) {
@@ -210,29 +218,48 @@ class Plugins {
     }
   }
 
-  // Install, remove, turn on or off, or update one plugin. accept: (Claude) the sha256 of a command you were shown.
-  async act(ai, what, id, accept) {
-    const pl = this.find(ai, id);
-    if (!pl || (this.busy[ai] || {})[id]) return;
-    if (what === "install" && !accept) {
-      const from = [pl.source, this.marketLabel(ai, pl.marketplace)].filter(Boolean).join(" · ");
-      if (!(await this.confirm(`Install ${pl.name} for ${SHORT[ai]}?`, `${from ? `From: ${from}\n\n` : ""}${RISK(ai)}`, "Install"))) return;
+  // Where to install a Claude plugin: all your projects, or only the one open (shared with its team, or only you).
+  // → "user" | "project" | "local" | null (cancelled). Codex and Gemini have one place: a plain Install question.
+  async askWhere(ai, pl) {
+    const from = [pl.source, this.marketLabel(ai, pl.marketplace)].filter(Boolean).join(" · ");
+    const head = `${from ? `From: ${from}\n\n` : ""}`;
+    const project = ai === "claude" ? this.projectName() : "";
+    if (!project) {
+      const only = ai === "claude" ? "It's installed for all your projects (open a project to install it for that project only).\n\n" : "";
+      return (await this.confirm(`Install ${pl.name} for ${SHORT[ai]}?`, `${head}${only}${RISK(ai)}`, "Install")) ? "user" : null;
     }
-    if (what === "uninstall" && !(await this.confirm(`Remove ${pl.name} from ${SHORT[ai]}?`, `${SHORT[ai]}'s chats won't use it any more.`, "Remove"))) return;
-    this.setBusy(ai, id, DOING[what]);
+    const choices = { [WHERE_BUTTON.user]: "user", [WHERE_BUTTON.project]: "project", [WHERE_BUTTON.local]: "local" };
+    const r = await vscode.window.showWarningMessage(`Install ${pl.name} for ${SHORT[ai]}?`, { modal: true, detail: `${head}Where:\n` +
+      `- All My Projects: every chat, in every folder.\n` +
+      `- This Project (Shared): only in ${project}, for everyone who works on it (saved in .claude/settings.json, which goes into Git with the project).\n` +
+      `- This Project, Only Me: only in ${project}, only for you (.claude/settings.local.json).\n\n${RISK(ai)}` }, ...Object.keys(choices));
+    return choices[r] || null;
+  }
+
+  // Install, remove, turn on or off, or update one plugin (key: its row, see find). accept: (Claude) the sha256 of a command
+  // you were shown; scope: where it's installed (asked when installing).
+  async act(ai, what, key, accept, scope) {
+    const pl = this.find(ai, key);
+    if (!pl || (this.busy[ai] || {})[key]) return;
+    if (pl.installed) scope = pl.scope;
+    else if (what === "install" && !accept) { scope = await this.askWhere(ai, pl); if (!scope) return; }
+    const where = ai === "claude" && scope && scope !== "user" ? ` (${WHERE[scope]})` : "";
+    if (what === "uninstall" && !(await this.confirm(`Remove ${pl.name} from ${SHORT[ai]}${where}?`, `${SHORT[ai]}'s chats${where ? " in this project" : ""} won't use it any more.`, "Remove"))) return;
+    this.setBusy(ai, key, DOING[what]);
     let r;
-    try { r = await core.act(ai, this.program(ai), what, { id, accept }); }
+    try { r = await core.act(ai, this.program(ai), what, { id: pl.id, accept, scope: ai === "claude" ? scope : undefined }); }
     catch (e) { r = { error: e.message }; }
-    finally { this.setBusy(ai, id, null); }
+    finally { this.setBusy(ai, key, null); }
     if (r.confirm) {
       // (Claude: its marketplace runs this command to install it; Claude Code wants a person to see it first.)
       if (await this.confirm(`${pl.name} is installed by running a command`, `Its marketplace runs this command on your computer:\n\n${r.confirm.command}\n\nRun it only if you trust where it comes from.`, "Run and Install"))
-        return this.act(ai, what, id, r.confirm.sha256);
+        return this.act(ai, what, key, r.confirm.sha256, scope);
       return;
     }
     if (r.error) {
-      const plain = { install: ai === "codex" ? ["plugin", "add", id] : ["plugin", "install", id], uninstall: ai === "codex" ? ["plugin", "remove", id] : ["plugin", "uninstall", id] }[what];
-      this.failed(ai, { install: `install ${pl.name}`, uninstall: `remove ${pl.name}`, enable: `turn ${pl.name} on`, disable: `turn ${pl.name} off`, update: `update ${pl.name}` }[what], ai === "agy" ? null : plain || ["plugin", what, id], r.error);
+      const id = pl.id, s = ai === "claude" && scope ? ["--scope", scope] : [];
+      const plain = { install: ai === "codex" ? ["plugin", "add", id] : ["plugin", "install", id, ...s], uninstall: ai === "codex" ? ["plugin", "remove", id] : ["plugin", "uninstall", id, ...s] }[what];
+      this.failed(ai, { install: `install ${pl.name}`, uninstall: `remove ${pl.name}`, enable: `turn ${pl.name} on`, disable: `turn ${pl.name} off`, update: `update ${pl.name}` }[what], ai === "agy" ? null : plain || ["plugin", what, id, ...s], r.error);
     } else {
       if (what === "update" && r.message) vscode.window.setStatusBarMessage(`Kural: ${r.message}`, 6000);
       this.changed(ai);
@@ -333,11 +360,14 @@ class Plugins {
   async refreshDetails() {
     const d = this.details;
     if (!d) return;
-    const pl = this.find(d.ai, d.id), seq = ++d.seq, key = pl ? `${pl.id}|${pl.installed}|${pl.fullVersion}` : "";
+    const pl = this.find(d.ai, d.id), seq = ++d.seq, key = pl ? `${pl.key}|${pl.installed}|${pl.fullVersion}` : "";
     if (d.infoKey !== key) d.info = null;
     this.postDetails();
-    if (!pl || !pl.installed || d.infoKey === key) return;
-    const info = await core.details(d.ai, this.program(d.ai), pl).catch(() => ({}));
+    if (!pl || d.infoKey === key) return;
+    // (Not installed: what its GitHub repository holds, at the commit its marketplace pins; read once per commit.)
+    if (!pl.installed && !pl.origin) { d.info = {}; d.infoKey = key; this.postDetails(); return; }
+    const info = pl.installed ? await core.details(d.ai, this.program(d.ai), pl).catch(() => ({}))
+      : await contents.fromGitHub(pl.origin, { cache: this.remote }).catch(() => ({ error: "Kural couldn't read this plugin's files on GitHub." }));
     if (this.details !== d || d.seq !== seq) return;
     d.info = info; d.infoKey = key;
     this.postDetails();

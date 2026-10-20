@@ -544,9 +544,21 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   feature and Kural's side by side; the plugins of whichever AI the chat's model is). Each AI's own plugin manager does the
   work. Claude: `claude plugin list --json --available` (Anthropic's built-in directory `anthropic-plugin-directory`, a few
   thousand, isn't in `marketplace list`; installed plugins aren't in `available`, their descriptions come from
-  `<installPath>/.claude-plugin/plugin.json`), `install|uninstall|enable|disable|update <id> --json` (one JSON line,
+  `<installPath>/.claude-plugin/plugin.json`), `install|uninstall|enable|disable|update <id> --json --scope user|project|local`
+  (Adithya, 20 Oct 2026: Install asks All My Projects / This Project (Shared) / This Project, Only Me when a trusted
+  project is open, `askWhere`; `list` shows EVERY project's project/local installs with `projectPath`, so `listClaude`
+  keeps only this project's (`sameDir`, real paths: /private/var on a Mac); one id can be installed in several scopes →
+  rows are keyed by `key` = id or `id#scope`, which the page, busy and details use; checked with Claude Code 2.1.296 in
+  a throwaway CLAUDE_CONFIG_DIR) (one JSON line,
   `outcome`; a marketplace-declared command comes back as `shownCommand {sha256}`: Kural shows the command, then
-  `--accept-command <sha>`), `details <id>` (text, installed only: `parseDetails`). Codex: `plugin list --json --available
+  `--accept-command <sha>`), `details <id>` (text, installed only: `parseDetails`). A plugin's page also lists each part with its own description,
+  the hooks/MCP servers with what they run, and the README (`contents.js`, no vscode: installed → its folder; not
+  installed → GitHub at the marketplace's pinned commit, `githubOrigin` from the source (url / git-subdir `ref:path` /
+  github): ONE unauthenticated API call `git/trees/<ref>:<dir>?recursive=1` (60 an hour per IP; 403/429 → "try again in
+  N minutes") + raw.githubusercontent.com for the files (not counted), cached per commit in `Plugins.remote`, failures
+  not kept; tested with real plugins on 20 Oct 2026). The README is drawn as DOM by `media/plugin-details.js`
+  (`markdown`, no innerHTML; HTML tags dropped, pictures → links, relative links → the GitHub page). Test:
+  `test/plugin-contents.test.js`. Codex: `plugin list --json --available
   | add | remove` (no enable/disable; no descriptions: from each marketplace root's catalog and the plugin's manifest in
   `<CODEX_HOME>/plugins/cache/<mp>/<name>/<version>`; Codex refuses a CODEX_HOME that doesn't exist). agy: `plugin list
   --json | install <folder> | uninstall|enable|disable <name> | validate <folder> --json`, no catalog: a folder, or an https
@@ -575,6 +587,34 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   checked: a real Gemini chat using a plugin's skills (agy wasn't logged in; Kural starts agy with
   `--disable-slash-commands`, which agy's help says also stops "skill expansion" in print mode), a real Codex chat with
   a plugin, Windows and Linux.
+- **The "/" list** (`lib/chat/slash.js` no vscode; Adithya, 20 Oct 2026: skills like Claude Code's own "/"): a chat's
+  Claude process sends the `initialize` control request at start (`opts.commands`, full setup only; no model request)
+  and Claude Code answers `{commands: [{name, description, argumentHint, aliases, builtin}]}`, later `commands_changed`
+  (`h.onCommands`, kept out of `onMessage` so `gotOutput` isn't set). `clean()` drops `SCREEN_ONLY` (Claude Code's own
+  screen: /model, /config, /mcp…) and `_` names. The page (`media/chat.js` `checkMention` → `renderSlash`) opens on "/"
+  as the first thing in the box. Claude Code runs a skill only when the message STARTS with "/name", so `slashOf` moves
+  it before everything Kural adds (handoff, notes, context: they become its arguments); its echo comes back as
+  `<command-name>/name</command-name>…` (`onEcho` matches it). Checked live: initialize doesn't change permission
+  prompts. Tests: `test/slash.test.js` (fake-claude-chat answers initialize).
+- **Enhance prompt** (`lib/enhance/`: `index.js` Enhancer, no vscode; `repo-tools.js` the sandbox; `repo-mcp.js` its MCP
+  server; `system-prompt.md` the prompt, read on every click; Adithya, 20 Oct 2026): the wand beside Send → `enhance` →
+  `chat.enhance` → a short-lived agent of the chat's AI's middle model (`pick`: Claude `claude-sonnet-5-5`; Codex/Gemini
+  `middleModel` by router `traits`: tier 2, else Flash at high effort) → `enhanceState` running/done/error → the page
+  puts the prompt in the box (pills kept) with Undo. No API key exists (the user's own CLIs, like every Kural chat; the
+  Agent SDK runs this same Claude Code binary). Safety is in code, not the prompt: Claude `--tools ""` + only
+  `mcp__kural_repo__*`, `--setting-sources ""` (safeMode + mcpServers), an empty cwd, `--max-turns`/`--max-budget-usd`
+  (`ClaudeProcess` opts `maxTurns`/`maxBudgetUsd`); Codex mode ask + `lockTools` (`TOOLS_OFF`: shell_tool, unified_exec,
+  view_image; `web_search="disabled"`). Codex 0.160 still LISTS unified_exec as on after the flag, and Codex wasn't
+  logged in here, so `step()` ends the run if Claude/Codex calls any tool but Kural's three. Gemini (agy has no
+  per-run MCP): its own tools, every call through the gate (`agyAllowed`: Read/list/find_by_name inside the root;
+  content search, commands, edits, web refused). `Repo.resolve`: inside the root as written AND as real path,
+  `SECRET_DIRS`/`SECRET_FILES` never read/listed/searched. Budget: `MAX_CALLS` counted in repo-mcp.js (then "write the
+  prompt now") and in `step()`, `TIMEOUT_MS`. Result: `extract` (only `<enhanced_prompt>`), `verifyPaths` (a bullet that
+  STARTS with a backticked path must exist, any language; `pathOf` skips symbols, globs, routes, packages). Tests:
+  `enhance-tools.test.js`, `enhance.test.js`, `enhance-chat.test.js`; live: `node test/enhance.live.js [codex]`
+  (fixture `test/fixtures/enhance-repo`, a planted .env and an injection note; all 5 cases passed with Sonnet 5.5,
+  7-14 s, 3-10 looks). NOT checked live: Codex and Gemini (neither logged in here), the page inside Kural itself (it was
+  driven in headless Chrome).
 - **Search & Ask** (`lib/search/`: `index.js` the view and Ask (always `brain.fastestModel()`: Haiku, or the lightest
   Codex/Gemini model by router `traits`, the chat's AI first; a local model only with no cloud AI; Adithya: Ask should
   be fast; no Auto routing there), `find.js` text search in the editor, `text.js` no

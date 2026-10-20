@@ -46,6 +46,16 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
   your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
+  Enhance prompt (the wand beside Send): your rough request goes to a quicker model (Claude Sonnet 5.5; for a ChatGPT or
+  Gemini chat their equivalent: Codex's workhorse model, Gemini's Flash) that looks through the open project, read only
+  (never secrets like .env or keys, never runs anything, at most 20 looks, 150 s), and rewrites it into a clear prompt:
+  goal, constraints, expected output, success criteria, "Relevant context" pointers to the right files (only files that
+  exist) and open questions. It keeps your language and adds no requirements of its own. While it works the line above
+  the box says what it does ("Sonnet 5.5: Reading src/api/client.ts"); Stop ends it. The result replaces your text (@
+  mentions stay); Undo puts back what you had. Nothing is sent: check it, then press Send for the chat's model.
+  "/" at the start of the message lists your skills and commands (Claude models with "Use my Claude Code setup" on: your
+  plugins' skills such as Superpowers' superpowers:brainstorming, your own, and Claude Code's like /code-review); type
+  to filter, Tab or Enter puts it in, then add what it's for and send.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
   beside it: it goes into your message as a quote, and the AI gets the whole selected text. Side chat: select text in an
@@ -158,9 +168,13 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Claude model, ChatGPT's for Codex, Gemini's for Gemini; a model on this computer has none); "Plugins for" shows another
   AI's without changing the chat. Search filters them. Claude: Installed, Available (Anthropic's plugin directory, a few
   thousand, and the marketplaces you add), Marketplaces (Add a Marketplace…: owner/repo such as
-  obra/superpowers-marketplace, an https Git address, or a folder); Install, Turn Off / On, Remove; click a plugin for
-  its page: where it comes from, what it adds (skills, agents, hooks, MCP servers), how many tokens it adds to every
-  chat, Update. ChatGPT (Codex): plugins come from the marketplaces you add (none at first); Install and Remove (Codex
+  obra/superpowers-marketplace, an https Git address, or a folder); Install, Turn Off / On, Remove. Claude's Install asks
+  where, when a project is open: All My Projects, This Project (Shared: in the project's .claude/settings.json, which
+  goes into Git, so teammates get it too) or This Project, Only Me (.claude/settings.local.json); such a plugin's row
+  says "This project" / "This project, only me" and its Turn Off and Remove act there; click a plugin for
+  its page: where it comes from, what it adds (each skill, command and agent with its description, the hooks and MCP
+  servers with what they run; for one that isn't installed yet, read from its GitHub repository), its README, how many
+  tokens it adds to every chat, Update. ChatGPT (Codex): plugins come from the marketplaces you add (none at first); Install and Remove (Codex
   can't turn one off). Gemini (Antigravity): no catalog: Add a plugin from a folder or a Git address (https; Antigravity
   checks it first), Turn Off / On, Remove. Installing always asks first and says where it comes from: a plugin runs code
   as you (its hooks and MCP servers start with that AI, and Kural's approval cards don't ask about them); one its
@@ -328,7 +342,7 @@ const GUIDE_LOCAL = `
 About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
 work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
 that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
-Ask; @ mentions a file; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
+Ask; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
 Fork from here; the clock button has every chat); Ctrl+K proposes changes to selected code in a read-only diff; Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Extensions & Plugins (the chat's AI's plugins beside VS
 Code's extensions); Kural's browser; devices over SSH; the Model Router (Auto);

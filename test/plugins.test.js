@@ -96,7 +96,32 @@ const claude = prog("claude"), codex = prog("codex"), agy = prog("agy");
     assert.ok((await core.act("claude", claude, "uninstall", { id: sp.id })).ok);
     assert.deepStrictEqual((await core.list("claude", claude)).installed, []);
   });
-
+  // Where it's installed: all your projects (user), this project shared (project), this project only you (local).
+  const projA = fs.mkdtempSync(path.join(tmp, "proj-a-")), projB = fs.mkdtempSync(path.join(tmp, "proj-b-"));
+  const inA = { ...claude, cwd: projA, project: true }, inB = { ...claude, cwd: projB, project: true };
+  const id = "superpowers@anthropic-plugin-directory";
+  await check("Claude: installed for one project (shared and only me) and for all: three rows in that project, one row elsewhere", async () => {
+    for (const scope of ["project", "local", "user"]) assert.ok((await core.act("claude", inA, "install", { id, scope })).ok, scope);
+    const a = await core.list("claude", inA);
+    assert.deepStrictEqual(a.installed.map((p) => [p.scope, p.key, p.readOnly]).sort(), [["local", `${id}#local`, false], ["project", `${id}#project`, false], ["user", id, false]]);
+    const b = await core.list("claude", inB);
+    assert.deepStrictEqual(b.installed.map((p) => p.scope), ["user"]);
+    // (No project open: only the plugins for all your projects.)
+    assert.deepStrictEqual((await core.list("claude", claude)).installed.map((p) => p.scope), ["user"]);
+  });
+  await check("Claude: turn off and remove act on the scope given", async () => {
+    assert.ok((await core.act("claude", inA, "disable", { id, scope: "local" })).ok);
+    const a = await core.list("claude", inA);
+    assert.deepStrictEqual(a.installed.map((p) => [p.scope, p.enabled]).sort(), [["local", false], ["project", true], ["user", true]]);
+    assert.ok((await core.act("claude", inA, "uninstall", { id, scope: "project" })).ok);
+    assert.ok((await core.act("claude", inA, "uninstall", { id, scope: "local" })).ok);
+    assert.ok((await core.act("claude", inA, "uninstall", { id })).ok);
+    assert.deepStrictEqual((await core.list("claude", inA)).installed, []);
+  });
+  await check("Claude: a project scope without an open project, or an unknown scope, is refused before running anything", async () => {
+    assert.match((await core.act("claude", claude, "install", { id, scope: "project" })).error, /Open the project/);
+    assert.match((await core.act("claude", inA, "install", { id, scope: "managed" })).error, /can't change/);
+  });
   // ---------- Codex ----------
   await check("Codex: no plugins until you add a marketplace", async () => {
     const c = await core.list("codex", codex);

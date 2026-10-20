@@ -274,6 +274,9 @@ class ClaudeProcess {
     if (o.allowedTools && o.allowedTools.length) args.push("--allowedTools", ...o.allowedTools);
     if (o.hostPermissions) args.push("--permission-mode", "default", "--permission-prompt-tool", "stdio");
     if (o.jsonSchema) args.push("--json-schema", JSON.stringify(o.jsonSchema));
+    // Hard limits for a short job (Enhance prompt): model turns, and what the run may cost (Claude Code's own estimate).
+    if (o.maxTurns) args.push("--max-turns", String(o.maxTurns));
+    if (o.maxBudgetUsd) args.push("--max-budget-usd", String(o.maxBudgetUsd));
     if (o.mcpServers) args.push("--mcp-config", promptFile(JSON.stringify({ mcpServers: o.mcpServers })));
     for (const d of o.addDirs || []) args.push("--add-dir", d);
     if (o.resume) args.push("--resume", o.resume);
@@ -301,6 +304,11 @@ class ClaudeProcess {
       for (const line of String(d).split(/\r?\n/)) if (line.trim()) log(`${o.name}: [claude] ${line.trim().slice(0, 300)}`);
     });
     this.proc.stdin.on("error", () => {}); // process already gone; the exit handler reports it
+    // The chat's "/" list: the skills and commands it has (the answer to `initialize`; later changes come as
+    // commands_changed, see onData). No request to the model. An older Claude Code that doesn't know it answers null.
+    if (o.commands && this.h.onCommands) this.request({ subtype: "initialize" }, 30000).then((res) => {
+      if (res && Array.isArray(res.commands) && !this.exited) this.h.onCommands(res.commands);
+    });
     this.proc.on("error", (e) => { log(`${o.name}: could not start claude: ${e.message}`); cleanup(); });
     this.proc.on("exit", (code) => {
       this.exited = true;
@@ -330,6 +338,10 @@ class ClaudeProcess {
       if (msg.type === "rate_limit_event") { const u = usage.fromClaude(msg); if (u) usage.report("claude", u); continue; }
       // Tokens each answer used (every Claude process: chat, Tab Completion, Ctrl+K…): the AI Usage panel's totals.
       if (msg.type === "result") usage.addTokens("claude", usage.fromResult(msg));
+      if (msg.type === "system" && msg.subtype === "commands_changed") {
+        if (Array.isArray(msg.commands) && this.h.onCommands) try { this.h.onCommands(msg.commands); } catch (e) { log(`${this.opts.name}: ${e.stack}`); }
+        continue;
+      }
       if (msg.type === "control_request" && msg.request && msg.request.subtype === "can_use_tool") {
         this.answerPermission(msg);
         continue;

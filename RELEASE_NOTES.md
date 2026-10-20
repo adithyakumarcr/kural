@@ -1,3 +1,21 @@
+## Not released yet
+
+- **Enhance prompt.** The wand beside Send turns a rough request into a clear prompt: goal, constraints, expected
+  output, success criteria, pointers to the files that matter (checked to exist) and open questions, in your language.
+  Claude Sonnet 5.5 does it (for ChatGPT and Gemini chats their equivalent model), reading the project only: never
+  secrets, never commands, at most 20 looks and 150 seconds. The line above the box says what it's doing; Undo puts back
+  what you wrote; you check it and send.
+- **Choose where a Claude plugin goes.** With a project open, Install asks: **All My Projects**, **This Project
+  (Shared)** (in the project's `.claude/settings.json`, so your teammates get it too) or **This Project, Only Me**
+  (`.claude/settings.local.json`). Plugins installed for the project say so in the list, and can be turned off or
+  removed there. Plugins other projects installed for themselves no longer show up in this one.
+- **"/" lists your skills in the chat.** Type **/** at the start of a message to see your skills and commands, the way
+  Claude Code does: your plugins' skills (Superpowers' `/superpowers:brainstorming`…), your own, and Claude Code's like
+  `/code-review`. Type to filter; **Tab** or **Enter** puts it in. Claude models, with your Claude Code setup on.
+- **See what a plugin adds before you install it.** A plugin's page lists each skill, command and agent with its
+  description, the hooks it runs by itself and its MCP servers (with the program or address each one uses), and shows
+  its README. For a plugin that isn't installed yet, Kural reads this from its GitHub repository.
+
 ## What's new in 1.1.0
 
 Kural 1.1.0 is the first final version of **Kural Code Editor** (it was ClaudeX): VSCodium with an AI assistant built

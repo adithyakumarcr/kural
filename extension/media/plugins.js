@@ -131,15 +131,24 @@
     msg.classList.toggle("empty", !parts.length);
   }
 
-  const busyOf = (p) => S.st && S.st.busy[p.id];
+  const busyOf = (p) => S.st && S.st.busy[p.key];
   const btn = (label, m, cls, title) => el("button", { class: `pbtn ${cls || ""}`, title: title || label, onclick: (e) => { e.stopPropagation(); post(m); } }, label);
   function actions(p) {
     const st = S.st, can = st.can || {}, busy = busyOf(p);
     if (busy) return [el("span", { class: "busy" }, busy)];
-    if (!p.installed) return p.installable ? [btn("Install", { type: "install", id: p.id }, "primary", `Install ${p.name} for ${st.names[st.ai]}`)] : [];
+    if (!p.installed) return p.installable ? [btn("Install", { type: "install", id: p.key }, "primary", `Install ${p.name} for ${st.names[st.ai]}`)] : [];
     if (p.readOnly) return [];
-    return [can.toggle && btn(p.enabled ? "Turn Off" : "Turn On", { type: p.enabled ? "disable" : "enable", id: p.id }),
-      el("button", { class: "icon-btn", title: `Remove ${p.name}`, "aria-label": `Remove ${p.name}`, onclick: (e) => { e.stopPropagation(); post({ type: "uninstall", id: p.id }); } }, icon("trash"))].filter(Boolean);
+    return [can.toggle && btn(p.enabled ? "Turn Off" : "Turn On", { type: p.enabled ? "disable" : "enable", id: p.key }),
+      el("button", { class: "icon-btn", title: `Remove ${p.name}`, "aria-label": `Remove ${p.name}`, onclick: (e) => { e.stopPropagation(); post({ type: "uninstall", id: p.key }); } }, icon("trash"))].filter(Boolean);
+  }
+  // Claude: a plugin installed only for the open project says so on its row ("All my projects" is the usual: no tag).
+  function whereTag(p) {
+    if (!p.installed) return null;
+    if (p.readOnly) return el("span", { class: "tag", title: "Set up for you by your organisation" }, "Organisation");
+    const proj = S.st && S.st.project ? ` (${S.st.project})` : "";
+    if (p.scope === "project") return el("span", { class: "tag", title: `Installed for this project${proj}, for everyone who works on it (.claude/settings.json)` }, "This project");
+    if (p.scope === "local") return el("span", { class: "tag", title: `Installed for this project${proj}, only for you (.claude/settings.local.json)` }, "This project, only me");
+    return null;
   }
   // Where a plugin comes from, on its row: only one of your own marketplaces (nearly all of Claude's come from Anthropic's
   // directory: saying so on every row was noise). The plugin's page always says.
@@ -155,11 +164,11 @@
     } else if (r.type === "plugin") {
       const p = r.p, off = p.installed && !p.enabled;
       const from = p.marketplace ? marketName(p.marketplace) : "";
-      n = el("div", { class: `row plugin${S.sel === p.id ? " sel" : ""}${off ? " off" : ""}`, role: "listitem", title: p.description || p.name,
-        onclick: () => { S.sel = p.id; keep(); draw(); post({ type: "details", id: p.id }); } },
+      n = el("div", { class: `row plugin${S.sel === p.key ? " sel" : ""}${off ? " off" : ""}`, role: "listitem", title: p.description || p.name,
+        onclick: () => { S.sel = p.key; keep(); draw(); post({ type: "details", id: p.key }); } },
         el("div", { class: "pmain" },
           el("div", { class: "ptop" }, el("span", { class: "pname" }, p.name), p.version && el("span", { class: "pver" }, p.version),
-            off && el("span", { class: "tag" }, "Off"), p.readOnly && el("span", { class: "tag" }, "This project"), el("span", { class: "grow" }),
+            off && el("span", { class: "tag" }, "Off"), whereTag(p), el("span", { class: "grow" }),
             from && el("span", { class: "pfrom" }, from)),
           el("div", { class: "pline" }, el("span", { class: "pdesc" }, p.description || "No description."), el("span", { class: "pacts" }, actions(p)))));
     } else if (r.type === "market") {
@@ -191,9 +200,9 @@
   function move(d) {
     const ps = rows.map((r, i) => r.type === "plugin" ? i : -1).filter((i) => i >= 0);
     if (!ps.length) return;
-    const at = ps.findIndex((i) => rows[i].p.id === S.sel);
+    const at = ps.findIndex((i) => rows[i].p.key === S.sel);
     const next = ps[Math.max(0, Math.min(ps.length - 1, at < 0 ? 0 : at + d))];
-    S.sel = rows[next].p.id; keep();
+    S.sel = rows[next].p.key; keep();
     const top = tops[next], h = Math.round(H.plugin * fs());
     if (top < list.scrollTop) list.scrollTop = top; else if (top + h > list.scrollTop + list.clientHeight) list.scrollTop = top + h - list.clientHeight;
     draw();
@@ -201,7 +210,7 @@
   list.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); move(e.key === "ArrowDown" ? 1 : -1); }
     else if (e.key === "Enter" && S.sel) post({ type: "details", id: S.sel });
-    else if (e.key === "Delete" && S.sel) { const r = rows.find((x) => x.type === "plugin" && x.p.id === S.sel); if (r && r.p.installed && !r.p.readOnly) post({ type: "uninstall", id: S.sel }); }
+    else if (e.key === "Delete" && S.sel) { const r = rows.find((x) => x.type === "plugin" && x.p.key === S.sel); if (r && r.p.installed && !r.p.readOnly) post({ type: "uninstall", id: S.sel }); }
   });
 
   function renderTop() {
