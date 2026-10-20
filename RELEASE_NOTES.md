@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.2.0-beta.2
 
 - **Talk to the chat.** The mic beside the wand (or **Ctrl+Alt+V**): click, talk, click again. Whisper writes down what
   you said on this computer, offline, and the quickest model you have takes out the "um"s and "ahm"s, repeats and false
