@@ -3,7 +3,8 @@
 // `claude mcp`. No vscode here (the tests use test/fake-claude.js, fake-codex.js and fake-agy.js).
 //   Claude:  `claude plugin list --json --available` → {installed, available} (Anthropic's plugin directory is built in,
 //            plus the marketplaces you added); `install|uninstall|enable|disable|update <id> --json` → one JSON line,
-//            outcome "ok" | "failed"; `details <id>` → text (what it adds, its token cost; installed plugins only);
+//            outcome "ok" | "failed", each with `--scope user|project|local` (list shows every project's project/local
+//            installs, with projectPath: Kural keeps this project's); `details <id>` → text (what it adds, its token cost; installed plugins only);
 //            `marketplace list --json`, `marketplace add <source> --json`, `marketplace remove <name> --json`.
 //   Codex:   `codex plugin list --json --available`, `add|remove <id> --json`, `marketplace list|add|remove --json`.
 //            No enable/disable command, and its list has no descriptions: they come from each marketplace's catalog
@@ -16,6 +17,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { execFile } = require("child_process");
+const contents = require("./contents");
 
 const AIS = ["claude", "codex", "agy"];
 // What each AI's plugin manager can do (the page shows only those buttons and sections).
@@ -89,6 +91,12 @@ function sourceUrl(s) {
   return ssh ? `https://github.com/${ssh[1]}` : webUrl(u.replace(/\.git$/i, ""));
 }
 
+// A listed plugin's source: the address to open (its own folder when a repository holds several) and where its files are.
+function fromSource(s) {
+  const origin = contents.githubOrigin(s);
+  return { source: origin && origin.dir ? contents.treeUrl(origin) : sourceUrl(s), origin };
+}
+
 function readJson(file, max = 1 << 20) {
   try {
     const st = fs.statSync(file);
@@ -114,17 +122,33 @@ function manifest(dir, ai) {
   return {};
 }
 
-// One plugin, the same shape for every AI.
+// Where Claude Code installs a plugin (`-s`): user = all your projects (~/.claude/settings.json), project = this project
+// for everyone who works on it (.claude/settings.json, committed with it), local = this project, only you
+// (.claude/settings.local.json). Codex and Gemini have only one place (all your projects).
+const SCOPES = ["user", "project", "local"];
+// One plugin, the same shape for every AI. key: one row of the list (Claude lists a plugin once per scope it's installed
+// in: superpowers can be there for all your projects and for this one).
 function plugin(o) {
+  const scope = o.scope || (o.installed ? "user" : "");
   return {
-    id: o.id, name: str(o.name, 128) || String(o.id).split("@")[0], marketplace: str(o.marketplace, 128),
+    id: o.id, key: o.installed && scope !== "user" ? `${o.id}#${scope}` : o.id,
+    name: str(o.name, 128) || String(o.id).split("@")[0], marketplace: str(o.marketplace, 128),
     version: shortVersion(o.version), fullVersion: str(o.version, 64), description: str(o.description, 2000),
     author: str(o.author, 120), homepage: webUrl(o.homepage), license: str(o.license, 60), source: webUrl(o.source),
-    installed: !!o.installed, enabled: o.installed ? o.enabled !== false : false, scope: o.scope || (o.installed ? "user" : ""),
-    // Kural adds and changes plugins for you (user scope); one a project set up is shown but left to that project.
-    readOnly: !!(o.scope && o.scope !== "user"), installable: o.installable !== false,
+    installed: !!o.installed, enabled: o.installed ? o.enabled !== false : false, scope,
+    // A scope Kural doesn't manage (one your organisation set up: "managed") is shown but left alone.
+    readOnly: !!(o.installed && !SCOPES.includes(scope)), installable: o.installable !== false,
     path: typeof o.path === "string" ? o.path : "", skills: Array.isArray(o.skills) ? o.skills : undefined,
+    // Where its files are on GitHub (contents.githubOrigin), so its page can show what it holds before it's installed.
+    origin: o.origin && typeof o.origin === "object" ? o.origin : null,
   };
+}
+// The same folder? (Claude Code writes the real path: /private/var/… for /var/… on a Mac.)
+function sameDir(a, b) {
+  if (!a || !b) return false;
+  const real = (x) => { try { return fs.realpathSync(x); } catch { return path.resolve(x); } };
+  const x = real(a), y = real(b);
+  return process.platform === "win32" || process.platform === "darwin" ? x.toLowerCase() === y.toLowerCase() : x === y;
 }
 const byName = (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 
@@ -147,14 +171,16 @@ async function listClaude(p) {
   if (!l.ok) return fail(l);
   const d = json(l.stdout);
   if (!d || !Array.isArray(d.installed)) return unreadable;
-  const installed = d.installed.filter((x) => x && validId(x.id) && x.id.includes("@")).map((x) => {
+  // (Claude Code lists what every project of yours installed for itself: only this project's count here.)
+  const here = (x) => !["project", "local"].includes(x.scope) || (p.project && sameDir(x.projectPath, p.cwd));
+  const installed = d.installed.filter((x) => x && validId(x.id) && x.id.includes("@") && here(x)).map((x) => {
     const [name, marketplace] = x.id.split("@");
     return plugin({ id: x.id, name, marketplace, version: x.version, installed: true, enabled: x.enabled, scope: str(x.scope, 20) || "user",
       path: x.installPath, ...manifest(x.installPath, "claude") });
   });
   const available = (Array.isArray(d.available) ? d.available : []).filter((x) => x && validId(x.pluginId) && x.pluginId.includes("@"))
     .map((x) => plugin({ id: x.pluginId, name: x.name, marketplace: x.marketplaceName || x.pluginId.split("@")[1], version: x.version,
-      description: x.description, source: sourceUrl(x.source) }));
+      description: x.description, ...fromSource(x.source) }));
   const ml = json(m.stdout);
   const listed = (Array.isArray(ml) ? ml : []).filter((x) => x && NAME.test(x.name || ""))
     .map((x) => ({ name: x.name, label: x.name, source: str(x.repo || x.url || x.path || (typeof x.source === "string" ? x.source : ""), 300), removable: true }));
@@ -186,7 +212,7 @@ async function listCodex(p) {
     const man = dir ? manifest(dir, "codex") : {}, a = about.get(x.pluginId) || {};
     return plugin({ id: x.pluginId, name: x.name || name, marketplace: x.marketplaceName || marketplace, version: x.version,
       description: man.description || a.description, author: man.author || a.author, homepage: man.homepage, license: man.license,
-      source: sourceUrl(x.source), installed, enabled: x.enabled, installable: !x.installPolicy || x.installPolicy === "AVAILABLE",
+      ...fromSource(x.source), installed, enabled: x.enabled, installable: !x.installPolicy || x.installPolicy === "AVAILABLE",
       path: dir && fs.existsSync(dir) ? dir : "" });
   };
   const ok = (x) => x && validId(x.pluginId) && x.pluginId.includes("@");
@@ -248,7 +274,8 @@ function claudeResult(r) {
 const codexResult = (r) => r.ok && lastJson(r.stdout) ? { ok: true } : { error: why(r) };
 
 // Do something to one plugin: what = install | uninstall | enable | disable | update. arg: { id, accept? (Claude: the
-// sha256 of a command you were shown) }. → { ok, message? } | { error } | { confirm: { command, sha256 } }
+// sha256 of a command you were shown), scope? (Claude: user | project | local; project and local need p.project) }.
+// → { ok, message? } | { error } | { confirm: { command, sha256 } }
 async function act(ai, p, what, arg = {}) {
   const id = arg.id;
   if (!CAN[ai] || !p || !p.bin) return { error: "Set it up first (Get started)." };
@@ -258,8 +285,11 @@ async function act(ai, p, what, arg = {}) {
   if (what === "update" && !can.update) return { error: "This AI updates its plugins by itself." };
   if (ai === "claude") {
     if (!["install", "uninstall", "enable", "disable", "update"].includes(what)) return { error: "Unknown action." };
+    const scope = arg.scope || "user";
+    if (!SCOPES.includes(scope)) return { error: "Kural can't change a plugin installed there." };
+    if (scope !== "user" && !p.project) return { error: "Open the project (and trust it) to change its plugins." };
     const accept = /^[0-9a-f]{64}$/i.test(String(arg.accept || "")) ? ["--accept-command", arg.accept] : [];
-    const r = await run(p.bin, ["plugin", what, id, "--json", ...(what === "install" || what === "update" ? accept : [])], p.env, { cwd: p.cwd, timeout: 300000 });
+    const r = await run(p.bin, ["plugin", what, id, "--json", "--scope", scope, ...(what === "install" || what === "update" ? accept : [])], p.env, { cwd: p.cwd, timeout: 300000 });
     return claudeResult(r);
   }
   if (ai === "codex") {
@@ -324,21 +354,29 @@ function parseDetails(text) {
   return { components, alwaysOn: always ? always[1].replace(/\s+/g, " ").replace(/tok$/, "tokens") : "" };
 }
 
-// What a plugin adds (installed ones: Claude says, else its folder is looked at). → { components, alwaysOn? } | {}
+// What an installed plugin adds: the counts (Claude says, with its token cost; Gemini's validate; else its folder's
+// layout) and, from its folder, each part with its description and the README (contents.js).
+// → { components, alwaysOn?, groups?, readme? } | {}
 async function details(ai, p, pl) {
   if (!pl || !pl.installed) return {};
+  let out = null;
   if (ai === "claude" && p && p.bin && validId(pl.id)) {
     const r = await run(p.bin, ["plugin", "details", pl.id], p.env, { cwd: p.cwd, timeout: 60000 });
-    if (r.ok) { const d = parseDetails(r.stdout); if (d.components.length) return d; }
+    if (r.ok) { const d = parseDetails(r.stdout); if (d.components.length) out = d; }
   }
-  if (ai === "agy" && p && p.bin && pl.path) {
+  if (!out && ai === "agy" && p && p.bin && pl.path) {
     const v = lastJson((await run(p.bin, ["plugin", "validate", pl.path, "--json"], p.env, { timeout: 60000 })).stdout);
     if (v && v.components && typeof v.components === "object") {
       const names = { skills: "Skills", agents: "Agents", hooks: "Hooks", mcpServers: "MCP servers", rules: "Rules" };
-      return { components: Object.entries(names).map(([k, kind]) => ({ kind, count: Number(v.components[k]) || 0, items: k === "skills" && pl.skills ? pl.skills.join(", ") : "" })) };
+      out = { components: Object.entries(names).map(([k, kind]) => ({ kind, count: Number(v.components[k]) || 0, items: k === "skills" && pl.skills ? pl.skills.join(", ") : "" })) };
     }
   }
-  return pl.path ? { components: inventory(pl.path) } : {};
+  if (!out) out = pl.path ? { components: inventory(pl.path) } : {};
+  if (pl.path) {
+    const c = await contents.fromFolder(pl.path).catch(() => null);
+    if (c) Object.assign(out, { groups: c.groups, readme: c.readme });
+  }
+  return out;
 }
 
 // ---------- Gemini: a plugin from a folder or a Git address ----------
@@ -397,5 +435,5 @@ async function cloneForAgy(p, url, tmpRoot) {
   return { ...c, dir, done };
 }
 
-module.exports = { AIS, CAN, BUILT_IN, NAME, validId, run, list, act, market, details, parseDetails, inventory, manifest, sourceUrl,
+module.exports = { AIS, CAN, BUILT_IN, NAME, SCOPES, validId, sameDir, run, list, act, market, details, parseDetails, inventory, manifest, sourceUrl,
   shortVersion, marketSource, gitUrl, checkFolder, installFolder, cloneForAgy, findGit, lastJson, why };

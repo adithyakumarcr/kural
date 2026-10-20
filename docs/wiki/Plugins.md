@@ -24,8 +24,10 @@ for** at the top shows another AI's plugins without changing the chat's model.
 
 ## The list
 
-- **Installed**: what this AI has. A plugin that's turned off says **Off**; one a project set up (its own
-  `.claude/settings.json`) says **This project** and is left to that project.
+- **Installed**: what this AI has. A plugin that's turned off says **Off**. A Claude plugin installed only for the open
+  project says **This project** or **This project, only me**; one your organisation set up for you says
+  **Organisation** and is left alone. A plugin installed in two places (for all your projects and for this one) has a
+  row for each: Turn Off and Remove act on that row's place.
 - **Available** (Claude, Codex): what you can install. The search box filters everything (all your words must match;
   names that match come first).
 - **Marketplaces** (Claude, Codex): where the plugins come from. **Add a Marketplace…** takes `owner/repo` (a GitHub
@@ -35,8 +37,15 @@ for** at the top shows another AI's plugins without changing the chat's model.
   it before anything is added).
 - **Refresh** is in the side bar's title bar.
 
-Click a plugin for its page: where it comes from, its author and license, what it adds (skills, agents, hooks, MCP
-servers), and for Claude how many tokens it adds to every chat before you ask anything (Claude Code's estimate).
+Click a plugin for its page: where it comes from, its author and license, and what it adds: each skill, command and
+agent with its own description, the hooks it runs by itself (and what they run) and its MCP servers (and the program or
+address each one uses), then its README. For Claude, also how many tokens it adds to every chat before you ask anything
+(Claude Code's estimate).
+
+A plugin you haven't installed yet is read from its GitHub repository, at the version its marketplace offers, so you can
+see what it would add before you install it. Kural asks GitHub without a login, which allows 60 plugin pages an hour;
+past that the page says when to try again. A plugin that isn't on GitHub shows only what its marketplace says. The
+README's pictures aren't loaded: each is a link you can open.
 
 ## Installing is your decision
 
@@ -44,6 +53,18 @@ A plugin runs code on your computer as you: its hooks and MCP servers start with
 don't ask about them. So **Install** always asks first and says where the plugin comes from (its repository and
 marketplace). A plugin whose marketplace installs it by running a command shows you that exact command first; only
 **Run and Install** runs it. Install only plugins you trust.
+
+### Where a Claude plugin goes
+
+With a project open (and trusted), Claude's **Install** asks where:
+
+| Choice | Used by | Saved in |
+|---|---|---|
+| **All My Projects** | every Claude chat, in every folder | your Claude Code settings (`~/.claude/settings.json`) |
+| **This Project (Shared)** | chats in this project, for everyone who works on it | the project's `.claude/settings.json`, which goes into Git with it |
+| **This Project, Only Me** | chats in this project, only yours | the project's `.claude/settings.local.json` (yours, not meant for Git) |
+
+With no project open, it goes to all your projects. ChatGPT (Codex) and Gemini have one place: all your projects.
 
 ## In your chats
 

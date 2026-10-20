@@ -80,6 +80,19 @@ body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 .edit-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px; font-size: calc(12px * var(--fs, 1)); color: var(--muted); }
 .edit-bar .edit-text { flex: 1; min-width: 0; }
 .edit-bar.hidden { display: none; }
+/* Enhance prompt: the wand beside Send, and the line above the box (what it's doing, then Undo, or what went wrong). */
+.enhance-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; margin-right: 4px; flex-shrink: 0; }
+.enhance-btn:hover { color: var(--vscode-foreground); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.enhance-btn.busy { color: var(--accent); }
+.enhance-btn.hidden { display: none; }
+.enh-bar { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; padding: 4px 6px 4px 8px; border-radius: 7px; font-size: calc(12px * var(--fs, 1)); color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.enh-bar.hidden { display: none; }
+.enh-bar.err { background: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 10%, transparent); border-color: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 45%, transparent); color: var(--vscode-foreground); }
+.enh-bar .codicon { flex-shrink: 0; }
+.enh-bar .enh-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.enh-bar .cb.x { padding: 0 2px; }
+.input.enh-locked { opacity: .6; cursor: progress; }
 .ctx-line { margin-bottom: 4px; }
 .ctx { font-size: calc(11px * var(--fs, 1)); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 4px; }
 .answer p { margin: 0 0 9px; }
@@ -242,6 +255,11 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .pop-item.sel, .pop-item:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .pop-name { white-space: nowrap; }
 .pop-dir { color: var(--muted); font-size: calc(11px * var(--fs, 1)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+/* The "/" list: /name, its arguments, what it does (one line; the whole description on hover). */
+.pop-cmd { min-width: 0; }
+.pop-cmd .pop-name { font-family: var(--vscode-editor-font-family, monospace); }
+.pop-hint { color: var(--muted); font-size: calc(11px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30%; flex-shrink: 1; }
+.pop-desc { color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
 .pop-empty { padding: 4px 8px; color: var(--muted); font-size: calc(12px * var(--fs, 1)); }
 
 /* menus */

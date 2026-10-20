@@ -50,11 +50,16 @@ function claude(args, stateFile) {
   ];
   const result = (o, ok = true) => { out({ command: args[1], outcome: ok ? "ok" : "failed", ...o }); if (!ok) process.stderr.write(`✘ ${o.message}\n`); process.exit(ok ? 0 : 1); };
   const sub = args[1], w = words(args.slice(2));
+  // (Installed once per scope, like the real one: user, or project/local with the project's real path; the list shows
+  // every project's.)
+  const scope = after(args, "--scope") || after(args, "-s") || "user";
+  const here = fs.realpathSync(process.cwd());
+  const slot = (id) => scope === "user" ? id : `${id}#${scope}#${here}`;
   if (sub === "list") {
-    const installed = Object.entries(st.installed).map(([id, x]) => ({ id, version: x.version, scope: x.scope || "user", enabled: x.enabled, installPath: x.path,
-      installedAt: "2026-10-18T13:20:15.693Z", lastUpdated: "2026-10-18T13:20:15.693Z", projectEnabled: false }));
+    const installed = Object.entries(st.installed).map(([k, x]) => ({ id: k.split("#")[0], version: x.version, scope: x.scope || "user", enabled: x.enabled, installPath: x.path,
+      installedAt: "2026-10-18T13:20:15.693Z", lastUpdated: "2026-10-18T13:20:15.693Z", ...(x.projectPath ? { projectPath: x.projectPath } : {}), projectEnabled: false }));
     if (!args.includes("--available")) out(installed, true);
-    else out({ installed, available: catalog().filter((p) => !st.installed[p.pluginId]) }, true);
+    else out({ installed, available: catalog().filter((p) => !installed.some((x) => x.id === p.pluginId)) }, true);
     process.exit(0);
   }
   if (sub === "marketplace") {
@@ -69,12 +74,12 @@ function claude(args, stateFile) {
     if (what === "remove") {
       if (!st.markets.includes(ww[0])) { out({ command: "marketplace-remove", outcome: "failed", message: `Marketplace '${ww[0]}' not found` }); process.exit(1); }
       st.markets = st.markets.filter((m) => m !== ww[0]);
-      for (const id of Object.keys(st.installed)) if (id.endsWith("@" + ww[0])) delete st.installed[id];
+      for (const id of Object.keys(st.installed)) if (id.split("#")[0].endsWith("@" + ww[0])) delete st.installed[id];
       save(file, st); out({ command: "marketplace-remove", outcome: "ok", marketplace: ww[0], message: `Successfully removed marketplace: ${ww[0]}` }); process.exit(0);
     }
   }
   // (A bare name finds the installed plugin, like the real one.)
-  const id = w[0] && (w[0].includes("@") ? w[0] : Object.keys(st.installed).find((k) => k.startsWith(w[0] + "@")) || w[0]);
+  const id = w[0] && (w[0].includes("@") ? w[0] : (Object.keys(st.installed).find((k) => k.startsWith(w[0] + "@")) || w[0]).split("#")[0]);
   if (sub === "install") {
     const p = catalog().find((x) => x.pluginId === id || x.name === id);
     if (!p) result({ plugin: w[0], scope: "user", message: `Plugin "${w[0]}" not found in any configured marketplace`, failureCode: "not_found" }, false);
@@ -83,16 +88,16 @@ function claude(args, stateFile) {
         shownCommand: { command: "npx -y @example/fetch-needs-command", sha256: ACCEPT } }, false);
     const dir = path.join(base, "cache", p.marketplaceName, p.name, p.version);
     writePlugin(dir, ".claude-plugin", p);
-    st.installed[p.pluginId] = { version: `${p.version}-8ca22dba9a94`, enabled: true, path: dir };
-    save(file, st); result({ plugin: p.pluginId, pluginId: p.pluginId, scope: "user", message: `Successfully installed plugin: ${p.pluginId} (scope: user)` });
+    st.installed[slot(p.pluginId)] = { version: `${p.version}-8ca22dba9a94`, enabled: true, path: dir, scope, ...(scope === "user" ? {} : { projectPath: here }) };
+    save(file, st); result({ plugin: p.pluginId, pluginId: p.pluginId, scope, message: `Successfully installed plugin: ${p.pluginId} (scope: ${scope})` });
   }
-  const have = st.installed[id];
+  const have = st.installed[slot(id)];
   if (["uninstall", "enable", "disable", "update", "details"].includes(sub) && !have) {
     if (sub === "details") { console.log(`Plugin "${w[0]}" not found. Run \`claude plugin list\` to see installed plugins, or pass --plugin-dir <path> to load one from disk.`); process.exit(1); }
     result({ plugin: w[0], scope: "user", message: `Plugin "${w[0]}" is not installed`, failureCode: "not_installed" }, false);
   }
-  if (sub === "uninstall") { delete st.installed[id]; save(file, st); result({ plugin: id, pluginId: id, scope: "user", keptData: false, message: `Successfully uninstalled plugin: ${id.split("@")[0]} (scope: user)` }); }
-  if (sub === "enable" || sub === "disable") { have.enabled = sub === "enable"; save(file, st); result({ plugin: w[0], pluginId: id, scope: "user", message: `Successfully ${sub}d plugin: ${id.split("@")[0]} (scope: user)` }); }
+  if (sub === "uninstall") { delete st.installed[slot(id)]; save(file, st); result({ plugin: id, pluginId: id, scope, keptData: false, message: `Successfully uninstalled plugin: ${id.split("@")[0]} (scope: ${scope})` }); }
+  if (sub === "enable" || sub === "disable") { have.enabled = sub === "enable"; save(file, st); result({ plugin: w[0], pluginId: id, scope, message: `Successfully ${sub}d plugin: ${id.split("@")[0]} (scope: ${scope})` }); }
   if (sub === "update") result({ plugin: id, pluginId: id, scope: "user", message: `${id.split("@")[0]} is already at the latest version (${have.version}).`, updateOutcome: "up_to_date", oldVersion: have.version, newVersion: have.version });
   if (sub === "details") {
     const name = id.split("@")[0];

@@ -106,6 +106,13 @@ your next message, because which tools the model has is fixed when it starts.
 ## Adding things to your message
 
 - **@** mentions a file in your sentence.
+- **Enhance prompt** (the wand beside Send): turns a rough request into a clear prompt before you send it. See
+  [Enhance prompt](#enhance-prompt) below.
+- **/** at the start of your message lists your skills and commands (Claude models): your plugins' skills, such as
+  Superpowers' `/superpowers:brainstorming`, your own skills and commands, and Claude Code's like `/code-review`. Type
+  to filter (by name or what it does), **Tab** or **Enter** puts it in, then write what it's for and send. It needs
+  **Use my Claude Code setup** on (Kural Settings → Claude). Claude Code's commands that only work on its own screen
+  (`/model`, `/config`, `/mcp`…) aren't listed: Kural has its own way for those (the model menu, Kural Settings).
 - **Text from the chat**: select part of an answer (or of a message you sent) and click **Add to chat** beside it. It goes
   into your message as a quote (its first words; point at it to read it all), and the AI gets the whole selected text
   (up to 8,000 characters) with your message.
@@ -118,6 +125,43 @@ your next message, because which tools the model has is fixed when it starts.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
 - The composer shows only context you choose. Attach a file with **@** or **+ → Add files**; opening it does not attach it.
+
+## Enhance prompt
+
+Write what you want, roughly ("the seam stuff is slow, make it faster"), and press the **wand** beside Send. A quicker
+model looks through the open project and rewrites your request into a prompt the chat's model can work with:
+
+- the goal, and where it fits: **Constraints**, **Expected output**, **Success criteria** (only what you asked for or
+  the project's own conventions; nothing made up),
+- **Relevant context**: pointers to the files, folders and functions that matter, each with a reason
+  (`` `src/api/client.ts` (`request()`): every call goes through it ``). Kural checks that every pointed-to file exists
+  and removes any that don't,
+- **Open questions**: what's unclear, instead of a guess.
+
+An already clear request barely changes: you get the same words plus the pointers. It keeps your language.
+
+While it works, the line above the box says what it's doing, in plain words: "Sonnet 5.5: Searching the code for
+planSeam", "Sonnet 5.5: Reading src/weld/seam.ts". **Stop** ends it. When it's done, the new prompt replaces your text
+(files you mentioned with @ stay) and **Undo** puts back what you had. Nothing is sent by itself: check it, change it,
+then press Send.
+
+| The chat's AI | Who enhances |
+|---|---|
+| Claude | Claude Sonnet 5.5 |
+| ChatGPT (Codex) | Codex's middle "workhorse" model (for example GPT-6.1-Sol) |
+| Google Gemini | Gemini's Flash model, at a high thinking level |
+| A model on this computer | the first of the above that's set up |
+
+**What it may do:** read only. It lists folders, searches text and reads files inside the open project, and nothing
+else: no commands, no changes, no web. Files that may hold secrets are never read, searched or listed (`.env`, keys and
+certificates, `credentials*`, `*secret*`, `.npmrc`, `.git`, `.ssh`…; `.env.example` is fine). Links that point outside
+the project are refused. What it reads is treated as data, so a comment in a file telling it to do something is
+ignored; if the new prompt points to such a file, Kural adds a warning to that pointer (and the line above the box says
+so), so the model that does the work is told too. Each click has a budget: at most 20 looks at the project and 150 seconds (Claude also stops at its own turn and
+cost limits). It needs an open project, and Claude, ChatGPT (Codex) or Google Gemini set up.
+
+**What it costs:** one extra run of a mid-size model per click, about 5-15 seconds and a few looks at the project. It
+counts toward that AI's usage limit like any chat message.
 
 ## Side chat
 

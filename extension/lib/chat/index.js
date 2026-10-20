@@ -30,6 +30,8 @@ const { profileOf, limitUsed, limitParts } = require("../router/policy");
 const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
 const { SideChats } = require("./side");
+const slashList = require("./slash");
+const { Enhancer } = require("../enhance");
 const scope = require("../profiles/scope");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
@@ -145,6 +147,18 @@ class ChatView {
       textOf: (segments) => ChatView.textOf(segments), cwd: () => this.root() || ws.workDir(),
       post: (msg) => this.post(msg), save: () => this.save(),
     });
+    // Enhance prompt: a model that looks through the project (read only) rewrites what you typed (lib/enhance). Not part of
+    // the conversation either; the page puts the result in the box for you to check.
+    this.enhancer = new Enhancer({
+      makeAgent: (model, opts, local, handlers) => brain.makeAgent(model, opts, local, handlers),
+      ready: (engine) => brain.providerOf(engine === "claude" ? "sonnet" : `${engine}:default`).ready(),
+      models: (engine) => ((brain.cli && brain.cli[engine]) || {}).models || [],
+      emptyDir: () => privateTmp("enhance"),
+      server: (root, maxCalls) => ({ command: process.execPath, args: [path.join(__dirname, "..", "enhance", "repo-mcp.js")],
+        env: { ELECTRON_RUN_AS_NODE: "1", KURAL_REPO_ROOT: root, KURAL_REPO_MAX_CALLS: String(maxCalls) } }),
+      log,
+    });
+    this.enhancing = new Map();   // tabId -> the running Enhance (one per chat)
     this.changes = new ChangeTracker(scope.dir("checkpoints", "data"));
     this.attachments = new Attachments();   // files added to the message you're writing
     this.setupVersion = 0;                  // goes up when your Claude Code setup changes
@@ -420,6 +434,7 @@ class ChatView {
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
     if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: tab.setup });
+    this.post({ type: "slash", tabId: tab.id, slash: this.slashView(tab) });
     this.warm(tab);
     this.save();
   }
@@ -440,12 +455,14 @@ class ChatView {
     if (!tab) return;
     const routing = this.routingJobs.get(id); if (routing) { routing.abort(); this.routingJobs.delete(id); }
     this.sideChats.stopAll(id);
+    this.stopEnhance(id);
     const r = this.runtime.get(id);
     if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
     this.endDevice(r);
     if (this.browserAi) this.browserAi.end(id);
     this.runtime.delete(id);
+    this.slashes().delete(id);
     const i = this.tabs.indexOf(tab);
     this.tabs.splice(i, 1);
     if (keep && tab.messages.length) this.archive.save(tab, this.card(tab));
@@ -1323,7 +1340,7 @@ class ChatView {
     const local = isLocal(tab.model);
     const localTools = [...(editing ? ["Read", "Write", "Edit", "Glob", "Grep", "Bash"] : ["Read", "Glob", "Grep"]), "AskUserQuestion"];
     const proc = brain.makeAgent(tab.model, {
-      name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode,
+      name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode, commands: full,
       // (A model on this computer gets the short guide: each word of the instructions costs it time before it answers.)
       safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + this.moodText(tab) +
         (nativeTeam ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
@@ -1340,12 +1357,15 @@ class ChatView {
     }, local ? { tools: localTools, allowedTools: ["Read", "Grep", "Glob"], readRoots: ws.aiRoots(), capabilities: this.localReady.get(tab.model) || [],
       store: brain.localStore(this.context) } : null, {
       onMessage: (m) => { if (r.stale) return; r.gotOutput = true; this.onClaude(tab, r, m); },
+      onCommands: (list) => { if (!r.stale) this.setSlash(tab, slashList.clean(list)); },
       onPermission: (req) => r.stale ? { allow: false, message: "Stopped." } : this.onPermission(tab, r, req),
       onExit: (info) => this.onExit(tab, r, info),
       onCheckpoint: () => this.routingCheckpoint(tab,r),
     });
     r.proc = proc;
     this.runtime.set(tab.id, r);
+    // (Skills and commands come only from Claude with your full setup: elsewhere the "/" list says so.)
+    if (!full || !isClaude(tab.model)) this.setSlash(tab, null);
     if (!proc.start()) { r.proc = null; return null; }
     // Ask which connectors / MCP servers it has (they connect in the background, so twice).
     if (full && isClaude(tab.model)) for (const ms of [1500, 7000]) setTimeout(() => { if (!r.stale && r.proc) this.checkServers(tab, r); }, ms);
@@ -1419,9 +1439,10 @@ class ChatView {
     }
     let text = ChatView.textOf(segments).trim();
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
-    const built = await this.buildPrompt(text, contexts);
+    const slash = this.slashOf(tab, text);
+    const built = await this.buildPrompt(slash ? slash.rest : text, contexts);
     if (!live(r) || this.runtime.get(tab.id) !== r) { this.post({ type: "flash", text: "The answer ended: send it again" }); return; }
-    const { content, meta } = this.attachments.content(built, attachIds, []);
+    const { content, meta } = this.attachments.content((slash ? slash.lead : "") + built, attachIds, []);
     if (meta.length) tab.granted = [...new Set([...(tab.granted || []), ...meta.flatMap((a) => [a.path, a.original]).filter(Boolean)])].slice(-50);
     const s = { id: shortId(), segments, attachments: meta, at: Date.now(),
       contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
@@ -1438,6 +1459,9 @@ class ChatView {
     const text = journal.textOf(m.message && m.message.content).trim();
     r.expect = r.expect || []; r.steers = r.steers || [];
     let i = r.expect.findIndex((x) => x.text === text);
+    // (A skill or command is echoed as <command-name>/name</command-name>…, not as the text sent.)
+    const cmd = i < 0 && /<command-name>(\/[^<\s]+)<\/command-name>/.exec(text);
+    if (cmd) i = r.expect.findIndex((x) => x.text === cmd[1] || x.text.startsWith(cmd[1] + " ") || x.text.startsWith(cmd[1] + "\n"));
     if (i < 0) i = 0;
     const [x] = r.expect.splice(i, 1);
     if (!x || x.kind !== "steer") return;
@@ -1475,6 +1499,45 @@ class ChatView {
     if (!back.length) return;
     log(`chat ${tab.id}: ${back.length} queued message${back.length === 1 ? "" : "s"} back in the box`);
     this.post({ type: "unqueue", tabId: tab.id, items: back.map((s) => ({ segments: s.segments, attachments: s.attachments.length })), queued: [] });
+  }
+
+  // ---------- Enhance prompt ----------
+  // The wand beside Send: what you typed → a better prompt in the box (lib/enhance). The page shows what it's doing
+  // ("Sonnet 5.5: Reading lib/chat/index.js") and puts the result in the box; you check it and send it yourself.
+  async enhance(tab, m) {
+    if (!this.enhancing) this.enhancing = new Map();
+    if (this.enhancing.has(tab.id) || tab.visiting) return;
+    const id = String(m.requestId || "").slice(0, 80), state = (o) => this.post({ type: "enhanceState", tabId: tab.id, id, ...o });
+    if (vscode.workspace.isTrusted === false) { state({ state: "error", kind: "unavailable", message: "Trust this workspace before using Kural AI." }); return; }
+    const run = this.enhancer.run({ text: ChatView.textOf(Array.isArray(m.segments) ? m.segments : []), root: this.root(), chatEngine: engineOf(tab.model),
+      onStatus: (status) => state({ state: "running", status }) });
+    this.enhancing.set(tab.id, run);
+    const r = await run.done;
+    if (this.enhancing.get(tab.id) === run) this.enhancing.delete(tab.id);
+    if (r.ok) state({ state: "done", prompt: r.prompt, label: r.label, calls: r.calls, ms: r.ms, dropped: r.dropped || [], flagged: r.flagged || [] });
+    else state({ state: "error", kind: r.kind, message: r.error, label: r.label });
+  }
+  stopEnhance(tabId) { const run = this.enhancing && this.enhancing.get(tabId); if (run) run.stop(); }
+
+  // ---------- the "/" list ----------
+  // tabId -> the skills and commands its Claude has (the "/" list in the box: lib/chat/slash.js).
+  slashes() { return this.slash || (this.slash = new Map()); }
+  // The chat's skills and commands (null: none here, a model that isn't Claude or Claude without your setup), to its page.
+  setSlash(tab, list) {
+    if (list) this.slashes().set(tab.id, list); else if (!this.slashes().delete(tab.id)) return;   // (none before, none now)
+    this.post({ type: "slash", tabId: tab.id, slash: this.slashView(tab) });
+  }
+  slashView(tab) {
+    const list = isClaude(tab.model) && this.slashes().get(tab.id);
+    if (list) return { items: list };
+    return { items: [], why: !isClaude(tab.model) ? "Skills and commands come from Claude: pick a Claude model to use them."
+      : !fullSetup() ? "Turn on \"Use my Claude Code setup\" (Kural Settings, Claude) to use your skills and commands." : "Loading your skills…" };
+  }
+  // "/name rest" when name is one of this chat's commands: { lead: "/name ", rest }.
+  slashOf(tab, text) {
+    if (!isClaude(tab.model)) return null;
+    const s = slashList.split(text, this.slashes().get(tab.id));
+    return s ? { lead: `/${s.name} `, rest: s.rest } : null;
   }
 
   // ---------- sending ----------
@@ -1697,11 +1760,14 @@ class ChatView {
       } catch { /* Context retrieval is optional; explicit context stays intact. */ }
     }
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
-    const built = await this.buildPrompt(text,contexts);
+    // A skill or command ("/superpowers:brainstorming …"): Claude Code runs it only when the message starts with it, so it
+    // goes first and everything Kural adds (handoff, notes, context) follows as its arguments.
+    const slash = this.slashOf(tab, text), lead = slash ? slash.lead : "";
+    const built = await this.buildPrompt(slash ? slash.rest : text,contexts);
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
     if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    const { content: prompt, meta } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
-    user.sentText = journal.textOf(prompt).slice(carry.length);
+    const { content: prompt, meta } = this.attachments.content(lead + carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
+    user.sentText = lead + journal.textOf(prompt).slice(lead.length + carry.length);
     r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
       user.attachments = meta; this.post({ type: "userAttachments", tabId: tab.id, attachments: meta });
@@ -2785,6 +2851,8 @@ class ChatView {
         Number.isInteger(m.editIndex) ? m.editIndex : null); break;
       // Side chat (lib/chat/side.js): a quick question under an answer. Never a turn of the chat: no status, no journal.
       case "sideAsk": if (tab && Number.isInteger(m.index)) this.sideChats.ask(tab, m); break;
+      case "enhance": if (tab) this.enhance(tab, m); break;
+      case "enhanceStop": if (tab) this.stopEnhance(tab.id); break;
       case "sideStop": if (tab && typeof m.thread === "string") this.sideChats.stop(tab.id, m.thread); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;

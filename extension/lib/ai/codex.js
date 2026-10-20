@@ -207,6 +207,9 @@ function mcpConfig(servers) {
 // (Kural's own device and browser tools are added after this and stay on: Kural asks before them itself.)
 const ALWAYS_OFF = ["browser_use", "browser_use_external", "computer_use", "in_app_browser"];
 const OFF_FEATURES = ["apps", ...ALWAYS_OFF];
+// Only the MCP servers Kural gives it (lockTools: Enhance prompt): Codex's own shell and exec tools and its image viewer
+// off too (feature names from `codex features list`, codex-cli 0.160.0), and web search "disabled".
+const TOOLS_OFF = ["shell_tool", "unified_exec", "view_image"].flatMap((f) => ["-c", `features.${f}=false`]);
 const tomlKey = (k) => /^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(String(k));
 function lockdownArgs(mode, connectors = []) {
   if (mode === "auto") return ALWAYS_OFF.flatMap((f) => ["-c", `features.${f}=false`]);
@@ -242,7 +245,7 @@ class AppServer {
   //   onExit(code, stderr)
   // mcpServers: { name: { command, args, env } }: MCP servers for this Codex only (Kural's device tools), as -c options.
   // config: more -c options, before those (lockdownArgs).
-  constructor(bin, { cwd, env, name, mcpServers, config } = {}, handlers = {}) {
+  constructor(bin, { cwd, env, name, mcpServers, config, webSearch = "live" } = {}, handlers = {}) {
     this.h = handlers;
     this.name = name || "codex";
     this.ids = 0;
@@ -252,7 +255,7 @@ class AppServer {
     this.exited = false;
     // Live web search in every mode (Codex's default is its cached index, so answers about new versions were stale).
     // Only Codex's own search tool: commands stay offline in the sandbox (networkAccess: false).
-    const c = command(bin, [...(config || []), ...mcpConfig(mcpServers), "-c", 'web_search="live"', "app-server"]);
+    const c = command(bin, [...(config || []), ...mcpConfig(mcpServers), "-c", `web_search=${JSON.stringify(webSearch)}`, "app-server"]);
     // Its own process group (not on Windows), so stopping it also stops the commands it started.
     this.proc = spawn(c.file, c.args, { cwd: cwd || privateTmp("codex"), env: { ...process.env, ...profileEnv(), ...(env || {}), ...c.env },
       stdio: ["pipe", "pipe", "pipe"], windowsHide: true, detached: !IS_WIN });
@@ -622,7 +625,7 @@ class CodexAgent {
       if (this.exited) return;   // (stopped while it looked)
       try {
         this.server = new AppServer(this.opts.bin, { cwd: this.cwd, env: this.opts.env, name: this.opts.name, mcpServers: this.opts.mcpServers,
-          config: lockdownArgs(this.opts.mode, names || []) }, {
+          config: [...lockdownArgs(this.opts.mode, names || []), ...(this.opts.lockTools ? TOOLS_OFF : [])], webSearch: this.opts.lockTools ? "disabled" : "live" }, {
           onNotification: (m, p) => this.onNotification(m, p),
           onRequest: (m, p) => this.onRequest(m, p),
           onExit: (code, stderr) => this.onServerExit(code, stderr),
