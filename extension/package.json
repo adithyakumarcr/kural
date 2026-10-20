@@ -61,6 +61,10 @@
         "title": "Kural: Show or Hide the Chat"
       },
       {
+        "command": "kural.chat.voice",
+        "title": "Kural: Record a Voice Prompt"
+      },
+      {
         "command": "kural.chat.newTab",
         "title": "Kural: New Chat Tab",
         "icon": "$(add)"
@@ -671,6 +675,12 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "kural.chat.voice",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v",
+        "when": "kural.chatFocused"
+      },
       {
         "command": "kural.chat.toggle",
         "key": "ctrl+l",

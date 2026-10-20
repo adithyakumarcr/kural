@@ -32,6 +32,7 @@ const handoffStore = require("./handoff-store");
 const { SideChats } = require("./side");
 const slashList = require("./slash");
 const { Enhancer } = require("../enhance");
+const { Voice } = require("../voice");
 const scope = require("../profiles/scope");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
@@ -147,6 +148,10 @@ class ChatView {
       textOf: (segments) => ChatView.textOf(segments), cwd: () => this.root() || ws.workDir(),
       post: (msg) => this.post(msg), save: () => this.save(),
     });
+    // Voice input (lib/voice): the page records; Whisper transcribes on this computer (downloaded the first time, after you
+    // agree); Side chat's quick model tidies the text up. The result goes into the box, never sent by itself.
+    this.voice = new Voice({ dir: path.join(context.globalStorageUri.fsPath, "voice"), post: (msg) => this.post(msg),
+      cleanupDeps: this.sideChats.d, log });
     // Enhance prompt: a model that looks through the project (read only) rewrites what you typed (lib/enhance). Not part of
     // the conversation either; the page puts the result in the box for you to check.
     this.enhancer = new Enhancer({
@@ -254,6 +259,8 @@ class ChatView {
       vscode.commands.registerCommand("kural.chat.nextTab", () => this.cycle(1)),
       vscode.commands.registerCommand("kural.chat.prevTab", () => this.cycle(-1)),
       vscode.commands.registerCommand("kural.chat.closeTab", () => this.closeTab(this.activeId)),
+      // (Ctrl+Alt+V: the mic of the chat you're in; the page starts or stops recording.)
+      vscode.commands.registerCommand("kural.chat.voice", () => { const p = this.cur(); if (p) this.postTo(p, { type: "voiceToggle" }); }),
       vscode.commands.registerCommand("kural.chat.moveToPanel", (uri) => this.moveToPanel(uri)),
       vscode.commands.registerCommand("kural.reloadSetup", () => this.setupChanged("reload asked for")),
       // (Internal: lib/account.js, when you log out, log in again or switch an AI's account.)
@@ -275,7 +282,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { this.sideChats.stopAll(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
+      { dispose: () => { this.sideChats.stopAll(); this.voice.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -456,6 +463,7 @@ class ChatView {
     const routing = this.routingJobs.get(id); if (routing) { routing.abort(); this.routingJobs.delete(id); }
     this.sideChats.stopAll(id);
     this.stopEnhance(id);
+    this.voice.closed(id);
     const r = this.runtime.get(id);
     if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
@@ -738,7 +746,7 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
     // (A message from a column of the side panel (split) says which: that column is a pane of its own.)
     webview.onDidReceiveMessage((m) => {
       const p = m && m.col ? (pane.layout || []).find((q) => q.col === m.col) : pane;
@@ -2853,6 +2861,13 @@ class ChatView {
       case "sideAsk": if (tab && Number.isInteger(m.index)) this.sideChats.ask(tab, m); break;
       case "enhance": if (tab) this.enhance(tab, m); break;
       case "enhanceStop": if (tab) this.stopEnhance(tab.id); break;
+      // Voice input (lib/voice): the mic beside the wand.
+      case "voiceStart": if (tab && !tab.visiting) await this.voice.start(tab.id); break;
+      case "voiceDownload": if (tab) this.voice.download(tab.id); break;
+      case "voiceDownloadStop": this.voice.stopDownload(); break;
+      case "voiceChunk": if (tab && Number.isInteger(m.seq)) this.voice.chunk(tab.id, m.seq, m.samples); break;
+      case "voiceStop": if (tab) this.voice.finish(tab.id); break;
+      case "voiceCancel": if (tab) this.voice.cancel(tab.id); break;
       case "sideStop": if (tab && typeof m.thread === "string") this.sideChats.stop(tab.id, m.thread); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;
