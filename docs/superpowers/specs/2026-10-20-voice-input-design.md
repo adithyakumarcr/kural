@@ -54,9 +54,11 @@ New folder `extension/lib/voice/` (feature folder, wired in `extension.js` and t
 - **First click with Whisper missing**: the bar above the box says "Voice input needs Whisper, a speech model that runs
   on this computer (about 60 MB, once). Nothing you say leaves it." with **Download** and **Not now**. Download shows
   progress in that bar ("Downloading Whisper… 42 %", Stop). When it's done, recording starts.
-- **Recording**: `getUserMedia({audio})` → an `AudioContext` at 16 kHz → an `AudioWorklet` collecting mono samples (sent to
-  the extension in chunks of 1 s, so no single huge message). The bar shows a red dot, the time and a small level meter;
-  Esc or the bar's × cancels (nothing kept); 5:00 stops it.
+- **Recording**: `getUserMedia({audio})` → `MediaRecorder` (compressed, small); an `AnalyserNode` drives the level meter.
+  At stop the page decodes the recording and resamples it to 16 kHz mono with an `OfflineAudioContext`, then sends the
+  samples to the extension in chunks of 1 s (no single huge message). (No `AudioWorklet`: loading its module would need a
+  looser `script-src` in the page's CSP.) The bar shows a red dot, the time and a small level meter; Esc or the bar's ×
+  cancels (nothing kept); 5:00 stops it.
 - **After stop**: "Transcribing…" then "Cleaning up…" in the bar; the result goes in at the cursor (a space added if
   needed; @ pills untouched). The bar then shows "From your voice · Undo" (Undo puts the raw transcript in its place)
   until you type or send.
