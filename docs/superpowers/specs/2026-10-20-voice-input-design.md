@@ -108,3 +108,7 @@ Kural's data removal already covers `<globalStorage>/voice/`.
 
 Before any UI: build the WASM, transcribe a 30-second recording on this laptop and time it. Good enough: under 5 s.
 Otherwise try `tiny.en` (30 MB, faster, less accurate) and decide with Adithya.
+
+**Measured 20 Oct 2026** (this laptop, 16 cores, 8 threads, base.en q5_1): 11 s of speech in 2.2 s, 33 s in 4.4 s; the
+first request of a helper 3.6 s. V8 first runs WebAssembly with its baseline compiler (Liftoff), which made the first
+request take 15 s; the helper sets `--no-liftoff` (`v8.setFlagsFromString`) before loading Whisper.
