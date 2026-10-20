@@ -38,18 +38,22 @@
     if (/^[a-z][\w+.-]*:/i.test(url) || !base) return "";
     try { const u = new URL(url, base).href; return web(u) ? u : ""; } catch { return ""; }
   }
-  // (Until nothing changes: removing one tag can join the pieces of another, "<scr<b>ipt>". The result only ever goes into
-  // text nodes, but no tag should be left in it either.)
-  const stripTags = (s) => {
-    let prev;
-    do {
-      prev = s;
-      s = s
-        .replace(/<!--[\s\S]*?-->/g, "")
-        .replace(/<\/?(?!https?:)[A-Za-z][^>]*>/g, "")
-        .replace(/[<>]/g, "");
-    } while (s !== prev);
-    return s;
+  // Is there text outside HTML tags and comments? (A paragraph of only tags, a row of badges say, is left out.) It only
+  // answers yes or no: nothing is removed from the text, so no half-removed tag can be left behind. An unclosed comment or
+  // tag, or an autolink <https://…>, counts as text.
+  const hasText = (s) => {
+    for (let i = 0; i < s.length; i++) {
+      if (s.startsWith("<!--", i)) {
+        const end = s.indexOf("-->", i + 4);
+        if (end < 0) return true;
+        i = end + 2;
+      } else if (s[i] === "<" && /^<\/?[A-Za-z]/.test(s.slice(i, i + 3)) && !/^<https?:/i.test(s.slice(i, i + 8))) {
+        const end = s.indexOf(">", i + 1);
+        if (end < 0) return true;
+        i = end;
+      } else if (!/\s/.test(s[i])) return true;
+    }
+    return false;
   };
   const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", copy: "©", mdash: "—", ndash: "–", hellip: "…" };
   const entities = (s) => s.replace(/&(#\d+|#x[\da-f]+|\w+);/gi, (m, e) => {
@@ -99,7 +103,7 @@
   function markdown(text, base, depth = 0) {
     const lines = String(text).replace(/\r\n?/g, "\n").replace(/\t/g, "    ").split("\n"), out = [];
     let para = [];
-    const endPara = () => { if (para.length) { const t = para.join(" ").trim(); if (stripTags(t).trim() || /<img\b/i.test(t)) out.push(el("p", {}, inline(t, base))); para = []; } };
+    const endPara = () => { if (para.length) { const t = para.join(" ").trim(); if (hasText(t) || /<img\b/i.test(t)) out.push(el("p", {}, inline(t, base))); para = []; } };
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i], f = isFence(l);
       if (f) {
