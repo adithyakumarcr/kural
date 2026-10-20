@@ -1,0 +1,40 @@
+# Builds Whisper (whisper.cpp compiled to WebAssembly) for Kural's voice input and publishes it on the release
+# whisper-wasm-1.9.5. Nothing about Whisper ships with Kural: the app downloads these files the first time you use the mic,
+# and refuses them unless their size and SHA-256 match extension/lib/voice/assets.js. Run it by hand (Actions → Whisper
+# for voice input → Run workflow) after changing scripts/whisper-wasm/; the job fails if the build doesn't match the pins.
+name: Whisper for voice input
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # (creates the release whisper-wasm-1.9.5 and uploads its files)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        run: bash scripts/whisper-wasm/build.sh
+      - name: The build matches the hashes Kural pins
+        run: |
+          node -e '
+            const { FILES } = require("./extension/lib/voice/assets");
+            const fs = require("fs"), crypto = require("crypto");
+            for (const f of FILES.filter((f) => f.name !== "model")) {
+              const b = fs.readFileSync("dist/whisper-wasm/" + f.file), sha = crypto.createHash("sha256").update(b).digest("hex");
+              console.log(f.file, b.length, sha);
+              if (b.length !== f.size || sha !== f.sha256) { console.error(`::error::${f.file} does not match extension/lib/voice/assets.js (${b.length} ${sha})`); process.exitCode = 1; }
+            }'
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist/whisper-wasm
+          files="kural-whisper.js kural-whisper.wasm SHA256SUMS LICENSE-whisper.cpp"
+          if gh release view whisper-wasm-1.9.5 >/dev/null 2>&1; then
+            gh release upload whisper-wasm-1.9.5 $files --clobber
+          else
+            gh release create whisper-wasm-1.9.5 $files --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Whisper for Kural's voice input (whisper.cpp 1.9.5)" \
+              --notes "whisper.cpp 1.9.5 compiled to WebAssembly by scripts/whisper-wasm/build.sh. Kural downloads these files the first time you use the mic in the chat and checks them against the hashes in extension/lib/voice/assets.js. Not a Kural release. whisper.cpp is MIT licensed (LICENSE-whisper.cpp)."
+          fi

@@ -1,3 +1,11 @@
+## What's new in 1.2.0-beta.2
+
+- **Talk to the chat.** The mic beside the wand (or **Ctrl+Alt+V**): click, talk, click again. Whisper writes down what
+  you said on this computer, offline, and the quickest model you have takes out the "um"s and "ahm"s, repeats and false
+  starts and fixes the grammar, keeping your words and every code and file name. It goes into the box at the cursor for
+  you to check and send; Undo puts back exactly what Whisper heard. The first time, Kural asks to download Whisper
+  (about 60 MB, once). English only for now.
+
 ## What's new in 1.2.0-beta.1
 
 - **Enhance prompt.** The wand beside Send turns a rough request into a clear prompt: goal, constraints, expected

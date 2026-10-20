@@ -71,6 +71,7 @@ async function downloadTo(url, file, { max = LIMITS.asset.bytes, idleMs = LIMITS
     }
     await new Promise((r, j) => out.end((e) => (e ? j(e) : r())));
   } catch (e) {
+    out.on("error", () => {});   // (a write still pending when it's stopped fails with ERR_STREAM_DESTROYED: nothing to report)
     out.destroy();
     // An abort reports the reason it was given (the stall), or a plain AbortError.
     throw signal.aborted && signal.reason instanceof Error && !(cancel && cancel.aborted) ? signal.reason : e;

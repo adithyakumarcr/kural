@@ -120,6 +120,9 @@ def main(app, platform):
     #    (Kural's Search & Ask side bar does text search; Kural's log opens with "Kural: Show Log"), Extensions | Plugins,
     #    and VSCodium's own content off the Welcome page.
     patch_workbench(app)
+    # 6b. The microphone for Kural's chat only (voice input): its webview frame, the inner frame, and the main process's
+    #     permission answer for webviews (audio only).
+    patch_webview_microphone(app)
     # 7. The editor's own texts (menus, settings, messages) say "VSCodium": they say Kural.
     rebrand_messages(app)
     print(f"rebranded {app} for {platform}")
@@ -542,6 +545,83 @@ def fresh_browser(text):
     return FRESH_BROWSER.sub(lambda m: m.group(0) + FRESH_BROWSER_MARK + 'return"ephemeral";', text, count=1)
 
 
+# Voice input (lib/voice, media/voice.js) records in Kural's chat page, a webview. VS Code blocks the microphone there in
+# three places, all patched here, found by shape (a miss: ::warning::, and the mic says the microphone was blocked):
+#   1. workbench.desktop.main.js: each webview's outer frame gets an `allow` list without "microphone". Kural's own
+#      webviews (extension kural.kural) get it; every other extension's webview stays without (webview_microphone).
+#   2. webview/browser/pre/index.html: the inner frame's `allow` list may pass "microphone" on. Safe for every webview: a
+#      frame can only pass on what its parent frame has (1). Its inline script is pinned by a sha256 in the page's own
+#      CSP, so the hash is computed again (patch_webview_pre).
+#   3. out/mainImpl.js: the main process answers vscode-webview:// pages' permission requests from a short list without
+#      "media". It now also allows "media" when only audio is asked for: never the camera (patch_main_permissions).
+WEBVIEW_MIC_MARK = "/*kural-mic*/"
+WEBVIEW_ALLOW = re.compile(r'(_createElement\(\w+,\w+\)\{.{0,500}?let (\w+)=\["cross-origin-isolated","autoplay","local-network-access"\];)')
+
+
+def webview_microphone(text):
+    if WEBVIEW_MIC_MARK in text:
+        return text
+    found = WEBVIEW_ALLOW.findall(text)
+    if len(found) != 1:
+        print(f"::warning::the webview frame's allow list not found as expected ({len(found)} matches); voice input can't use the microphone")
+        return text
+    return WEBVIEW_ALLOW.sub(lambda m: m.group(1) + WEBVIEW_MIC_MARK +
+                             f'this.extension?.id?.value?.toLowerCase()==="kural.kural"&&{m.group(2)}.push("microphone");', text, count=1)
+
+
+PRE_ALLOW = "const allowRules = ['cross-origin-isolated;', 'autoplay;', 'local-network-access;'];"
+PRE_ALLOW_MIC = "const allowRules = ['cross-origin-isolated;', 'autoplay;', 'local-network-access;', 'microphone;']; /* kural-mic: only Kural's own frames have it to pass on */"
+INLINE_SCRIPT = re.compile(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', re.S)
+CSP_SCRIPT_HASH = re.compile(r"(script-src ')sha256-[A-Za-z0-9+/=]+(')")
+
+
+def patch_webview_pre_text(text):
+    if PRE_ALLOW_MIC not in text:
+        if text.count(PRE_ALLOW) != 1:
+            print("::warning::the webview's inner frame allow list not found as expected; voice input can't use the microphone")
+            return text
+        text = text.replace(PRE_ALLOW, PRE_ALLOW_MIC)
+    scripts = INLINE_SCRIPT.findall(text)
+    if len(scripts) != 1 or len(CSP_SCRIPT_HASH.findall(text)) != 1:
+        print(f"::warning::the webview page's script or its CSP hash not found as expected ({len(scripts)} scripts); webviews may break")
+        return text
+    digest = "sha256-" + base64.b64encode(hashlib.sha256(scripts[0].encode("utf-8")).digest()).decode()
+    return CSP_SCRIPT_HASH.sub(lambda m: m.group(1) + digest + m.group(2), text, count=1)
+
+
+MAIN_REQUEST = re.compile(r'(setPermissionRequestHandler\(\((\w+),(\w+),(\w+),(\w+)\)=>\w+\(\5\.requestingUrl\)\?\4\()(\w+\.has\(\3\))(\))')
+MAIN_CHECK = re.compile(r'(setPermissionCheckHandler\(\((\w+),(\w+),(\w+),(\w+)\)=>\w+\(\5\.requestingUrl\)\?)(\w+\.has\(\3\))(:)')
+
+
+def patch_main_permissions_text(text):
+    if WEBVIEW_MIC_MARK in text:
+        return text
+    req, chk = MAIN_REQUEST.findall(text), MAIN_CHECK.findall(text)
+    if len(req) != 1 or len(chk) != 1:
+        print(f"::warning::the main process's webview permissions not found as expected ({len(req)}, {len(chk)} matches); voice input "
+              "can't use the microphone")
+        return text
+    text = MAIN_REQUEST.sub(lambda m: f'{m.group(1)}{m.group(6)}||{WEBVIEW_MIC_MARK}{m.group(3)}==="media"&&'
+                            f'({m.group(5)}.mediaTypes||[]).length>0&&{m.group(5)}.mediaTypes.every(k=>k==="audio"){m.group(7)}', text, count=1)
+    return MAIN_CHECK.sub(lambda m: f'{m.group(1)}({m.group(6)}||{WEBVIEW_MIC_MARK}{m.group(3)}==="media"&&{m.group(5)}.mediaType==="audio"){m.group(7)}',
+                          text, count=1)
+
+
+def patch_webview_microphone(app):
+    for rel, fn in (("out/vs/workbench/contrib/webview/browser/pre/index.html", patch_webview_pre_text),
+                    ("out/mainImpl.js", patch_main_permissions_text)):
+        p = os.path.join(app, *rel.split("/"))
+        if not os.path.exists(p):
+            print(f"::warning::{rel} not found; voice input can't use the microphone")
+            continue
+        with open(p, encoding="utf-8") as f:
+            text = f.read()
+        new = fn(text)
+        if new != text:
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(new)
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -553,7 +633,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))))
+    new = webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))))
     if new == text:
         return
     data = new.encode("utf-8")
