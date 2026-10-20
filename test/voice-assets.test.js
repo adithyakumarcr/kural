@@ -40,7 +40,7 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "kural-voice-"));
     assert.ok(seen.every(([g], i) => i === 0 || g >= seen[i - 1][0]), "progress only goes up");
     assert.strictEqual(await a.ready(), true);
     assert.deepStrictEqual(a.paths(), { loader: path.join(dir, "a.js"), model: path.join(dir, "b.bin") });
-    assert.strictEqual(fs.statSync(dir).mode & 0o777, 0o700);
+    if (process.platform !== "win32") assert.strictEqual(fs.statSync(dir).mode & 0o777, 0o700);   // (Windows has no Unix modes)
   });
 
   await check("a wrong sha256 deletes the file and rejects with \"Whisper's download didn't match\"", async () => {

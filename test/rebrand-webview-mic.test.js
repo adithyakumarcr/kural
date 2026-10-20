@@ -13,7 +13,7 @@ let fail = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
 const root = path.join(__dirname, "..");
 const py = (fn, input) => {
-  const r = spawnSync("python3", ["-c", `import sys\nsys.path.insert(0, ${JSON.stringify(path.join(root, "scripts"))})\nimport rebrand\nsys.stdout.write(rebrand.${fn}(sys.stdin.read()))`],
+  const r = spawnSync("python3", ["-c", `import sys\nsys.stdin.reconfigure(encoding="utf-8")\nsys.stdout.reconfigure(encoding="utf-8", newline="\\n")\nsys.path.insert(0, ${JSON.stringify(path.join(root, "scripts"))})\nimport rebrand\nsys.stdout.write(rebrand.${fn}(sys.stdin.read()))`],
     { input, encoding: "utf8", maxBuffer: 1 << 28 });
   if (r.status) throw new Error(r.stderr);
   return { out: r.stdout, warn: r.stderr + r.stdout.split("\n").filter((l) => l.startsWith("::warning::")).join("\n") };
