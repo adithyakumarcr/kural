@@ -48,6 +48,19 @@ const words = (s) => s.toLowerCase().replace(/[^a-z ]+/g, " ").replace(/\s+/g, "
     assert.ok(words(text).includes(WANT), `"${WANT}" in: ${text}`);
   }
   w.free();
+  // The same through Kural's helper process (lib/voice/transcriber.js), as Kural runs it: with Node, and with Kural's own
+  // program as Node when KURAL_EXEC points at it (e.g. /usr/share/kural/kural).
+  const { Transcriber } = require("../extension/lib/voice/transcriber");
+  for (const execPath of [process.execPath, process.env.KURAL_EXEC].filter(Boolean)) {
+    const tr = new Transcriber({ paths: () => ({ loader: path.join(DIR, "kural-whisper.js"), model: MODEL }), execPath, log: console.log });
+    for (const label of ["first", "second"]) {
+      t = Date.now();
+      const r = await tr.transcribe(jfk);
+      console.log(`helper (${path.basename(execPath)}), ${label}: ${Date.now() - t} ms in all, ${r.ms} ms Whisper: ${r.text}`);
+      assert.ok(words(r.text).includes(WANT));
+    }
+    tr.stop();
+  }
   console.log("voice-transcribe.live: ALL PASS");
   process.exit(0);
 })().catch((e) => { console.error("FAIL", e.stack || e); process.exit(1); });

@@ -111,4 +111,5 @@ Otherwise try `tiny.en` (30 MB, faster, less accurate) and decide with Adithya.
 
 **Measured 20 Oct 2026** (this laptop, 16 cores, 8 threads, base.en q5_1): 11 s of speech in 2.2 s, 33 s in 4.4 s; the
 first request of a helper 3.6 s. V8 first runs WebAssembly with its baseline compiler (Liftoff), which made the first
-request take 15 s; the helper sets `--no-liftoff` (`v8.setFlagsFromString`) before loading Whisper.
+request take 15 s; the helper is started with `--no-liftoff` on its command line (`v8.setFlagsFromString` crashed Electron
+with SIGTRAP once Whisper's threads started). Through the helper in Kural's own program: 3.7 s first, 2.4 s after (11 s of speech).
