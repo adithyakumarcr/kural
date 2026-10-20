@@ -1,7 +1,8 @@
 // Voice input: the Whisper files Kural downloads the first time you use the mic (no vscode inside). Nothing about Whisper
 // ships with Kural. Each file is pinned here by size and SHA-256: a download that doesn't match is deleted and refused.
 //   - kural-whisper.js / .wasm: whisper.cpp 1.9.5 compiled to WebAssembly by scripts/whisper-wasm/build.sh, published on
-//     this repo's release whisper-wasm-1.9.5 (.github/workflows/whisper-wasm.yml).
+//     this repo's release whisper-wasm-1.9.5 (.github/workflows/whisper-wasm.yml). The build is reproducible (a pinned
+//     Emscripten image), so these hashes are also what scripts/whisper-wasm/build.sh makes; the workflow checks it.
 //   - the model: Whisper base.en (English, already trained, used as is), quantized q5_1, from Hugging Face at a fixed commit.
 const crypto = require("crypto");
 const fs = require("fs");
@@ -11,8 +12,10 @@ const { downloadTo } = require("../update-net");
 const RELEASE = "https://github.com/adithyakumarcr/kural/releases/download/whisper-wasm-1.9.5";
 const HF = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1";
 const FILES = [
-  { name: "loader", file: "kural-whisper.js", url: `${RELEASE}/kural-whisper.js`, size: 0, sha256: "" },
-  { name: "wasm", file: "kural-whisper.wasm", url: `${RELEASE}/kural-whisper.wasm`, size: 0, sha256: "" },
+  { name: "loader", file: "kural-whisper.js", url: `${RELEASE}/kural-whisper.js`, size: 101380,
+    sha256: "7eef969b6dee059e92723fe90737fdf330b86920c6809d7c39ccb877f72cca75" },
+  { name: "wasm", file: "kural-whisper.wasm", url: `${RELEASE}/kural-whisper.wasm`, size: 1255493,
+    sha256: "73d3bf7f9e5c120fcc3be3c824160430c2f695733c186585a465c70e9d34ec72" },
   { name: "model", file: "ggml-base.en-q5_1.bin", url: `${HF}/ggml-base.en-q5_1.bin`, size: 59721011,
     sha256: "4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f" },
 ];
