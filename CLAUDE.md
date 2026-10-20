@@ -634,9 +634,18 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Measured 20 Oct 2026 (16 cores, 8 threads): 11 s of speech 2.4 s, 33 s 4.4 s. Cleanup = Side chat's deps
   (`fastestModel(…, ["codex"])`), no tools, 15 s; a reply without `<clean>` or over 2x the transcript's length (it
   answered instead of tidying) → the raw text. Mac: `device.audio-input` entitlement + `NSMicrophoneUsageDescription`
-  (`build-mac.sh`). Tests: `voice-assets`, `voice-transcriber` (`test/fake-whisper-worker.js`), `voice-cleanup`,
+  (`build-mac.sh`). **VS Code blocks the microphone in webviews** (three locks); `rebrand.py` `webview_microphone` (the
+  outer frame's `allow` gets "microphone" only when `this.extension.id` is `kural.kural`), `patch_webview_pre_text` (the
+  inner frame may pass it on; the page's inline script is pinned by a sha256 in its own CSP, recomputed) and
+  `patch_main_permissions_text` (`out/mainImpl.js`: webviews get "media" for audio only); all by shape, `::warning::` on a
+  miss, so it needs a full `./install.sh`, not `--ext`. Checked 20 Oct 2026 in a patched copy (Xvfb from `apt-get download
+  xvfb`, `--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=test/fixtures/voice/jfk.wav`, CDP on
+  `--remote-debugging-port`, started with `env -i`): Kural's chat gets the microphone, not the camera; the Markdown preview
+  neither; the JFK recording went through Whisper into the box. Tests: `rebrand-webview-mic`, `voice-assets`, `voice-transcriber` (`test/fake-whisper-worker.js`), `voice-cleanup`,
   `voice-chat`, `voice-page`, `build-mac-mic`; live: `node test/voice-transcribe.live.js` (`KURAL_EXEC=/usr/share/kural/kural`
-  also runs the helper in Kural's own program; needs `scripts/whisper-wasm/build.sh` and the model in `dist/`).
+  also runs the helper in Kural's own program; needs `scripts/whisper-wasm/build.sh` and the model in `dist/`),
+  `node test/voice-record.live.js` (the page's recording code in headless Chrome with the fake microphone → Whisper),
+  `node test/voice-cleanup.live.js` (the tidy-up with real Haiku, ~1 s).
 - **Search & Ask** (`lib/search/`: `index.js` the view and Ask (always `brain.fastestModel()`: Haiku, or the lightest
   Codex/Gemini model by router `traits`, the chat's AI first; a local model only with no cloud AI; Adithya: Ask should
   be fast; no Auto routing there), `find.js` text search in the editor, `text.js` no

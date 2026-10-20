@@ -64,8 +64,13 @@ New folder `extension/lib/voice/` (feature folder, wired in `extension.js` and t
   until you type or send.
 - **Errors in words**: no microphone, permission refused (on a Mac: "Allow Kural in System Settings > Privacy & Security
   > Microphone"), nothing heard ("No speech heard"), download failed (the reason, Try again).
-- The chat page's CSP doesn't change: the page records, the extension transcribes. (VS Code 1.140 already lets webviews
-  use `media`.)
+- The chat page's CSP doesn't change: the page records, the extension transcribes.
+- **Correction (found while building it):** VS Code does NOT let webviews use the microphone. Three locks: the webview's
+  outer frame `allow` list, the inner frame's `allow` list, and the main process's permission answer for
+  `vscode-webview://` pages (no "media"). `rebrand.py` patches all three, for Kural's own webviews only (`kural.kural`),
+  audio only (decided with Adithya, 20 Oct 2026). Checked in a patched copy of the app: Kural's chat page gets the
+  microphone, not the camera; the Markdown preview (another extension's webview) gets neither; a recording of the JFK
+  sample went through Whisper into the message box.
 
 ## The extension side (`lib/chat/index.js`)
 

@@ -77,9 +77,11 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "kural-voice-"));
   await check("ready() checks hashes once, then trusts size and mtime", async () => {
     const dir = tmp(), a = new Assets(dir, { files: files() });
     await a.download({});
+    // (Whole seconds: a date restored from a Date can come back a millisecond off.)
+    const f = path.join(dir, "b.bin"), when = 1700000000, bad = Buffer.from(B); bad[0] ^= 1;
+    fs.utimesSync(f, when, when);
     assert.strictEqual(await a.ready(), true);
-    const f = path.join(dir, "b.bin"), st = fs.statSync(f), bad = Buffer.from(B); bad[0] ^= 1;
-    fs.writeFileSync(f, bad); fs.utimesSync(f, st.atime, st.mtime);
+    fs.writeFileSync(f, bad); fs.utimesSync(f, when, when);
     assert.strictEqual(await a.ready(), true, "same size and date: trusted");
     fs.appendFileSync(f, "x");
     assert.strictEqual(await a.ready(), false, "size changed: checked again");

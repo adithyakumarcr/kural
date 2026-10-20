@@ -212,7 +212,7 @@
           const D = S.done || {};
           if (D.cleaned) bar.replaceChildren(d.icon("mic"), text(`From your voice · tidied up${D.model ? ` by ${D.model}` : ""} · check it, then send`),
             d.el("button", { class: "cb", title: "Put back exactly what Whisper heard", onclick: () => undo() }, "Undo"), x());
-          else bar.replaceChildren(d.icon("mic"), text(`From your voice · ${D.why || "not tidied up"}`), x());
+          else bar.replaceChildren(d.icon("mic"), text(`From your voice, as heard (not tidied up${D.why ? `: ${D.why}` : ""})`), x());
           break;
         }
         case "error":
