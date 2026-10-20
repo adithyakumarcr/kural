@@ -608,7 +608,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   logged in here, so `step()` ends the run if Claude/Codex calls any tool but Kural's three. Gemini (agy has no
   per-run MCP): its own tools, every call through the gate (`agyAllowed`: Read/list/find_by_name inside the root;
   content search, commands, edits, web refused). `Repo.resolve`: inside the root as written AND as real path,
-  `SECRET_DIRS`/`SECRET_FILES` never read/listed/searched. Budget: `MAX_CALLS` counted in repo-mcp.js (then "write the
+  `SECRET_DIRS`/`SECRET_FILES` never read/listed/searched. Prompt injection: a file whose text tries to give an AI orders
+  (`INJECTION` patterns, `looksInjected`) is shown with `INJECTION_NOTE` first, and Kural re-reads every pointed-to file
+  (`repo.injected`) and appends `INJECTED_WARNING` to a pointer that doesn't warn already: live, Sonnet called a planted
+  note "notes on the weld code, read them" in 3 of 5 runs, so the prompt alone wasn't enough. Budget: `MAX_CALLS` counted in repo-mcp.js (then "write the
   prompt now") and in `step()`, `TIMEOUT_MS`. Result: `extract` (only `<enhanced_prompt>`), `verifyPaths` (a bullet that
   STARTS with a backticked path must exist, any language; `pathOf` skips symbols, globs, routes, packages). Tests:
   `enhance-tools.test.js`, `enhance.test.js`, `enhance-chat.test.js`; live: `node test/enhance.live.js [codex]`

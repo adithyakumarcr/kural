@@ -93,7 +93,7 @@ const PLUGIN = {
     asked.length = 0;
     const d = await c.fromGitHub(o, { fetchImpl: fake(PLUGIN) });
     assert.ok(!d.error, d.error);
-    assert.strictEqual(asked.filter((u) => u.includes("api.github.com")).length, 1);
+    assert.strictEqual(asked.filter((u) => new URL(u).host === "api.github.com").length, 1);
     assert.match(asked[0], /\/repos\/ada\/market\/git\/trees\/abc123:plugins\/demo\?recursive=1$/);
     assert.deepStrictEqual(d.groups.map((x) => [x.kind, x.items.length]), [["Skills", 2], ["Commands", 2], ["Agents", 1], ["Hooks", 2], ["MCP servers", 2]]);
     assert.strictEqual(d.groups[0].items[0].web, "https://github.com/ada/market/blob/abc123/plugins/demo/skills/brainstorming/SKILL.md");

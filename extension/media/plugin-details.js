@@ -38,7 +38,13 @@
     if (/^[a-z][\w+.-]*:/i.test(url) || !base) return "";
     try { const u = new URL(url, base).href; return web(u) ? u : ""; } catch { return ""; }
   }
-  const stripTags = (s) => s.replace(/<!--[\s\S]*?-->/g, "").replace(/<\/?(?!https?:)[A-Za-z][^>]*>/g, "");
+  // (Until nothing changes: removing one tag can join the pieces of another, "<scr<b>ipt>". The result only ever goes into
+  // text nodes, but no tag should be left in it either.)
+  const stripTags = (s) => {
+    let prev;
+    do { prev = s; s = s.replace(/<!--[\s\S]*?-->/g, "").replace(/<\/?(?!https?:)[A-Za-z][^>]*>/g, ""); } while (s !== prev);
+    return s;
+  };
   const ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", copy: "©", mdash: "—", ndash: "–", hellip: "…" };
   const entities = (s) => s.replace(/&(#\d+|#x[\da-f]+|\w+);/gi, (m, e) => {
     if (e[0] === "#") { const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m; }

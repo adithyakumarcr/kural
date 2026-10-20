@@ -48,7 +48,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
   Enhance prompt (the wand beside Send): your rough request goes to a quicker model (Claude Sonnet 5.5; for a ChatGPT or
   Gemini chat their equivalent: Codex's workhorse model, Gemini's Flash) that looks through the open project, read only
-  (never secrets like .env or keys, never runs anything, at most 20 looks, 150 s), and rewrites it into a clear prompt:
+  (never secrets like .env or keys, never runs anything, at most 20 looks, 150 s; a file that tries to give an AI orders
+  is marked with a warning wherever the prompt points to it), and rewrites it into a clear prompt:
   goal, constraints, expected output, success criteria, "Relevant context" pointers to the right files (only files that
   exist) and open questions. It keeps your language and adds no requirements of its own. While it works the line above
   the box says what it does ("Sonnet 5.5: Reading src/api/client.ts"); Stop ends it. The result replaces your text (@

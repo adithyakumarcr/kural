@@ -156,7 +156,8 @@ then press Send.
 else: no commands, no changes, no web. Files that may hold secrets are never read, searched or listed (`.env`, keys and
 certificates, `credentials*`, `*secret*`, `.npmrc`, `.git`, `.ssh`…; `.env.example` is fine). Links that point outside
 the project are refused. What it reads is treated as data, so a comment in a file telling it to do something is
-ignored. Each click has a budget: at most 20 looks at the project and 150 seconds (Claude also stops at its own turn and
+ignored; if the new prompt points to such a file, Kural adds a warning to that pointer (and the line above the box says
+so), so the model that does the work is told too. Each click has a budget: at most 20 looks at the project and 150 seconds (Claude also stops at its own turn and
 cost limits). It needs an open project, and Claude, ChatGPT (Codex) or Google Gemini set up.
 
 **What it costs:** one extra run of a mid-size model per click, about 5-15 seconds and a few looks at the project. It
