@@ -1,10 +1,11 @@
-## Not released yet
+## What's new in 1.2.0-beta.1
 
 - **Enhance prompt.** The wand beside Send turns a rough request into a clear prompt: goal, constraints, expected
   output, success criteria, pointers to the files that matter (checked to exist) and open questions, in your language.
   Claude Sonnet 5.5 does it (for ChatGPT and Gemini chats their equivalent model), reading the project only: never
-  secrets, never commands, at most 20 looks and 150 seconds. The line above the box says what it's doing; Undo puts back
-  what you wrote; you check it and send.
+  secrets, never commands, at most 20 looks and 150 seconds. If a file it points to tries to give an AI orders, the
+  prompt says so with a warning. The line above the box says what it's doing; Stop ends it; Undo puts back what you
+  wrote. Nothing is sent until you check it and press Send.
 - **Choose where a Claude plugin goes.** With a project open, Install asks: **All My Projects**, **This Project
   (Shared)** (in the project's `.claude/settings.json`, so your teammates get it too) or **This Project, Only Me**
   (`.claude/settings.local.json`). Plugins installed for the project say so in the list, and can be turned off or
