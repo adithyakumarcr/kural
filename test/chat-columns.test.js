@@ -67,7 +67,7 @@ function fixture(ids = ["a", "b", "c"]) {
   Object.assign(chat, {
     tabs: ids.map((id) => ({ id, title: `Chat ${id}`, status: "idle", messages: [{ role: "user" }] })),
     panes: [], runtime: new Map(), routingJobs: new Map(), opened: [], saved: 0,
-    sideChats: { stopAll() {} }, archive: { save() {} }, card: () => ({}),
+    sideChats: { stopAll() {} }, voice: { closed() {} }, archive: { save() {} }, card: () => ({}),
     summary: (t) => ({ id: t.id, title: t.title, status: t.status }), viewTab: (t) => ({ id: t.id, title: t.title, messages: [] }),
     save() { chat.saved++; }, warm() {}, postHistory() {}, endDevice() {}, clearNotice() {},
     openSplit(id) { chat.opened.push(id || "new"); },
