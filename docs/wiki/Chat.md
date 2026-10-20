@@ -108,6 +108,7 @@ your next message, because which tools the model has is fixed when it starts.
 - **@** mentions a file in your sentence.
 - **Enhance prompt** (the wand beside Send): turns a rough request into a clear prompt before you send it. See
   [Enhance prompt](#enhance-prompt) below.
+- **Voice** (the mic beside the wand, **Ctrl+Alt+V**): talk instead of typing. See [Voice input](#voice-input) below.
 - **/** at the start of your message lists your skills and commands (Claude models): your plugins' skills, such as
   Superpowers' `/superpowers:brainstorming`, your own skills and commands, and Claude Code's like `/code-review`. Type
   to filter (by name or what it does), **Tab** or **Enter** puts it in, then write what it's for and send. It needs
@@ -125,6 +126,29 @@ your next message, because which tools the model has is fixed when it starts.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
 - The composer shows only context you choose. Attach a file with **@** or **+ → Add files**; opening it does not attach it.
+
+## Voice input
+
+Click the **mic** beside the wand (or press **Ctrl+Alt+V**, on a Mac **Cmd+Alt+V**), say what you want, and click it
+again. The line above the box shows a red dot, the time and how loud it hears you; **Esc** cancels and nothing is kept.
+It stops by itself after 5 minutes.
+
+1. **Whisper** writes down what you said, on this computer and offline. The first time, Kural asks to download it
+   ("Voice input needs Whisper, a speech model that runs on this computer (about 60 MB, once). Nothing you say leaves
+   it."): **Download** or **Not now**. It understands English.
+2. The **quickest model** you have (Claude Haiku, or Gemini's lightest, or your own model) tidies it up: it removes
+   "um", "ahm", repeated words and false starts, and fixes grammar and punctuation. It keeps your words, the order and
+   every code, file and command name, and adds nothing. Without an AI set up, or if it takes over 15 seconds, the plain
+   transcript is used and the line says why.
+3. The text goes into the box **at the cursor**. Nothing is sent by itself: check it and press Send. **Undo** puts back
+   exactly what Whisper heard.
+
+| | |
+|---|---|
+| Where it runs | Whisper (base.en) in a helper process of Kural, on your CPU. On a 16-core laptop: about 2.5 s for a short prompt, 4.5 s for half a minute of speech. |
+| What leaves the computer | Nothing you say. Only the written text goes to the quick model for the tidy-up, like any message. |
+| The download | whisper.cpp built for Kural (from this repository's release `whisper-wasm-1.9.5`) and the model from Hugging Face, each checked against a fixed SHA-256. Kept in Kural's data; **Remove Kural's Data** deletes it. |
+| On a Mac | macOS asks once for the microphone, at the first recording. If you said no: System Settings > Privacy & Security > Microphone, allow Kural. |
 
 ## Enhance prompt
 

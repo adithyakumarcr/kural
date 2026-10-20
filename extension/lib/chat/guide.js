@@ -54,6 +54,13 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   exist) and open questions. It keeps your language and adds no requirements of its own. While it works the line above
   the box says what it does ("Sonnet 5.5: Reading src/api/client.ts"); Stop ends it. The result replaces your text (@
   mentions stay); Undo puts back what you had. Nothing is sent: check it, then press Send for the chat's model.
+  Voice input (the mic beside the wand, or Ctrl+Alt+V / Cmd+Alt+V): click, talk, click again (Esc cancels; it stops by
+  itself after 5 minutes). Whisper writes down what you said on this computer, offline (English only); the first click
+  asks to download it, about 60 MB, once, and nothing you say leaves the computer. Then the quickest model you have
+  (Haiku, or Gemini's lightest, or your own model; never ChatGPT) removes "um", "ahm", repeats and false starts and fixes
+  the grammar, keeping your words and every code, file and command name; without an AI set up the plain transcript is
+  used. The text goes into the box at the cursor, never sent by itself; Undo puts back exactly what Whisper heard. On a
+  Mac, macOS asks for the microphone once, at the first recording.
   "/" at the start of the message lists your skills and commands (Claude models with "Use my Claude Code setup" on: your
   plugins' skills such as Superpowers' superpowers:brainstorming, your own, and Claude Code's like /code-review); type
   to filter, Tab or Enter puts it in, then add what it's for and send.
@@ -343,7 +350,7 @@ const GUIDE_LOCAL = `
 About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
 work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
 that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
-Ask; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
+Ask; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; the mic beside it (Ctrl+Alt+V) turns what you say into text; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
 Fork from here; the clock button has every chat); Ctrl+K proposes changes to selected code in a read-only diff; Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Extensions & Plugins (the chat's AI's plugins beside VS
 Code's extensions); Kural's browser; devices over SSH; the Model Router (Auto);
