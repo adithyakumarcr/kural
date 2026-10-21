@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.2.1-beta.1
 
 - **Listen to an answer.** The speaker under a finished answer: Kural talks you through it like a friend explaining it,
   in a voice made on this computer, while the part it explains is highlighted. A short walkthrough, not the text read
