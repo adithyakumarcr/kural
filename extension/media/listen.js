@@ -78,8 +78,18 @@
         play(it, P.startedAt + (it.start + off - pos), off);
       }
     }
+    // The samples as they arrive: an Int16Array (VS Code passes typed arrays through), or an ArrayBuffer, a plain array, or
+    // a typed array that became a numbered object on the way ({"0": …, "1": …}): never silence because of the form.
+    function samples(x) {
+      if (x instanceof Int16Array) return x;
+      if (x instanceof ArrayBuffer) return new Int16Array(x.slice(0, x.byteLength - (x.byteLength % 2)));
+      if (ArrayBuffer.isView(x)) return Int16Array.from(x);
+      if (Array.isArray(x)) return Int16Array.from(x);
+      if (x && typeof x === "object") { const n = Object.keys(x).length, out = new Int16Array(n); for (let k = 0; k < n; k++) out[k] = x[k] | 0; return out; }
+      return new Int16Array(0);
+    }
     function enqueue(a) {
-      const pcm = a.pcm instanceof Int16Array ? a.pcm : new Int16Array(a.pcm || []);
+      const pcm = samples(a.pcm);
       if (!pcm.length || !a.rate) return;
       const buffer = ctx.createBuffer(1, pcm.length, a.rate), data = buffer.getChannelData(0);
       for (let k = 0; k < pcm.length; k++) data[k] = pcm[k] / 32768;

@@ -219,6 +219,15 @@ function page({ visiting = false, why = "" } = {}) {
     assert.strictEqual(p.bar(), null);
     assert.strictEqual(p.root.querySelectorAll(".listen-on").length, 0);
   });
+  await check("audio that arrives as an ArrayBuffer, a plain array or a numbered object still plays, at its length", () => {
+    const p = page(); p.btn().on.click(); const ctx = Ctx.last;
+    const msg = (seq, pcm) => p.L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq, block: 0, text: "x", pcm, rate: 100 });
+    msg(0, new Int16Array(200).buffer);
+    msg(1, Array.from({ length: 300 }, () => 5));
+    const obj = {}; for (let k = 0; k < 100; k++) obj[k] = 7;
+    msg(2, obj);
+    assert.deepStrictEqual(live(ctx).map((x) => x.dur), [2, 3, 1]);
+  });
   await check("messages about another chat or answer aren't Listen's business here", () => {
     const p = page();
     assert.strictEqual(p.L.onMessage({ type: "full" }), false);

@@ -138,6 +138,8 @@ class Listen {
     job.ended = true;
     if (this.job === job) this.job = null;
     if (index >= 0) this.postTo(job.pane, { type: "listenEnd", tabId: job.tab.id, index, ...more });
+    // No openers yet (their making failed after the download): make them now, while the voice is warm and idle.
+    if (this.openersMissing) { this.openersMissing = false; this.makeOpeners().catch((e) => this.log(`listen: openers: ${e.message}`)); }
   }
 
   fail(job, message) {
@@ -230,7 +232,7 @@ class Listen {
       const pcm = new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength - (b.byteLength % 2)));
       return rate > 0 && pcm.length ? { pcm, rate } : null;
     } catch {
-      Promise.resolve(this.assets.ready()).then((ok) => ok && !this.job && this.makeOpeners()).catch(() => {});
+      this.openersMissing = true;   // (made when this walkthrough ends: finish())
       return null;
     }
   }

@@ -137,7 +137,7 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     const { listen, sent, spoken, tab } = setup({ writeFails: true, pieces: [{ block: 0, text: "First bit." }] });
     await listen.start("A", tab, 1, BLOCKS);
     await until(() => sent.some((s) => s.msg.type === "listenEnd"));
-    assert.ok(spoken.includes("First bit.") && spoken[spoken.length - 1] === "That's all I could put together.");
+    assert.strictEqual(spoken[spoken.indexOf("First bit.") + 1], "That's all I could put together.");
     assert.strictEqual(sent.find((s) => s.msg.type === "listenEnd").msg.partial, true);
     assert.strictEqual(tab.messages[1].listen, undefined);
   });
@@ -199,6 +199,14 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     assert.ok(listen.pending);
     listen.stop("t1", 1);
     assert.strictEqual(listen.pending, null);
+  });
+  await check("openers missing (never made after the download): made after the next walkthrough, for the time after", async () => {
+    const dir = tmp();
+    const { listen, sent, tab } = setup({ dir });
+    await listen.start("A", tab, 1, BLOCKS);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    assert.ok(!sent.some((s) => s.msg.opener), "none this time");
+    await until(() => fs.existsSync(path.join(dir, "openers", "rate")));
   });
   await check("clean drops walkthroughs that aren't the right shape", () => {
     const msgs = [{ listen: { pieces: [{ block: 0, text: "ok" }], model: "m", engine: "supertonic", at: 1 } }, { listen: { pieces: "x" } },
