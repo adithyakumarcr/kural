@@ -92,6 +92,19 @@ body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 .enh-bar .codicon { flex-shrink: 0; }
 .enh-bar .enh-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .enh-bar .cb.x { padding: 0 2px; }
+/* Listen (media/listen.js): the bar at the top of an answer being explained out loud, and the block it explains. */
+.listen-bar { display: flex; align-items: center; gap: 4px; margin: 0 0 8px; padding: 3px 6px 3px 8px; border-radius: 7px; font-size: calc(12px * var(--fs, 1)); color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.listen-bar.err { background: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 10%, transparent); border-color: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 45%, transparent); color: var(--vscode-foreground); }
+.listen-bar .codicon { flex-shrink: 0; }
+.listen-bar .listen-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 2px; }
+.listen-bar .listen-text.wrap { white-space: normal; }
+.listen-bar .cb.x { padding: 0 3px; display: inline-flex; align-items: center; gap: 1px; }
+.listen-bar .listen-5 { font-size: 10px; font-weight: 600; }
+.listen-on { border-radius: 4px; background: color-mix(in srgb, var(--accent) 13%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); transition: background .25s, box-shadow .25s; }
+.listen-btn.on { color: var(--accent); }
+.listen-btn:disabled { opacity: .45; cursor: default; }
+.answer-actions:has(.listen-btn.on) { opacity: 1; pointer-events: auto; }
 /* Voice input (media/voice.js): the mic beside the wand; while recording a red dot, the time and a level meter. */
 .mic-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; margin-right: 2px; flex-shrink: 0; }
 .mic-btn:hover:not(:disabled) { color: var(--vscode-foreground); background: color-mix(in srgb, var(--accent) 14%, transparent); }
