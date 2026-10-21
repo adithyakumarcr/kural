@@ -233,6 +233,29 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     assert.strictEqual(state.speeds[state.speeds.length - 1], 2);
     assert.ok(tab.messages[1].listen, "still saved at the end");
   });
+  await check("a new speed after everything was made (it's still playing): made again from there, and a new end", async () => {
+    const { listen, sent, tab, state } = setup();
+    await listen.start("A", tab, 1, BLOCKS);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    sent.length = 0;
+    listen.setSpeed("t1", 1, 0.75, 1);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    const audio = sent.filter((s) => s.msg.type === "listenAudio").map((s) => s.msg);
+    assert.deepStrictEqual(audio.map((a) => [a.n, a.gen]), [[1, 1], [2, 1]]);
+    assert.ok(sent.every((s) => s.pane === "A"));
+    assert.strictEqual(state.speeds[state.speeds.length - 1], 0.75);
+  });
+  await check("after Stop, a speed change re-makes nothing (it's only kept as the default)", async () => {
+    const { listen, sent, tab, state } = setup();
+    await listen.start("A", tab, 1, BLOCKS);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    listen.stop("t1", 1);
+    sent.length = 0;
+    listen.setSpeed("t1", 1, 2, 0);
+    await sleep(50);
+    assert.strictEqual(sent.length, 0);
+    assert.strictEqual(state.speed, 2);
+  });
   await check("a speed outside the menu is refused; without a listen it's only saved", () => {
     const { listen, state } = setup();
     listen.setSpeed("t1", 1, 3, 0);

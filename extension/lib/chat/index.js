@@ -159,7 +159,9 @@ class ChatView {
     // only to the pane that asked (a chat on screen twice would otherwise play twice).
     this.listen = new Listen({ dir: path.join(context.globalStorageUri.fsPath, "listen"), postTo: (pane, msg) => this.postTo(pane, msg),
       save: () => this.save(), pick: (tab) => pickModel(tab.model, { isLocal, fastest: (m, skip) => brain.fastestModel(m, skip) }),
-      nameOf: this.sideChats.d.nameOf, scriptDeps: this.sideChats.d, log });
+      nameOf: this.sideChats.d.nameOf, scriptDeps: this.sideChats.d, log,
+      // (the speed you last chose in the player is the default for every walkthrough)
+      speed: () => context.globalState.get("kural.listen.speed", 1), setSpeed: (v) => context.globalState.update("kural.listen.speed", v) });
     // Enhance prompt: a model that looks through the project (read only) rewrites what you typed (lib/enhance). Not part of
     // the conversation either; the page puts the result in the box for you to check.
     this.enhancer = new Enhancer({
@@ -2885,6 +2887,7 @@ class ChatView {
       case "listenStop": if (tab && Number.isInteger(m.index)) this.listen.stop(tab.id, m.index); break;
       case "listenDownload": if (tab && pane) this.listen.download(pane, tab); break;
       case "listenDownloadStop": this.listen.stopDownload(); break;
+      case "listenSpeed": if (tab) this.listen.setSpeed(tab.id, m.index, m.speed, m.from); break;
       case "sideStop": if (tab && typeof m.thread === "string") this.sideChats.stop(tab.id, m.thread); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;

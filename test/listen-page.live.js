@@ -40,7 +40,6 @@ const el = (tag, props = {}, ...kids) => { const n = document.createElement(tag)
 const list = document.querySelector(".list"), tab = { id: "t1", listenWhy: "", messages: [{ role: "user" }, { role: "assistant", blocks: [] }] };
 function draw(i) {
   const a = el("div", { class: "answer" });
-  const bar = L.bar(tab.messages[i], i); if (bar) a.append(bar);
   a.append(el("div", { class: "blk", "data-b": "0" },
     el("p", {}, "The login broke because the access token expired after an hour and nothing refreshed it."),
     el("p", {}, "I changed the client so it keeps the refresh token and asks for a new access token a minute before the old one runs out."),
@@ -54,9 +53,11 @@ function draw(i) {
 window.L = KURAL_LISTEN({ el, icon: (n) => el("i", { class: "codicon codicon-" + n }), post: (m) => posts.push(m), tab: () => tab, root: () => list,
   rerender: (i) => { draw(i); L.retag(); }, AudioContext, every: (f, ms) => setInterval(f, ms), stopEvery: (id) => clearInterval(id) });
 draw(1);
+document.body.append(L.dock);
 window.deliver = (m) => { if (m.pcm) { const b = atob(m.pcm); const u = new Uint8Array(b.length); for (let k = 0; k < b.length; k++) u[k] = b.charCodeAt(k); m.pcm = new Int16Array(u.buffer); } L.onMessage(m); };
-window.peek = () => { const on = list.querySelector(".listen-on"), bar = list.querySelector(".listen-bar"), t = list.querySelector(".listen-text");
-  return { lit: on ? on.getAttribute("data-lb") : null, bar: !!bar, text: t ? t.textContent : "" }; };
+window.peek = () => { const on = list.querySelector(".listen-on"), bar = L.dock.querySelector(".listen-bar"), t = L.dock.querySelector(".listen-line.cur");
+  return { lit: on ? on.getAttribute("data-lb") : null, bar: !!bar, text: t ? t.textContent : "", lines: Array.from(L.dock.querySelectorAll(".listen-line"), (n) => n.textContent),
+    speed: (L.dock.querySelector(".listen-speed-btn") || {}).textContent || "" }; };
 </script>`;
 
 function pipe(child) {
@@ -88,7 +89,8 @@ function pipe(child) {
     await s.send("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/` });
     await sleep(800);
     const toPage = [];
-    const listen = new Listen({ dir: DIR, engine: "supertonic", assets, speaker, save() {},
+    let savedSpeed = 1;
+    const listen = new Listen({ dir: DIR, engine: "supertonic", assets, speaker, save() {}, speed: () => savedSpeed, setSpeed: (v) => { savedSpeed = v; },
       postTo: (pane, m) => toPage.push(m.pcm ? { ...m, pcm: Buffer.from(m.pcm.buffer, m.pcm.byteOffset, m.pcm.byteLength).toString("base64") } : m),
       pick: () => ({ model: "haiku" }), nameOf: () => "Haiku",
       scriptDeps: { makeAgent: brain.makeAgent, isClaude: () => true, emptyDir: () => os.tmpdir(), cwd: () => process.cwd(), localOpts: () => null, mode: () => "ask" } });
@@ -101,6 +103,7 @@ function pipe(child) {
       for (const m of posts || []) {
         if (m.type === "listenStart") listen.start("pane", tab, m.index, m.blocks);
         if (m.type === "listenStop") listen.stop(m.tabId, m.index);
+        if (m.type === "listenSpeed") listen.setSpeed(m.tabId, m.index, m.speed, m.from);
       }
       while (toPage.length) { const m = toPage.shift(); if (m.type === "listenEnd") ended = true; await js(`deliver(${JSON.stringify(m)})`); }
     }, 40);
@@ -108,11 +111,19 @@ function pipe(child) {
     await js(`document.querySelector(".listen-btn").click()`);
     const lits = [];
     const t0 = Date.now();
-    let paused = null, rewound = null;
+    let paused = null, rewound = null, sped = null, threeLines = false;
     while (Date.now() - t0 < 180000) {
       await sleep(250);
       const p = await js("peek()");
       if (p.lit !== null && lits[lits.length - 1] !== p.lit) lits.push(p.lit);
+      if (p.lines.length === 3 && p.lines.every((l) => l && l !== "Getting ready…")) threeLines = true;
+      // Later: 1.5x from the speed menu; the next sentences come at it.
+      if (rewound && !sped && lits.length >= 4) {
+        await js(`document.querySelector(".listen-speed-btn").click()`);
+        await js(`Array.from(document.querySelectorAll(".listen-speed")).find((b) => b.textContent === "1.5x").click()`);
+        await sleep(2500);
+        sped = { label: (await js("peek()")).speed, saved: savedSpeed };
+      }
       // After a few blocks: Pause for a second (the clock must not move), then Rewind 5 s.
       if (!paused && lits.length >= 2) {
         await js(`document.querySelector(".listen-pause").click()`);
@@ -132,11 +143,14 @@ function pipe(child) {
     console.log(`highlighted blocks in order: ${lits.join(" → ")}`);
     console.log(`pause kept the same sentence: ${paused && paused.same}; rewind from block ${rewound && rewound.before} to ${rewound && rewound.after}`);
     console.log(`took ${((Date.now() - t0) / 1000).toFixed(1)} s; walkthrough ${tab.messages[1].listen ? tab.messages[1].listen.pieces.length : 0} pieces`);
+    console.log(`three lines shown: ${threeLines}; speed menu → ${sped && sped.label}, kept as the default: ${sped && sped.saved}`);
     assert.ok(ended, "the host finished");
     assert.ok(blocks.length >= 3, "the highlight moved through the answer");
     assert.ok(paused && paused.same, "pause holds the sentence");
     assert.ok(rewound && Number(rewound.after) <= Number(rewound.before), "rewind went back (or stayed in the same block)");
     assert.strictEqual((await js("peek()")).bar, false, "the bar closed at the end");
+    assert.ok(threeLines, "three lines at some point");
+    assert.ok(sped && sped.label === "1.5x" && sped.saved === 1.5, "the speed changed and was kept");
     console.log("OK");
   } catch (e) { console.error("FAIL", e.stack); code = 1; }
   speaker.stop(); chrome.kill(); server.close();

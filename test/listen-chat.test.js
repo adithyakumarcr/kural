@@ -17,7 +17,8 @@ check("the chat makes a Listen whose messages go to one pane, never to all", () 
   assert.ok(!/new Listen\(\{[^}]*post: \(msg\) => this\.post\(/.test(chat));
 });
 check("the page's Listen messages reach it with the pane they came from", () => {
-  for (const m of ["listenStart", "listenWarm", "listenStop", "listenDownload", "listenDownloadStop"]) assert.ok(chat.includes(`case "${m}"`), m);
+  for (const m of ["listenStart", "listenWarm", "listenStop", "listenDownload", "listenDownloadStop", "listenSpeed"]) assert.ok(chat.includes(`case "${m}"`), m);
+  assert.ok(/case "listenSpeed":[^\n]*this\.listen\.setSpeed\(tab\.id, m\.index, m\.speed, m\.from\)/.test(chat));
   assert.ok(/case "listenStart":[^\n]*this\.listen\.start\(pane, tab/.test(chat));
   assert.ok(/case "listenDownload":[^\n]*this\.listen\.download\(pane, tab/.test(chat));
 });
@@ -36,10 +37,15 @@ check("the page loads listen.js before chat.js", () => {
 check("the chat page draws the button and the bar and passes Listen its messages", () => {
   assert.ok(page.includes("window.KURAL_LISTEN("));
   assert.ok(/el\("div", \{ class: "answer-actions" \}, listen\.button\(m, i\), forkButton\(i\)\)/.test(page));
-  assert.ok(page.includes("listen.bar(m, i)"));
+  assert.ok(!page.includes("listen.bar("), "the player isn't in the answer any more");
+  assert.ok(page.includes("voice.bar.after(listen.dock)"), "the player sits above the chat box, by the voice bar");
   assert.ok(/case "listenState": case "listenAudio": case "listenEnd": listen\.onMessage\(m\); break;/.test(page));
   assert.ok(/case "full": [^\n]*listen\.onFull\(/.test(page));
   assert.ok(/function rerender\(i\) \{[\s\S]{0,400}listen\.retag\(\);/.test(page));
+});
+check("the speed you choose is kept as your default (globalState kural.listen.speed)", () => {
+  assert.ok(/speed: \(\) => context\.globalState\.get\("kural\.listen\.speed", 1\)/.test(chat));
+  assert.ok(/setSpeed: \(v\) => context\.globalState\.update\("kural\.listen\.speed", v\)/.test(chat));
 });
 check("Fork keeps the walkthrough on the answer", () => {
   const source = { id: "a", status: "idle", messages: [{ role: "user", segments: [{ t: "text", v: "Why?" }] },

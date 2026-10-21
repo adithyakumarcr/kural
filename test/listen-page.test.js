@@ -77,7 +77,6 @@ function page({ visiting = false, why = "" } = {}) {
     const old = root.querySelector(`[data-i="${i}"]`);
     const m = tab.messages[i];
     const a = answer();
-    const bar = L.bar(m, i); if (bar) a.kids.unshift(bar), bar.parent = a;
     a.append(el("div", { class: "answer-actions" }, L.button(m, i)));
     const node = el("div", { class: "msg assistant", "data-i": String(i) }, a);
     if (old) old.replaceWith(node); else root.append(node);
@@ -87,8 +86,8 @@ function page({ visiting = false, why = "" } = {}) {
   draw(1);
   const tick = () => ticks.forEach((f) => f());
   const btn = () => root.querySelector('[data-i="1"] .listen-btn');
-  const bar = () => root.querySelector('[data-i="1"] .listen-bar');
-  const audio = (seq, block, secs, text = `sentence ${seq}`) => L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq, block, text, pcm: new Int16Array(Math.round(secs * 100)), rate: 100 });
+  const bar = () => L.dock.querySelector(".listen-bar");   // (the player above the chat box)
+  const audio = (seq, block, secs, text = `sentence ${seq}`, n = seq, gen = 0) => L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq, n, gen, block, text, pcm: new Int16Array(Math.round(secs * 100)), rate: 100 });
   return { L, tab, root, sent, tick, btn, bar, audio, draw };
 }
 
@@ -227,6 +226,59 @@ function page({ visiting = false, why = "" } = {}) {
     const obj = {}; for (let k = 0; k < 100; k++) obj[k] = 7;
     msg(2, obj);
     assert.deepStrictEqual(live(ctx).map((x) => x.dur), [2, 3, 1]);
+  });
+  await check("the player sits above the chat box, not in the answer", () => {
+    const p = page(); p.btn().on.click(); p.audio(0, 0, 2);
+    assert.ok(p.bar(), "in the dock");
+    assert.strictEqual(p.root.querySelector(".listen-bar"), null, "not in the answer");
+    assert.ok(!p.L.dock.classList.contains("hidden"));
+    p.bar().querySelector(".listen-close").on.click();
+    assert.ok(p.L.dock.classList.contains("hidden"));
+  });
+  await check("three lines: the sentence before, the one being spoken, the next", () => {
+    const p = page(); p.btn().on.click(); const ctx = Ctx.last;
+    p.audio(0, 0, 2, "First one."); p.audio(1, 1, 2, "Second one."); p.audio(2, 2, 2, "Third one.");
+    ctx.currentTime = live(ctx)[0].when + 2.5; p.tick();
+    const lines = p.L.dock.querySelectorAll(".listen-line").map((n) => [n.textContent, n.classList.contains("cur")]);
+    assert.deepStrictEqual(lines, [["First one.", false], ["Second one.", true], ["Third one.", false]]);
+  });
+  await check("the speed menu: 0.5x to 2x; the one in use shown; preparing tells the default", () => {
+    const p = page(); p.btn().on.click();
+    p.L.onMessage({ type: "listenState", tabId: "t1", index: 1, phase: "preparing", speed: 1.25 });
+    const btn = p.bar().querySelector(".listen-speed-btn");
+    assert.strictEqual(btn.textContent, "1.25x");
+    btn.on.click();
+    const opts = p.bar().querySelectorAll(".listen-speed");
+    assert.deepStrictEqual(opts.map((o) => o.textContent), ["0.5x", "0.75x", "1x", "1.25x", "1.5x", "2x"]);
+    assert.ok(opts[3].classList.contains("on"));
+  });
+  await check("a new speed: the host is told from which sentence; what's queued from there is dropped; older audio ignored", () => {
+    const p = page(); p.btn().on.click(); const ctx = Ctx.last;
+    p.audio(0, 0, 2, "First.", 0); p.audio(1, 1, 2, "Second.", 1); p.audio(2, 2, 2, "Third.", 2);
+    ctx.currentTime = live(ctx)[0].when + 2.5; p.tick();   // (in "Second.")
+    p.bar().querySelector(".listen-speed-btn").on.click();
+    p.bar().querySelectorAll(".listen-speed").find((o) => o.textContent === "1.5x").on.click();
+    assert.deepStrictEqual(p.sent.filter((m) => m.type === "listenSpeed"), [{ type: "listenSpeed", tabId: "t1", index: 1, speed: 1.5, from: 1 }]);
+    assert.strictEqual(live(ctx).length, 0, "sentence 1 on stopped, waiting for the new ones");
+    p.audio(3, 2, 2, "Third.", 2, 0);   // (old speed, still on its way)
+    assert.strictEqual(live(ctx).length, 0);
+    p.audio(4, 1, 1, "Second.", 1, 1);
+    const s = live(ctx);
+    assert.strictEqual(s.length, 1); assert.strictEqual(s[0].dur, 1);
+    assert.strictEqual(p.bar().querySelector(".listen-speed-btn").textContent, "1.5x");
+  });
+  await check("a new speed after the host's end: the player waits for the new sentences instead of closing", () => {
+    const p = page(); p.btn().on.click(); const ctx = Ctx.last;
+    p.audio(0, 0, 2, "First.", 0); p.audio(1, 1, 2, "Second.", 1);
+    p.L.onMessage({ type: "listenEnd", tabId: "t1", index: 1 });
+    ctx.currentTime = live(ctx)[0].when + 0.5; p.tick();
+    p.bar().querySelector(".listen-speed-btn").on.click();
+    p.bar().querySelectorAll(".listen-speed").find((o) => o.textContent === "2x").on.click();
+    ctx.currentTime += 5; p.tick();
+    assert.ok(p.bar(), "still open");
+    p.audio(2, 0, 1, "First.", 0, 1); p.L.onMessage({ type: "listenEnd", tabId: "t1", index: 1 });
+    ctx.currentTime += 3; p.tick();
+    assert.strictEqual(p.bar(), null, "closes after the new end");
   });
   await check("messages about another chat or answer aren't Listen's business here", () => {
     const p = page();

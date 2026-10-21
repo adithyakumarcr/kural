@@ -2,20 +2,23 @@
 // talks you through the answer: a short spoken walkthrough in a voice made on this computer, while the part being
 // explained is highlighted. The page numbers the answer's rendered blocks (paragraphs, lists, code, tables, headings
 // outside the steps), tags them data-lb, and sends them with the click; the host answers with audio, one sentence at a
-// time, which Web Audio plays back to back (no <audio> element: the sentences join without gaps). The bar at the top of
-// the answer: Pause/Play, Rewind 5 s, ✕. No slider.
+// time, which Web Audio plays back to back (no <audio> element: the sentences join without gaps). The player sits just
+// above the chat box (it stays on screen while you scroll): Pause/Play, Rewind 5 s, the speed (0.5x–2x; your choice
+// becomes the default), ✕, and three lines: the sentence before, the one being spoken, the next. No slider.
 // Loaded by chat.js as a plain script (window.KURAL_LISTEN = make) and by the test with require().
 (function () {
   const LEAD = 0.05;   // seconds between scheduling and the first sound (a sound scheduled in the past is cut)
   const NOTHING = "Nothing to explain in this answer.";
+  const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const ask = (size, model) => `Listen needs a voice: about ${Math.round((size || 0) / 1e6)} MB, downloaded once. The voice is made on this computer; the walkthrough's words are written by ${model || "your AI"} from this answer.`;
 
   function make(d) {
     // d: el, icon, post(msg), tab() → the shown chat, root() → the list element, rerender(i) (redraws message i, then retag()),
     //   AudioContext, every(fn, ms) → id, stopEvery(id)
-    let ctx = null, P = null, follow = true, refollow = false, lit = null, hooked = null, ticker = null;
+    let ctx = null, P = null, follow = true, refollow = false, lit = null, hooked = null, ticker = null, speed = 1, menu = false;
+    const dock = d.el("div", { class: "listen-dock hidden" });   // (the chat puts it above the box)
     // P: the answer being listened to here: { tabId, index, phase, message?, size?, model?, pct?, items: [{buffer, block,
-    //   text, start, dur}], end, from, startedAt, srcs, paused, ended, partial, scheduled }
+    //   text, n, start, dur}], end, from, startedAt, srcs, paused, ended, partial, scheduled, gen }
 
     function kindOf(n) {
       const t = n.tagName;
@@ -55,7 +58,7 @@
 
     const answerEl = (i) => d.root().querySelector(`[data-i="${i}"] .answer`);
     const mine = (i) => P && P.tabId === (d.tab() || {}).id && P.index === i;
-    const redraw = () => { if (P) d.rerender(P.index); };
+    const redraw = () => renderDock();
 
     // ---------- sound ----------
     function position() {
@@ -89,11 +92,12 @@
       return new Int16Array(0);
     }
     function enqueue(a) {
+      if (a.gen != null && a.gen < P.gen) return;   // (made at the old speed)
       const pcm = samples(a.pcm);
       if (!pcm.length || !a.rate) return;
       const buffer = ctx.createBuffer(1, pcm.length, a.rate), data = buffer.getChannelData(0);
       for (let k = 0; k < pcm.length; k++) data[k] = pcm[k] / 32768;
-      const it = { buffer, block: a.block == null ? null : a.block, text: a.text || "", start: P.end, dur: buffer.duration };
+      const it = { buffer, block: a.block == null ? null : a.block, text: a.text || "", n: Number.isInteger(a.n) ? a.n : null, start: P.end, dur: buffer.duration };
       P.items.push(it); P.end += it.dur;
       if (!P.scheduled) return schedule(it.start);
       const when = P.startedAt + (it.start - P.from);
@@ -123,8 +127,7 @@
       const cur = current();
       if (P.ended && position() >= P.end - 1e-3) return stop(false);
       if (!cur) return;
-      const text = d.root().querySelector(`[data-i="${P.index}"] .listen-bar .listen-text`);
-      if (text && cur.text && text.textContent !== cur.text) text.textContent = cur.text;
+      showLines(cur);
       if (cur.block !== lit || refollow) { light(cur.block, true); refollow = false; }
     }
     const userScroll = () => { follow = false; };
@@ -136,6 +139,40 @@
       root.addEventListener("touchmove", userScroll, { passive: true });
     }
 
+    // The three lines: before, now, next (by the sentences already made; the next may not be made yet).
+    function linesFor(cur) {
+      const said = P.items.filter((it) => it.text);
+      const k = cur ? said.indexOf(cur) : -1;
+      return [k > 0 ? said[k - 1].text : "", cur && cur.text ? cur.text : "Getting ready…", k >= 0 && k + 1 < said.length ? said[k + 1].text : ""];
+    }
+    function showLines(cur) {
+      const nodes = dock.querySelectorAll(".listen-line");
+      if (nodes.length !== 3) return;
+      linesFor(cur).forEach((t, k) => { if (nodes[k].textContent !== t) nodes[k].textContent = t; });
+    }
+
+    // ---------- speed ----------
+    // The voice makes the sentences again at the new speed from the one being spoken (the host is told which); what was
+    // queued from there is dropped, and audio still on its way at the old speed is ignored (P.gen).
+    function speedTo(v) {
+      speed = v; menu = false;
+      if (!P) return renderDock();
+      const cur = P.scheduled ? current() : null;
+      const said = P.items.filter((it) => it.n != null);
+      const from = cur && cur.n != null ? cur.n : said.length ? said[0].n : 0;
+      d.post({ type: "listenSpeed", tabId: P.tabId, index: P.index, speed: v, from });
+      P.gen = (P.gen || 0) + 1;
+      const keep = P.items.filter((it) => it.n == null || it.n < from);
+      P.ended = false;   // (the host ends again once it has made them at the new speed)
+      if (keep.length !== P.items.length && P.scheduled) {
+        const pos = position();
+        P.items = keep;
+        P.end = keep.reduce((e, it) => Math.max(e, it.start + it.dur), 0);
+        schedule(Math.min(pos, P.end));
+      }
+      renderDock();
+    }
+
     // ---------- start / stop ----------
     function stop(tell) {
       if (!P) return;
@@ -143,8 +180,9 @@
       stopSources();
       if (tell) d.post({ type: "listenStop", tabId: was.tabId, index: was.index });
       if (ticker != null) { d.stopEvery(ticker); ticker = null; }
-      P = null;
+      P = null; menu = false;
       light(null);
+      renderDock();
       d.rerender(was.index);
     }
 
@@ -155,13 +193,14 @@
       if (P) stop(false);   // (the host stops the other one itself)
       hookScroll();
       const blocks = numberBlocks(answerEl(i));
-      P = { tabId: t.id, index: i, phase: blocks.length ? "preparing" : "nothing", items: [], end: 0, from: 0, startedAt: 0, srcs: [], paused: false, ended: false, scheduled: false };
-      if (!blocks.length) return d.rerender(i);
+      P = { tabId: t.id, index: i, phase: blocks.length ? "preparing" : "nothing", items: [], end: 0, from: 0, startedAt: 0, srcs: [], paused: false, ended: false, scheduled: false, gen: 0 };
+      if (!blocks.length) { renderDock(); return d.rerender(i); }
       ctx = ctx || new d.AudioContext();
       if (ctx.state === "suspended") ctx.resume();   // (inside the click: the browser lets sound start)
       follow = true; lit = null;
       if (ticker == null) ticker = d.every(tick, 100);
       d.post({ type: "listenStart", tabId: t.id, index: i, blocks });
+      renderDock();
       d.rerender(i);
     }
 
@@ -189,26 +228,36 @@
       d.icon(on ? "debug-stop" : "unmute"));
     }
 
-    function bar(m, i) {
-      if (!mine(i)) return null;
+    // The player above the chat box, for the answer being listened to in the chat on screen.
+    function renderDock() {
+      const show = P && P.tabId === (d.tab() || {}).id;
+      dock.classList.toggle("hidden", !show);
+      if (!show) return dock.replaceChildren();
       const close = (label = "Close", onclick = () => stop(true)) => d.el("button", { class: "cb x listen-close", title: label, "aria-label": label, onclick }, d.icon("close"));
       const row = (cls, ...kids) => d.el("div", { class: `listen-bar ${cls}`, role: "status", "aria-live": "polite" }, ...kids);
-      if (P.phase === "nothing" || P.phase === "error") return row("err", d.icon("warning"), d.el("span", { class: "listen-text" }, P.phase === "nothing" ? NOTHING : P.message || "Something went wrong."), close());
+      if (P.phase === "nothing" || P.phase === "error") return dock.replaceChildren(row("err", d.icon("warning"), d.el("span", { class: "listen-text" }, P.phase === "nothing" ? NOTHING : P.message || "Something went wrong."), close()));
       if (P.phase === "ask") {
-        return row("ask", d.icon("unmute"), d.el("span", { class: "listen-text wrap" }, ask(P.size, P.model)),
+        return dock.replaceChildren(row("ask", d.icon("unmute"), d.el("span", { class: "listen-text wrap" }, ask(P.size, P.model)),
           d.el("button", { class: "cb primary listen-download", onclick: () => { P.phase = "downloading"; P.pct = 0; d.post({ type: "listenDownload", tabId: P.tabId }); redraw(); } }, "Download"),
-          d.el("button", { class: "cb listen-close", onclick: () => stop(true) }, "Cancel"));
+          d.el("button", { class: "cb listen-close", onclick: () => stop(true) }, "Cancel")));
       }
       if (P.phase === "downloading") {
-        return row("", d.icon("cloud-download"), d.el("span", { class: "listen-text" }, `Downloading the voice… ${P.pct || 0}%`),
-          close("Stop the download", () => { d.post({ type: "listenDownloadStop" }); stop(true); }));
+        return dock.replaceChildren(row("", d.icon("cloud-download"), d.el("span", { class: "listen-text" }, `Downloading the voice… ${P.pct || 0}%`),
+          close("Stop the download", () => { d.post({ type: "listenDownloadStop" }); stop(true); })));
       }
-      const cur = P.scheduled ? current() : null;
-      return row("",
-        d.el("button", { class: "cb x listen-pause", title: P.paused ? "Play" : "Pause", "aria-label": P.paused ? "Play" : "Pause", onclick: pause }, d.icon(P.paused ? "play" : "debug-pause")),
-        d.el("button", { class: "cb x listen-rewind", title: "Back 5 seconds", "aria-label": "Back 5 seconds", onclick: rewind }, d.icon("history"), d.el("span", { class: "listen-5" }, "5")),
-        d.el("span", { class: "listen-text" }, (cur && cur.text) || "Getting ready…"),
-        close());
+      const label = (v) => `${v}x`;
+      const lines = linesFor(P.scheduled ? current() : null);
+      dock.replaceChildren(row("player",
+        d.el("div", { class: "listen-controls" },
+          d.el("button", { class: "cb x listen-pause", title: P.paused ? "Play" : "Pause", "aria-label": P.paused ? "Play" : "Pause", onclick: pause }, d.icon(P.paused ? "play" : "debug-pause")),
+          d.el("button", { class: "cb x listen-rewind", title: "Back 5 seconds", "aria-label": "Back 5 seconds", onclick: rewind }, d.icon("history"), d.el("span", { class: "listen-5" }, "5")),
+          d.el("button", { class: `cb x listen-speed-btn${menu ? " on" : ""}`, title: "Speed", "aria-label": `Speed ${label(speed)}`, "aria-expanded": menu ? "true" : "false",
+            onclick: () => { menu = !menu; renderDock(); } }, label(speed))),
+        d.el("div", { class: "listen-lines" },
+          d.el("div", { class: "listen-line prev" }, lines[0]), d.el("div", { class: "listen-line cur" }, lines[1]), d.el("div", { class: "listen-line next" }, lines[2])),
+        close(),
+        menu ? d.el("div", { class: "listen-speeds", role: "menu" }, SPEEDS.map((v) => d.el("button", { class: `cb listen-speed${v === speed ? " on" : ""}`, role: "menuitemradio",
+          "aria-checked": v === speed ? "true" : "false", onclick: () => speedTo(v) }, label(v)))) : null));
     }
 
     // After the chat redraws: the blocks are new elements; tag them again and keep the highlight.
@@ -222,8 +271,8 @@
       if (!msg || !/^listen(State|Audio|End)$/.test(msg.type)) return false;
       if (!P || msg.tabId !== P.tabId || (msg.index !== P.index && msg.index !== -1)) return true;
       if (msg.type === "listenAudio") {
-        if (P.phase !== "playing") { P.phase = "playing"; redraw(); }
         if (ctx) enqueue(msg);
+        if (P.phase !== "playing") { P.phase = "playing"; redraw(); }
         return true;
       }
       if (msg.type === "listenEnd") { P.ended = true; P.partial = !!msg.partial; if (!P.items.length) stop(false); return true; }
@@ -231,7 +280,7 @@
         case "stopped": stop(false); return true;
         case "ask": Object.assign(P, { phase: "ask", size: msg.size, model: msg.model }); break;
         case "downloading": Object.assign(P, { phase: "downloading", pct: msg.pct }); break;
-        case "preparing": if (P.phase !== "playing") P.phase = "preparing"; break;
+        case "preparing": if (P.phase !== "playing") P.phase = "preparing"; if (SPEEDS.includes(msg.speed)) speed = msg.speed; break;
         case "playing": P.phase = "playing"; break;
         case "error": stopSources(); Object.assign(P, { phase: "error", message: msg.message }); break;
         default: return true;
@@ -243,7 +292,7 @@
     // The pane now shows another chat: this one stops.
     function onFull(tabId) { if (P && P.tabId !== tabId) stop(true); }
 
-    return { button, bar, numberBlocks, retag, onMessage, onFull };
+    return { button, dock, numberBlocks, retag, onMessage, onFull };
   }
 
   if (typeof module !== "undefined" && module.exports) module.exports = make; else window.KURAL_LISTEN = make;

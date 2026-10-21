@@ -49,6 +49,8 @@ class Listen {
     this.pending = null;    // a start waiting for the download: {pane, tab, index, blocks}
     this.fetching = null;   // {ctl, pct}
     this.making = null;     // the openers being made
+    this.done = null;       // the last job whose sentences are all made: its page may still be playing them (a speed change
+                            // then makes them again from where it is)
   }
 
   // "" when Listen can run in this chat, else why not (the button's hover).
@@ -159,11 +161,24 @@ class Listen {
 
   speed() { const v = Number(this.getSpeed()); return SPEEDS.includes(v) ? v : 1; }
 
+  // Everything was made but the page is still playing it: make the sentences from `from` again at the new speed (a job
+  // of its own, with the same sentences and the next generation), then end again.
+  async resume(old, speed, from) {
+    const job = { ...old, ctl: new AbortController(), next: Math.max(0, Math.min(Number.isInteger(from) ? from : 0, old.sentences.length)),
+      gen: old.gen + 1, speed, pumping: null, ended: false, playing: true };
+    this.done = null;
+    this.job = job;
+    await this.drain(job);
+    if (!job.ended) this.finish(job, {});
+  }
+
   // The page's speed menu: kept as your default; the walkthrough playing goes on at it from sentence `from` (made again).
   setSpeed(tabId, index, speed, from) {
     const v = Number(speed);
     if (!SPEEDS.includes(v)) return;
     this.saveSpeed(v);
+    const dn = this.done;
+    if (!this.job && dn && dn.tab.id === tabId && dn.tab.messages.indexOf(dn.msg) === index && v !== dn.speed) return this.resume(dn, v, from);
     const j = this.job;
     if (!j || j.ended || j.tab.id !== tabId || j.tab.messages.indexOf(j.msg) !== index || v === j.speed) return;
     j.speed = v;
@@ -184,6 +199,7 @@ class Listen {
     const index = job.tab.messages.indexOf(job.msg);
     job.ended = true;
     if (this.job === job) this.job = null;
+    this.done = job;
     if (index >= 0) this.postTo(job.pane, { type: "listenEnd", tabId: job.tab.id, index, ...more });
     // No openers yet (their making failed after the download): make them now, while the voice is warm and idle.
     if (this.openersMissing) { this.openersMissing = false; this.makeOpeners().catch((e) => this.log(`listen: openers: ${e.message}`)); }
@@ -197,6 +213,7 @@ class Listen {
 
   // Stops a job: the model request, and the voice's queue. phase: tell its page (another Listen started, the toggle).
   end(job, phase) {
+    if (this.done && job && this.done.tab === job.tab && this.done.msg === job.msg) this.done = null;
     if (!job || job.ended) return;
     job.ended = true;
     job.ctl.abort();
@@ -209,22 +226,29 @@ class Listen {
   stop(tabId, index) {
     const p = this.pending;
     if (p && p.tab.id === tabId && p.index === index) this.pending = null;
+    const dn = this.done;
+    if (dn && dn.tab.id === tabId && dn.tab.messages.indexOf(dn.msg) === index) this.done = null;
     const j = this.job;
     if (j && j.tab.id === tabId && j.tab.messages.indexOf(j.msg) === index) this.end(j);
   }
 
   paneGone(pane) {
+    if (this.done && this.done.pane === pane) this.done = null;
     if (this.job && this.job.pane === pane) this.end(this.job);
     if (this.pending && this.pending.pane === pane) this.pending = null;
   }
 
   tabClosed(tabId) {
+    if (this.done && this.done.tab.id === tabId) this.done = null;
     if (this.job && this.job.tab.id === tabId) this.end(this.job);
     if (this.pending && this.pending.tab.id === tabId) this.pending = null;
   }
 
   // Messages were removed (Edit): stop if the answer being listened to is gone.
-  cut(tab) { if (this.job && this.job.tab === tab && tab.messages.indexOf(this.job.msg) < 0) this.end(this.job); }
+  cut(tab) {
+    if (this.done && this.done.tab === tab && tab.messages.indexOf(this.done.msg) < 0) this.done = null;
+    if (this.job && this.job.tab === tab && tab.messages.indexOf(this.job.msg) < 0) this.end(this.job);
+  }
 
   async download(pane, tab) {
     if (this.fetching) return;

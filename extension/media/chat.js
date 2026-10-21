@@ -722,8 +722,6 @@ window.KURAL_CHAT = function (app, port) {
     if (m.models && m.models.length) out.append(el("div", { class: "model-attribution", ...(m.routing && m.routing.reason ? { title: m.routing.reason } : {}) },m.models.map(modelLabel).join(" → ") +
       (m.routing ? ` · ${m.routing.source || "native"} · ${Number(m.routing.ms).toFixed(1)} ms routing` : "")));
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
-    const listenBar = listen.bar(m, i);   // (Listen: this answer explained out loud; Pause, Rewind 5 s, ✕)
-    if (listenBar) out.append(listenBar);
     const P = parts(m);
     P.forEach((p, n) => {
       if (p.group.length) out.append(stepsNode(m, p.group, n, n === P.length - 1));
@@ -1266,6 +1264,7 @@ window.KURAL_CHAT = function (app, port) {
   // Listen: an answer explained out loud (media/listen.js; the host half is lib/listen). Its sound plays in this page only.
   const listen = window.KURAL_LISTEN({ el, icon, post, tab: () => S.tab, root: () => listEl, rerender: (i) => rerender(i),
     AudioContext: window.AudioContext, every: (fn, ms) => setInterval(fn, ms), stopEvery: (id) => clearInterval(id) });
+  voice.bar.after(listen.dock);   // (its player sits just above the chat box, by voice input's bar)
 
   // --- @ mentions, and "/" for your skills and commands ---
 
