@@ -8,7 +8,7 @@ const { loadKokoro, loadPiper, wav } = require("./kp");
 const text = fs.readFileSync(path.join(__dirname, "out/walkthrough.txt"), "utf8").trim();
 const tagged = text.replace("pretty cool.", "pretty cool. <laugh>").replace("Then there's the design bugs.", "<breath> Then there's the design bugs.");
 const sentences = (t) => t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
-const strip = (t) => t.replace(/<\/?[a-z]+>/g, "").replace(/\s+/g, " ").trim();
+const strip = (t) => { let p; do { p = t; t = t.replace(/<\/?[a-z]+>/g, ""); } while (t !== p); return t.replace(/\s+/g, " ").trim(); };
 const runs = [
   ["supertonic3", "F1", () => loadSupertonic(ort, path.join(__dirname, "out/models/st3"), "F1", 3), tagged],
   ["supertonic3", "F2", () => loadSupertonic(ort, path.join(__dirname, "out/models/st3"), "F2", 3), tagged],

@@ -34,6 +34,14 @@ const cleanBlocks = (blocks) => (Array.isArray(blocks) ? blocks : []).slice(0, M
 const validListen = (l) => !!l && Array.isArray(l.pieces) && l.pieces.length > 0
   && l.pieces.every((p) => p && Number.isInteger(p.block) && p.block >= 0 && typeof p.text === "string");
 
+// The voice's tags (<laugh>, <breath>) taken out, again until none are left: one pass could join "<la<x>ugh>" into a
+// new tag (CodeQL js/incomplete-multi-character-sanitization). Only to see whether a sentence has anything to say.
+function withoutTags(text) {
+  let previous;
+  do { previous = text; text = text.replace(/<[a-z]+>/g, ""); } while (text !== previous);
+  return text;
+}
+
 class Listen {
   // dir: <globalStorage>/listen · postTo(pane, msg) · save() · pick(tab) → {model} | {why} · nameOf(model) ·
   // scriptDeps: Side chat's model deps · speed() / setSpeed(v): your default speed (kept by the chat) ·
@@ -147,7 +155,7 @@ class Listen {
   // false: the voice failed (the job has ended with an error) or was stopped.
   async speakSentence(job, s, n, gen) {
     const say = forVoice(s.text, this.tags);
-    if (!say.replace(/<[a-z]+>/g, "").trim()) return true;
+    if (!withoutTags(say).trim()) return true;
     let r;
     try { r = await this.speaker.speak(say, { speed: job.speed }); } catch (e) {
       if (gen !== job.gen) return true;   // (cancelled for a new speed)
