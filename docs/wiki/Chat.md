@@ -109,6 +109,7 @@ your next message, because which tools the model has is fixed when it starts.
 - **Enhance prompt** (the wand beside Send): turns a rough request into a clear prompt before you send it. See
   [Enhance prompt](#enhance-prompt) below.
 - **Voice** (the mic beside the wand, **Ctrl+Alt+V**): talk instead of typing. See [Voice input](#voice-input) below.
+- **Listen** (the speaker under a finished answer): Kural explains the answer out loud. See [Listen](#listen) below.
 - **/** at the start of your message lists your skills and commands (Claude models): your plugins' skills, such as
   Superpowers' `/superpowers:brainstorming`, your own skills and commands, and Claude Code's like `/code-review`. Type
   to filter (by name or what it does), **Tab** or **Enter** puts it in, then write what it's for and send. It needs
@@ -142,6 +143,29 @@ It stops by itself after 5 minutes.
    transcript is used and the line says why.
 3. The text goes into the box **at the cursor**. Nothing is sent by itself: check it and press Send. **Undo** puts back
    exactly what Whisper heard.
+
+## Listen
+
+Point at a finished answer and click the **speaker** (beside Fork from here). Kural talks you through the answer like a
+friend explaining it: a short walkthrough of the main points, about a minute or two for a 300–500 word answer, while the
+part it's explaining is **highlighted** in the answer and kept on screen. Code is explained ("this checks whether the
+token runs out within a minute"), never read out symbol by symbol.
+
+- **It starts at once.** A short opener plays right away ("Alright, let me walk you through this."), and the walkthrough
+  is spoken sentence by sentence while the rest is still being made.
+- **The bar** at the top of the answer: **Pause/Play**, **Rewind 5 s** (also back into the sentence before) and **✕**.
+  There's no slider. The speaker button again also stops it. If you scroll the chat yourself, it stops scrolling for
+  you (the highlight still moves) until you press Play or Rewind.
+- **The voice is made on this computer**, offline (Supertonic 3). The first click asks to download it: about 430 MB,
+  once (the voice and Microsoft's ONNX Runtime). Every file is checked against the size and SHA-256 Kural expects.
+- **The words** come from the chat's quickest model (Claude Haiku, or Gemini's lightest), which reads the answer. A chat
+  on your own model uses that model, so nothing leaves the computer. ChatGPT (Codex) can't be used for this: with only
+  ChatGPT set up, the speaker is greyed out and says why.
+- **Listening again is instant**: the walkthrough's text is kept with the answer (and goes with it into a fork); the
+  audio isn't saved, it's made again on this computer.
+- One answer plays at a time. The sound plays only in the place you clicked (with the chat open twice, in one of them);
+  showing another chat there, closing it, or editing an earlier message stops it.
+- English only for now. Available on Linux x64, Apple Silicon Macs and Windows x64.
 
 | | |
 |---|---|
