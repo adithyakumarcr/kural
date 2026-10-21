@@ -229,12 +229,44 @@ model if that is all you have). Ask more in the same box and it remembers the si
 
 ## In the answer
 
-- **How it worked: one dropdown.** Everything the AI did on the way (its thoughts, the files it read, its searches,
-  commands, edits, permissions you answered, and the short notes it wrote between them) is one line above the answer:
-  "Worked for 34 s · 2 thoughts, 3 reads, 1 command". While it works the line says what it's doing now. Click it to see
-  every step. What needs you (a permission card, a question), agents' cards, the team's messages and pictures stay in
-  sight, outside it.
-- **Questions with options.** When a choice is yours, Kural asks with options you can click.
+- **Calm reading.** Answers have real headings, roomy text, and color only where it means something. An answer that
+  starts with its point (`**Done:** …`, `**Goal:** …`, `**In short:** …`) shows it in a box on top. Callouts use
+  GitHub's alerts, so a saved plan looks the same on GitHub: `> [!NOTE]` blue **Note**, `> [!TIP]` green **Tip**,
+  `> [!IMPORTANT]` purple **Important**, `> [!WARNING]` amber **Watch out**, `> [!CAUTION]` red **Risk**. Also quotes,
+  nested lists, checkboxes, ~~struck-out~~ text, and numbered steps whose file is a chip that opens it. Tables line up
+  number columns on the right and color status words: passed green, failed red, No grey ("Breaking change: No" isn't
+  bad news). Kural asks every AI to write this way; an answer that doesn't still reads fine.
+
+### Thinking: one timeline
+
+Everything the AI did on the way is one timeline above the answer: its thoughts in readable text, between the steps
+it took (Read, Searched, Edited +18 −3, Ran npm test · passed). Click a step to see all of it.
+
+- The header says "Working… 12 s" while it works, then "Worked for 34 s · 2 thoughts, 3 reads, 1 command", and what the
+  thinking is: **Claude's summary**, **ChatGPT's summary** or **raw**. Anthropic and OpenAI only send a summary of their
+  models' thinking, never the raw thinking. Kural shows it as it comes and summarizes nothing itself. Models on your
+  computer (Qwen3, DeepSeek-R1, gpt-oss) and open models through Codex send their raw thinking, word by word. Gemini
+  (Antigravity) passes no thinking on.
+- At about 14 lines it scrolls inside, following the newest line. Scroll up in it to read and it stays there;
+  **Latest** brings you back to the newest line.
+- It never folds by itself while you watch, so nothing below it jumps. When you open the chat later, earlier answers'
+  timelines are folded to their header: click to open one.
+- What needs you (a permission card, a question), agents' cards, the team's messages and pictures stay outside it.
+
+### Answering a question: pick, then Send
+
+When the AI asks you something (a question card, or options at the end of its answer: a question, then a numbered
+list, `- [ ]` lines when several may be picked, or a yes/no question), the options are buttons.
+
+- A click picks an option; a second click un-picks it. Pick several where the question allows it.
+- Your picks stay on the question, and the line above the box shows "Your answer … (press Send)". Nothing is sent until
+  you press **Send** (or Enter). What you type in the box goes with your answer as a note.
+- A card has no Submit button: the chat's Send answers it. **Skip** stays, and **Other…** takes your own words.
+- After you answer, the question keeps your picks (the others fade), so you can see later what you chose.
+- Only the last answer of a chat that isn't working can be answered; older ones show what was picked.
+- **Ask about this question.** Not sure what to pick? Type your question in the box under the options and press
+  **Ask**. The AI that asked answers right there, then asks again, changed if your question changed something
+  ("Updated after your question"). **The question before you asked** opens the old one.
 - **Code blocks** have **Copy**, **Insert** (at your cursor) and **Apply** (Kural applies it to the file and you review
   it, like [[Inline Edit]]).
 - **Pictures.** Pictures in an answer are shown: a picture file from your project, one the model read, or one an image

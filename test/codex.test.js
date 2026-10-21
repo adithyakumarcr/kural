@@ -48,6 +48,18 @@ const results = (ev) => ev.filter((m) => m.type === "user" && !m.isReplay).flatM
     assert.deepStrictEqual({ ...events[0] }, { session_id: "kural-1", type: "system", subtype: "init", model: "gpt-fake", tools: [], mcp_servers: [] });
   });
 
+  await check("raw reasoning wins over its summary, never both", async () => {
+    const thinkStart = (ev) => ev.find((m) => m.type === "stream_event" && m.event.type === "content_block_start" && m.event.content_block.type === "thinking");
+    const raw = await ask({}, "raw thinking");
+    assert.strictEqual(deltas(raw.events, "thinking_delta"), "Let me think");
+    assert.strictEqual(thinkStart(raw.events).event.content_block.kural_raw, true);
+    const first = await ask({}, "summary then raw");
+    assert.strictEqual(deltas(first.events, "thinking_delta"), "Summary first");
+    assert.ok(!thinkStart(first.events).event.content_block.kural_raw);
+    const hello = await ask({}, "hello");
+    assert.ok(!thinkStart(hello.events).event.content_block.kural_raw);
+  });
+
   await check("thinking and text stream in as blocks, then a success result", async () => {
     usage._reset(); codex._test.limits.primary = codex._test.limits.secondary = null;
     const { events, result } = await ask({}, "hello");

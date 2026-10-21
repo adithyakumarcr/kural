@@ -170,6 +170,17 @@ async function run(threadId, turnId, th, p) {
     note("account/rateLimits/updated", { rateLimits: { limitId: "codex", primary: { usedPercent: 50, windowDurationMins: 300, resetsAt: now() + 1800 }, secondary: null, planType: null } });
     return end("completed");
   }
+  // Raw reasoning (open models such as gpt-oss) and its summary for the same item: Kural shows the raw one.
+  if (/^raw thinking/i.test(text) || /^summary then raw/i.test(text)) {
+    const r = { type: "reasoning", id: `rs_${turnId}`, summary: [], content: [] };
+    started(r);
+    const raw = () => note("item/reasoning/textDelta", { ...ids, itemId: r.id, delta: "Let me think", contentIndex: 0 });
+    const sum = (d) => note("item/reasoning/summaryTextDelta", { ...ids, itemId: r.id, delta: d, summaryIndex: 0 });
+    if (/^raw/i.test(text)) { raw(); sum("Summary"); } else { sum("Summary first"); raw(); }
+    completed({ ...r, summary: ["Summary"], content: ["Let me think"] });
+    await say("Done.");
+    return end("completed");
+  }
   if (/run tests/i.test(text)) {
     const item = { type: "commandExecution", id: `cmd_${turnId}`, command: "/bin/bash -lc 'npm test'", cwd: th.cwd, status: "inProgress",
       commandActions: [{ type: "unknown", command: "npm test" }], aggregatedOutput: null, exitCode: null };

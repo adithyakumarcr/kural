@@ -4,7 +4,7 @@ const assert = require("assert");
 const fs = require("fs"), path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "..", "extension", "media", "chat.js"), "utf8");
 const esc = src.slice(src.indexOf("  const esc = "), src.indexOf("\n", src.indexOf("  const esc = ")));
-const body = src.slice(src.indexOf("  function fileSrc"), src.indexOf("  // \"| a | b |\""));
+const body = src.slice(src.indexOf("  function fileSrc"), src.indexOf("  // Answers are drawn by media/markdown.js"));
 const inline = new Function("S", `${esc}\n${body}\nreturn inline;`)({ pics: { base: "https://file+.vscode-resource.vscode-cdn.net", root: "/proj", home: "/home/u" } });
 
 // Every tag's attributes, read the way a browser tokenizer would (name="value" pairs only).
@@ -50,6 +50,10 @@ check("ordinary markdown still renders", () => {
   assert.strictEqual(inline("`![x](y.png)`"), "<code>![x](y.png)</code>");
   assert.ok(inline("[the file](src/app.js#L3)").startsWith('<a class="link file" data-path="src/app.js" data-line="3"'));
   assert.ok(inline("![pic](shot.png)").startsWith('<img class="md-img" src="https://file+.vscode-resource.vscode-cdn.net/proj/shot.png"'));
+});
+check("~~struck~~ text", () => {
+  assert.ok(inline("~~old~~ new").includes("<del>old</del> new"), inline("~~old~~ new"));
+  assert.ok(!inline("`~~code~~`").includes("<del>"), "nothing inside code");
 });
 console.log(fail ? `markdown-inline: ${fail} FAILED` : "markdown-inline: ALL PASS");
 process.exit(fail ? 1 : 0);
