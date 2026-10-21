@@ -169,7 +169,8 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
   await check("the code is there once, before the export, with this build's registry and host service names", () => {
     assert.strictEqual(js.split("/*kural-toast*/").length - 1, 1);
     const i = js.indexOf("/*kural-toast*/");
-    assert.ok(/;$/.test(js.slice(0, i)) && /^\/\*kural-toast\*\/\(\(\)=>\{[\s\S]*\}\)\(\);export\{[\w$]+ as main\}/.test(js.slice(i, js.indexOf(" as main}") + 9)));
+    // An installed Kural's file has later patches there too (the Plugins tab's command goes after this one).
+    assert.ok(/;$/.test(js.slice(0, i)) && /^\/\*kural-toast\*\/\(\(\)=>\{[\s\S]*\}\)\(\);(\/\*kural-[\w-]+\*\/[\s\S]*)?export\{[\w$]+ as main\}$/.test(js.slice(i, js.indexOf(" as main}") + 9)));
     const registry = /([\w$]+)=new class\{constructor\(\)\{this\._commands=new Map[,;]this\._onDidRegisterCommand=/.exec(js)[1];   // ("," in 1.135, ";" in 1.140)
     const hostId = /(?<![\w$.])([\w$]+)=[\w$]+\("hostService"\)/.exec(js)[1];
     assert.ok(js.includes(`${registry}.registerCommand("_kural.osToast"`) && js.includes(`a.get(${hostId})`));
