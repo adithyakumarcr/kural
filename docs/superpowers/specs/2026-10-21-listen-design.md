@@ -236,3 +236,48 @@ under "Not released yet".
 | Audio saved as WAV per piece | Only the walkthrough's text, on the message | ~3–5 MB per listened answer; making it again is free |
 | "Nothing you hear leaves this computer" | The voice is local; the words come from your AI; a local chat's walkthrough stays local | The answer's text goes to the model that writes the walkthrough |
 | A piece at a time to the voice | A sentence at a time; helper warmed on hover | First sound sooner |
+
+## Decision (from the spike, 21 Oct 2026)
+
+Numbers: `docs/benchmarks/listen-2026-10-21.md`. Adithya listened to the samples and picked Supertonic 3 with its
+expression tags.
+
+| Field | Value |
+|---|---|
+| engine | `supertonic` (Supertonic 3, 5 denoising steps, speed 1.05) |
+| runtime | `ort-node`: Microsoft's native onnxruntime-node 1.23.2 (ladder step 3). onnxruntime-web got no speed from threads under Node (3.2 s vs 0.63 s native on 4 threads for the same sentence) |
+| voice | `F1` (Adithya didn't name one; one constant) |
+| rate | 44100 Hz |
+| tags | `laugh`, `breath`, `sigh` (the only ones the model card names) |
+| threads | `min(4, max(1, availableParallelism() - 1))`: 8 threads were no faster than 3 |
+| second engine | none: Supertonic passes the speed bars on 4 cores, so Task 11 is skipped |
+| memory | ~770 MB while the helper runs (over the 700 MB bar; accepted: it stops after 5 idle minutes) |
+| no GPL | Supertonic reads characters: no espeak-ng, no separate GPL helper |
+
+Model files, from `https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46/`
+(OpenRAIL-M; its LICENSE is downloaded beside them):
+
+| name | file | size | sha256 |
+|---|---|---|---|
+| dp | `onnx/duration_predictor.onnx` | 3700147 | `c3eb91414d5ff8a7a239b7fe9e34e7e2bf8a8140d8375ffb14718b1c639325db` |
+| te | `onnx/text_encoder.onnx` | 36416150 | `c7befd5ea8c3119769e8a6c1486c4edc6a3bc8365c67621c881bbb774b9902ff` |
+| ve | `onnx/vector_estimator.onnx` | 256534781 | `883ac868ea0275ef0e991524dc64f16b3c0376efd7c320af6b53f5b780d7c61c` |
+| voc | `onnx/vocoder.onnx` | 101424195 | `085de76dd8e8d5836d6ca66826601f615939218f90e519f70ee8a36ed2a4c4ba` |
+| cfg | `onnx/tts.json` | 8253 | `42078d3aef1cd43ab43021f3c54f47d2d75ceb4e75f627f118890128b06a0d09` |
+| indexer | `onnx/unicode_indexer.json` | 277676 | `9bf7346e43883a81f8645c81224f786d43c5b57f3641f6e7671a7d6c493cb24f` |
+| voice | `voice_styles/F1.json` | 292046 | `bbdec6ee00231c2c742ad05483df5334cab3b52fda3ba38e6a07059c4563dbc2` |
+| license | `LICENSE` | 15007 | `0d944a9110fed9a9602d60e0423a272903e7bd21ab060490774efc77c2275e9f` |
+
+Runtime files, published by Kural on its release `tts-runtime-1.23.2` (made by `scripts/tts-runtime/build.sh` from the
+npm package onnxruntime-node 1.23.2, MIT; the workflow checks them against `extension/lib/listen/assets.js`): one bundled
+`ort-node.js` (onnxruntime-node's and onnxruntime-common's JavaScript, loading the binding beside it), plus per platform:
+
+| platform | files (size, sha256 of the npm package's file) |
+|---|---|
+| linux-x64 | `onnxruntime_binding.node` 369032 `230a3094dba6a95f299a617d6399537cd56d6848249b45f7415fee34d2beb1ef`; `libonnxruntime.so.1` 32735928 `733854c3d7ce45256cc1c22cd4a30373247e1f7b7de8f40beab24211ef8e2a76` |
+| darwin-arm64 | `onnxruntime_binding.node` 238872 `29c18bc05a0c9577fde8856432f29cdcccf0e5c92440a69f196ac37505ad8b35`; `libonnxruntime.1.23.2.dylib` 35715416 `7d5ac8528f16a5d157c53eadb4c766bc23f0dbf02c994fb900303e27806e372c` |
+| win32-x64 | `onnxruntime_binding.node` 294944 `da279d977291af6d759388fccfad7117e382a1eef990cde198902a85a62d21cc`; `onnxruntime.dll` 23595552 `63168d83986667a1d3b3af081dffe4afc3f3ffbc6235e5862c4bae51b411adaf` (DirectML.dll is not imported: not needed) |
+
+On the release each platform's files carry a prefix (`linux-x64-onnxruntime_binding.node`…) and are saved under their own
+names. Not checked: macOS loading the dylib (signing), Windows (it imports MSVCP140/VCRUNTIME140: present with Kural's
+Electron? to check on Windows). Total download: about 399 MB of model + 33–36 MB of runtime.
