@@ -92,6 +92,31 @@ body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 .enh-bar .codicon { flex-shrink: 0; }
 .enh-bar .enh-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .enh-bar .cb.x { padding: 0 2px; }
+/* Listen (media/listen.js): the player just above the chat box (controls, three lines of what's said, the speed menu),
+   and the block of the answer being explained. */
+.listen-dock.hidden { display: none; }
+.listen-bar { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; padding: 4px 6px 4px 8px; border-radius: 7px; font-size: calc(12px * var(--fs, 1)); color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.listen-bar.err { background: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 10%, transparent); border-color: color-mix(in srgb, var(--vscode-errorForeground, #f48771) 45%, transparent); color: var(--vscode-foreground); }
+.listen-bar.player { flex-wrap: wrap; align-items: flex-start; padding: 6px 6px 6px 6px; }
+.listen-bar .codicon { flex-shrink: 0; }
+.listen-bar .listen-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 2px; }
+.listen-bar .listen-text.wrap { white-space: normal; }
+.listen-bar .cb.x { padding: 0 3px; display: inline-flex; align-items: center; gap: 1px; height: 22px; }
+.listen-bar .listen-5 { font-size: 10px; font-weight: 600; }
+.listen-controls { display: flex; flex-direction: column; align-items: center; gap: 1px; flex-shrink: 0; }
+.listen-bar .listen-speed-btn { font-size: 10.5px; font-weight: 600; min-width: 34px; justify-content: center; font-variant-numeric: tabular-nums; }
+.listen-bar .listen-speed-btn.on { color: var(--accent); }
+.listen-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 1px 4px; line-height: 1.4; }
+.listen-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1.4em; opacity: .55; }
+.listen-line.cur { opacity: 1; color: var(--vscode-foreground); font-size: calc(12.5px * var(--fs, 1)); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.listen-speeds { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0 0 2px; border-top: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); margin-top: 4px; }
+.listen-speeds .listen-speed { font-size: 11px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.listen-speeds .listen-speed.on { color: var(--accent); border-color: var(--accent); }
+.listen-on { border-radius: 4px; background: color-mix(in srgb, var(--accent) 13%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); transition: background .25s, box-shadow .25s; }
+.listen-btn.on { color: var(--accent); }
+.listen-btn:disabled { opacity: .45; cursor: default; }
+.answer-actions:has(.listen-btn.on) { opacity: 1; pointer-events: auto; }
 /* Voice input (media/voice.js): the mic beside the wand; while recording a red dot, the time and a level meter. */
 .mic-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; margin-right: 2px; flex-shrink: 0; }
 .mic-btn:hover:not(:disabled) { color: var(--vscode-foreground); background: color-mix(in srgb, var(--accent) 14%, transparent); }

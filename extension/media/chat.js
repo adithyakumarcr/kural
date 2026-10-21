@@ -482,6 +482,7 @@ window.KURAL_CHAT = function (app, port) {
     }
     stick = true; toBottom();
     renderFoot();
+    listen.retag();
   }
 
   function rerender(i) {
@@ -490,6 +491,7 @@ window.KURAL_CHAT = function (app, port) {
     const node = messageNode(S.tab.messages[i], i);
     if (old) old.replaceWith(node); else listEl.append(node);
     side.refocus(typing);
+    listen.retag();
     follow();
   }
 
@@ -749,7 +751,7 @@ window.KURAL_CHAT = function (app, port) {
     if (m.changes && m.changes.length) out.append(changesNode(m, i));
     side.nodes(m, i).forEach((n) => out.append(n));   // side chats: quick questions about parts of this answer
     if (!m.running && m.ms && last) out.append(el("div", { class: "meta" }, `${(m.ms / 1000).toFixed(1)} s`));
-    if (!m.running && !S.tab.visiting) out.append(el("div", { class: "answer-actions" }, forkButton(i)));
+    if (!m.running && !S.tab.visiting) out.append(el("div", { class: "answer-actions" }, listen.button(m, i), forkButton(i)));
     return el("div", { class: "msg assistant", "data-i": i }, out);
   }
 
@@ -1258,6 +1260,11 @@ window.KURAL_CHAT = function (app, port) {
   const side = window.KURAL_SIDE({ el, icon, markdown, post, tab: () => S.tab, rerender: (i) => rerender(i), root: () => listEl,
     addToChat: ({ text, label }) => { const line = label.replace(/\s+/g, " "), t = text.length > MAX_QUOTE ? `${text.slice(0, MAX_QUOTE)}…` : text;
       insertPill({ kind: "quote", text: t, label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line }); input.focus(); } });
+
+  // Listen: an answer explained out loud (media/listen.js; the host half is lib/listen). Its sound plays in this page only.
+  const listen = window.KURAL_LISTEN({ el, icon, post, tab: () => S.tab, root: () => listEl, rerender: (i) => rerender(i),
+    AudioContext: window.AudioContext, every: (fn, ms) => setInterval(fn, ms), stopEvery: (id) => clearInterval(id) });
+  voice.bar.after(listen.dock);   // (its player sits just above the chat box, by voice input's bar)
 
   // --- @ mentions, and "/" for your skills and commands ---
 
@@ -1848,7 +1855,7 @@ ${d.system}` : ""}`,
         break;
       case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
-      case "full": S.tab = m.tab; renderAll(); renderEditBar(); renderEnhance(); voice.tabChanged(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
+      case "full": listen.onFull(m.tab && m.tab.id); S.tab = m.tab; renderAll(); renderEditBar(); renderEnhance(); voice.tabChanged(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "openLocal": closeMenu(); openLocal(); break;
       // Auto mode, a big task: "Use 3 agents?" for 15 s above the box; no answer = one agent.
       case "teamOffer": S.offers[m.tabId] = { id: m.id, agents: m.agents, until: Date.now() + m.seconds * 1000 }; renderOffer(); break;
@@ -1938,6 +1945,7 @@ ${d.system}` : ""}`,
       case "setup": S.setups[m.tabId] = m.setup; if (S.menu === "model") openMenu.refresh(); break;
       case "enhanceState": onEnhanceState(m); break;
       case "voiceState": voice.onState(m); break;
+      case "listenState": case "listenAudio": case "listenEnd": listen.onMessage(m); break;
       case "voiceToggle": voice.toggle(); break;
       case "slash": S.slash[m.tabId] = m.slash; if (S.popup && S.popup.kind === "slash" && S.tab && S.tab.id === m.tabId) renderPopup(); break;
       case "attached": S.attachments.push(...m.items); renderChips(); input.focus(); break;
