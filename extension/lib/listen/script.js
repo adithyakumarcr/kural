@@ -31,7 +31,7 @@ function blocksText(blocks) {
 
 function buildPrompt({ blocks, request, tags }) {
   const tagLine = tags && tags.length
-    ? `- You may add at most one expression tag per piece, only where it fits naturally, never more than two in all: ${tags.map((t) => `<${t}>`).join(", ")}.`
+    ? `- Expression tags make the voice laugh, breathe or sigh: ${tags.map((t) => `<${t}>`).join(", ")}. Use one or two in the walkthrough where a person would (a short laugh after something fun, a breath before a big point); at most one per piece.`
     : "";
   const system = fs.readFileSync(PROMPT_FILE, "utf8").replace(/^\{\{TAGS\}\}\n?/m, tagLine ? `${tagLine}\n` : "").trim();
   const req = String(request || "").trim();

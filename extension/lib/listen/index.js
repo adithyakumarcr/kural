@@ -15,9 +15,10 @@ const { writeScript } = require("./script");
 const { sentences, forVoice } = require("./speech");
 
 // Played at once the first time an answer is listened to, while the walkthrough is being written. Made with the voice
-// right after the download and kept as files (openers/<i>.pcm, Int16, and openers/rate).
-const OPENERS = ["Alright, let me walk you through this.", "Okay, here's the short version.", "Right, let's go through it.",
-  "So, here's what's going on.", "Okay, let me explain."];
+// right after the download and kept as files (openers/<i>.pcm, Int16, openers/rate, and openers/lines: the lines they
+// say, so a change here makes them again). Lively but fitting any answer.
+const OPENERS = ["Alright, let's dig in!", "Okay! Here's the short version.", "Right, let me walk you through it!",
+  "So! Here's what's going on.", "Okay, let's go through this together!"];
 const CLOSING = "That's all I could put together.";
 const VOICE_STOPPED = "The voice stopped. Try again.";
 const NO_VOICE = "Listen's voice isn't available for this computer yet.";
@@ -291,6 +292,7 @@ class Listen {
         await fs.promises.writeFile(path.join(dir, `${i}.pcm`), Buffer.from(r.pcm.buffer, r.pcm.byteOffset, r.pcm.byteLength));
       }
       await fs.promises.writeFile(path.join(dir, "rate"), String(rate));
+      await fs.promises.writeFile(path.join(dir, "lines"), JSON.stringify(OPENERS));
     })().finally(() => { this.making = null; });
     return this.making;
   }
@@ -299,6 +301,7 @@ class Listen {
   opener() {
     try {
       const dir = this.openersDir(), rate = Number(fs.readFileSync(path.join(dir, "rate"), "utf8"));
+      if (fs.readFileSync(path.join(dir, "lines"), "utf8") !== JSON.stringify(OPENERS)) throw new Error("older lines");
       const i = Math.floor(Math.random() * OPENERS.length), b = fs.readFileSync(path.join(dir, `${i}.pcm`));
       const pcm = new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength - (b.byteLength % 2)));
       return rate > 0 && pcm.length ? { pcm, rate, text: OPENERS[i] } : null;

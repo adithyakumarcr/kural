@@ -147,15 +147,18 @@ It stops by itself after 5 minutes.
 ## Listen
 
 Point at a finished answer and click the **speaker** (beside Fork from here). Kural talks you through the answer like a
-friend explaining it: a short walkthrough of the main points, about a minute or two for a 300–500 word answer, while the
+friend explaining it, with some enthusiasm: a short walkthrough of the main points, about a minute or two for a 300–500 word answer, while the
 part it's explaining is **highlighted** in the answer and kept on screen. Code is explained ("this checks whether the
 token runs out within a minute"), never read out symbol by symbol.
 
 - **It starts at once.** A short opener plays right away ("Alright, let me walk you through this."), and the walkthrough
   is spoken sentence by sentence while the rest is still being made.
-- **The bar** at the top of the answer: **Pause/Play**, **Rewind 5 s** (also back into the sentence before) and **✕**.
-  There's no slider. The speaker button again also stops it. If you scroll the chat yourself, it stops scrolling for
-  you (the highlight still moves) until you press Play or Rewind.
+- **The player** sits just above the chat box, so it stays in view while you scroll: **Pause/Play**, **Rewind 5 s** (also
+  back into the sentence before), the **speed** and **✕**, with three lines of what's being said (the sentence before,
+  the one now, the next). There's no slider. The speaker button again also stops it. If you scroll the chat yourself,
+  it stops scrolling for you (the highlight still moves) until you press Play or Rewind.
+- **Speed**: 0.5x, 0.75x, 1x, 1.25x, 1.5x or 2x. The voice itself speaks faster or slower, so it never sounds like a
+  chipmunk; a change takes effect from the sentence being spoken. The speed you pick becomes your default.
 - **The voice is made on this computer**, offline (Supertonic 3). The first click asks to download it: about 430 MB,
   once (the voice and Microsoft's ONNX Runtime). Every file is checked against the size and SHA-256 Kural expects.
 - **The words** come from the chat's quickest model (Claude Haiku, or Gemini's lightest), which reads the answer. A chat

@@ -64,8 +64,10 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Listen (the speaker button under a finished answer, beside Fork from here): Kural talks you through the answer like a
   friend explaining it, in a voice made on this computer (Supertonic 3, offline), while the part it explains is
   highlighted and kept on screen. It's a short walkthrough of the main points (about a minute or two), not the text read
-  out; code is explained, not read. It starts at once (a short opener, then sentence by sentence while the rest is made);
-  the bar at the top of the answer has Pause/Play, Rewind 5 s and ✕ (no slider); the button again stops it. The first
+  out, told with some enthusiasm; code is explained, not read. It starts at once (a short opener, then sentence by sentence
+  while the rest is made). The player sits just above the chat box: Pause/Play, Rewind 5 s, the speed (0.5x, 0.75x, 1x,
+  1.25x, 1.5x, 2x: the voice itself speaks faster or slower, and the speed you pick becomes the default), ✕, and three
+  lines of what's said (the sentence before, the one now, the next); no slider; the button again stops it. The first
   click asks to download the voice, about 430 MB, once. The words come from the chat's quickest model (Haiku, or
   Gemini's lightest; a chat on your own model uses that model, so it stays on the computer; not ChatGPT: with only
   ChatGPT set up, Listen is greyed out). The walkthrough's text is kept with the answer, so listening again is instant and

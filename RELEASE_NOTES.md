@@ -2,8 +2,9 @@
 
 - **Listen to an answer.** The speaker under a finished answer: Kural talks you through it like a friend explaining it,
   in a voice made on this computer, while the part it explains is highlighted. A short walkthrough, not the text read
-  out; it starts at once. Pause, Rewind 5 s, Close. The first time, Kural asks to download the voice (about 430 MB,
-  once). English only for now.
+  out, told with some enthusiasm; it starts at once. The player sits above the chat box with three lines of what's
+  said: Pause, Rewind 5 s, the speed (0.5x to 2x, your choice becomes the default), Close. The first time, Kural asks to
+  download the voice (about 430 MB, once). English only for now.
 
 ## What's new in 1.2.0
 

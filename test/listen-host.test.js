@@ -263,6 +263,19 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     listen.setSpeed("t1", 1, 0.75, 0);
     assert.strictEqual(state.speed, 0.75);
   });
+  await check("openers made with older lines count as missing: made again with the new ones", async () => {
+    const dir = tmp();
+    fs.mkdirSync(path.join(dir, "openers"));
+    fs.writeFileSync(path.join(dir, "openers", "0.pcm"), Buffer.alloc(200)); fs.writeFileSync(path.join(dir, "openers", "rate"), "24000");
+    for (let i = 1; i < OPENERS.length; i++) fs.writeFileSync(path.join(dir, "openers", `${i}.pcm`), Buffer.alloc(200));
+    const { listen, sent, tab, spoken } = setup({ dir });
+    await listen.start("A", tab, 1, BLOCKS);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    assert.ok(!sent.some((s) => s.msg.opener), "the old ones aren't played");
+    await until(() => OPENERS.every((l) => spoken.includes(l)));
+    await until(() => fs.existsSync(path.join(dir, "openers", "lines")));
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, "openers", "lines"), "utf8")), OPENERS);
+  });
   await check("clean drops walkthroughs that aren't the right shape", () => {
     const msgs = [{ listen: { pieces: [{ block: 0, text: "ok" }], model: "m", engine: "supertonic", at: 1 } }, { listen: { pieces: "x" } },
       { listen: { pieces: [{ block: "0", text: 3 }] } }, {}];
