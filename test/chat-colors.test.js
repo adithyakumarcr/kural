@@ -38,10 +38,12 @@ check("the guide tells the chat about the calm chat", () => {
   for (const s of ["Ask about this question", "Claude's summary", "Pick, then Send", "Watch out"]) assert.ok(guide.includes(s), s);
 });
 
-check("the release notes have it, under Not released yet", () => {
+// (In the top block: "Not released yet" until a release names it "What's new in <version>".)
+check("the release notes have it, in the top block", () => {
   const notes = fs.readFileSync(path.join(root, "RELEASE_NOTES.md"), "utf8");
-  assert.ok(notes.startsWith("## Not released yet"), "at the top");
-  const top = notes.slice(0, notes.indexOf("## What's new in"));
+  assert.ok(/^## (Not released yet|What's new in )/.test(notes), "a block at the top");
+  const next = notes.indexOf("\n## ", 1);
+  const top = next < 0 ? notes : notes.slice(0, next);
   for (const s of ["thinking", "Ask about this question", "Send"]) assert.ok(top.includes(s), s);
 });
 
