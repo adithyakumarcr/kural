@@ -28,11 +28,12 @@ function hashFile(file) {
     fs.createReadStream(file).on("error", reject).on("data", (d) => h.update(d)).on("end", () => resolve(h.digest("hex")));
   });
 }
-const mismatch = () => new Error("Whisper's download didn't match what Kural expects, so it was deleted. Try again later.");
+const mismatch = (label = "Whisper") => new Error(`${label}'s download didn't match what Kural expects, so it was deleted. Try again later.`);
 
 class Assets {
-  constructor(dir, { files = FILES, download = downloadTo } = {}) {
-    this.dir = dir; this.files = files; this.downloadTo = download;
+  // (label: whose download it is, in the message about a file that doesn't match; Listen uses this class too)
+  constructor(dir, { files = FILES, download = downloadTo, label = "Whisper" } = {}) {
+    this.dir = dir; this.files = files; this.downloadTo = download; this.label = label;
     this.checked = new Map();   // file -> "size:mtimeMs" whose hash was right (checked once per start)
   }
 
@@ -69,12 +70,12 @@ class Assets {
         await this.downloadTo(f.url, part, { expectedSize: f.size, cancel: signal,
           onProgress: (got) => onProgress && onProgress(done + Math.min(got, f.size), total) });
         const st = await fs.promises.stat(part);
-        if (st.size !== f.size || await hashFile(part) !== f.sha256) throw mismatch();
+        if (st.size !== f.size || await hashFile(part) !== f.sha256) throw mismatch(this.label);
         await fs.promises.rename(part, dest);
       } catch (e) {
         await fs.promises.rm(part, { force: true });
         // (A file bigger than its pinned size is refused by downloadTo: the same mismatch for the user.)
-        throw e && e.constructor && e.constructor.name === "TooBig" ? mismatch() : e;
+        throw e && e.constructor && e.constructor.name === "TooBig" ? mismatch(this.label) : e;
       }
       done += f.size;
       if (onProgress) onProgress(done, total);

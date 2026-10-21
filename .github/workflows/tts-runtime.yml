@@ -1,0 +1,43 @@
+# Publishes the voice runtime for Kural's Listen (spoken walkthroughs of chat answers) on the release tts-runtime-1.23.2:
+# Microsoft's ONNX Runtime for Node 1.23.2 (MIT), its CPU files for Linux x64, macOS arm64 and Windows x64, and its
+# JavaScript bundled into ort-node.js (scripts/tts-runtime/build.sh). Nothing about it ships with Kural: the app downloads
+# these files the first time you press Listen and refuses them unless their size and SHA-256 match
+# extension/lib/listen/assets.js. Run it by hand (Actions → Voice runtime for Listen → Run workflow) after changing
+# scripts/tts-runtime/; the job fails if the build doesn't match the pins.
+name: Voice runtime for Listen
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # (creates the release tts-runtime-1.23.2 and uploads its files)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        run: bash scripts/tts-runtime/build.sh
+      - name: The build matches the hashes Kural pins
+        run: |
+          node -e '
+            const { ORT_JS, NATIVE } = require("./extension/lib/listen/assets");
+            const fs = require("fs"), crypto = require("crypto");
+            const want = [[ORT_JS.file, ORT_JS], ...Object.entries(NATIVE).flatMap(([k, list]) => list.map((f) => [`${k}-${f.file}`, f]))];
+            for (const [name, f] of want) {
+              const b = fs.readFileSync("dist/tts-runtime/" + name), sha = crypto.createHash("sha256").update(b).digest("hex");
+              console.log(name, b.length, sha);
+              if (b.length !== f.size || sha !== f.sha256) { console.error(`::error::${name} does not match extension/lib/listen/assets.js (${b.length} ${sha})`); process.exitCode = 1; }
+            }'
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist/tts-runtime
+          files="ort-node.js linux-x64-onnxruntime_binding.node linux-x64-libonnxruntime.so.1 darwin-arm64-onnxruntime_binding.node darwin-arm64-libonnxruntime.1.23.2.dylib win32-x64-onnxruntime_binding.node win32-x64-onnxruntime.dll SHA256SUMS LICENSE-onnxruntime"
+          if gh release view tts-runtime-1.23.2 >/dev/null 2>&1; then
+            gh release upload tts-runtime-1.23.2 $files --clobber
+          else
+            gh release create tts-runtime-1.23.2 $files --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Voice runtime for Kural's Listen (ONNX Runtime 1.23.2)" \
+              --notes "Microsoft's ONNX Runtime for Node 1.23.2 (the npm package onnxruntime-node, MIT: LICENSE-onnxruntime), CPU files for Linux x64, macOS arm64 and Windows x64, and its JavaScript bundled into ort-node.js by scripts/tts-runtime/build.sh. Kural downloads these files the first time you press Listen in the chat and checks them against the hashes in extension/lib/listen/assets.js. Not a Kural release."
+          fi
