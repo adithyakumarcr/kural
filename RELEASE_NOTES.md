@@ -1,3 +1,21 @@
+## What's new in 1.2.0
+
+- **Talk to the chat.** The mic beside the wand (or **Ctrl+Alt+V**): click, talk, click again. Whisper writes down what
+  you said on this computer, offline, and the quickest model you have tidies it up (no "um"s, repeats or false starts),
+  keeping your words and every code and file name. It goes into the box for you to check and send; Undo puts back
+  exactly what Whisper heard. The first time, Kural asks to download Whisper (about 60 MB, once). English only for now.
+- **Enhance prompt.** The wand beside Send turns a rough request into a clear prompt: goal, constraints, expected
+  output, success criteria, pointers to the files that matter and open questions, in your language. It only reads the
+  project (never secrets, never commands), warns when a file it points to tries to give an AI orders, and sends nothing
+  until you check it and press Send.
+- **"/" lists your skills in the chat.** Type **/** at the start of a message for your skills and commands, the way
+  Claude Code does (your plugins', your own and Claude Code's). Claude models, with your Claude Code setup on.
+- **Choose where a Claude plugin goes.** With a project open, Install asks: **All My Projects**, **This Project
+  (Shared)** or **This Project, Only Me**.
+- **See what a plugin adds before you install it.** A plugin's page lists its skills, commands, agents, hooks and MCP
+  servers and shows its README, also for plugins not installed yet (read from GitHub).
+- **Fixed on Linux:** a second, gear-shaped icon no longer shows in the dock while Kural runs.
+
 ## What's new in 1.2.0-beta.2
 
 - **Talk to the chat.** The mic beside the wand (or **Ctrl+Alt+V**): click, talk, click again. Whisper writes down what
