@@ -783,20 +783,21 @@ class CodexAgent {
   }
 
   // ---- streaming blocks (thinking, text), like Claude Code's stream_event ----
-  open(type) {
+  // extra: more on the block's start; kural_raw: true for raw reasoning (the chat's timeline says "raw").
+  open(type, extra = {}) {
     const t = this.turn;
     if (t.block === type) return;
     this.close();
     t.block = type;
-    this.emit({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type } } });
+    this.emit({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type, ...extra } } });
   }
   close() {
     const t = this.turn;
     if (t && t.block) { this.emit({ type: "stream_event", event: { type: "content_block_stop", index: 0 } }); t.block = null; }
   }
-  think(itemId, s) {
+  think(itemId, s, raw = false) {
     if (!s) return;
-    this.open("thinking");
+    this.open("thinking", raw ? { kural_raw: true } : {});
     this.turn.last = "think";
     this.emit({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: s } } });
   }
@@ -831,17 +832,19 @@ class CodexAgent {
     if (!t || (p.threadId && p.threadId !== this.threadId)) return;
     if (p.turnId && t.id && p.turnId !== t.id) return;
     switch (method) {
+      // Raw reasoning wins over its summary (Adithya: the AI's own thinking where it exists), but never both: whichever
+      // comes first for an item stays, so nothing shows twice. OpenAI's own models send only summaries.
       case "item/reasoning/summaryTextDelta":
+        if (t.deltas.has(p.itemId + ":raw")) return;
         t.deltas.add(p.itemId + ":summary");
         return this.think(p.itemId, p.delta);
       case "item/reasoning/summaryPartAdded":
         if (t.deltas.has(p.itemId + ":summary")) this.think(p.itemId, "\n\n");
         return;
       case "item/reasoning/textDelta":
-        // The raw reasoning only when there's no summary of it (never both: it would show twice).
         if (t.deltas.has(p.itemId + ":summary")) return;
         t.deltas.add(p.itemId + ":raw");
-        return this.think(p.itemId, p.delta);
+        return this.think(p.itemId, p.delta, true);
       case "item/agentMessage/delta": return this.say(p.itemId, p.delta);
       case "item/started": return this.itemStarted(p.item || {});
       case "item/completed": return this.itemCompleted(p.item || {});
@@ -863,8 +866,11 @@ class CodexAgent {
     const t = this.turn;
     switch (item.type) {
       case "reasoning":
-        // Nothing streamed (an older Codex, or a short summary): show it whole.
-        if (!t.deltas.has(item.id + ":summary") && !t.deltas.has(item.id + ":raw")) this.think(item.id, (item.summary || []).join("\n\n"));
+        // Nothing streamed (an older Codex, or a short summary): show it whole, the raw text when there is some.
+        if (!t.deltas.has(item.id + ":summary") && !t.deltas.has(item.id + ":raw")) {
+          const raw = (item.content || []).map((c) => typeof c === "string" ? c : c && c.text).filter(Boolean);
+          if (raw.length) this.think(item.id, raw.join("\n\n"), true); else this.think(item.id, (item.summary || []).join("\n\n"));
+        }
         if (t.block === "thinking") this.close();
         return;
       case "agentMessage":

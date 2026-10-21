@@ -40,7 +40,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
     (modes, `MOODS`, mood prompts); `team.js` (roles, team prompts) + `team-mcp.js` (the agents' board); `guide.js`
     (what Kural can do, appended to every chat's prompt); `archive.js` (History), `attachments.js`, `tickets.js`
     (Jira), `changes.js`. UI (a webview): `media/chat-columns.js` (the page: chats side by side, the tab drag) +
-    `media/chat.js` (one chat) + `media/chat.css`.
+    `media/chat.js` (one chat) + `media/chat.css`; answers drawn by `media/markdown.js`, the thinking timeline
+    `media/timeline.js`, questions (pick, then Send) `media/choices.js`.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
@@ -269,7 +270,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `<tmp>/kural-fake-claude-state`: ok / loggedout / nocredit / old) with `kural.claudePath` pointing at it.
 - **Claude CLI flags** (see `ClaudeProcess.start`): `--safe-mode` skips the user's setup *and* any
   `--mcp-config` we pass; with a team in safe mode we use `--setting-sources "" --disable-slash-commands`
-  instead. Full setup (default) = no safe mode, no `--strict-mcp-config`.
+  instead. Full setup (default) = no safe mode, no `--strict-mcp-config`. Its `--tools` must include `ToolSearch`: without
+  it Claude Code sends every connector's whole tool list with every request (measured: 67.8k → 34.4k tokens, the model
+  starting 2-4 s sooner).
 - **Control requests** over stdin: `interrupt`, `set_model` (works mid-answer), `mcp_status`, `stop_task` {task_id}
   (stops one background agent; it ends with status "killed"/"stopped").
   Permission requests (`can_use_tool`) are answered by `onPermission`; `AskUserQuestion` is answered by
@@ -314,9 +317,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
   chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
 - **Chat page streaming** (`media/chat.js`): blocks are wrapped in `.blk[data-b]`; deltas patch one block per frame
-  (`schedulePatch`/`patchBlock`), a new block is added with `appendBlock` (no full redraw). Thinking is always ONE line
-  ("Thinking… <latest sentence>", then "Thought for N s"; click to open): Claude's summarized thinking arrives in
-  paragraph bursts every few seconds, and a box that grew with it and collapsed afterwards made the whole answer jump.
+  (`schedulePatch`/`patchBlock`), a new block is added with `appendBlock` (no full redraw). Thinking shows in the
+  timeline (below): Claude's summarized thinking arrives in paragraph bursts every few seconds, and a box that grew with
+  it and then collapsed made the whole answer jump, so the timeline has a fixed height and never folds while you watch.
   Mode changes mid-answer: `modeChangedMidAnswer` (Auto resolves waiting permission cards; Plan/Ask apply next message). Scrolling follows only while
   you're at the bottom (`stick`); scrolled up, a "Latest" button appears. Pictures: `fileSrc()` turns a path into the
   webview's address (`S.pics` = `{base, root}` from `filesFor()`; `localResourceRoots` = media, project folders,
@@ -774,11 +777,25 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   answer them next) and `giveBack` (page `unqueue`: back into the box). Old Claude Code without the flag: a flash to
   update, the draft stays. Live-checked with Claude Code 2.1.289 (one answer with both; the poem case: next turn).
   Tests: test/queue.test.js, the engine/codex/agy tests (fake-codex has `turn/steer`, FAKE_CODEX_NO_STEER).
-- **Steps dropdown** (`media/chat.js` `parts`/`layout`/`stepsNode`): thinking, tools (not team posts), answered permissions and
-  the text before the last step go into ONE `.steps` group per part of an answer (a `steer` block, a message you
-  added while it worked, splits it into parts; only the last part's dropdown is live); pending permissions/questions, agent cards, team
-  posts, pictures and the text after the last step stay outside. An answer with steps is redrawn on each new block
-  (`appendBlock` → `rerender`); `patchBlock` still patches inside the group and refreshes `.steps-line`.
+- **The thinking timeline** (`media/timeline.js`; `media/chat.js` `parts`/`layout`/`stepsNode`; spec
+  `docs/superpowers/specs/2026-10-21-calm-chat-design.md`): thinking, tools (not team posts), answered permissions and the
+  text before the last step go into ONE timeline (`.thv`) per part of an answer (a `steer` block splits it into parts;
+  only the last part's is live): thoughts in readable text between the steps, `max-height: 300px` then it scrolls
+  inside, following the newest line (`state` {follow, top} kept per part in `m._tl`, so a redraw keeps your place;
+  Latest). It never folds by itself: open while it runs and after, in this window (`m._liveHere`); drawn later, folded.
+  The tag (`thinkingTag`): "Claude's summary", "ChatGPT's summary", "raw" (a think block's `raw`, set from Codex's
+  `kural_raw` in `onClaude`, or an `ollama:` model). Kural never summarizes thinking. Pending permissions/questions, agent
+  cards, team posts, pictures and the text after the last step stay outside. `patchBlock` patches only the last
+  thought (`timeline.patchThought`).
+- **Calm reading and questions** (`media/markdown.js`: `parse` → blocks, `render` with `el()` only, `choicesOf`;
+  `media/choices.js`): nothing the AI writes becomes HTML except through `inline()`. `prompts.js` `FORMAT` asks every AI
+  for `**Done:**`-style leads, GitHub alerts (`> [!WARNING]`) and options after a question (numbered: one choice, `- [ ]`:
+  several). Options become buttons only on the last text of a finished answer, clickable only on the last answer of an
+  idle chat. Pick, then Send: picks live in `choices.js` (by tab|message|pid|question), the chat's Send answers (`sendPicks`:
+  a card → `answer {answers, note}`, options → a message with `picks`, kept on the user message: `ChatView.cleanPicks`).
+  Ask about a card → `answer {ask}` → `askUser` answers the tool call with `ASK_ANSWER` and marks it `asked`; the next card
+  of that answer is drawn with the old one folded in (`askedInto`). `test/chat-wiring.test.js` checks every module
+  chat.js uses is loaded before it (a missing script tag left the panel empty).
 - **Instructions changed mid-chat** (`instructionsNote`, `tab.sessionInstructions` fingerprints): Claude Code (checked
   with 2.1.289) ignores `--append-system-prompt(-file)` on `--resume`, so a mode, mood or team change after the first
   message reached Claude never; now the next message starts with a `<kural_instructions_update>` saying what changed.

@@ -132,10 +132,37 @@ body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 .input.enh-locked { opacity: .6; cursor: progress; }
 .ctx-line { margin-bottom: 4px; }
 .ctx { font-size: calc(11px * var(--fs, 1)); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 4px; }
-.answer p { margin: 0 0 9px; }
-.answer h3, .answer h4, .answer h5, .answer h6 { margin: 12px 0 6px; font-size: calc(13px * var(--fs, 1)); }
-.answer ul, .answer ol { margin: 0 0 9px; padding-left: 20px; }
-.answer li { margin: 2px 0; }
+/* Calm reading (media/markdown.js): real headings, the point first, callouts whose color means something, roomy text.
+   Color only where it means something: blue = note, green = tip, purple = important, amber = watch out, red = risk. */
+.answer p { margin: 0 0 7px; line-height: 1.55; color: color-mix(in srgb, var(--vscode-foreground) 90%, transparent); }
+.answer h3, .answer h4, .answer h5, .answer h6 { margin: 14px 0 5px; font-weight: 600; line-height: 1.35; color: var(--vscode-foreground); }
+.answer h3 { font-size: calc(16px * var(--fs, 1)); }
+.answer h4 { font-size: calc(14.5px * var(--fs, 1)); padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.answer h5 { font-size: calc(13.5px * var(--fs, 1)); }
+.answer h6 { font-size: calc(13px * var(--fs, 1)); color: var(--muted); }
+.answer ul, .answer ol { margin: 0 0 7px; padding-left: 20px; }
+.answer li { margin: 1px 0; line-height: 1.5; }
+.answer li > ul, .answer li > ol { margin: 1px 0 0; }
+.answer del { color: var(--muted); }
+.sum { margin: 0 0 12px; padding: 8px 12px 9px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.sum-label { font-size: calc(10.5px * var(--fs, 1)); letter-spacing: .08em; text-transform: uppercase; font-weight: 700; color: var(--accent-hi); }
+.answer .sum p { margin: 2px 0 0; font-size: calc(13.5px * var(--fs, 1)); line-height: 1.6; color: var(--vscode-foreground); }
+.callout { --c: var(--blue); margin: 12px 0; padding: 8px 12px 9px; border-left: 3px solid var(--c); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--c) 9%, transparent); }
+.c-note { --c: var(--blue); } .c-tip { --c: var(--green); } .c-important { --c: var(--accent-hi); } .c-warning { --c: var(--yellow); } .c-caution { --c: var(--red); }
+.callout-head { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--c); font-size: calc(12.5px * var(--fs, 1)); margin-bottom: 3px; }
+.answer .callout > p:last-child, .answer .md-quote > p:last-child { margin-bottom: 0; }
+.md-quote { margin: 10px 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--border); }
+.answer .md-quote p { color: var(--muted); }
+.answer ol.md-steps { list-style: none; padding-left: 0; counter-reset: md-step; }
+.answer ol.md-steps > li { counter-increment: md-step; position: relative; padding-left: 30px; margin: 0 0 8px; }
+.answer ol.md-steps > li::before { content: counter(md-step); position: absolute; left: 0; top: 1px; width: 20px; height: 20px; box-sizing: border-box; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent-hi); font-size: calc(11px * var(--fs, 1)); font-weight: 700; display: grid; place-items: center; }
+.file-chip { font-family: var(--vscode-editor-font-family); font-size: calc(11.5px * var(--fs, 1)); color: var(--vscode-textLink-foreground); background: var(--code-bg); padding: 1px 6px; border-radius: 4px; cursor: pointer; }
+.file-chip:hover { text-decoration: underline; }
+.answer li.task { list-style: none; margin-left: -18px; }
+.task-box { display: inline-grid; place-items: center; width: 13px; height: 13px; box-sizing: border-box; margin-right: 7px; vertical-align: -2px; border: 1.5px solid var(--muted); border-radius: 3px; }
+.task-box.done { background: var(--accent); border-color: var(--accent); }
+.task-box.done::after { content: ""; width: 6px; height: 3px; border-left: 2px solid var(--on-accent); border-bottom: 2px solid var(--on-accent); transform: translateY(-1px) rotate(-45deg); }
 .answer code { font-family: var(--vscode-editor-font-family); font-size: calc(12px * var(--fs, 1)); background: var(--code-bg); padding: 1px 4px; border-radius: 4px; }
 .answer code.ref { color: var(--vscode-textLink-foreground); cursor: pointer; }
 .answer code.ref:hover { text-decoration: underline; }
@@ -355,6 +382,10 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .answer td { overflow-wrap: break-word; }
 .answer td code { white-space: normal; }   /* lists of names wrap at spaces instead of widening the table */
 .answer tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent); }
+.answer td.num, .answer th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.st { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; white-space: nowrap; }
+.st.good { color: var(--green); } .st.bad { color: var(--red); } .st.neutral { color: var(--muted); }
+.st .codicon { font-size: calc(12px * var(--fs, 1)); }
 .answer hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
 .answer code { color: var(--vscode-textPreformat-foreground, var(--accent-hi)); }
 /* Code in answers: VS Code's Dark+ colors (Light+ below), so it reads like the editor. */
@@ -423,31 +454,41 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .agent-think::before { content: "Thinking: "; font-style: normal; font-weight: 600; }
 .agent-say.clamp, .agent-think.clamp { max-height: 4.4em; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
 
-/* Claude's thinking (summaries) */
-.think { margin: 4px 0 8px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); }
-.think-head { cursor: pointer; display: flex; align-items: center; gap: 5px; user-select: none; min-width: 0; }
-.think-label { flex: none; }
-.think-line { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: .75; font-style: italic; }
-.think-head:hover { color: var(--fg, inherit); }
-.think-caret::before { font-family: codicon; content: "\eab6"; display: inline-block; width: 1em; vertical-align: -2px; }
-.think.open .think-caret::before { content: "\eab4"; }
-.think.live .think-head { color: var(--accent-hi); }
-.think-body { display: none; margin: 4px 0 0 6px; padding: 2px 0 2px 10px; border-left: 2px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-style: italic; }
-.think.open .think-body { display: block; }
-.think.live .think-body { max-height: 9em; overflow-y: auto; }
 .team-wait { color: var(--muted); font-style: italic; }
-/* One dropdown per answer for how it worked (thoughts, tool steps, answered permissions, notes in between). */
-.steps { margin: 2px 0 10px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); }
-.steps-head { cursor: pointer; display: flex; align-items: center; gap: 5px; user-select: none; min-width: 0; }
-.steps-head:hover { color: var(--vscode-foreground); }
-.steps-label { flex: none; }
-.steps-line { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: .75; font-style: italic; }
-.steps.live .steps-head { color: var(--accent-hi); }
-.steps.open > .steps-head .think-caret::before { content: "\eab4"; }
-.steps-body { display: none; margin: 6px 0 0 6px; padding: 2px 0 2px 10px; border-left: 2px solid var(--border); }
-.steps.open > .steps-body { display: block; }
-.steps-body .think { margin: 2px 0 6px; }
-.steps-body .perm { margin: 4px 0 6px; }
+/* How it worked: the timeline (media/timeline.js). Thoughts in readable text between the steps it took; at about 14 lines
+   it scrolls inside, following the newest line. It never folds by itself while you watch (nothing below it jumps). */
+.thv { margin: 2px 0 12px; }
+.th-head { display: flex; align-items: center; gap: 7px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); margin: 0 0 8px; user-select: none; cursor: pointer; min-width: 0; }
+.th-head:hover { color: var(--vscode-foreground); }
+.th-head.live { color: var(--accent-hi); cursor: default; }
+.th-head .lab { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.th-head .src { flex: none; font-size: calc(10.5px * var(--fs, 1)); color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 0 7px; white-space: nowrap; }
+.th-head .pulse { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s infinite ease-in-out; }
+.th-head:not(.live) .pulse { display: none; }
+.th-head .codicon { flex: none; transform: rotate(90deg); transition: transform .15s; }
+.th-head.live .codicon { display: none; }
+.thv.folded > .th-head .codicon { transform: none; }
+.thv.folded > .tbox-wrap { display: none; }
+.tbox-wrap { position: relative; }
+.tbox { max-height: 300px; overflow-y: auto; padding: 2px 6px 2px 0; margin-bottom: 4px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+.latest { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; background: var(--accent); color: var(--on-accent);
+  border: 0; border-radius: 12px; padding: 2px 11px; font: inherit; font-size: calc(11.5px * var(--fs, 1)); cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.35); }
+.latest.hidden { display: none; }
+.tl2 { list-style: none; margin: 0; padding: 0 0 4px; }
+.tl2 > li { position: relative; padding: 0 0 5px 20px; }
+.tl2 > li::before { content: ""; position: absolute; left: 4px; top: 15px; bottom: -3px; width: 1px; background: var(--border); }
+.tl2 > li:last-child::before { display: none; }
+.tl2 .dot { position: absolute; left: 0; top: 6px; width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%; background: color-mix(in srgb, var(--accent) 70%, var(--vscode-sideBar-background, #181818)); }
+.tl2 > li.now > .dot { background: var(--accent); animation: pulse 1.1s infinite ease-in-out; }
+.tl2 > li.act > .dot { background: var(--vscode-sideBar-background, #181818); border: 1.5px solid var(--muted); width: 7px; height: 7px; left: 1px; top: 7px; }
+.tl2 > li.act.now > .dot { border-color: var(--accent-hi); }
+.tl2 .tx { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: calc(13px * var(--fs, 1)); color: color-mix(in srgb, var(--vscode-foreground) 88%, transparent); }
+.tl2 .tx b { color: var(--vscode-foreground); font-weight: 600; }
+.tl2 > li.act .row { min-width: 0; cursor: pointer; }
+.tl2 > li.act .row .tool { margin: 0; }
+.tl2 > li.act.open .row .tool { white-space: normal; overflow-wrap: anywhere; }
+.tl2 > li.act .row .perm { margin: 2px 0 0; }
+.think-plain { white-space: pre-wrap; color: var(--muted); }
 .blk.interim { display: block; color: var(--muted); font-size: calc(12.5px * var(--fs, 1)); }
 .blk.interim p { margin: 0 0 6px; }
 .tool.more { opacity: .7; font-style: italic; }
@@ -456,25 +497,64 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .seg.team button { font-size: calc(11px * var(--fs, 1)); }
 
 /* Claude's questions with options */
-.question { border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 9px; margin: 6px 0 10px; padding: 8px 10px 4px; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
-.question.answered, .question.skipped { border-color: var(--border); background: transparent; padding-bottom: 6px; }
-.q-title { font-weight: 600; font-size: calc(12px * var(--fs, 1)); margin-bottom: 6px; color: var(--accent-hi); }
+/* Questions: pick, then Send (media/choices.js). A click picks (several where allowed); your picks stay on the question;
+   the chat's Send answers, with the box's text as a note. "Ask about this question" goes back to the AI that asked. */
+.question { border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 10px; margin: 6px 0 10px; padding: 9px 11px 8px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.question.answered, .question.skipped, .question.asked { border-color: var(--border); background: transparent; }
+.q-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 700; font-size: calc(11px * var(--fs, 1)); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 7px; color: var(--accent-hi); }
+.question:not(.pending) .q-title { color: var(--muted); }
+.q-upd { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: calc(10.5px * var(--fs, 1)); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 50%, transparent); border-radius: 8px; padding: 0 7px; }
 .q-block { margin-bottom: 8px; }
 .q-chip { display: inline-block; font-size: calc(10.5px * var(--fs, 1)); padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-hi); margin-bottom: 3px; }
-.q-text { font-weight: 600; margin-bottom: 5px; }
-.q-opt { display: flex; align-items: flex-start; gap: 9px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; margin-bottom: 4px; color: var(--vscode-foreground); cursor: pointer; font: inherit; }
-.q-opt:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
-.q-opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
-.q-mark { flex: none; width: 13px; height: 13px; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--muted); }
-.q-opt.multi .q-mark { border-radius: 3px; }
-.q-opt.on .q-mark { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 2px var(--surface); }
+.q-text { font-weight: 600; margin-bottom: 7px; font-size: calc(13.5px * var(--fs, 1)); color: var(--vscode-foreground); }
+.q-opt { display: flex; align-items: flex-start; gap: 9px; width: 100%; text-align: left; background: var(--vscode-editor-background, var(--surface)); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; color: var(--vscode-foreground); cursor: pointer; font: inherit; }
+.q-opt:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.q-opt:disabled { cursor: default; }
+.q-opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--vscode-editor-background, var(--surface))); }
+.question:not(.pending) .q-opt:not(.on), .reply .q-opt:disabled:not(.on) { opacity: .45; }
+.q-mark { flex: none; display: grid; place-items: center; box-sizing: border-box; width: 14px; height: 14px; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--muted); }
+.q-opt.multi .q-mark { border-radius: 4px; }
+.q-opt.on .q-mark { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 2.5px var(--vscode-editor-background, var(--surface)); }
+.q-opt.multi.on .q-mark { box-shadow: none; }
+.q-opt.multi.on .q-mark::after { content: ""; width: 7px; height: 4px; border-left: 2px solid var(--on-accent); border-bottom: 2px solid var(--on-accent); transform: translateY(-1px) rotate(-45deg); }
 .q-opt-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.q-label { font-weight: 500; }
+.q-label { font-weight: 600; }
+.q-opt.rec .q-label::after { content: "Recommended"; margin-left: 6px; font-size: calc(10px * var(--fs, 1)); font-weight: 600; color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 50%, transparent); border-radius: 8px; padding: 0 6px; vertical-align: 1px; }
 .q-desc, .q-muted { color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); }
-.q-muted.small { margin: -2px 0 4px; }
+.q-muted.small { margin: -2px 0 5px; }
 .q-other { width: 100%; box-sizing: border-box; background: var(--vscode-input-background); color: var(--vscode-foreground); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; font: inherit; }
 .q-other:focus { outline: none; border-color: var(--accent); }
-.q-done { font-size: calc(12px * var(--fs, 1)); margin: 2px 0; }
+.q-said { font-size: calc(12px * var(--fs, 1)); color: var(--muted); margin-top: 2px; }
+.q-ask { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; }
+.q-ask .codicon { color: var(--blue); flex: none; }
+.q-ask-in { flex: 1; min-width: 0; background: var(--vscode-input-background); color: var(--vscode-foreground); border: 1px solid color-mix(in srgb, var(--blue) 40%, var(--border)); border-radius: 7px; padding: 5px 9px; font: inherit; }
+.q-ask-in:focus { outline: none; border-color: var(--blue); }
+.q-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.q-hint { font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); }
+.q-qa { margin: 4px 0 9px; padding: 7px 10px; border-left: 2px solid var(--blue); background: color-mix(in srgb, var(--blue) 8%, transparent); border-radius: 0 7px 7px 0; }
+.q-qa-q { font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); margin-bottom: 3px; }
+.q-qa-a p:last-child { margin-bottom: 0; }
+.q-before { margin: 6px 0 0; font-size: calc(12px * var(--fs, 1)); color: var(--muted); }
+.q-before summary { cursor: pointer; }
+.q-before ul { margin: 4px 0 0; padding-left: 18px; }
+/* Options the AI wrote at the end of its answer: the same rows; Yes / No as two small buttons. */
+.reply { margin: 2px 0 10px; }
+.reply-h { display: flex; align-items: center; gap: 6px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); margin: 0 0 6px; }
+.reply.done .reply-h { color: var(--vscode-foreground); }
+.answer .reply-q p { margin: 0 0 6px; font-weight: 600; color: var(--vscode-foreground); }
+.reply-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.reply-chips .q-opt { width: auto; padding: 3px 12px; border-radius: 14px; margin: 0; }
+.reply-chips .q-mark { display: none; }
+/* Above the chat box while something is picked, and your message with its picks. */
+.answer-line { display: flex; flex-wrap: wrap; gap: 3px 8px; align-items: baseline; font-size: calc(11.5px * var(--fs, 1)); margin: 0 0 5px; }
+.answer-line .h { color: var(--accent-hi); font-weight: 600; }
+.answer-line .m { color: var(--muted); }
+.composer.picked { border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.bubble .picked { display: flex; flex-wrap: wrap; gap: 5px; }
+.bubble .pk { display: inline-flex; align-items: center; gap: 4px; font-size: calc(12px * var(--fs, 1)); padding: 1px 9px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.bubble .pick-q { font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); margin: 6px 0 3px; }
+.bubble .pick-q:first-child { margin-top: 0; }
+.bubble .pick-note { margin-top: 7px; }
 .flash { position: fixed; left: 50%; bottom: 112px; transform: translate(-50%, 6px); background: var(--accent); color: var(--on-accent); padding: 4px 12px; border-radius: 14px; font-size: calc(12px * var(--fs, 1)); font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; z-index: 30; }
 .flash.on { opacity: 1; transform: translate(-50%, 0); }
 /* attachments */
@@ -529,7 +609,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
    pale on white, so text colors get darker versions here (all at least 4.5:1 against the panel). */
 body.vscode-light {
   --accent: #6447d6; --accent-hi: #5a3cc8;
-  --green: #2c7a34; --red: #c02a3a; --yellow: #8a5d00; --blue: #1d5bbf;
+  --green: #2a7632; --red: #c02a3a; --yellow: #8a5d00; --blue: #1d5bbf;
   --code-bg: var(--vscode-textCodeBlock-background, #efedf5);
 }
 /* Whole code blocks in the normal text color (15:1) instead of purple: easier to read on white. */

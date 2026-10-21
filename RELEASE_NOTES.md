@@ -1,3 +1,20 @@
+## Not released yet
+
+- **Calmer answers, easier to read.** Real headings, the point first in a box, roomy text, and color only where it means
+  something: callouts for a note, a tip, something important, something to watch out for and a risk; tables with their
+  numbers lined up and passed / failed in green and red; numbered steps whose file is a chip that opens it. Kural asks
+  every AI to write this way.
+- **Follow the thinking.** The AI's thinking is a timeline between the steps it took (read, searched, edited, ran),
+  in readable text. It scrolls after about 14 lines and never folds by itself while you watch. It says what you're
+  reading: Claude's or ChatGPT's own summary, or the raw thinking of a model on your computer. Kural summarizes nothing
+  itself.
+- **Answer by clicking, then Send.** Options in a question card or at the end of an answer are buttons: pick one or
+  several, your picks stay on the question, and Send answers (with a note from the box if you like).
+  **Ask about this question** asks the AI first; it answers and asks again, changed if needed.
+- **Claude chats start answering sooner when you have connectors.** Kural sent every connector's full list of tools
+  (Figma, Atlassian, Notion…) with every message; now Claude loads a connector's tools only when it needs them. With
+  three connectors the first request is half the size and the model starts 2-4 s sooner, and it uses less of your plan.
+
 ## What's new in 1.2.1-beta.1
 
 - **Listen to an answer.** The speaker under a finished answer: Kural talks you through it like a friend explaining it,

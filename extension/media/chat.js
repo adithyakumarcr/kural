@@ -124,7 +124,7 @@ window.KURAL_CHAT = function (app, port) {
   // nothing inside `code` is markdown. A placeholder can't be inside an attribute (alt and addresses exclude \0).
   function inline(s) {
     const keep = [], put = (html) => `\u0000${keep.push(html) - 1}\u0000`;
-    const emph = (x) => x.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+    const emph = (x) => x.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>").replace(/~~([^~]+)~~/g, "<del>$1</del>");
     const t = esc(String(s).replace(/\u0000/g, ""))
       .replace(/`([^`]+)`/g, (_, c) => {
         const m = c.match(/^([\w./-]+\.[A-Za-z0-9]+)(?::(\d+)(?:-(\d+))?)?$/);
@@ -141,73 +141,14 @@ window.KURAL_CHAT = function (app, port) {
     return out;
   }
 
-  // "| a | b |" → ["a", "b"]   (a "|" inside `code` doesn't split)
-  function cells(line) {
-    let s = line.trim();
-    if (s.startsWith("|")) s = s.slice(1);
-    if (s.endsWith("|")) s = s.slice(0, -1);
-    const out = []; let cur = "", code = false;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (ch === "`") code = !code;
-      if (ch === "\\" && s[i + 1] === "|") { cur += "|"; i++; continue; }
-      if (ch === "|" && !code) { out.push(cur.trim()); cur = ""; continue; }
-      cur += ch;
-    }
-    out.push(cur.trim());
-    return out;
-  }
-  const isSep = (line) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
-  const isRow = (line) => /^\s*\|.*\|\s*$/.test(line) || (line.includes("|") && line.trim().split("|").length > 2);
-
-  function table(head, aligns, rows) {
-    const al = (i) => aligns[i] ? { style: `text-align:${aligns[i]}` } : {};
-    return el("div", { class: "table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, head.map((h, i) => el("th", { ...al(i), html: inline(h) })))),
-      el("tbody", {}, rows.map((r) => el("tr", {}, head.map((_, i) => el("td", { ...al(i), html: inline(r[i] || "") })))))));
-  }
-
-  function markdown(src, finished) {
-    const out = [], lines = src.split("\n");
-    let para = [], list = null;
-    const flushPara = () => { if (para.length) { out.push(el("p", { html: inline(para.join(" ")) })); para = []; } };
-    const flushList = () => { if (list) { out.push(list); list = null; } };
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const fence = line.match(/^\s*```(.*)$/);
-      if (fence) {
-        flushPara(); flushList();
-        const code = []; let closed = false;
-        for (i++; i < lines.length; i++) { if (/^\s*```\s*$/.test(lines[i])) { closed = true; break; } code.push(lines[i]); }
-        out.push(codeCard(fence[1].trim(), code.join("\n"), closed || finished));
-        continue;
-      }
-      // Table: a header row, then a |---|---| row, then data rows.
-      if (isRow(line) && i + 1 < lines.length && isSep(lines[i + 1])) {
-        flushPara(); flushList();
-        const head = cells(line);
-        const aligns = cells(lines[i + 1]).map((c) => /^:-+:$/.test(c) ? "center" : /-+:$/.test(c) ? "right" : "");
-        const rows = [];
-        for (i += 2; i < lines.length && isRow(lines[i]) && lines[i].trim(); i++) rows.push(cells(lines[i]));
-        i--;
-        out.push(table(head, aligns, rows));
-        continue;
-      }
-      // Some answers squeeze a whole table onto one line: "| a | b || --- | --- || 1 | 2 |". Unsqueeze it.
-      if (/\|\s*\|\s*:?-{2,}/.test(line) && (line.match(/\|\|/g) || []).length >= 2) {
-        const rowsText = line.replace(/\|\s*\|/g, "|\n|").split("\n");
-        if (rowsText.length > 2 && isSep(rowsText[1])) { lines.splice(i, 1, ...rowsText); i--; continue; }
-      }
-      const h = line.match(/^(#{1,4})\s+(.*)$/), li = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/);
-      if (h) { flushPara(); flushList(); out.push(el(`h${Math.min(6, h[1].length + 2)}`, { html: inline(h[2]) })); }
-      else if (li) { flushPara(); if (!list) list = el(/^\s*\d/.test(line) ? "ol" : "ul"); list.append(el("li", { html: inline(li[1]) })); }
-      else if (/^\s*(---|\*\*\*)\s*$/.test(line)) { flushPara(); flushList(); out.push(el("hr")); }
-      else if (!line.trim()) { flushPara(); flushList(); }
-      else { flushList(); para.push(line); }
-    }
-    flushPara(); flushList();
-    return out;
-  }
+  // Answers are drawn by media/markdown.js (Calm reading): blocks from the Markdown, then the page from them with el(),
+  // text through inline() above. A file chip in a numbered step opens the file.
+  const md = window.KURAL_MARKDOWN({ el, inline, codeCard, icon, onFile: (p) => post({ type: "openFile", path: p }) });
+  // How it worked (thoughts between its steps): media/timeline.js.
+  const timeline = window.KURAL_TIMELINE({ el, icon });
+  // Questions: pick, then Send; Ask about this question (media/choices.js).
+  const choices = window.KURAL_CHOICES({ el, icon, post, tab: () => S.tab, markdown: (t, f) => md.markdown(t, f), onChange: () => renderPending(),
+    sendText: (t, picks) => sendText(t, picks) });
 
   // ---------- code colors ----------
   // A small, any-language highlighter for code in answers: comments, strings, numbers, keywords, function names, types,
@@ -354,7 +295,8 @@ window.KURAL_CHAT = function (app, port) {
     every: (fn, ms) => setInterval(fn, ms), stopEvery: (id) => clearInterval(id), isMac: /Mac/i.test(navigator.platform || navigator.userAgent),
     media: { getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c), MediaRecorder: window.MediaRecorder,
       AudioContext: window.AudioContext, OfflineAudioContext: window.OfflineAudioContext } });
-  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, enhanceBar, voice.bar, chipsEl, input,
+  const pendingEl = el("div", { class: "answer-slot" });   // "Your answer: … (press Send)" while something is picked (renderPending)
+  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, enhanceBar, voice.bar, pendingEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }), ctxEl,
       voice.button, enhanceBtn, queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
@@ -492,6 +434,8 @@ window.KURAL_CHAT = function (app, port) {
     if (old) old.replaceWith(node); else listEl.append(node);
     side.refocus(typing);
     listen.retag();
+    // (A timeline drawn again keeps its place: its end while it followed, else where you had scrolled.)
+    for (const t of node.querySelectorAll(".thv")) timeline.follow(t);
     follow();
   }
 
@@ -501,19 +445,13 @@ window.KURAL_CHAT = function (app, port) {
     const msg = S.tab.messages[i], b = msg && msg.blocks[k];
     const wrap = listEl.querySelector(`[data-i="${i}"] [data-b="${k}"]`);
     if (!b || !wrap) return rerender(i);
-    if (b.k === "text") wrap.replaceChildren(...markdown(b.text, !msg.running));
+    if (b.k === "text") wrap.replaceChildren(...md.markdown(b.text, !msg.running, k === leadOf(msg)));
     else if (b.k === "think") {
-      const body = wrap.querySelector(".think-body"), line = wrap.querySelector(".think-line");
-      if (!body) return rerender(i);
-      if (line) line.textContent = lastLine(b.text);
-      if (b._open) {   // (closed: nothing to draw until you open it)
-        const end = body.scrollHeight - body.scrollTop - body.clientHeight < 16;   // following its end?
-        body.textContent = b.text;
-        if (end) body.scrollTop = body.scrollHeight;
-      } else body.textContent = b.text;
+      // (Only this thought's text; the timeline follows its newest line unless you scrolled up in it.)
+      const root = wrap.closest(".thv");
+      if (!root) return rerender(i);
+      timeline.patchThought(root, b.text);
     } else return rerender(i);
-    const line = listEl.querySelector(`[data-i="${i}"] .steps-line`);
-    if (line) line.textContent = currentStep(msg, layout(msg).group);
     follow();
   }
 
@@ -530,14 +468,26 @@ window.KURAL_CHAT = function (app, port) {
 
   // Each block in its own wrapper (display: contents), so a streamed delta redraws just that block (patchBlock), and a
   // new block is added without redrawing the others (appendBlock).
+  // A text block: Calm reading (media/markdown.js). The answer's last text, once it's finished, may end with options
+  // the AI wrote after a question: those become buttons (media/choices.js), clickable on the last answer of an idle chat.
+  function textNodes(m, b, k, inSteps) {
+    const lead = !inSteps && k === leadOf(m);
+    if (inSteps || m.running || k !== lastTextOf(m) || m.role !== "assistant") return md.markdown(b.text, !m.running, lead);
+    const blocks = md.parse(b.text, { finished: true, lead }), ch = md.choicesOf(blocks);
+    if (!ch) return md.render(blocks, { finished: true });
+    const i = S.tab.messages.indexOf(m), next = S.tab.messages[i + 1];
+    const clickable = i === lastAssistant() && S.tab.status === "idle" && !S.tab.visiting;
+    return [...md.render(blocks.slice(0, ch.start), { finished: true }), choices.options(ch, i, { answered: (next && next.picks) || null, clickable }),
+      ...md.render(blocks.slice(ch.end), { finished: true })];
+  }
   function blockNode(m, b, k, inSteps = false) {
     const w = el("div", { class: `blk${inSteps && b.k === "text" ? " interim" : ""}`, "data-b": k });
-    if (b.k === "text") w.append(...markdown(b.text, !m.running));
+    if (b.k === "text") w.append(...textNodes(m, b, k, inSteps));
     else if (b.k === "tool") w.append(toolNode(b));
     else if (b.k === "perm") w.append(permNode(b));
     else if (b.k === "agent") w.append(agentNode(b));
-    else if (b.k === "question") w.append(questionNode(b));
-    else if (b.k === "think") w.append(thinkNode(b, m.running && !b.done));
+    else if (b.k === "question") w.append(choices.card(b, S.tab.messages.indexOf(m), b._prior));
+    else if (b.k === "think") w.append(el("div", { class: "think-plain" }, b.text));   // (thoughts are drawn in the timeline)
     else if (b.k === "image") w.append(imageNode(b));
     else if (b.k === "steer") w.append(steerNode(b));
     return w;
@@ -695,6 +645,31 @@ window.KURAL_CHAT = function (app, port) {
       onclick: () => S.tab.status !== "idle" ? busyNote() : post({ type: "fork", tabId: S.tab.id, index: i }) }, icon("git-branch"));
   }
 
+  // A question card you asked about (state "asked") and the AI's text after it go into the next card of the same answer
+  // (its new version): b._prior = { before, answerText }. Returns the block indexes drawn there instead.
+  function askedInto(m) {
+    const folded = new Set(), bs = m.blocks || [];
+    bs.forEach((b, k) => {
+      if (b.k !== "question" || b.state !== "asked") return;
+      const next = bs.findIndex((x, j) => j > k && x.k === "question");
+      if (next < 0) return;
+      const between = [];
+      for (let j = k + 1; j < next; j++) if (bs[j].k === "text") { between.push(bs[j].text); folded.add(j); }
+      bs[next]._prior = { before: b, answerText: between.join("\n\n") };
+      folded.add(k);
+    });
+    return folded;
+  }
+
+  // What you answered by picking: chips per question (the question above them when there were several), then the note.
+  function picksBubble(m) {
+    const text = (m.segments || []).filter((x) => x.t === "text").map((x) => x.v).join("");
+    const said = m.picks.map((x) => `${x.question} ${x.choices.join(", ")}`).join("\n");
+    const note = text.startsWith(said) ? text.slice(said.length).trim() : "";
+    return [...m.picks.flatMap((x) => [m.picks.length > 1 ? el("div", { class: "pick-q" }, x.question) : null,
+      el("div", { class: "picked" }, x.choices.map((c) => el("span", { class: "pk" }, icon("check"), c)))]), note ? el("div", { class: "pick-note" }, note) : null];
+  }
+
   function messageNode(m, i) {
     if (m.role === "user") {
       // Hover: Edit (what you send replaces this message and everything after it) and Restore code (the files the AI
@@ -709,7 +684,7 @@ window.KURAL_CHAT = function (app, port) {
         (m.contexts || []).length || (m.mode && m.mode !== "agent") ? el("div", { class: "ctx-line" },
           m.mode && m.mode !== "agent" ? el("span", { class: `mode-tag ${m.mode}` }, modeLabel(m.mode)) : null,
           (m.contexts || []).map((c) => el("span", { class: "ctx" }, icon("file"), " ", c.name || base(c.path)))) : null,
-        el("div", { class: "bubble" }, (m.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)),
+        el("div", { class: "bubble" }, m.picks && m.picks.length ? picksBubble(m) : (m.segments || []).map((s) => s.t === "text" ? s.v : pillNode(s.ctx)),
           // Pictures you mentioned with @: shown, like attached ones.
           ((pics) => pics.length ? el("div", { class: "att-row" }, pics.map((c) => el("img", { class: "att-photo", src: fileSrc(c.path), alt: base(c.path),
             title: `Open ${base(c.path)} full size`, onclick: () => post({ type: "openImage", path: c.path }) }))) : null)(
@@ -722,10 +697,10 @@ window.KURAL_CHAT = function (app, port) {
     if (m.models && m.models.length) out.append(el("div", { class: "model-attribution", ...(m.routing && m.routing.reason ? { title: m.routing.reason } : {}) },m.models.map(modelLabel).join(" → ") +
       (m.routing ? ` · ${m.routing.source || "native"} · ${Number(m.routing.ms).toFixed(1)} ms routing` : "")));
     if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
-    const P = parts(m);
+    const P = parts(m), folded = askedInto(m);
     P.forEach((p, n) => {
       if (p.group.length) out.append(stepsNode(m, p.group, n, n === P.length - 1));
-      p.outside.forEach((k) => out.append(blockNode(m, m.blocks[k], k)));
+      p.outside.forEach((k) => { if (!folded.has(k)) out.append(blockNode(m, m.blocks[k], k)); });
       if (p.steer !== null) out.append(blockNode(m, m.blocks[p.steer], p.steer));   // what you added while it worked
     });
     const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
@@ -735,7 +710,8 @@ window.KURAL_CHAT = function (app, port) {
       el("span", {}, `Waiting for ${listNames(m.waitingFor)} to finish — the answer comes when everyone has reported`),
       // Agents that take too long (or got stuck): stop them and get the answer from what's there.
       el("button", { class: "cb", title: "Stop the agents still working and have the lead answer with what it has", onclick: () => post({ type: "finishTeam", tabId: S.tab.id }) }, "Finish now")));
-    else if (m.running) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
+    // (While a timeline is live, its header says it works: no second "Thinking…" line under the answer.)
+    else if (m.running && !layout(m).group.length) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
     if (m.note) out.append(el("div", { class: "note" }, m.note));
     if (m.error === "stopped") out.append(el("div", { class: "note" }, "Stopped."));
@@ -762,6 +738,7 @@ window.KURAL_CHAT = function (app, port) {
   }
   setInterval(() => {
     for (const e of listEl.querySelectorAll(".elapsed")) e.textContent = workingText(+e.dataset.t0);
+    for (const e of listEl.querySelectorAll(".tl-elapsed")) e.textContent = workingLabel(e.dataset.t0, e.dataset.kinds);
   }, 1000);
 
   // ONE dropdown per answer for how it worked: thoughts, tool steps (reads, searches, commands, edits…), permission cards
@@ -787,10 +764,15 @@ window.KURAL_CHAT = function (app, port) {
   }
   // The part still being written (the last): its dropdown is the live one.
   function layout(m) { const p = parts(m); return p[p.length - 1]; }
+  // The answer's first text after all its steps: where "**Done:** …" becomes the point-first box (-1: none yet).
+  function leadOf(m) { const p = layout(m), k = p.outside.find((x) => m.blocks[x].k === "text"); return k === undefined ? -1 : k; }
+  // ...and its last text, where options at the end of the answer can be (-1: none).
+  function lastTextOf(m) { const ks = layout(m).outside.filter((x) => m.blocks[x].k === "text"); return ks.length ? ks[ks.length - 1] : -1; }
   const STEP_KIND = { Bash: "command", run_command: "command", Read: "read", Grep: "search", Glob: "search", read_file: "read", list_dir: "search",
     Edit: "edit", Write: "edit", NotebookEdit: "edit", write_file: "edit", WebSearch: "web search", WebFetch: "web page" };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : w.endsWith("search") ? "es" : "s"}`;
-  function stepsLabel(m, ks, live = true) {
+  // " · 3 thoughts, 2 reads, 1 command"
+  function stepsKinds(m, ks) {
     const count = {};
     for (const k of ks) {
       const b = m.blocks[k];
@@ -799,33 +781,44 @@ window.KURAL_CHAT = function (app, port) {
     }
     const order = ["thought", "read", "search", "edit", "command", "web search", "web page", "browser step", "step"];
     const kinds = order.filter((k) => count[k]).map((k) => plural(count[k], k));
+    return kinds.length ? ` · ${kinds.join(", ")}` : "";
+  }
+  function stepsLabel(m, ks, live = true) {
     const secs = m.ms && live ? Math.max(1, Math.round(m.ms / 1000)) : 0;   // (the time: the whole answer's, on its last part)
-    return `${m.running && live ? "Working…" : secs ? `Worked for ${secs} s` : "Worked"}${kinds.length ? ` · ${kinds.join(", ")}` : ""}`;
+    return `${m.running && live ? "Working…" : secs ? `Worked for ${secs} s` : "Worked"}${stepsKinds(m, ks)}`;
   }
-  // While it works: what it's doing now (its latest thought, or the step).
-  function currentStep(m, ks) {
-    const b = ks.length && m.blocks[ks[ks.length - 1]];
-    if (!b || !m.running) return "";
-    if (b.k === "think") return lastLine(b.text);
-    if (b.k === "tool") return `${TOOL_VERB[b.name] || deviceVerb(b.name) || browserVerb(b.name) || prettyTool(b.name)} ${b.detail || ""}`;
-    if (b.k === "text") return lastLine(b.text);
-    return "";
+  const workingLabel = (t0, kinds = "") => `Working… ${Math.max(0, Math.round((Date.now() - (+t0 || Date.now())) / 1000))} s${kinds}`;
+  // What the thinking is (the timeline's tag): Claude and ChatGPT send their own summaries; models on this computer, and
+  // open models through Codex, their raw thinking. Kural shows it as it comes and summarizes nothing itself.
+  function thinkingTag(m) {
+    const thinks = (m.blocks || []).filter((b) => b.k === "think");
+    if (!thinks.length) return null;
+    const model = (m.models || [])[(m.models || []).length - 1] || (S.tab && S.tab.model) || "";
+    if (thinks.some((b) => b.raw) || /^ollama:/.test(model)) return "raw";
+    if (/^codex:/.test(model)) return "ChatGPT's summary";
+    if (/^agy:/.test(model)) return null;
+    return "Claude's summary";
   }
-  // n: which part of the answer (see parts); live: the last part (its dropdown shows what it's doing now).
+  // n: which part of the answer (see parts); live: the last part (its timeline shows what it's doing now). Open while it
+  // works and after, in this window; an answer drawn later (you opened the chat) starts folded. Your choice stays.
   function stepsNode(m, ks, n = 0, live = true) {
-    const open = () => !!(m._stepsOpen && m._stepsOpen[n]);
     const running = m.running && live;
-    const node = el("div", { class: `steps${open() ? " open" : ""}${running ? " live" : ""}` });
-    node.append(
-      el("div", { class: "steps-head", title: open() ? "Hide the steps" : "Show every step", onclick: () => {
-        m._stepsOpen = { ...(m._stepsOpen || {}), [n]: !node.classList.contains("open") }; node.classList.toggle("open", open()); } },
-        el("span", { class: "think-caret" }), el("span", { class: "steps-label" }, stepsLabel(m, ks, live)),
-        running ? el("span", { class: "steps-line" }, currentStep(m, ks)) : null),
-      el("div", { class: "steps-body" }, ks.map((k) => blockNode(m, m.blocks[k], k, true))));
+    const open = m._stepsOpen && n in m._stepsOpen ? m._stepsOpen[n] : (running || !!m._liveHere);
+    const state = ((m._tl = m._tl || {})[n] = m._tl[n] || { follow: true });
+    const last = ks[ks.length - 1];
+    const items = ks.map((k) => {
+      const b = m.blocks[k], now = running && k === last;
+      return b.k === "think" ? { kind: "thought", text: b.text, raw: !!b.raw, now, key: k } : { kind: "step", node: blockNode(m, b, k, true), now };
+    });
+    const kinds = stepsKinds(m, ks);
+    const node = timeline.node({ label: running ? workingLabel(m.t0, kinds) : stepsLabel(m, ks, live), tag: thinkingTag(m), live: running, open, items, state,
+      onToggle: (o) => { m._stepsOpen = { ...(m._stepsOpen || {}), [n]: o }; } });
+    if (running) { const lab = node.querySelector(".lab"); lab.classList.add("tl-elapsed"); lab.dataset.t0 = String(m.t0 || Date.now()); lab.dataset.kinds = kinds; }
     return node;
   }
 
-  const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page" };
+  const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page",
+    ToolSearch: "Loaded tools" };
   // A linked device's tools.
   const DEVICE_VERB = { run_command: "Device command", read_file: "Read on device", write_file: "Wrote on device", list_dir: "Listed on device" };
   const deviceVerb = (name) => { const m = /^mcp__device__(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
@@ -852,20 +845,6 @@ window.KURAL_CHAT = function (app, port) {
       file ? el("span", { class: "tool-file", onclick: () => post({ type: "openFile", path: file }) }, b.detail)
         : b.name === "Bash" || /run_command$/.test(b.name) ? el("code", {}, b.detail) : el("span", {}, b.detail),
       pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), title: "Click to open it full size", onclick: () => post({ type: "openImage", path: file }) }) : null);
-  }
-
-  // The model's thinking (short summaries). Always one line, so nothing around it moves while it thinks: "Thinking…"
-  // with its latest sentence, then "Thought for 12 s". Click to read all of it.
-  const lastLine = (t) => { const s = String(t || "").trim().split(/\n+/).filter(Boolean); return s.length ? s[s.length - 1].replace(/^[*#\s]+|\*+$/g, "") : ""; };
-  function thinkNode(b, live) {
-    const secs = b.ms ? Math.max(1, Math.round(b.ms / 1000)) : 0;
-    const node = el("div", { class: `think${b._open ? " open" : ""}${live ? " live" : ""}` });
-    node.append(
-      el("div", { class: "think-head", onclick: () => { b._open = !node.classList.contains("open"); node.classList.toggle("open", b._open); } },
-        el("span", { class: "think-caret" }), el("span", { class: "think-label" }, live ? "Thinking…" : secs ? `Thought for ${secs} s` : "Thought"),
-        live ? el("span", { class: "think-line" }, lastLine(b.text)) : null),
-      el("div", { class: "think-body" }, b.text));
-    return node;
   }
 
   // A picture the model made (saved by Kural as a file): shown in the answer; click opens it.
@@ -905,65 +884,6 @@ window.KURAL_CHAT = function (app, port) {
     const node = el("div", { class: `${cls} clamp`, title: "Click to show all" }, text);
     node.onclick = () => node.classList.toggle("clamp");
     return node;
-  }
-
-  // Claude's multiple-choice question. Your picks live on the block (b._sel, b._other) so a
-  // redraw while you're choosing doesn't lose them.
-  function questionNode(b) {
-    const qs = b.questions || [];
-    const card = el("div", { class: `question ${b.state}` });
-    const who = b.agent ? el("span", { class: "perm-agent" }, b.agent) : null;
-    if (b.state !== "pending") {
-      card.append(el("div", { class: "q-title" }, who, b.state === "answered" ? "You answered" : "Skipped"));
-      for (const q of qs) card.append(el("div", { class: "q-done" }, el("span", { class: "q-muted" }, q.question), " ",
-        el("b", {}, b.answers && b.answers[q.question] ? b.answers[q.question] : "—")));
-      return card;
-    }
-    b._sel = b._sel || qs.map(() => []);
-    b._other = b._other || qs.map(() => "");
-    const submit = el("button", { class: "cb primary solid", onclick: () => send() }, "Submit");
-    const ready = () => qs.every((q, i) => b._sel[i].length || b._other[i].trim());
-    const refresh = () => { submit.disabled = !ready(); };
-    const answerOf = (q, i) => [...b._sel[i], ...(b._other[i].trim() ? [b._other[i].trim()] : [])].join(", ");
-    const send = () => {
-      if (!ready()) return;
-      const answers = {};
-      qs.forEach((q, i) => { answers[q.question] = answerOf(q, i); });
-      post({ type: "answer", tabId: S.tab.id, pid: b.pid, answers });
-    };
-    card.append(el("div", { class: "q-title" }, who, qs.length > 1 ? "A few questions for you" : "A question for you"));
-    qs.forEach((q, i) => {
-      const multi = !!q.multiSelect;
-      const box = el("div", { class: "q-block" },
-        q.header ? el("span", { class: "q-chip" }, q.header) : null,
-        el("div", { class: "q-text" }, q.question),
-        multi ? el("div", { class: "q-muted small" }, "Pick one or more") : null);
-      const rows = [];
-      const paint = () => rows.forEach(([row, label]) => row.classList.toggle("on", b._sel[i].includes(label)));
-      for (const o of q.options || []) {
-        const row = el("button", { class: `q-opt ${multi ? "multi" : ""}`, onclick: () => {
-          const sel = b._sel[i];
-          if (multi) { const k = sel.indexOf(o.label); if (k >= 0) sel.splice(k, 1); else sel.push(o.label); }
-          else { b._sel[i] = sel[0] === o.label ? [] : [o.label]; b._other[i] = ""; other.value = ""; }
-          paint(); refresh();
-        } }, el("span", { class: "q-mark" }), el("span", { class: "q-opt-text" }, el("span", { class: "q-label" }, o.label),
-          o.description ? el("span", { class: "q-desc" }, o.description) : null));
-        rows.push([row, o.label]);
-        box.append(row);
-      }
-      const other = el("input", { class: "q-other", placeholder: "Other…", value: b._other[i], oninput: () => {
-        b._other[i] = other.value;
-        if (!multi && other.value.trim()) { b._sel[i] = []; paint(); }
-        refresh();
-      }, onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } } });
-      box.append(other);
-      paint();
-      card.append(box);
-    });
-    card.append(el("div", { class: "perm-row" }, submit,
-      el("button", { class: "cb", onclick: () => post({ type: "answer", tabId: S.tab.id, pid: b.pid, answers: null }) }, "Skip")));
-    refresh();
-    return card;
   }
 
   function permNode(b) {
@@ -1086,6 +1006,7 @@ window.KURAL_CHAT = function (app, port) {
     // (While it answers, Enter doesn't stop it: what you send is added to the answer at its next step, or answered next.)
     // Short (Adithya: "Ask Kural something", nothing more); the mode shows on its own button.
     input.dataset.placeholder = running ? "Add to this answer…" : "Ask Kural something";
+    renderPending();   // (picks waiting for Send change the hint)
   }
   function renderOffer() {
     clearTimeout(S.offerTimer);
@@ -1104,7 +1025,16 @@ window.KURAL_CHAT = function (app, port) {
     if (left > 0) S.offerTimer = setTimeout(renderOffer, 1000);
   }
   const hasDraft = () => !isEmptyInput() || S.attachments.length > 0;
-  function renderQueueBtn() { queueBtn.classList.toggle("hidden", !(S.tab && S.tab.status !== "idle" && !S.tab.visiting && hasDraft())); }
+  function renderQueueBtn() { queueBtn.classList.toggle("hidden", !(S.tab && S.tab.status !== "idle" && !S.tab.visiting && (hasDraft() || choices.anyPicked()))); }
+  // Picks waiting for Send: the line above the box, the box's hint, Send lit up.
+  function renderPending() {
+    const line = choices.lineNode();
+    pendingEl.replaceChildren(...(line ? [line] : []));
+    composer.classList.toggle("picked", !!line);
+    if (line) input.dataset.placeholder = "Add a note (optional), then press Send";
+    else if (S.tab) input.dataset.placeholder = S.tab.status !== "idle" ? "Add to this answer…" : "Ask Kural something";
+    renderQueueBtn();
+  }
 
   // The queue above the box: what you sent while it answered and it hasn't taken in yet.
   function renderQueue() {
@@ -1148,6 +1078,7 @@ window.KURAL_CHAT = function (app, port) {
   function sendMessage() {
     const t = S.tab;
     if (!t || t.visiting) return;
+    if (sendPicks(t)) return;
     if (isEmptyInput() && !S.attachments.length) return;
     if (S.enh && S.enh.state === "running") { flash("Enhance is still working on it: wait, or press Stop", 2200); return; }
     if (t.status !== "idle" && S.editing && S.editing.tabId === t.id) return busyNote();   // (an edit waits for the answer)
@@ -1161,6 +1092,26 @@ window.KURAL_CHAT = function (app, port) {
     closePopup(); closeHistory();
     if (S.enh && S.enh.state !== "running") { S.enh = null; renderEnhance(); }
     voice.typed();   // (the "From your voice" note goes with the message)
+  }
+
+  function sendPicks(t) {
+    if (!choices.anyPicked()) return false;
+    const p = choices.pending();
+    const note = readInput().filter((x) => x.t === "text").map((x) => x.v).join("").trim();
+    if (p && p.cards.length) {
+      p.cards.forEach((c, n) => post({ type: "answer", tabId: t.id, pid: c.pid, answers: c.answers, ...(note && n === p.cards.length - 1 ? { note } : {}) }));
+    } else if (p && p.picks.length && t.status === "idle") {
+      sendText(p.picks.map((x) => `${x.question} ${x.choices.join(", ")}`).join("\n") + (note ? `\n\n${note}` : ""), p.picks);
+    } else { flash("Pick an answer for each question on the card, then press Send", 2400); return true; }
+    input.replaceChildren(); choices.clear(); renderChips();
+    return true;
+  }
+  // A message from the page itself (your picks, a question about a question), sent like one typed in the box.
+  function sendText(text, picks) {
+    const t = S.tab;
+    if (!t || t.visiting || !String(text || "").trim()) return;
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    post({ type: "send", tabId: t.id, requestId, segments: [{ t: "text", v: String(text) }], contexts: [], attachments: [], ...(picks && picks.length ? { picks } : {}) });
   }
 
   // Kural took the message you sent (as a new message, or into the queue): the box and its attachments empty (only if
@@ -1257,7 +1208,7 @@ window.KURAL_CHAT = function (app, port) {
   document.addEventListener("selectionchange", () => { if (!quoteBar.classList.contains("hidden") && !chatSelection()) quoteBar.classList.add("hidden"); }, on);
   listEl.addEventListener("scroll", () => quoteBar.classList.add("hidden"));
   // Side chat: a quick question under an answer (media/side.js). "Add to chat" under a side answer joins it to your message as a quote.
-  const side = window.KURAL_SIDE({ el, icon, markdown, post, tab: () => S.tab, rerender: (i) => rerender(i), root: () => listEl,
+  const side = window.KURAL_SIDE({ el, icon, markdown: (t, finished) => md.markdown(t, finished), post, tab: () => S.tab, rerender: (i) => rerender(i), root: () => listEl,
     addToChat: ({ text, label }) => { const line = label.replace(/\s+/g, " "), t = text.length > MAX_QUOTE ? `${text.slice(0, MAX_QUOTE)}…` : text;
       insertPill({ kind: "quote", text: t, label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line }); input.focus(); } });
 
@@ -1842,6 +1793,7 @@ ${d.system}` : ""}`,
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "moods": S.moods = m.moods || S.moods; renderFoot(); if (S.menu === "model") openMenu.refresh(); break;
       case "tabs":
+        const wasStatus = S.tab && S.tab.status;
         S.tabs = m.tabs; S.activeId = m.activeId;
         // A chat dragged into the editor area: its editor tab is its tab, so no tab bar of its own. In a column of the
         // side panel (split): its title above it.
@@ -1851,7 +1803,8 @@ ${d.system}` : ""}`,
           mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device, queued: s.queued,
           autoRoute: s.autoRoute,routingProfile: s.routingProfile,routingState: s.routingState,modelName: s.modelName,tokens: s.tokens,context: s.context }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
-        if (S.tab) { const i = lastAssistant(); if (i >= 0 && S.tab.messages[i].planReady) rerender(i); }
+        if (S.tab) { const i = lastAssistant(); if (i >= 0 && (S.tab.messages[i].planReady || S.tab.status !== wasStatus)) rerender(i); }
+        renderPending();
         break;
       case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
@@ -1911,20 +1864,22 @@ ${d.system}` : ""}`,
       case "delta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
         const msg = S.tab.messages[i];
+        msg._liveHere = true;
         let b = msg.blocks[msg.blocks.length - 1];
         if (!b || b.k !== "text") { b = { k: "text", text: "" }; msg.blocks.push(b); b.text += m.text; appendBlock(i); break; }
         b.text += m.text; schedulePatch(i, msg.blocks.length - 1);
       } break;
-      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i].blocks.push(m.block); appendBlock(i); } } break;
+      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i]._liveHere = true; S.tab.messages[i].blocks.push(m.block); appendBlock(i); } } break;
       case "thinkDelta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
+        S.tab.messages[i]._liveHere = true;
         const blocks = S.tab.messages[i].blocks, b = blocks[blocks.length - 1];
         if (b && b.k === "think") { b.text += m.text; schedulePatch(i, blocks.length - 1); }
       } break;
       case "agentActivity": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.activity = m.activity; scheduleRerender(i); } } break;
       case "agentStep": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.steps.push(m.step); scheduleRerender(i); } } break;
       case "agentState": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.state = m.state; if (m.why) a.why = m.why; scheduleRerender(i); } } break;
-      case "questionState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) { b.state = m.state; b.answers = m.answers; } scheduleRerender(i); } } break;
+      case "questionState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) { b.state = m.state; b.answers = m.answers; if (m.ask) b.ask = m.ask; } scheduleRerender(i); } } break;
       case "permState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) b.state = m.state; scheduleRerender(i); } } break;
       case "patch": if (mine) { const i = m.index != null ? m.index : lastAssistant(); if (i >= 0) { Object.assign(S.tab.messages[i], m.msg); rerender(i); } renderFoot(); } break;
       case "sideDelta": if (mine) side.delta(m); break;

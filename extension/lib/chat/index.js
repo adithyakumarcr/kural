@@ -42,6 +42,19 @@ const { excludedModel, completionModel } = require("../ai/model-policy");
 const { Notifier, notifyDecision, message: notifyText } = require("./notify");
 const { NAME: BROWSER_SERVER, TOOLS: BROWSER_TOOLS } = require("../browser/bridge");
 
+// A question card (AskUserQuestion) you asked about before answering: what the AI is told instead of an answer.
+const ASK_ANSWER = (q) => `The user hasn't chosen yet and asks: "${q}". Answer that briefly, then ask your question again with AskUserQuestion, changed if your answer changes the options.`;
+// The note you wrote in the chat box goes with the last question's answer: "Only if I was at the bottom. Note: keep it simple".
+function withNote(answers, questions, note) {
+  const n = typeof note === "string" ? note.trim().slice(0, 2000) : "";
+  if (!n) return answers;
+  const out = { ...answers };
+  const asked = (questions || []).map((q) => q && q.question).filter((q) => q in out);
+  const last = asked.length ? asked[asked.length - 1] : Object.keys(out).pop();
+  if (last !== undefined) out[last] = `${String(out[last]).replace(/[.\s]+$/, "")}. Note: ${n}`;
+  return out;
+}
+
 const MODELS = [
   { id: "opus", label: "Opus", hint: "most capable" },
   { id: "sonnet", label: "Sonnet", hint: "fast and smart" },
@@ -758,7 +771,7 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("listen.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("markdown.js")}"></script><script nonce="${nonce}" src="${uri("timeline.js")}"></script><script nonce="${nonce}" src="${uri("choices.js")}"></script><script nonce="${nonce}" src="${uri("listen.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
     // (A message from a column of the side panel (split) says which: that column is a pane of its own.)
     webview.onDidReceiveMessage((m) => {
       const p = m && m.col ? (pane.layout || []).find((q) => q.col === m.col) : pane;
@@ -1343,8 +1356,14 @@ class ChatView {
     r.teamFile = nativeTeam ? path.join(privateTmp("teams"), `${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
-    // With your full setup, Claude can also use your skills.
-    const tools = [...(editing ? AGENT_TOOLS : [...READ_TOOLS, ...WEB_TOOLS]),...(team ? ["Task"] : []), "AskUserQuestion", ...(full ? ["Skill"] : [])];
+    // With your full setup, Claude can also use your skills, and ToolSearch: without it in --tools, Claude Code sends every
+    // connector's whole tool list (Figma, Atlassian…) with every request instead of loading a tool when it needs one.
+    // Measured 21 Oct 2026 (Claude Code 2.1.289, three claude.ai connectors): first request 67,800 → 34,400 tokens, the
+    // model starting 4-6.7 s → 1.5-2.1 s; connector tools still work (one ToolSearch step first). It only loads tool
+    // descriptions, so it's pre-allowed; the connector's own tools still ask (onPermission). An older Claude Code without
+    // it ignores the name.
+    const fullTools = full ? ["Skill", "ToolSearch"] : [];
+    const tools = [...(editing ? AGENT_TOOLS : [...READ_TOOLS, ...WEB_TOOLS]),...(team ? ["Task"] : []), "AskUserQuestion", ...fullTools];
     // A Claude model: Claude Code. A model on this computer: Kural's own engine, with the same tools and events.
     // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
     // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
@@ -1370,7 +1389,7 @@ class ChatView {
       addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : []), ...(lessonDir ? [lessonDir] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
-      tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...(full ? ["Skill"] : []), ...deviceTools, ...browserTools],
+      tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...fullTools, ...deviceTools, ...browserTools],
       mcpServers: nativeTeam || dev || brw ? { ...(nativeTeam ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
         ...(dev ? { device: dev.server } : {}), ...(brw ? { [BROWSER_SERVER]: brw.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
@@ -1596,6 +1615,20 @@ class ChatView {
   }
 
   // What you typed, with pills written as @main.py or @main.py (L3-9); a quote from the chat as "its first words…".
+  // What you picked for options the AI wrote in its answer, kept on your message (the page shows them as chips):
+  // [{ question, choices }], at most 6 questions of at most 6 choices; anything else is dropped.
+  static cleanPicks(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    for (const p of list) {
+      if (out.length >= 6) break;
+      if (!p || typeof p.question !== "string" || !p.question.trim() || !Array.isArray(p.choices)) continue;
+      const choices = p.choices.filter((c) => typeof c === "string" && c.trim()).slice(0, 6).map((c) => c.trim().slice(0, 120));
+      if (choices.length) out.push({ question: p.question.trim().slice(0, 300), choices });
+    }
+    return out;
+  }
+
   static textOf(segments) {
     return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
       : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
@@ -1630,7 +1663,7 @@ class ChatView {
     if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
   }
 
-  async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null) {
+  async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null, picks = []) {
     if (vscode.workspace.isTrusted === false) {
       vscode.window.showWarningMessage("Trust this workspace before using Kural AI. Repository files and provider setup may execute code.");
       return;
@@ -1713,6 +1746,8 @@ class ChatView {
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
     if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
+    const picked = ChatView.cleanPicks(picks);
+    if (picked.length) user.picks = picked;   // (options you picked in the answer: shown as chips on your message)
     const reply = this.newReply(tab, routed);
     tab.messages.push(user, reply);
     tab.status = "running";
@@ -2203,11 +2238,12 @@ class ChatView {
       if (parent) return;   // helpers' own text stays inside their card; only the lead talks in the chat
       const e = m.event;
       // Claude's thinking, as short summaries (only when Claude Code supports --thinking-display).
-      if (e.type === "content_block_start") r.blockType = e.content_block && e.content_block.type;
+      // (kural_raw: the AI's own thinking as it wrote it, not a summary: lib/ai/codex.js marks it. The timeline says so.)
+      if (e.type === "content_block_start") { r.blockType = e.content_block && e.content_block.type; r.thinkRaw = !!(e.content_block && e.content_block.kural_raw); }
       if (e.type === "content_block_delta" && e.delta.type === "thinking_delta" && e.delta.thinking) {
         let last = reply.blocks[reply.blocks.length - 1];
         if (!last || last.k !== "think" || last.done) {
-          last = { k: "think", text: "", t0: Date.now() };
+          last = { k: "think", text: "", t0: Date.now(), ...(r.thinkRaw ? { raw: true } : {}) };
           reply.blocks.push(last);
           this.post({ type: "block", tabId: tab.id, block: last });
         }
@@ -2711,15 +2747,20 @@ class ChatView {
     this.post({ type: "block", tabId: tab.id, block });
     this.postTabs();
     this.notify(tab, "question", { question: (questions[0] || {}).question });
-    const answers = await new Promise((resolve) => r.perms.set(pid, resolve));
+    // The page answers { answers, note } (your picks, and a note from the chat box), { ask } (a question about the
+    // question: the AI answers it, then asks again, changed if needed), or false (Skip).
+    const got = await new Promise((resolve) => r.perms.set(pid, resolve));
     this.clearNotice(tab.id);
-    const ok = answers && typeof answers === "object";
-    block.state = ok ? "answered" : "skipped";
-    block.answers = ok ? answers : null;
+    const ask = got && typeof got === "object" && typeof got.ask === "string" && got.ask.trim() ? got.ask.trim().slice(0, 1000) : "";
+    const picked = got && typeof got === "object" && !ask ? (got.answers && typeof got.answers === "object" ? got.answers : got) : null;
+    const answers = ask ? { [(questions[0] || {}).question]: ASK_ANSWER(ask) } : picked ? withNote(picked, questions, got.note) : null;
+    block.state = ask ? "asked" : answers ? "answered" : "skipped";
+    block.answers = ask ? null : answers;
+    if (ask) block.ask = ask;
     if (r.turn && r.turn.reply.running) tab.status = "running";
-    this.post({ type: "questionState", tabId: tab.id, pid, state: block.state, answers: block.answers });
+    this.post({ type: "questionState", tabId: tab.id, pid, state: block.state, answers: block.answers, ...(ask ? { ask } : {}) });
     this.postTabs(); this.save();
-    return ok ? { allow: true, updatedInput: { ...input, answers } }
+    return answers ? { allow: true, updatedInput: { ...input, answers } }
       : { allow: false, message: "The user skipped the question. Continue with your best judgment, and say what you assumed." };
   }
 
@@ -2870,7 +2911,7 @@ class ChatView {
       case "installOllama": installOllama(); break;
       case "openWorkspace": this.openWorkspaceOf(m.id); break;
       case "send": if (tab) await this.send(tab, m.segments, m.contexts, m.attachments || [], typeof m.requestId === "string" ? m.requestId.slice(0,100) : null,
-        Number.isInteger(m.editIndex) ? m.editIndex : null); break;
+        Number.isInteger(m.editIndex) ? m.editIndex : null, Array.isArray(m.picks) ? m.picks : []); break;
       // Side chat (lib/chat/side.js): a quick question under an answer. Never a turn of the chat: no status, no journal.
       case "sideAsk": if (tab && Number.isInteger(m.index)) this.sideChats.ask(tab, m); break;
       case "enhance": if (tab) this.enhance(tab, m); break;
@@ -3063,7 +3104,11 @@ class ChatView {
       case "answer": {
         const r = this.runtime.get(tab.id);
         const res = r && r.perms.get(m.pid);
-        if (res) { r.perms.delete(m.pid); res(m.answers && typeof m.answers === "object" ? m.answers : false); }
+        if (res) {
+          r.perms.delete(m.pid);
+          res(typeof m.ask === "string" && m.ask.trim() ? { ask: m.ask }
+            : m.answers && typeof m.answers === "object" ? { answers: m.answers, note: typeof m.note === "string" ? m.note : "" } : false);
+        }
         break;
       }
       case "change": await this.onChangeAction(tab, m); break;

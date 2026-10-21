@@ -23,6 +23,8 @@
     function kindOf(n) {
       const t = n.tagName;
       if (t === "P") return "p";
+      // Calm reading's boxes (media/markdown.js): the point first, callouts and quotes read like paragraphs.
+      if (n.classList.contains("sum") || n.classList.contains("callout") || n.classList.contains("md-quote")) return "p";
       if (t === "UL" || t === "OL") return "list";
       if (/^H[1-6]$/.test(t)) return "heading";
       if (n.classList.contains("code")) return "code";
@@ -32,7 +34,11 @@
     function textOf(n, kind) {
       if (kind === "code") { const pre = n.querySelector("pre"); return (pre || n).textContent; }
       if (kind === "table") return Array.from(n.querySelectorAll("tr"), cells).join("\n");
-      if (kind === "list") { const li = n.querySelectorAll("li"); return (li.length ? Array.from(li, (x) => `- ${x.textContent.trim()}`).join("\n") : n.textContent); }
+      // (Only the list's own items: a nested item's text is already in its parent's.)
+      if (kind === "list") { const li = Array.from(n.children).filter((x) => x.tagName === "LI"); return (li.length ? li.map((x) => `- ${x.textContent.trim()}`).join("\n") : n.textContent); }
+      // "Done: Each chat reopens.", "Watch out: Two windows." (the box's label, then what it says)
+      const head = n.querySelector(".sum-label") || n.querySelector(".callout-head");
+      if (head) return `${head.textContent.trim()}: ${Array.from(n.children).filter((c) => c !== head).map((c) => c.textContent.trim()).join(" ")}`;
       return n.textContent;
     }
     const cells = (r) => Array.from(r.children, (c) => c.textContent.trim()).join(" | ");
@@ -43,7 +49,7 @@
       if (!answer) return out;
       for (const old of answer.querySelectorAll("[data-lb]")) old.removeAttribute("data-lb");
       for (const blk of answer.querySelectorAll(".blk")) {
-        if (blk.classList.contains("interim") || blk.closest(".steps")) continue;
+        if (blk.classList.contains("interim") || blk.closest(".steps") || blk.closest(".thv")) continue;   // (not what it did: the timeline)
         for (const n of blk.children) {
           const kind = kindOf(n);
           if (!kind) continue;

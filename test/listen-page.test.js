@@ -101,6 +101,15 @@ function page({ visiting = false, why = "" } = {}) {
     assert.strictEqual(p.root.querySelectorAll("[data-lb]").length, 5);
     assert.strictEqual(p.root.querySelector(".steps p").getAttribute("data-lb"), null);
   });
+  await check("the new blocks are numbered: the point first, callouts, quotes, nested lists once", () => {
+    const a = el("div", { class: "answer" }, el("div", { class: "blk", "data-b": "0" },
+      el("div", { class: "sum" }, el("div", { class: "sum-label" }, "Done"), el("p", {}, "Each chat reopens.")),
+      el("div", { class: "callout c-warning" }, el("div", { class: "callout-head" }, el("i"), el("span", {}, "Watch out")), el("p", {}, "Two windows.")),
+      el("div", { class: "md-quote" }, el("p", {}, "Quoted.")),
+      el("ul", {}, el("li", {}, "a", el("ul", {}, el("li", {}, "b"))), el("li", {}, "c"))));
+    const blocks = page().L.numberBlocks(a);
+    assert.deepStrictEqual(blocks.map((b) => [b.kind, b.text]), [["p", "Done: Each chat reopens."], ["p", "Watch out: Two windows."], ["p", "Quoted."], ["list", "- ab\n- c"]]);
+  });
   await check("the button: shown on a finished answer, not while it runs or in a read-only chat; disabled with the reason", () => {
     const p = page();
     assert.ok(p.btn() && p.btn().getAttribute("aria-label") === "Listen");

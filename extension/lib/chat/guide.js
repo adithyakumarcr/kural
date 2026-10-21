@@ -101,9 +101,26 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and Kural-managed teams always do
   that). Stop (the square button, or Esc) stops the answer and puts queued messages back into the box. Each change
   can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
-  Claude Code's own plans and memory). How the AI worked (its thoughts, reads, searches, commands, edits) is ONE dropdown per
-  answer ("Worked for 34 s · 2 thoughts, 3 reads, 1 command"; while it works: what it's doing now); the answer is below
-  it.
+  Claude Code's own plans and memory). How the AI worked is ONE timeline per answer: its thoughts in readable text between
+  the steps it took (Read, Searched, Edited +18 −3, Ran npm test · passed; click a step for all of it), headed "Working… 12
+  s" and then "Worked for 34 s · 2 thoughts, 3 reads, 1 command", with a tag saying what the thinking is:
+  "Claude's summary" or "ChatGPT's summary" (Anthropic and OpenAI only send a summary of their models' thinking, never the raw
+  thinking: Kural shows it as it comes and summarizes nothing itself) or "raw" (models on this computer, open models
+  through Codex); Gemini (Antigravity) passes no thinking on. At about 14 lines it scrolls inside, following the newest
+  line; scroll up in it to read and it stays there until Latest. It never folds by itself while you watch; when you open
+  the chat later, earlier answers' timelines are folded to their header (click to open). The answer is below it.
+  Answers are drawn calmly ("Calm reading"): real headings, the point first in a box (an answer that starts with
+  "**Done:** …", "**Goal:**", "**In short:**"), callouts whose color means something (GitHub's alerts: > [!NOTE] blue
+  Note, > [!TIP] green Tip, > [!IMPORTANT] purple Important, > [!WARNING] amber Watch out, > [!CAUTION] red Risk), quotes,
+  nested lists, checkboxes, numbered steps whose file is a chip that opens it, tables with number columns lined up on the
+  right and status words colored (passed green, failed red, no grey).
+  Questions: Pick, then Send. On a question card (the AI asking with options) and on options the AI wrote at the end of
+  its answer (a question, then a numbered list, or "- [ ]" lines when several may be picked, or a yes/no question), a
+  click picks an option and a second click un-picks it; the picks stay on the question, the line above the box shows
+  "Your answer … (press Send)", and nothing is sent until you press Send (Enter); what you type in the box goes with
+  it as a note. The card has no Submit (Skip stays; "Other…" takes your own words). Only the last answer of an idle chat
+  is clickable. "Ask about this question" (a box under the options): the AI that asked answers right there, then asks
+  again, changed if needed ("Updated after your question"; "The question before you asked" opens the old one).
   Notifications: when an answer is done or needs you (a command or file to allow, a question, a plan to build, an
   error, a login), a system notification names the chat ("Fix the login is done"); click it to go there. By default only
   while you're not looking (Kural's window not in front, or that chat not on screen); setting kural.notifications:
