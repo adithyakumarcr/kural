@@ -1,0 +1,1 @@
+{"name":"listen-spike","private":true,"description":"Throwaway: Listen engine spike (docs/superpowers/plans/2026-10-21-listen.md Task 1)","dependencies":{"onnxruntime-node":"^1.23.2","onnxruntime-web":"^1.30.0","phonemizer":"^1.2.1"}}
