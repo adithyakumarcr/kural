@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.2.1-beta.2
 
 - **Calmer answers, easier to read.** Real headings, the point first in a box, roomy text, and color only where it means
   something: callouts for a note, a tip, something important, something to watch out for and a risk; tables with their
