@@ -33,6 +33,8 @@ const { SideChats } = require("./side");
 const slashList = require("./slash");
 const { Enhancer } = require("../enhance");
 const { Voice } = require("../voice");
+const { Listen } = require("../listen");
+const { pickModel } = require("../listen/script");
 const scope = require("../profiles/scope");
 const usageHub = require("../ai/usage");
 const { retrieve } = require("../router/retrieve");
@@ -152,6 +154,12 @@ class ChatView {
     // agree); Side chat's quick model tidies the text up. The result goes into the box, never sent by itself.
     this.voice = new Voice({ dir: path.join(context.globalStorageUri.fsPath, "voice"), post: (msg) => this.post(msg),
       cleanupDeps: this.sideChats.d, log });
+    // Listen (lib/listen): an answer explained out loud, in a voice made on this computer (downloaded the first time, after
+    // you agree); Side chat's quick model (or the chat's own model on this computer) writes the walkthrough. Its messages go
+    // only to the pane that asked (a chat on screen twice would otherwise play twice).
+    this.listen = new Listen({ dir: path.join(context.globalStorageUri.fsPath, "listen"), postTo: (pane, msg) => this.postTo(pane, msg),
+      save: () => this.save(), pick: (tab) => pickModel(tab.model, { isLocal, fastest: (m, skip) => brain.fastestModel(m, skip) }),
+      nameOf: this.sideChats.d.nameOf, scriptDeps: this.sideChats.d, log });
     // Enhance prompt: a model that looks through the project (read only) rewrites what you typed (lib/enhance). Not part of
     // the conversation either; the page puts the result in the box for you to check.
     this.enhancer = new Enhancer({
@@ -282,7 +290,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { this.sideChats.stopAll(); this.voice.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
+      { dispose: () => { this.sideChats.stopAll(); this.voice.dispose(); this.listen.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -464,6 +472,7 @@ class ChatView {
     this.sideChats.stopAll(id);
     this.stopEnhance(id);
     this.voice.closed(id);
+    this.listen.tabClosed(id);
     const r = this.runtime.get(id);
     if (r && r.checkpointAbort) r.checkpointAbort.abort();
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
@@ -592,7 +601,7 @@ class ChatView {
     mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
     device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
-  viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll }; }
+  viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll, listenWhy: this.listen.why(t) }; }
   postTabs() {
     this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)) });   // each pane gets its own activeId (post)
     for (const p of this.panes) if (p.panel) { const t = this.tab(p.activeId); p.panel.title = t ? t.title : "Kural chat"; }
@@ -626,6 +635,7 @@ class ChatView {
     else if (t.profileFresh && (t.profile || "default") === scope.profileId()) { if (t.freshSession === "account") delete t.freshSession; delete t.profileFresh; }
     const roots = this.projectRoots(t);
     SideChats.clean(t.messages);
+    Listen.clean(t.messages);
     for (const m of t.messages) if (m.role === "assistant") {
       if (m.running) { m.running = false; m.error = m.error || "stopped"; }
       for (const b of m.blocks || []) {
@@ -694,7 +704,7 @@ class ChatView {
     const old = this.side();
     // (The old page's columns go with it, and come back in the new one.)
     const cols = old && old.layout ? this.layoutOf(old) : this.savedCols;
-    if (old) for (const p of old.layout || [old]) if (this.panes.includes(p)) this.panes.splice(this.panes.indexOf(p), 1);
+    if (old) for (const p of old.layout || [old]) if (this.panes.includes(p)) { this.listen.paneGone(p); this.panes.splice(this.panes.indexOf(p), 1); }
     const pane = this.attach(view.webview, "side", null, old ? old.activeId : this._activeId);
     pane.view = view;   // (is the side panel on screen: notifications, stopIdle)
     pane.layout = [pane];
@@ -702,7 +712,7 @@ class ChatView {
     view.onDidDispose(() => {
       this._activeId = pane.activeId;
       this.savedCols = this.layoutOf(pane);
-      for (const p of pane.layout) if (this.panes.includes(p)) this.panes.splice(this.panes.indexOf(p), 1);
+      for (const p of pane.layout) if (this.panes.includes(p)) { this.listen.paneGone(p); this.panes.splice(this.panes.indexOf(p), 1); }
       if (pane.layout.includes(this.focusPane)) this.focusPane = null;
     });
     // The panel shown again: its chat's program back, ready for your next message (it may have stopped while idle).
@@ -746,7 +756,7 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("listen.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
     // (A message from a column of the side panel (split) says which: that column is a pane of its own.)
     webview.onDidReceiveMessage((m) => {
       const p = m && m.col ? (pane.layout || []).find((q) => q.col === m.col) : pane;
@@ -800,6 +810,7 @@ class ChatView {
     this.focusPane = pane;
     panel.onDidChangeViewState((e) => { if (e.webviewPanel.active) this.focusPane = pane; });
     panel.onDidDispose(() => {
+      this.listen.paneGone(pane);
       this.panes.splice(this.panes.indexOf(pane), 1);
       if (this.focusPane === pane) this.focusPane = null;
       this.postTabs();   // (a dragged-out chat goes back into the side panel's tabs)
@@ -831,7 +842,7 @@ class ChatView {
   }
   closeColumn(pane) {
     const main = pane.main;
-    if (this.panes.includes(pane)) this.panes.splice(this.panes.indexOf(pane), 1);
+    if (this.panes.includes(pane)) { this.listen.paneGone(pane); this.panes.splice(this.panes.indexOf(pane), 1); }
     if (main && main.layout.includes(pane)) { main.layout.splice(main.layout.indexOf(pane), 1); for (const p of main.layout) p.size = 1; }
     if (this.focusPane === pane) this.focusPane = main || null;
     if (main) this.postCols(main);
@@ -1119,6 +1130,7 @@ class ChatView {
     if (old && old.proc) { old.stale = true; old.proc.kill(); old.proc = null; }
     this.endDevice(old);
     tab.messages = tab.messages.slice(0, index);
+    this.listen.cut(tab);
     tab.sessionId = newSessionId(); tab.started = false; tab.context = null;
     tab.carryOver = index > 0 ? { model: true, edited: true, text: journal.handoff(tab.messages) } : null;
     if (!tab.carryOver) delete tab.carryOver;
@@ -2868,6 +2880,11 @@ class ChatView {
       case "voiceChunk": if (tab && Number.isInteger(m.seq)) this.voice.chunk(tab.id, m.seq, m.samples); break;
       case "voiceStop": if (tab) this.voice.finish(tab.id); break;
       case "voiceCancel": if (tab) this.voice.cancel(tab.id); break;
+      case "listenWarm": this.listen.warm(); break;
+      case "listenStart": if (tab && pane && Number.isInteger(m.index) && Array.isArray(m.blocks)) await this.listen.start(pane, tab, m.index, m.blocks.slice(0, 400)); break;
+      case "listenStop": if (tab && Number.isInteger(m.index)) this.listen.stop(tab.id, m.index); break;
+      case "listenDownload": if (tab && pane) this.listen.download(pane, tab); break;
+      case "listenDownloadStop": this.listen.stopDownload(); break;
       case "sideStop": if (tab && typeof m.thread === "string") this.sideChats.stop(tab.id, m.thread); break;
       case "restore": if (tab && Number.isInteger(m.index)) await this.restoreTo(tab, m.index); break;
       case "fork": if (tab) await this.forkAsk(tab, m.index, pane); break;

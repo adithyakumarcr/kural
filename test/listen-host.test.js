@@ -185,6 +185,21 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     const { listen, tab } = setup({ platform: ["linux", "arm64"] });
     assert.strictEqual(listen.why(tab), "Listen's voice isn't available for this computer yet.");
   });
+  await check("the page's blocks are cleaned before they reach the model: numbered again, known kinds, text only", async () => {
+    let got = null;
+    const { listen, tab } = setup({ write: async ({ blocks, onPiece }) => { got = blocks; onPiece({ block: 0, text: "Hi." }); return { pieces: [] }; } });
+    await listen.start("A", tab, 1, [{ n: 7, kind: "script", text: { evil: 1 } }, { n: 9, kind: "code", text: "x".repeat(30000) }, null]);
+    await until(() => got);
+    assert.deepStrictEqual(got.map((b) => [b.n, b.kind]), [[0, "p"], [1, "code"], [2, "p"]]);
+    assert.ok(typeof got[0].text === "string" && got[1].text.length <= 20000);
+  });
+  await check("stopping while it asks to download forgets the waiting start", async () => {
+    const { listen, tab } = setup({ ready: false });
+    await listen.start("A", tab, 1, BLOCKS);
+    assert.ok(listen.pending);
+    listen.stop("t1", 1);
+    assert.strictEqual(listen.pending, null);
+  });
   await check("clean drops walkthroughs that aren't the right shape", () => {
     const msgs = [{ listen: { pieces: [{ block: 0, text: "ok" }], model: "m", engine: "supertonic", at: 1 } }, { listen: { pieces: "x" } },
       { listen: { pieces: [{ block: "0", text: 3 }] } }, {}];

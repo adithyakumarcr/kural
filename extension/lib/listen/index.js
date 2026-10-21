@@ -20,6 +20,12 @@ const CLOSING = "That's all I could put together.";
 const VOICE_STOPPED = "The voice stopped. Try again.";
 const NO_VOICE = "Listen's voice isn't available for this computer yet.";
 
+// What the page sent, made safe for the prompt: numbered again, known kinds only, plain text of a sane size.
+const KINDS = new Set(["p", "list", "code", "table", "heading"]);
+const MAX_BLOCKS = 400, MAX_BLOCK_TEXT = 20000;
+const cleanBlocks = (blocks) => (Array.isArray(blocks) ? blocks : []).slice(0, MAX_BLOCKS).map((b, n) => ({
+  n, kind: b && KINDS.has(b.kind) ? b.kind : "p", text: b && typeof b.text === "string" ? b.text.slice(0, MAX_BLOCK_TEXT) : "" }));
+
 const validListen = (l) => !!l && Array.isArray(l.pieces) && l.pieces.length > 0
   && l.pieces.every((p) => p && Number.isInteger(p.block) && p.block >= 0 && typeof p.text === "string");
 
@@ -64,7 +70,7 @@ class Listen {
       return this.state(pane, tab, index, "ask", { size: totalBytes(this.engine, ...this.platform), model: this.nameOf(model) });
     }
     if (tab.messages[index] !== msg || (this.job && this.job !== cur)) return;   // (changed while checking)
-    this.run(pane, tab, msg, blocks, model);
+    this.run(pane, tab, msg, cleanBlocks(blocks), model);
   }
 
   async run(pane, tab, msg, blocks, model) {
@@ -152,6 +158,8 @@ class Listen {
   }
 
   stop(tabId, index) {
+    const p = this.pending;
+    if (p && p.tab.id === tabId && p.index === index) this.pending = null;
     const j = this.job;
     if (j && j.tab.id === tabId && j.tab.messages.indexOf(j.msg) === index) this.end(j);
   }

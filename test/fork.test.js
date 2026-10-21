@@ -42,6 +42,7 @@ function fixture(tab) {
   const pane = { kind: "side", activeId: tab.id };
   Object.assign(chat, { tabs: [tab], panes: [pane], runtime: new Map(), routingJobs: new Map(), localReady: new Map(),
     attachments: new Attachments(), here: tab.workspace, post: (m) => posted.push(m), postTo: (_, m) => posted.push(m),
+    listen: { why: () => "", tabClosed() {}, paneGone() {}, cut() {} },
     postTabs: () => {}, postHistory: () => {}, save: () => {}, warm: () => {}, isReady: () => true,
     teamSize: () => 0, teamLabel: () => null, endDevice: () => {}, prepareLocal: async () => ({ ok: true }),
     buildPrompt: async (text) => text, procKey: (t) => t.model, openSplit: (id) => opened.push(id), finishTurn: () => {},
