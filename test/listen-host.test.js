@@ -16,8 +16,8 @@ function setup(over = {}) {
   const sent = [], spoken = [];
   const state = { ready: over.ready !== false, saves: 0, cancels: 0, writes: 0 };
   const speaker = {
-    speak: async (text) => {
-      spoken.push(text);
+    speak: async (text, opts = {}) => {
+      spoken.push(text); if (!OPENERS.includes(text)) state.speeds = (state.speeds || []).concat(opts.speed || 1);
       if (over.speakFails && spoken.length >= over.speakFails) throw new Error("The voice stopped (exited with 3).");
       await sleep(over.speakMs || 1);
       return { pcm: new Int16Array(Math.max(1, text.length)), rate: 24000, ms: 1 };
@@ -38,7 +38,8 @@ function setup(over = {}) {
   });
   const listen = new Listen({ dir: over.dir || tmp(), engine: "supertonic", postTo: (pane, msg) => sent.push({ pane, msg }),
     save: () => { state.saves++; }, pick: over.pick || (() => ({ model: "haiku" })), nameOf: () => "Haiku 4.5", scriptDeps: {},
-    speaker, assets, write, platform: over.platform });
+    speaker, assets, write, platform: over.platform,
+    speed: () => state.speed || 1, setSpeed: (v) => { state.speed = v; state.speedSaves = (state.speedSaves || 0) + 1; } });
   const tab = { id: "t1", messages: [{ role: "user", segments: [{ t: "text", v: "Why?" }] }, { role: "assistant", blocks: [] }, { role: "user" }, { role: "assistant", blocks: [] }] };
   return { listen, sent, spoken, state, tab };
 }
@@ -207,6 +208,37 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     await until(() => sent.some((s) => s.msg.type === "listenEnd"));
     assert.ok(!sent.some((s) => s.msg.opener), "none this time");
     await until(() => fs.existsSync(path.join(dir, "openers", "rate")));
+  });
+  await check("each sentence carries its number and the generation; preparing tells the speed in use", async () => {
+    const { listen, sent, tab, state } = setup();
+    state.speed = 1.25;
+    await listen.start("A", tab, 1, BLOCKS);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    assert.strictEqual(sent.find((s) => s.msg.phase === "preparing").msg.speed, 1.25);
+    const audio = sent.filter((s) => s.msg.type === "listenAudio" && !s.msg.opener).map((s) => s.msg);
+    assert.deepStrictEqual(audio.map((a) => [a.n, a.gen]), [[0, 0], [1, 0], [2, 0]]);
+    assert.ok(state.speeds.every((v) => v === 1.25));
+  });
+  await check("a new speed: saved as the default; the sentences from the one asked for are made again at it", async () => {
+    const { listen, sent, tab, state } = setup({ speakMs: 25 });
+    await listen.start("A", tab, 1, BLOCKS);
+    await until(() => sent.some((s) => s.msg.type === "listenAudio" && s.msg.n === 1));
+    listen.setSpeed("t1", 1, 2, 1);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    assert.strictEqual(state.speed, 2);
+    const audio = sent.filter((s) => s.msg.type === "listenAudio" && !s.msg.opener).map((s) => s.msg);
+    const again = audio.filter((a) => a.gen === 1);
+    assert.deepStrictEqual(again.map((a) => a.n), [1, 2]);
+    assert.ok(!audio.some((a) => a.gen === 0 && a.n === 2), "no old-speed audio after the change");
+    assert.strictEqual(state.speeds[state.speeds.length - 1], 2);
+    assert.ok(tab.messages[1].listen, "still saved at the end");
+  });
+  await check("a speed outside the menu is refused; without a listen it's only saved", () => {
+    const { listen, state } = setup();
+    listen.setSpeed("t1", 1, 3, 0);
+    assert.strictEqual(state.speed, undefined);
+    listen.setSpeed("t1", 1, 0.75, 0);
+    assert.strictEqual(state.speed, 0.75);
   });
   await check("clean drops walkthroughs that aren't the right shape", () => {
     const msgs = [{ listen: { pieces: [{ block: 0, text: "ok" }], model: "m", engine: "supertonic", at: 1 } }, { listen: { pieces: "x" } },

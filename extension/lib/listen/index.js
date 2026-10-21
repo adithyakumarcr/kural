@@ -2,7 +2,9 @@
 // writes a short spoken walkthrough as pieces (script.js), each piece is split into sentences (speech.js) and the voice
 // helper (speaker.js) turns each sentence into audio, which goes to the page that asked, and only there:
 //   listenState {tabId, index, phase: ask {size, model} | downloading {pct} | preparing | playing | stopped | error {message}}
-//   listenAudio {tabId, index, seq, block, text, pcm Int16Array, rate, opener?}   (block null for the opener)
+//   listenAudio {tabId, index, seq, n, gen, block, text, pcm Int16Array, rate, opener?}
+//     (n: the sentence's number; gen: bumped when the speed changes and the sentences from one on are made again, so
+//     the page drops what it has from there; block null for the opener)
 //   listenEnd   {tabId, index, partial?}
 // One at a time in the window. A finished walkthrough is saved on the answer (msg.listen); the audio never is.
 const fs = require("fs");
@@ -19,6 +21,8 @@ const OPENERS = ["Alright, let me walk you through this.", "Okay, here's the sho
 const CLOSING = "That's all I could put together.";
 const VOICE_STOPPED = "The voice stopped. Try again.";
 const NO_VOICE = "Listen's voice isn't available for this computer yet.";
+// The speeds in the bar's menu (the voice itself speaks faster or slower: the pitch stays natural).
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 // What the page sent, made safe for the prompt: numbered again, known kinds only, plain text of a sane size.
 const KINDS = new Set(["p", "list", "code", "table", "heading"]);
@@ -31,15 +35,17 @@ const validListen = (l) => !!l && Array.isArray(l.pieces) && l.pieces.length > 0
 
 class Listen {
   // dir: <globalStorage>/listen · postTo(pane, msg) · save() · pick(tab) → {model} | {why} · nameOf(model) ·
-  // scriptDeps: Side chat's model deps · (speaker / assets / write / platform: stand-ins in tests)
-  constructor({ dir, engine = "supertonic", postTo, save, pick, nameOf, scriptDeps, log = () => {}, speaker, assets, write, platform }) {
-    Object.assign(this, { dir, engine, postTo, save, pick, nameOf, scriptDeps, log });
+  // scriptDeps: Side chat's model deps · speed() / setSpeed(v): your default speed (kept by the chat) ·
+  // (speaker / assets / write / platform: stand-ins in tests)
+  constructor({ dir, engine = "supertonic", postTo, save, pick, nameOf, scriptDeps, log = () => {}, speaker, assets, write, platform,
+    speed = () => 1, setSpeed = () => {} }) {
+    Object.assign(this, { dir, engine, postTo, save, pick, nameOf, scriptDeps, log, getSpeed: speed, saveSpeed: setSpeed });
     this.platform = platform || [process.platform, process.arch];
     this.assets = assets || assetsFor(dir, engine);
     this.speaker = speaker || new Speaker({ engine, paths: () => this.assets.paths(), log });
     this.write = write || writeScript;
     this.tags = ENGINES[engine].tags;
-    this.job = null;        // {pane, tab, msg, ctl, seq, pieces, chain, ended, playing}
+    this.job = null;        // {pane, tab, msg, ctl, seq, pieces, sentences, next, gen, speed, pumping, ended, playing}
     this.pending = null;    // a start waiting for the download: {pane, tab, index, blocks}
     this.fetching = null;   // {ctl, pct}
     this.making = null;     // the openers being made
@@ -74,16 +80,18 @@ class Listen {
   }
 
   async run(pane, tab, msg, blocks, model) {
-    const job = { pane, tab, msg, ctl: new AbortController(), seq: 0, pieces: [], chain: Promise.resolve(), ended: false, playing: false };
+    const job = { pane, tab, msg, ctl: new AbortController(), seq: 0, pieces: [], sentences: [], next: 0, gen: 0, speed: this.speed(),
+      pumping: null, ended: false, playing: false };
     this.job = job;
     const index = () => tab.messages.indexOf(msg);
-    this.state(pane, tab, index(), "preparing");
+    this.state(pane, tab, index(), "preparing", { speed: job.speed });
     const saved = validListen(msg.listen) ? msg.listen.pieces : null;
-    if (!saved) { const op = this.opener(); if (op) this.audio(job, { block: null, text: "", ...op, opener: true }); }
+    if (!saved) { const op = this.opener(); if (op) this.audio(job, { block: null, ...op, opener: true }); }
     const enqueue = (piece) => {
       if (job.ended) return;
       job.pieces.push(piece);
-      job.chain = job.chain.then(() => this.speakPiece(job, piece));
+      for (const s of sentences(piece.text)) job.sentences.push({ block: piece.block, text: s });
+      this.pump(job);
     };
     let failed = null;
     try {
@@ -93,11 +101,12 @@ class Listen {
         await this.write({ model, blocks, request, tags: this.tags, deps: this.scriptDeps, onPiece: enqueue, signal: job.ctl.signal });
       }
     } catch (e) { if (job.ended || e.cancelled) return; failed = e; }
-    await job.chain;
+    await this.drain(job);
     if (job.ended) return;
     if (failed) {
       if (!job.pieces.length) return this.fail(job, failed.message);
-      await this.speakText(job, null, CLOSING);
+      job.sentences.push({ block: null, text: CLOSING });
+      await this.drain(job);
       if (job.ended) return;
       this.finish(job, { partial: true });
       return;
@@ -106,24 +115,62 @@ class Listen {
     this.finish(job, {});
   }
 
-  async speakPiece(job, piece) {
-    for (const s of sentences(piece.text)) {
-      if (job.ended || !(await this.speakText(job, piece.block, s))) return;
+  // Speaks the sentences in order, one at a time, from job.next. A speed change (setSpeed) moves job.next back and bumps
+  // job.gen: what was being made at the old speed is dropped and the loop goes on from there.
+  pump(job) {
+    if (job.pumping || job.ended) return;
+    job.pumping = (async () => {
+      while (!job.ended && job.next < job.sentences.length) {
+        const n = job.next, gen = job.gen, s = job.sentences[n];
+        const ok = await this.speakSentence(job, s, n, gen);
+        if (job.ended) break;
+        if (gen !== job.gen) continue;   // (the speed changed meanwhile: job.next was set again)
+        if (!ok) break;
+        job.next = n + 1;
+      }
+      job.pumping = null;
+    })();
+  }
+
+  // Until every sentence so far is spoken (or the job ended).
+  async drain(job) {
+    for (;;) {
+      if (job.pumping) { await job.pumping; continue; }
+      if (!job.ended && job.next < job.sentences.length) { this.pump(job); continue; }
+      return;
     }
   }
 
   // false: the voice failed (the job has ended with an error) or was stopped.
-  async speakText(job, block, sentence) {
-    const say = forVoice(sentence, this.tags);
+  async speakSentence(job, s, n, gen) {
+    const say = forVoice(s.text, this.tags);
     if (!say.replace(/<[a-z]+>/g, "").trim()) return true;
     let r;
-    try { r = await this.speaker.speak(say); } catch (e) {
+    try { r = await this.speaker.speak(say, { speed: job.speed }); } catch (e) {
+      if (gen !== job.gen) return true;   // (cancelled for a new speed)
       if (!job.ended && !e.cancelled) { this.log(`listen: ${e.message}`); this.fail(job, VOICE_STOPPED); }
       return false;
     }
     if (job.ended) return false;
-    if (r.pcm.length) this.audio(job, { block, text: forVoice(sentence, []), pcm: r.pcm, rate: r.rate });
+    if (gen !== job.gen) return true;
+    if (r.pcm.length) this.audio(job, { n, gen, block: s.block, text: forVoice(s.text, []), pcm: r.pcm, rate: r.rate });
     return true;
+  }
+
+  speed() { const v = Number(this.getSpeed()); return SPEEDS.includes(v) ? v : 1; }
+
+  // The page's speed menu: kept as your default; the walkthrough playing goes on at it from sentence `from` (made again).
+  setSpeed(tabId, index, speed, from) {
+    const v = Number(speed);
+    if (!SPEEDS.includes(v)) return;
+    this.saveSpeed(v);
+    const j = this.job;
+    if (!j || j.ended || j.tab.id !== tabId || j.tab.messages.indexOf(j.msg) !== index || v === j.speed) return;
+    j.speed = v;
+    j.gen++;
+    j.next = Math.max(0, Math.min(Number.isInteger(from) ? from : j.next, j.sentences.length));
+    this.speaker.cancel();
+    this.pump(j);
   }
 
   audio(job, a) {
@@ -228,9 +275,9 @@ class Listen {
   opener() {
     try {
       const dir = this.openersDir(), rate = Number(fs.readFileSync(path.join(dir, "rate"), "utf8"));
-      const b = fs.readFileSync(path.join(dir, `${Math.floor(Math.random() * OPENERS.length)}.pcm`));
+      const i = Math.floor(Math.random() * OPENERS.length), b = fs.readFileSync(path.join(dir, `${i}.pcm`));
       const pcm = new Int16Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength - (b.byteLength % 2)));
-      return rate > 0 && pcm.length ? { pcm, rate } : null;
+      return rate > 0 && pcm.length ? { pcm, rate, text: OPENERS[i] } : null;
     } catch {
       this.openersMissing = true;   // (made when this walkthrough ends: finish())
       return null;
@@ -243,4 +290,4 @@ class Listen {
   static clean(messages) { for (const m of messages || []) if (m && "listen" in m && !validListen(m.listen)) delete m.listen; }
 }
 
-module.exports = { Listen, OPENERS, CLOSING, VOICE_STOPPED, NO_VOICE };
+module.exports = { Listen, OPENERS, CLOSING, VOICE_STOPPED, NO_VOICE, SPEEDS };
