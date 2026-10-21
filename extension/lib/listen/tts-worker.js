@@ -1,5 +1,5 @@
 // Listen's voice helper (started by speaker.js with ELECTRON_RUN_AS_NODE; no vscode). Loads the voice engine once, then
-// answers requests on stdin, one at a time: a JSON line {"id", "text"} → a JSON line {"id", "n", "rate", "ms"} followed
+// answers requests on stdin, one at a time: a JSON line {"id", "text", "speed"} → a JSON line {"id", "n", "rate", "ms"} followed
 // by n little-endian Int16 samples, or {"id", "error"}.
 //   argv: <engine> <paths JSON> <threads>
 const path = require("path");
@@ -26,7 +26,7 @@ process.stdin.on("data", (d) => {
       const t = Date.now();
       try {
         const voice = await ready;
-        const pcm = await voice.speak(String(req.text || ""));
+        const pcm = await voice.speak(String(req.text || ""), Number(req.speed) || 1);
         answer({ id: req.id, n: pcm.length, rate: voice.rate, ms: Date.now() - t });
         if (pcm.length) process.stdout.write(Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength));
       } catch (e) { answer({ id: req.id, error: String((e && e.message) || e) }); }

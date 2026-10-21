@@ -1,7 +1,7 @@
 // Listen: the voice, in a helper process (no vscode inside). The helper (tts-worker.js, run by Kural's own program as Node:
 // ELECTRON_RUN_AS_NODE) loads the voice model once and keeps it while you listen; it stops after `idleMs` without a
 // request (the model takes ~770 MB). A crash fails that request only; the next one starts it again.
-// Protocol over stdio, so the audio never touches the disk: a JSON line {"id", "text"} in; a JSON line
+// Protocol over stdio, so the audio never touches the disk: a JSON line {"id", "text", "speed"} in; a JSON line
 // {"id", "n", "rate", "ms"} followed by n little-endian Int16 samples out, or a JSON line {"id", "error"}.
 // One request is in the helper at a time: what waits stays here, so cancel() drops it without the helper making it.
 const os = require("os");
@@ -73,14 +73,14 @@ class Speaker {
     let p;
     try { p = this.proc || this.start(); } catch (e) { job.reject(e); return this.next(); }
     this.current = job;
-    p.stdin.write(`${JSON.stringify({ id: job.id, text: job.text })}\n`);
+    p.stdin.write(`${JSON.stringify({ id: job.id, text: job.text, speed: job.speed })}\n`);
   }
 
-  // text → {pcm Int16Array, rate, ms}
-  speak(text) {
+  // text → {pcm Int16Array, rate, ms}. speed: 0.5 to 2 (the voice speaks faster or slower; the pitch stays)
+  speak(text, { speed = 1 } = {}) {
     clearTimeout(this.idle);
     return new Promise((resolve, reject) => {
-      this.queue.push({ id: this.nextId++, text: String(text || ""), resolve, reject });
+      this.queue.push({ id: this.nextId++, text: String(text || ""), speed: Math.min(2, Math.max(0.5, Number(speed) || 1)), resolve, reject });
       this.next();
     });
   }

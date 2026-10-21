@@ -3,7 +3,7 @@
 // characters (no phonemizer) → duration predictor → text encoder → 5 denoising steps → vocoder → 44.1 kHz audio.
 const fs = require("fs");
 
-const STEPS = 5, SPEED = 1.05, MAX_CHARS = 300;
+const STEPS = 5, SPEED = 1.05, MAX_CHARS = 300;   // (SPEED: Supertone's own pace; Listen's 0.5x–2x multiplies it)
 const REPLACE = [["–", "-"], ["‑", "-"], ["—", "-"], ["_", " "], ["“", '"'], ["”", '"'], ["‘", "'"], ["’", "'"],
   ["´", "'"], ["`", "'"], ["[", " "], ["]", " "], ["|", " "], ["/", " "], ["#", " "], ["→", " "], ["←", " "], ["@", " at "],
   ["e.g.,", "for example, "], ["i.e.,", "that is, "]];
@@ -46,13 +46,13 @@ async function load(paths, threads = 1) {
   const rate = cfg.ae.sample_rate, chunk = cfg.ae.base_chunk_size * cfg.ttl.chunk_compress_factor, dim = cfg.ttl.latent_dim * cfg.ttl.chunk_compress_factor;
   const [sDp, sTe, sVe, sVoc] = sessions;
 
-  async function one(text) {
+  async function one(text, speed) {
     const t = prepare(text);
     if (!t) return new Float32Array(0);
     const ids = Array.from(t).map((c) => indexer[c.charCodeAt(0)] || 0), L = ids.length;
     const textIds = new ort.Tensor("int64", BigInt64Array.from(ids.map(BigInt)), [1, L]);
     const textMask = new ort.Tensor("float32", new Float32Array(L).fill(1), [1, 1, L]);
-    const seconds = (await sDp.run({ text_ids: textIds, style_dp: sdp, text_mask: textMask })).duration.data[0] / SPEED;
+    const seconds = (await sDp.run({ text_ids: textIds, style_dp: sdp, text_mask: textMask })).duration.data[0] / (SPEED * speed);
     const emb = (await sTe.run({ text_ids: textIds, style_ttl: ttl, text_mask: textMask })).text_emb;
     const wavLen = Math.max(1, Math.floor(seconds * rate)), latLen = Math.max(1, Math.ceil(wavLen / chunk));
     let latent = new Float32Array(dim * latLen).map(normal);
@@ -67,9 +67,10 @@ async function load(paths, threads = 1) {
     return wav.subarray(0, Math.min(wav.length, wavLen));
   }
 
-  async function speak(text) {
+  async function speak(text, speed = 1) {
+    const pace = Math.min(2, Math.max(0.5, Number(speed) || 1));
     const pieces = [];
-    for (const p of parts(text)) pieces.push(await one(p));
+    for (const p of parts(text)) pieces.push(await one(p, pace));
     const gap = pieces.length > 1 ? Math.round(rate * 0.15) : 0;
     const n = pieces.reduce((s, p) => s + p.length, 0) + gap * Math.max(0, pieces.length - 1);
     const out = new Int16Array(n);

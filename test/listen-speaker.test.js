@@ -22,6 +22,12 @@ const withEnv = async (k, v, fn) => { const old = process.env[k]; process.env[k]
     assert.strictEqual(typeof r.ms, "number");
     s.stop();
   });
+  await check("the speed goes to the voice (2x: half the samples)", async () => {
+    const s = make();
+    assert.strictEqual((await s.speak("hello", { speed: 2 })).pcm.length, 25);
+    assert.strictEqual((await s.speak("hello")).pcm.length, 50);
+    s.stop();
+  });
   await check("calls in a row reuse one process and come back in order", async () => {
     const s = make();
     const [a, b, c] = await Promise.all([s.speak("a"), s.speak("bb"), s.speak("ccc")]);

@@ -38,6 +38,13 @@ const rms = (pcm) => { let s = 0; for (const v of pcm) s += (v / 32768) ** 2; re
     const r = await s.speak("That's pretty cool. <laugh> Anyway, next part.");
     assert.ok(rms(r.pcm) > 0.01);
   });
+  await check("speed: 2x is about half as long as 1x, 0.5x about twice", async () => {
+    const t = "Here's the clever part: it keeps the token for an hour.";
+    const len = async (speed) => (await s.speak(t, { speed })).pcm.length;
+    const one = await len(1), two = await len(2), half = await len(0.5);
+    console.log(`     1x ${(one / 44100).toFixed(2)} s, 2x ${(two / 44100).toFixed(2)} s, 0.5x ${(half / 44100).toFixed(2)} s`);
+    assert.ok(two < one * 0.65 && half > one * 1.6, `${one} ${two} ${half}`);
+  });
   await check("empty text gives no audio, not an error", async () => {
     const r = await s.speak("   ");
     assert.strictEqual(r.pcm.length, 0);
