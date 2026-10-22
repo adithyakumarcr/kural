@@ -211,15 +211,16 @@ const OFF_FEATURES = ["apps", ...ALWAYS_OFF];
 // off too (feature names from `codex features list`, codex-cli 0.160.0), and web search "disabled".
 const TOOLS_OFF = ["shell_tool", "unified_exec", "view_image"].flatMap((f) => ["-c", `features.${f}=false`]);
 const tomlKey = (k) => /^[A-Za-z0-9_-]+$/.test(k) ? k : JSON.stringify(String(k));
-function lockdownArgs(mode, connectors = []) {
-  if (mode === "auto") return ALWAYS_OFF.flatMap((f) => ["-c", `features.${f}=false`]);
-  const out = OFF_FEATURES.flatMap((f) => ["-c", `features.${f}=false`]);
+// off: the connectors you turned off in Kural Settings (connectors-off.js), off in every mode.
+function lockdownArgs(mode, connectors = [], off = []) {
+  const out = (mode === "auto" ? ALWAYS_OFF : OFF_FEATURES).flatMap((f) => ["-c", `features.${f}=false`]);
   // A connector is a name, or { name, command } for a stdio server: one that comes from a Codex plugin (not from config.toml)
   // has no settings to merge into, so a bare { enabled = false } is refused ("invalid transport"); its command completes it.
   const list = (connectors || []).map((c) => typeof c === "string" ? { name: c } : c)
     .filter((c) => c && typeof c.name === "string" && c.name && c.name !== "device" && c.name !== "kural_browser");
-  if ((mode === "plan" || mode === "ask") && list.length)
-    out.push("-c", `mcp_servers={ ${list.map((c) => `${tomlKey(c.name)} = { ${c.command ? `command = ${JSON.stringify(c.command)}, ` : ""}enabled = false }`).join(", ")} }`);
+  const shut = mode === "plan" || mode === "ask" ? list : list.filter((c) => (off || []).includes(c.name));
+  if (shut.length)
+    out.push("-c", `mcp_servers={ ${shut.map((c) => `${tomlKey(c.name)} = { ${c.command ? `command = ${JSON.stringify(c.command)}, ` : ""}enabled = false }`).join(", ")} }`);
   return out;
 }
 
@@ -620,12 +621,14 @@ class CodexAgent {
     if (!this.opts.bin || !fs.existsSync(this.opts.bin)) return false;
     // Outside Auto, Codex's tools that can't ask Kural are switched off (lockdownArgs). Plan and Ask need the names of your
     // connectors for that first (`codex mcp list`, well under a second); messages sent meanwhile wait (ready is false).
+    // Connectors you turned off in Kural Settings: their names too (only one Codex knows can be switched off).
     const plain = this.opts.mode === "plan" || this.opts.mode === "ask";
-    (plain ? connectorNames(this.opts.bin, { env: this.opts.env, cwd: this.cwd }) : Promise.resolve([])).then((names) => {
+    const off = this.opts.lockTools ? [] : require("./connectors-off").list("codex");
+    (plain || off.length ? connectorNames(this.opts.bin, { env: this.opts.env, cwd: this.cwd }) : Promise.resolve([])).then((names) => {
       if (this.exited) return;   // (stopped while it looked)
       try {
         this.server = new AppServer(this.opts.bin, { cwd: this.cwd, env: this.opts.env, name: this.opts.name, mcpServers: this.opts.mcpServers,
-          config: [...lockdownArgs(this.opts.mode, names || []), ...(this.opts.lockTools ? TOOLS_OFF : [])], webSearch: this.opts.lockTools ? "disabled" : "live" }, {
+          config: [...lockdownArgs(this.opts.mode, names || [], off), ...(this.opts.lockTools ? TOOLS_OFF : [])], webSearch: this.opts.lockTools ? "disabled" : "live" }, {
           onNotification: (m, p) => this.onNotification(m, p),
           onRequest: (m, p) => this.onRequest(m, p),
           onExit: (code, stderr) => this.onServerExit(code, stderr),

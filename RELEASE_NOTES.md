@@ -10,6 +10,11 @@
   (Ctrl/Cmd+L) and Edit Selection (Ctrl/Cmd+K) (#104).
 - **Terminal suggestions match from the start.** Typing `git push ori` no longer lists `./.dockerignore` because its
   letters o, r, i appear somewhere inside; the list shows only names that start with what you typed (#106).
+- **Link ticket works again after other AIs answered.** An answer from ChatGPT, Gemini or a model on your computer made
+  Kural think the Atlassian connector wasn't connected, and + → Link ticket then offered no search. Now the search always
+  runs (through Claude), reconnects Atlassian once if it failed, and says what's wrong with Try again (#105).
+- **Turn a connector off without removing it.** Kural Settings → an AI's page → Connectors: untick **On** and Kural's
+  Claude or ChatGPT chats stop using it, in every project. Plugin connectors say which plugin they come with (#105).
 
 ## What's new in 1.2.1-beta.2
 

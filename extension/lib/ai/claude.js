@@ -272,6 +272,10 @@ class ClaudeProcess {
     if (o.appendSystemPrompt) args.push("--append-system-prompt-file", promptFile(o.appendSystemPrompt));
     args.push("--tools", (o.tools || []).join(","));
     if (o.allowedTools && o.allowedTools.length) args.push("--allowedTools", ...o.allowedTools);
+    // Connectors you turned off in Kural Settings (connectors-off.js): their tools are hidden from this Claude. Only with
+    // your setup's connectors (not safe mode or strict MCP, where there are none of yours).
+    const deny = [...(o.disallowedTools || []), ...(o.safeMode || o.strictMcp ? [] : require("./connectors-off").claudeDeny())];
+    if (deny.length) args.push("--disallowedTools", ...deny);
     if (o.hostPermissions) args.push("--permission-mode", "default", "--permission-prompt-tool", "stdio");
     if (o.jsonSchema) args.push("--json-schema", JSON.stringify(o.jsonSchema));
     // Hard limits for a short job (Enhance prompt): model turns, and what the run may cost (Claude Code's own estimate).

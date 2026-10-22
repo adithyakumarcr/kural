@@ -73,6 +73,10 @@ function activate(context) {
   // Which profile this window runs as (lib/profiles): first, before anything starts Claude or Codex or reads chats, because
   // the profile decides which logins those programs use and where chats are kept.
   const profileStore = applyActive(context);
+  // Connectors you turned off in Kural Settings (per profile: its own accounts and connectors). Read by every Claude and
+  // Codex Kural starts, so before any of them.
+  const offKey = () => scope.key("kural.connectors.off.v1", "account");
+  require("./lib/ai/connectors-off").init(() => context.globalState.get(offKey()) || {}, (v) => context.globalState.update(offKey(), v));
   // Crash reports: what went wrong when Kural last closed unexpectedly (lib/crash), and errors in Kural's own code.
   crashLog = new CrashLog(context);
   crashLog.start();

@@ -116,12 +116,18 @@
 
   const section = (title, ...kids) => el("section", { class: "sec" }, el("div", { class: "sechead" }, el("h2", {}, title), el("span", { class: "grow" }), kids.shift()), kids);
 
+  // A row: on/off (Kural's own switch, every chat in every project: issue #105), its state, and where it's changed: claude.ai's
+  // connectors on claude.ai, a plugin's in the Plugins tab, yours here (Remove).
   function connectorRow(id, x) {
     const K = connOf(id), sure = V.confirm === x.name;
-    return el("div", { class: "srv-row" },
-      el("span", { class: "dot " + (x.ok ? "ok" : "warn") }), el("strong", { class: "ell", title: x.target }, x.name), el("span", { class: "grow" }),
-      el("span", { class: "muted small", title: x.why || x.status }, x.ok ? "Connected" : x.needsAuth ? "Needs sign-in" : /fail/i.test(x.status) ? "Failed" : x.status),
-      x.managed ? el("span", { class: "muted small", title: "Added on claude.ai: change it there" }, "on claude.ai")
+    const onOff = el("label", { class: "check small", title: x.off ? `Turned off: Kural's ${id === "claude" ? "Claude" : "ChatGPT"} chats don't use it` : "On: Kural's chats can use it. Untick to turn it off everywhere in Kural" },
+      el("input", { type: "checkbox", checked: !x.off, disabled: K.busy, "aria-label": `${x.name} on`, onchange: (e) => post({ type: "connectorOff", id, name: x.name, off: !e.target.checked }) }), "On");
+    return el("div", { class: "srv-row" + (x.off ? " off" : "") },
+      el("span", { class: "dot " + (x.off ? "" : x.ok ? "ok" : "warn") }), el("strong", { class: "ell", title: x.target }, x.name), el("span", { class: "grow" }),
+      el("span", { class: "muted small", title: x.why || x.status }, x.off ? "Off in Kural" : x.ok ? "Connected" : x.needsAuth ? "Needs sign-in" : /fail/i.test(x.status) ? "Failed" : x.status),
+      onOff,
+      x.managed === "plugin" ? el("span", { class: "muted small", title: "Comes with a plugin: turn the plugin off or remove it in Extensions → Plugins" }, `from the ${x.plugin || "a"} plugin`)
+      : x.managed ? el("span", { class: "muted small", title: "Added on claude.ai: remove it there (Settings → Connectors)" }, "on claude.ai")
         : [x.needsAuth ? el("button", { class: "btn", onclick: () => { V.hint = id === "claude" ? x.name : null; post({ type: "signIn", id, name: x.name }); render(); } }, "Sign in") : null,
           sure ? [el("button", { class: "btn danger", disabled: K.busy, onclick: () => { V.confirm = null; post({ type: "removeConnector", id, name: x.name, reqId: Date.now() }); } }, "Remove?"),
             el("button", { class: "pill-btn", "aria-label": "Keep it", title: "Keep it", onclick: () => { V.confirm = null; render(); } }, icon("close"))]

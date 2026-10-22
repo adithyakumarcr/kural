@@ -306,7 +306,10 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   overview. A card each for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan,
   usage bars, and Settings (that AI's own page; the model menu's gear opens the same page), log in / log out / switch
   account / set up. An AI's page: Connectors (Claude and ChatGPT: each with its status, Sign in when one needs it (Codex
-  opens its login; Claude opens a terminal where you type /mcp), remove; "Add connector" opens a searchable list: Popular
+  opens its login; Claude opens a terminal where you type /mcp), an On box (untick it to turn the connector off
+  everywhere in Kural: Kural's chats of that AI, in every project, don't use it; it still connects in the background,
+  and claude/codex in a terminal aren't affected), remove (yours; claude.ai's are removed on claude.ai, a plugin's with
+  its plugin in Extensions → Plugins); "Add connector" opens a searchable list: Popular
   ones (Notion, Linear, Sentry, Atlassian, Asana, Stripe, Vercel, Supabase, Hugging Face, Context7, Cloudflare docs,
   Playwright, GitHub, Filesystem) and the official MCP directory as you type (those show the exact command
   or address and ask you to confirm: nobody checked them); Add, and fill in a token or folder only if

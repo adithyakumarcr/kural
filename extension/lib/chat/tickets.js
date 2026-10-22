@@ -7,17 +7,14 @@
 const { ClaudeProcess, findClaude, log } = require("../ai/claude");
 
 const { IS_ATLASSIAN, isAtlassianRead } = require("./atlassian");
+const connectorsOff = require("../ai/connectors-off");
 
-// What the + menu shows for "Link ticket": ok, or a warning and why.
+// What the + menu shows for "Link ticket": ok, or a warning and why. Only what can't change by itself: the minimal setup
+// has no connectors at all. Whether Atlassian is connected is the search's own business (its helper waits for it and says
+// what's wrong): the chat's last report said "not connected" far too often (issue #105: an answer from ChatGPT or Gemini
+// reports no connectors, a just-started Claude reports them still connecting), and the menu then offered no search at all.
 function atlassianState(setup) {
-  if (!setup) return { ok: true, unknown: true };            // not loaded yet: just try
-  if (!setup.full) return { ok: false, why: "Kural is using the fast minimal setup, which has no connectors. Turn on your full Claude Code setup in the model menu." };
-  const s = (setup.servers || []).find((x) => IS_ATLASSIAN.test(x.id || x.name));
-  if (!s) return { ok: false, why: "Atlassian isn't connected. Add the Atlassian connector on claude.ai (Settings → Connectors), or run `claude mcp add` for an Atlassian MCP server, then click ↻ Reload in the model menu." };
-  if (s.status !== "connected") {
-    const what = { "needs-auth": "needs you to log in", pending: "is still connecting", failed: "couldn't connect" }[s.status] || `isn't ready (${s.status})`;
-    return { ok: false, why: `Atlassian ${what}. Check it on claude.ai (Settings → Connectors), then click ↻ Reload in the model menu.` };
-  }
+  if (setup && !setup.full) return { ok: false, why: "Kural is using the fast minimal setup, which has no connectors. Turn on your full Claude Code setup in the model menu." };
   return { ok: true };
 }
 
@@ -56,18 +53,27 @@ function ticketNote(t) {
     "When its details matter (description, acceptance criteria, comments, linked issues), read it with the Atlassian tools.\n</ticket>\n\n";
 }
 
-// Ask Claude Code how its connectors are doing until Atlassian is connected (or clearly won't be).
+// Ask Claude Code how its connectors are doing until Atlassian is connected (or clearly won't be). One that failed is
+// reconnected once (Claude Code's mcp_reconnect control request, 2.1.296) before giving up: most failures pass.
 async function waitForAtlassian(proc, maxMs = 30000) {
   const t0 = Date.now();
-  let seen = null;
+  let seen = null, retried = false;
   while (Date.now() - t0 < maxMs && !proc.exited) {
     const res = await proc.request({ subtype: "mcp_status" }, 4000);
-    const servers = (res && res.mcpServers) || [];
-    const s = servers.find((x) => IS_ATLASSIAN.test(x.name || ""));
+    const all = ((res && res.mcpServers) || []).filter((x) => IS_ATLASSIAN.test(x.name || ""));
+    const servers = ((res && res.mcpServers) || []).filter((x) => !connectorsOff.isOff("claude", x.name));
+    const s = all.find((x) => !connectorsOff.isOff("claude", x.name));
     if (s) seen = s.status;
     if (s && s.status === "connected") return {};
     if (s && s.status === "needs-auth") return { error: "Atlassian needs you to log in. Check it on claude.ai (Settings → Connectors), then try again." };
-    if (s && s.status === "failed") return { error: "Atlassian couldn't connect. Check it on claude.ai (Settings → Connectors), then try again." };
+    if (s && s.status === "failed" && !retried) {
+      retried = true;
+      log(`jira: ${s.name} failed; reconnecting it`);
+      await proc.request({ subtype: "mcp_reconnect", serverName: s.name }, 20000);
+      continue;
+    }
+    if (s && s.status === "failed") return { error: "Atlassian couldn't connect, also after trying again. Check it on claude.ai (Settings → Connectors), then try again." };
+    if (!s && all.length) return { error: "The Atlassian connector is turned off in Kural Settings (your AI's page → Connectors). Turn it on to link tickets." };
     // Not in the list at all, and nothing else is still connecting: it isn't set up.
     if (res && !s && Date.now() - t0 > 8000 && !servers.some((x) => x.status === "pending"))
       return { error: "Atlassian isn't connected. Add the Atlassian connector on claude.ai (Settings → Connectors), or run `claude mcp add` for an Atlassian MCP server." };
@@ -155,4 +161,4 @@ class Tickets {
   stop() { const p = this.proc; this.proc = null; this.ready = null; if (p) p.kill(); }
 }
 
-module.exports = { Tickets, atlassianState, ticketNote, isAtlassianRead, IS_ATLASSIAN };
+module.exports = { Tickets, atlassianState, ticketNote, waitForAtlassian, isAtlassianRead, IS_ATLASSIAN };

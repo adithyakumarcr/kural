@@ -107,6 +107,7 @@ header .title { flex: 1 1 260px; }
 .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
 .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); }
+.srv-row.off strong { color: var(--muted); font-weight: 500; }
 .nowrap { white-space: nowrap; }
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-hi); cursor: pointer; text-align: left; }
 .linkbtn:hover { text-decoration: underline; }

@@ -313,7 +313,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Jira tickets** (`lib/chat/tickets.js`): no Jira login in Kural. Search = a Haiku `claude` helper with the full setup
   (so the Atlassian connector is there), only Atlassian tools allowed, JSON answer. claude.ai connectors connect in the
   background after Claude starts: `waitForAtlassian()` polls `mcp_status` until it's connected before asking (asking at
-  once gave "Atlassian tools not available"). The helper is reused between searches, stopped after 5 idle minutes. `tab.ticket` is saved with the
+  once gave "Atlassian tools not available"); a `failed` one gets one `mcp_reconnect` control request (Claude Code
+  2.1.296) first. The + menu never blocks on the chat's last connector report (issue #105: Codex/agy/engine adapters send
+  `init` with `mcp_servers: []`, which read as "Atlassian isn't connected" after every non-Claude answer): only Claude's
+  init updates `tab.setup` (`r.engine`), and `atlassianState` warns only for the minimal setup; the search itself reports
+  real failures (Try again). The helper is reused between searches, stopped after 5 idle minutes. `tab.ticket` is saved with the
   chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
   chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
 - **Chat page streaming** (`media/chat.js`): blocks are wrapped in `.blk[data-b]`; deltas patch one block per frame
@@ -823,6 +827,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (list does health checks: seconds; the mark before the status varies: ✓ ✗ × !; "claude.ai …" ones are managed on
   claude.ai, no remove); Codex = `codex mcp list --json|add [--url]|remove`; Gemini (agy) and Ollama: none. A Claude change
   → `chat.setupChanged()`. Names are checked (`NAME_RE`, never starting with "-"); commands are split without a shell.
+  "plugin:<plugin>:<server>" ones are the plugin's (`managed: "plugin"`, no remove). **On/off everywhere in Kural**
+  (`lib/ai/connectors-off.js`, issue #105, Adithya chose Kural-wide over Claude's per-project `/mcp disable`): globalState
+  `kural.connectors.off.v1` (account scope) = `{claude: [names], codex: [names]}`; ClaudeProcess adds
+  `--disallowedTools mcp__<name, non [A-Za-z0-9_-] → _>` unless safe mode/strict MCP (checked live with 2.1.296: Figma's
+  42 tools gone, Atlassian's 21 stay; it still connects); CodexAgent passes `enabled = false` for them in every mode
+  (`lockdownArgs(mode, names, off)`, names from `connectorNames`: an unknown name would make Codex refuse its config).
+  Claude Code 2.1.296 also has `mcp_toggle` (persists to the project's `disabledMcpServers`) and `mcp_reconnect`.
 - **Usage switch points** (`lib/ai/usage-switch.js`): `kural.usageSwitch.enabled` + per AI `kural.usageSwitch.limits`
   {claude|codex|agy: {session, weekly}} (missing → `threshold`). `over(model, settings)` uses `model.limitParts`
   (`policy.limitParts`: Session windows vs the rest) else `limitUsed`; chat `overLimit(provider, model)`.

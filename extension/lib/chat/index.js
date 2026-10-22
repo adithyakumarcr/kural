@@ -463,7 +463,7 @@ class ChatView {
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
-    if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: tab.setup });
+    if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: { ...tab.setup, jira: atlassianState(tab.setup) } });   // (a saved one may be older)
     this.post({ type: "slash", tabId: tab.id, slash: this.slashView(tab) });
     this.warm(tab);
     this.save();
@@ -1351,7 +1351,7 @@ class ChatView {
     // steers: messages you sent while it answered, given to the program but not taken in yet (see queueSend);
     // expect: every message given to the program, in order, until its echo says it was taken in (onEcho).
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map(),
-      steers: [], expect: [] };
+      steers: [], expect: [], engine: engineOf(tab.model) };
     // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
     r.teamFile = nativeTeam ? path.join(privateTmp("teams"), `${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
@@ -2158,7 +2158,9 @@ class ChatView {
     if (m.type === "system" && m.subtype === "init" && m.model) {
       tab.modelName = shownModel(tab, m.model);
       if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
-      this.noteSetup(tab, r, m);
+      // (Only Claude reports your connectors. ChatGPT's, Gemini's and a local model's adapters send an empty list, which
+      // said "Atlassian isn't connected" and closed Link ticket after every answer they gave: issue #105.)
+      if (r.engine === "claude") this.noteSetup(tab, r, m);
       return;
     }
     // What Claude Code keeps running in the background (agents, a long command like a dev server), also after the answer
@@ -2864,7 +2866,7 @@ class ChatView {
           moods: allMoods(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
         w.postMessage(this.tabsFor(pane));
         w.postMessage({ type: "full", tab: this.viewTab(t) });
-        if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
+        if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: { ...t.setup, jira: atlassianState(t.setup) } });
         pane.ready = true;
         for (const q of pane.queue.splice(0)) w.postMessage(q);
         // The side panel's page (re)loaded: its columns start again in it (each says "ready" in turn). (Also with one

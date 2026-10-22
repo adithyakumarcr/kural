@@ -82,7 +82,10 @@ const root = path.join(__dirname, "..", "extension");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).contributes;
   await check("package.json: Ctrl/Cmd+L runs the switch (not in the terminal); no log button in the chat's title bar", () => {
     const keys = pkg.keybindings.filter((k) => k.key === "ctrl+l");
-    assert.deepStrictEqual(keys.map((k) => [k.command, k.mac, k.when]), [["kural.chat.toggle", "cmd+l", "!terminalFocus"]]);
+    // (The second one is the selection's "Add to Chat" button's own key, so the button reads "Add to Chat (⌘L)": with a
+    // selection in the editor the switch adds it to the chat too, the same thing. Issue #104.)
+    assert.deepStrictEqual(keys.map((k) => [k.command, k.mac, k.when]), [["kural.chat.toggle", "cmd+l", "!terminalFocus"],
+      ["kural.selection.addToChat", "cmd+l", "editorTextFocus && editorHasSelection"]]);
     assert.ok(pkg.commands.some((c) => c.command === "kural.chat.toggle"));
     assert.ok(!pkg.menus["view/title"].some((m) => m.command === "kural.showLog"));
     assert.ok(pkg.commands.some((c) => c.command === "kural.showLog"), "Kural: Show Log stays in the Command Palette");

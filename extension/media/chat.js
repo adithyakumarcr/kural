@@ -1698,7 +1698,8 @@ ${d.system}` : ""}`,
     out.push(el("div", { class: "ticket-search" }, U.input));
     if (U.searching) out.push(el("div", { class: "ticket-status" }, el("span", { class: "dots small" }, el("span"), el("span"), el("span")),
       " ", U.status || (U.query ? `Searching Jira for “${U.query}”…` : "Getting your recent tickets…")));
-    else if (U.error) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), U.error));
+    else if (U.error) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), U.error),
+      el("div", { class: "mi", onclick: () => ticketSearch(U.query) }, el("span", { class: "mi-icon" }, icon("refresh")), el("span", { class: "mi-label" }, "Try again")));
     else if (U.issues && !U.issues.length) out.push(el("div", { class: "ticket-status" }, U.note || "No tickets found. Try other words or the ticket's key."));
     for (const i of (!U.searching && U.issues) || []) out.push(el("div", { class: `mi ticket-row${t.ticket && t.ticket.key === i.key ? " on" : ""}`, title: i.summary,
       onclick: () => { post({ type: "linkTicket", tabId: t.id, ticket: i }); closeMenu(); input.focus(); } },

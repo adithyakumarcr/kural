@@ -122,7 +122,8 @@ your next message, because which tools the model has is fixed when it starts.
   own file explorer into the chat. (Dropping files from outside Kural doesn't work: VS Code doesn't pass them on.)
 - **+ → Link ticket** (Claude): link a Jira epic, story or task; Kural then knows which ticket you're working on in every
   message, and reads its details from Jira when needed. Needs the Atlassian connector in Claude (claude.ai → Settings →
-  Connectors).
+  Connectors). It works whichever AI answered the chat last: the search always goes through Claude, waits for the
+  connector to connect, and reconnects it once if it failed. If it still can't, it says why, with **Try again**.
 - **+ → Pick from a browser**: opens the [[Browser]] to select an element of your app and add it here.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
@@ -397,7 +398,12 @@ With a Claude model, the chat uses your whole Claude Code setup: MCP servers, co
 4. **Sign in**, if the connector needs your account. A terminal opens: type `/mcp`, pick the connector, then Authenticate.
 
 Connectors are added for all your projects, and your chats continue. **Add one by hand** at the bottom of the list takes a
-command or a web address. **Remove** is the trash icon; connectors from claude.ai are changed on claude.ai.
+command or a web address. **Remove** is the trash icon; connectors from claude.ai are removed on claude.ai, and a
+plugin's connector goes with its plugin (Extensions → Plugins).
+
+**On** turns a connector off or on **everywhere in Kural**: untick it and Kural's chats of that AI (in every project)
+don't use it; its tools are hidden from the AI. It still connects in the background, and `claude` or `codex` in a
+terminal still has it. Chats pick the change up when they're not busy, in the same conversation.
 
 Small options on Claude's page: **Use my Claude Code setup (connectors, plugins, skills)** is the checkbox (setting
 `kural.chat.fullClaudeCodeSetup`); off = a faster, minimal setup. **Reload** starts Claude again.

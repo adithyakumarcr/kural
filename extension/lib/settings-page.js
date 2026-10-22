@@ -15,6 +15,8 @@ const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
 const usageSwitch = require("./ai/usage-switch");
 const connectors = require("./ai/connectors");
+const connectorsOff = require("./ai/connectors-off");
+const { log } = require("./log");
 // Connector keys: a private folder per profile (its accounts), never on a command line (APP-9).
 const keyDir = () => require("./profiles/scope").dir("connector-keys", "account");
 const catalog = require("./ai/connector-catalog");
@@ -155,7 +157,8 @@ class SettingsPage {
       version: versionLabel(this.context.extensionPath, this.context.extension.packageJSON.version),
       autoUpdates: vscode.workspace.getConfiguration("kural").get("updates.autoCheck") !== false,
       usageSwitch: usageSwitch.options(vscode.workspace.getConfiguration("kural")),
-      connectors: Object.fromEntries(["claude", ...CLI_IDS, "local"].map((id) => [id, connectors.SUPPORTED[id] ? { supported: true, ...(this.conn[id] || {}) } : { supported: false }])),
+      connectors: Object.fromEntries(["claude", ...CLI_IDS, "local"].map((id) => [id, connectors.SUPPORTED[id] ? { supported: true, ...(this.conn[id] || {}),
+        servers: ((this.conn[id] || {}).servers || []).map((x) => ({ ...x, off: connectorsOff.isOff(id, x.name) })) } : { supported: false }])),
       fullSetup: vscode.workspace.getConfiguration("kural").get("chat.fullClaudeCodeSetup") !== false,
       learn: this.learning ? this.learning() : null,
       localContext: vscode.workspace.getConfiguration("kural").get("localModels.contextLength") || 32768,
@@ -220,6 +223,18 @@ class SettingsPage {
       case "router": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "findModels": vscode.commands.executeCommand("kural.findModels"); break;
       case "connectors": await this.loadConnectors(m.id, !!m.force); break;
+      // On/off for a connector, everywhere in Kural (lib/ai/connectors-off.js). Chats start again with it (same conversations)
+      // when they're not busy; the Jira helper starts again at its next search.
+      case "connectorOff": {
+        if (!connectors.SUPPORTED[m.id] || !(await connectorsOff.set(m.id, String(m.name || ""), !!m.off))) break;
+        log(`settings: connector ${m.name} (${m.id}) turned ${m.off ? "off" : "on"} in Kural`);
+        if (this.chat) {
+          if (m.id === "claude") { this.chat.setupChanged(`connector ${m.off ? "turned off" : "turned on"}`); if (this.chat.tickets) this.chat.tickets.stop(); }
+          else this.chat.pluginsChanged(m.id);
+        }
+        this.push();
+        break;
+      }
       case "addConnector": case "removeConnector": {
         const c = this.conn[m.id] || (this.conn[m.id] = {});
         if (c.busy) break;
