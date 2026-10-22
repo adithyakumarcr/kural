@@ -1,3 +1,14 @@
+## Not released yet
+
+- **Shorter commit messages.** The sparkle button in Source Control writes at most 200 characters: a subject line, and a
+  line or two more only when needed (#104).
+- **Thinking uses the whole chat, then gets out of the way.** While the AI works, its thinking grows as tall as the
+  chat; when it's done it folds to "Worked for 34 s · …" and the answer comes up under it (#104).
+- **Clearer Kural Light.** The side bar and panels stand apart from the editor, borders are clearer, the selected row is
+  light purple and secondary text is darker (#104).
+- **Add to Chat and Edit Selection buttons.** Select code and two buttons float in the editor's corner: Add to Chat
+  (Ctrl/Cmd+L) and Edit Selection (Ctrl/Cmd+K) (#104).
+
 ## What's new in 1.2.1-beta.2
 
 - **Calmer answers, easier to read.** Real headings, the point first in a box, roomy text, and color only where it means

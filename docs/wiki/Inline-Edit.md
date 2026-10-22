@@ -4,6 +4,10 @@ Select code, press **Ctrl+K** (**Cmd+K** on a Mac) and say what to change. Kural
 green; keep it (**Ctrl+Enter**, **Cmd+Enter** on a Mac, or **Accept** above it) or reject it (**Ctrl+Shift+Backspace**,
 **Cmd+Shift+Backspace** on a Mac, or **Reject**). With nothing selected, Ctrl+K proposes new code at the cursor.
 
+While code is selected, two buttons float in the editor's bottom-right corner: **Edit Selection (Ctrl+K)** does the
+same as Ctrl+K, and **Add to Chat (Ctrl+L)** puts the selection into your chat message. (Edit Selection isn't shown in
+read-only files.)
+
 It uses the chat's model (Claude or [[Your Own Model]]).
 
 **Apply** on a code block in the chat works the same way: Kural previews the proposed code before applying it.

@@ -350,6 +350,10 @@ function activate(context) {
       if (!(o && o.quiet)) vscode.window.showInformationMessage("Tab Completion forgot what it learned in this workspace.");
     }),
     vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState) : getStarted.open()),
+    // The buttons over a selection in the editor (package.json editor/content; issue #104): what Ctrl/Cmd+L and Ctrl/Cmd+K
+    // do there. Their own ids carry the same keys, so the buttons read "Add to Chat (⌘L)" and "Edit Selection (⌘K)".
+    vscode.commands.registerCommand("kural.selection.addToChat", () => vscode.commands.executeCommand("kural.chat.open")),
+    vscode.commands.registerCommand("kural.selection.edit", () => vscode.commands.executeCommand("kural.inlineEdit")),
     vscode.commands.registerCommand("kural.toggleTab", async () => {
       const on = !cfg().get("tabCompletion.enabled");
       await cfg().update("tabCompletion.enabled", on, vscode.ConfigurationTarget.Global);

@@ -106,9 +106,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   s" and then "Worked for 34 s · 2 thoughts, 3 reads, 1 command", with a tag saying what the thinking is:
   "Claude's summary" or "ChatGPT's summary" (Anthropic and OpenAI only send a summary of their models' thinking, never the raw
   thinking: Kural shows it as it comes and summarizes nothing itself) or "raw" (models on this computer, open models
-  through Codex); Gemini (Antigravity) passes no thinking on. At about 14 lines it scrolls inside, following the newest
-  line; scroll up in it to read and it stays there until Latest. It never folds by itself while you watch; when you open
-  the chat later, earlier answers' timelines are folded to their header (click to open). The answer is below it.
+  through Codex); Gemini (Antigravity) passes no thinking on. While it works it grows as tall as the chat, then scrolls
+  inside, following the newest line; scroll up in it to read and it stays there until Latest. When it's done it folds to
+  its header ("Worked for 34 s · …"; click to open it again) and the answer comes up under it.
   Answers are drawn calmly ("Calm reading"): real headings, the point first in a box (an answer that starts with
   "**Done:** …", "**Goal:**", "**In short:**"), callouts whose color means something (GitHub's alerts: > [!NOTE] blue
   Note, > [!TIP] green Tip, > [!IMPORTANT] purple Important, > [!WARNING] amber Watch out, > [!CAUTION] red Risk), quotes,
@@ -155,8 +155,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   × (back among the tabs); drag a title to move that chat (to a side, onto another chat, onto the first column: back
   among the tabs, or out of the panel: beside the code); drag the line between two to resize. Made narrower, they stack
   above each other. They come back after a restart.
-- Source Control panel: the sparkle button in the commit message box writes a commit message from your staged changes
-  (or all changes), in the style of your recent commits, with the chat's model; edit it and commit as usual.
+- Source Control panel: the sparkle button in the commit message box writes a short commit message (at most 200
+  characters: a subject line, maybe a line or two more) from your staged changes (or all changes), in the style of your
+  recent commits, with the chat's model; edit it and commit as usual.
 - Kural's browser (Command Palette "Kural: Open Browser", or + in the chat: "Pick from a browser", or ANY web link in an
   answer, which opens there instead of the outside browser): real web pages inside Kural, your app on localhost or any
   site, with Design Mode like Cursor. The browser bar's inspect button ("Add Element to Chat", Cmd/Ctrl+Shift+C): click
@@ -221,6 +222,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   profile. "Kural: Show Plugins" opens it. (If VS Code's Extensions side bar can't take the tab, Plugins has a side bar
   of its own: the plug icon.)
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review a read-only red/green diff, Accept or Reject. The original file changes only on Accept.
+- With code selected in the editor, two buttons float in the editor's bottom-right corner: "Add to Chat (Ctrl+L)" (the
+  selection goes into your chat message) and "Edit Selection (Ctrl+K)" (inline edit; not in read-only files).
 - Model Router (Auto in the model menu, like Cursor's): Balance, Cost (saves your usage limits: lightest model that can
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
   cheaper model; "Build it" on an agreed plan goes to a light model such as Haiku in Balance and Cost, and a step that
@@ -350,7 +353,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   code-signed yet: click the small "More info" link, then "Run anyway" ("Unknown publisher"). Kural's own updates don't
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
-  buttons and focus.
+  buttons and focus. Kural Light has stronger contrast than VS Code's light theme: the side bar and panels are a shade
+  darker than the editor, with clearer borders, a light purple selected row and darker secondary text.
 - Profiles: a profile is a separate Kural setup with its own Claude and ChatGPT (Codex) accounts, e.g. a personal one and
   a work one. The status bar item (person or briefcase icon and the profile's name) shows the current one; click it to
   switch, or for "New profile…" (Personal or Work, a name, share chats or keep them separate) and "Manage profiles…"

@@ -365,6 +365,16 @@
       {
         "command": "kural.plugins.show",
         "title": "Kural: Show Plugins"
+      },
+      {
+        "command": "kural.selection.addToChat",
+        "title": "Add to Chat",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.selection.edit",
+        "title": "Edit Selection",
+        "category": "Kural"
       }
     ],
     "viewsContainers": {
@@ -612,6 +622,14 @@
         {
           "command": "kural.chat.moveToPanel",
           "when": "activeCustomEditorId == kural.chatTab || activeWebviewPanelId == kural.chatEditor"
+        },
+        {
+          "command": "kural.selection.addToChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.selection.edit",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -671,6 +689,18 @@
           "command": "kural.scm.commitMessage",
           "when": "scmProvider == git",
           "group": "navigation"
+        }
+      ],
+      "editor/content": [
+        {
+          "command": "kural.selection.addToChat",
+          "when": "editorHasSelection && !isInDiffEditor && resourceScheme =~ /^(file|untitled|vscode-remote|vscode-userdata)$/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kural.selection.edit",
+          "when": "editorHasSelection && !editorReadonly && !isInDiffEditor && resourceScheme =~ /^(file|untitled|vscode-remote|vscode-userdata)$/",
+          "group": "navigation@2"
         }
       ]
     },
@@ -786,6 +816,18 @@
         "command": "kural.search.prev",
         "key": "shift+f4",
         "when": "kural.searchHasResults"
+      },
+      {
+        "command": "kural.selection.addToChat",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "kural.selection.edit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "editorTextFocus && editorHasSelection && !editorReadonly"
       }
     ],
     "configuration": {
@@ -1290,6 +1332,7 @@
     "terminalCompletionProvider",
     "terminalDataWriteEvent",
     "contribSourceControlInputBoxMenu",
-    "browser"
+    "browser",
+    "contribEditorContentMenu"
   ]
 }

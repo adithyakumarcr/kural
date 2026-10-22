@@ -266,6 +266,11 @@ window.KURAL_CHAT = function (app, port) {
   const toBottom = () => { listEl.scrollTop = listEl.scrollHeight; jumpBtn.classList.add("hidden"); };
   const follow = () => { if (stick) toBottom(); else jumpBtn.classList.remove("hidden"); };
   listEl.addEventListener("scroll", () => { stick = atBottom(); if (stick) jumpBtn.classList.add("hidden"); });
+  // How tall a running timeline may grow: the chat's visible height, less room for the message above it and the answer's
+  // first lines (chat.css .thv.live .tbox). Per column: stacked columns are shorter.
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => {
+    if (listEl.clientHeight) listEl.style.setProperty("--tl-max", `${Math.max(300, listEl.clientHeight - 140)}px`);
+  }).observe(listEl);
   const historyEl = el("div", { class: "history hidden" });
   const localEl = el("div", { class: "history local hidden" });   // "Local models": search, download, use
   const chipsEl = el("div", { class: "chips" });
@@ -800,10 +805,11 @@ window.KURAL_CHAT = function (app, port) {
     return "Claude's summary";
   }
   // n: which part of the answer (see parts); live: the last part (its timeline shows what it's doing now). Open while it
-  // works and after, in this window; an answer drawn later (you opened the chat) starts folded. Your choice stays.
+  // works (as tall as the chat: --tl-max); once that part is done it folds to its header, so the answer comes up
+  // (Adithya, issue #104). Your own click (open or fold) stays.
   function stepsNode(m, ks, n = 0, live = true) {
     const running = m.running && live;
-    const open = m._stepsOpen && n in m._stepsOpen ? m._stepsOpen[n] : (running || !!m._liveHere);
+    const open = m._stepsOpen && n in m._stepsOpen ? m._stepsOpen[n] : running;
     const state = ((m._tl = m._tl || {})[n] = m._tl[n] || { follow: true });
     const last = ks[ks.length - 1];
     const items = ks.map((k) => {
@@ -1864,15 +1870,13 @@ ${d.system}` : ""}`,
       case "delta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
         const msg = S.tab.messages[i];
-        msg._liveHere = true;
         let b = msg.blocks[msg.blocks.length - 1];
         if (!b || b.k !== "text") { b = { k: "text", text: "" }; msg.blocks.push(b); b.text += m.text; appendBlock(i); break; }
         b.text += m.text; schedulePatch(i, msg.blocks.length - 1);
       } break;
-      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i]._liveHere = true; S.tab.messages[i].blocks.push(m.block); appendBlock(i); } } break;
+      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i].blocks.push(m.block); appendBlock(i); } } break;
       case "thinkDelta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
-        S.tab.messages[i]._liveHere = true;
         const blocks = S.tab.messages[i].blocks, b = blocks[blocks.length - 1];
         if (b && b.k === "think") { b.text += m.text; schedulePatch(i, blocks.length - 1); }
       } break;

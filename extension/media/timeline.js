@@ -1,8 +1,8 @@
 // The thinking timeline (docs/superpowers/specs/2026-10-21-calm-chat-design.md): what the AI thought, between the steps
 // it took (read, searched, edited, ran…), exactly as it sends it: Claude's and ChatGPT's own summaries, or raw from
-// models on this computer. Kural adds nothing to it and asks no AI about it. It grows to about 14 lines (300 px), then
-// scrolls inside, following the newest line; scroll up and it stays where you are until Latest. It never folds by itself
-// while you watch (a box that grew and then folded made the answer jump: that's why thinking was one line before).
+// models on this computer. Kural adds nothing to it and asks no AI about it. While it runs it grows as tall as the chat
+// (chat.css --tl-max), then scrolls inside, following the newest line; scroll up and it stays where you are until Latest.
+// When that part of the answer is done the chat draws it folded (issue #104: the answer comes up under its header).
 // No outside libraries; the tests load it too (module.exports).
 (function () {
   function KURAL_TIMELINE({ el, icon }) {

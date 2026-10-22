@@ -247,10 +247,10 @@ it took (Read, Searched, Edited +18 −3, Ran npm test · passed). Click a step 
   models' thinking, never the raw thinking. Kural shows it as it comes and summarizes nothing itself. Models on your
   computer (Qwen3, DeepSeek-R1, gpt-oss) and open models through Codex send their raw thinking, word by word. Gemini
   (Antigravity) passes no thinking on.
-- At about 14 lines it scrolls inside, following the newest line. Scroll up in it to read and it stays there;
-  **Latest** brings you back to the newest line.
-- It never folds by itself while you watch, so nothing below it jumps. When you open the chat later, earlier answers'
-  timelines are folded to their header: click to open one.
+- While it works it grows as tall as the chat, then scrolls inside, following the newest line. Scroll up in it to
+  read and it stays there; **Latest** brings you back to the newest line.
+- When it's done it folds to its header ("Worked for 34 s · …") and the answer comes up under it. Click the header to
+  open it again; if you opened or folded it yourself, that stays. Earlier answers' timelines are folded too.
 - What needs you (a permission card, a question), agents' cards, the team's messages and pictures stay outside it.
 
 ### Answering a question: pick, then Send
@@ -380,8 +380,9 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
 ## Commit messages in Source Control
 
 In the Source Control panel, the sparkle button in the commit message box (and in the panel's title bar) writes a
-commit message for you: from your staged changes, or all changes when nothing is staged, in the style of your recent
-commits, with the chat's model. Edit it if you like and commit as usual.
+short commit message for you (at most 200 characters: a subject line, and a line or two more only when needed): from
+your staged changes, or all changes when nothing is staged, in the style of your recent commits, with the chat's model.
+Edit it if you like and commit as usual.
 
 ## Your Claude Code setup
 

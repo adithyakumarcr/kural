@@ -52,7 +52,9 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 **Kural Dark** and **Kural Light**: Command Palette → *Preferences: Color Theme*. They look like VS Code's own (Dark
 Modern / Light Modern): code in many colors (keywords, strings, functions, types, comments each their own, as in
 VS Code's Dark+ / Light+), and purple, Kural's color, only for buttons, the active tab, focus and links. Code in chat
-answers is colored the same way. Every text color has at least 4.5:1 contrast with its background. With *Window › Auto Detect Color Scheme* on, Kural follows your computer's
+answers is colored the same way. Every text color has at least 4.5:1 contrast with its background. Kural Light is
+stronger than VS Code's Light Modern: the side bar and panels are a shade darker than the editor, borders are clearer,
+the selected row in a list is light purple and secondary text is darker. With *Window › Auto Detect Color Scheme* on, Kural follows your computer's
 light/dark mode.
 
 ## Workspace Color
