@@ -76,6 +76,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   "/" at the start of the message lists your skills and commands (Claude models with "Use my Claude Code setup" on: your
   plugins' skills such as Superpowers' superpowers:brainstorming, your own, and Claude Code's like /code-review); type
   to filter, Tab or Enter puts it in, then add what it's for and send.
+  Your shortcuts (every AI): a name that stands for a text you write once, like /pr-summary or /test. Make them in Kural
+  Settings → Shortcuts (or "Make a shortcut…" at the end of the "/" list when you have none). Type "/" at the start of
+  the message or after a space anywhere ("hi! please do /pr-summary"), pick it, and it goes in as a chip; the AI gets
+  your message as written plus what the shortcut stands for. Typed by hand as a whole word it counts too. Yours come
+  first in the list and win over a Claude skill with the same name. Kept in your user settings (kural.chat.shortcuts),
+  for every project; a project can't add one.
   Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
   (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
   beside it: it goes into your message as a quote, and the AI gets the whole selected text. Side chat: select text in an
@@ -317,7 +323,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   it to the program directly); "Add one by hand" at the bottom takes a command or web address; ChatGPT can't use ones that need a key header
   or the older SSE kind; Claude also: "Use my Claude Code setup (plugins, skills)" and Reload; Gemini: no connectors
   yet), then "Switch to another AI near a limit". Your own model's page: Find & download models, change model, context
-  length. Then Moods (your own chat moods: add, edit, delete; remove or restore the built-in ones); What Kural learns
+  length. Then Moods (your own chat moods: add, edit, delete; remove or restore the built-in ones); Shortcuts (your "/"
+  shortcuts: add, edit, delete, with examples); What Kural learns
   (Tab Completion learning from your work, off by default; Auto learning which models you prefer, on by default; each
   with "Delete what it learned"); then Kural's version and Check for updates, Get started, Tab Completion, Profiles,
   all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,

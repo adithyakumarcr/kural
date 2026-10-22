@@ -247,6 +247,8 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--vscode-foreground); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); user-select: all; }
 .pill-icon { font-size: calc(10px * var(--fs, 1)); opacity: .75; font-family: var(--vscode-editor-font-family); }
 .pill.selection { background: color-mix(in srgb, var(--blue) 16%, transparent); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.pill.shortcut { cursor: default; font-family: var(--vscode-editor-font-family, monospace); }
+.pop-make { color: var(--muted); }
 .pill.quote { cursor: default; max-width: calc(100% - 4px); vertical-align: bottom; }
 .pill.quote .pill-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* "Add to chat" beside text you select in the chat (chat.js placeQuoteBtn). */

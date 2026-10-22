@@ -31,6 +31,7 @@ const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
 const { SideChats } = require("./side");
 const slashList = require("./slash");
+const shortcuts = require("./shortcuts");
 const { Enhancer } = require("../enhance");
 const { Voice } = require("../voice");
 const { Listen } = require("../listen");
@@ -231,6 +232,7 @@ class ChatView {
     c.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => this.setupChanged("trusted")));
     c.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.chat.moods") || e.affectsConfiguration("kural.chat.hiddenMoods")) this.moodsChanged();
+      if (e.affectsConfiguration("kural.chat.shortcuts")) this.post({ type: "shortcuts", shortcuts: userShortcuts() });
       if (e.affectsConfiguration("kural.usageSwitch")) this.usageChanged();
     }));
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
@@ -1575,9 +1577,11 @@ class ChatView {
       : !fullSetup() ? "Turn on \"Use my Claude Code setup\" (Kural Settings, Claude) to use your skills and commands." : "Loading your skills…" };
   }
   // "/name rest" when name is one of this chat's commands: { lead: "/name ", rest }.
+  // (Your shortcut wins over a skill with the same name: Kural expands it, Claude Code never sees it as a command.)
   slashOf(tab, text) {
     if (!isClaude(tab.model)) return null;
-    const s = slashList.split(text, this.slashes().get(tab.id));
+    const mine = new Set(userShortcuts().map((x) => x.name));
+    const s = slashList.split(text, (this.slashes().get(tab.id) || []).filter((c) => !mine.has(c.name)));
     return s ? { lead: `/${s.name} `, rest: s.rest } : null;
   }
 
@@ -1601,6 +1605,8 @@ class ChatView {
         parts.push(`Part of this chat I selected:\n${String(c.text || "").slice(0, 8001).split("\n").map((l) => `> ${l}`).join("\n")}`);
       } else if (c.kind === "element") {
         parts.push(elementNote(c.element || {}));
+      } else if (c.kind === "shortcut") {
+        continue;   // (below: each shortcut once, chips and typed ones alike)
       } else if (c.kind === "file" || c.kind === "current") {
         const uri = this.resolvePath(c.path);
         let body = null;
@@ -1611,6 +1617,8 @@ class ChatView {
           : `${label} (large — read it with your tools if you need it)`);
       }
     }
+    // Your shortcuts (/pr-summary): what each one stands for (lib/chat/shortcuts.js).
+    parts.push(...shortcuts.notes(text, contexts, userShortcuts()));
     return parts.length ? `<context>\n${parts.join("\n\n")}\n</context>\n\n${text}` : text;
   }
 
@@ -1630,13 +1638,13 @@ class ChatView {
   }
 
   static textOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "shortcut" ? `/${s.ctx.name}` : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
       : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
   }
 
   // A tab title from your first message; pills read as "main.py (L3-9)".
   static titleOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? s.ctx.label
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "shortcut" ? `/${s.ctx.name}` : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? s.ctx.label
       : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
@@ -2863,7 +2871,7 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: allMoods(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
+          moods: allMoods(), shortcuts: userShortcuts(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
         w.postMessage(this.tabsFor(pane));
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: { ...t.setup, jira: atlassianState(t.setup) } });
@@ -3072,6 +3080,7 @@ class ChatView {
       case "setMood": if (valid(allMoods(), m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
       // "Add your own mood…" in the model menu: Kural Settings, at Moods (lib/settings-page.js).
       case "editMoods": vscode.commands.executeCommand("kural.settings.moods"); break;
+      case "editShortcuts": vscode.commands.executeCommand("kural.settings.shortcuts"); break;
       case "toggleRole": if (TEAMS_ENABLED && valid(ROLES, m.role)) {
         const roles = tab.roles || [];
         tab.roles = roles.includes(m.role) ? roles.filter((r) => r !== m.role) : [...roles, m.role].slice(0, FRIENDS.length);
@@ -3376,6 +3385,8 @@ function permDetail(tool, input) {
 function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
 // Your own moods, from your user settings only (never a project's: their instructions go into the AI's prompt).
 function userMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.moods") : null; return i ? i.globalValue : undefined; }
+// Your shortcuts (Kural Settings → Shortcuts), from your user settings only too: their text goes to the AI.
+function userShortcuts() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.shortcuts") : null; return shortcuts.clean(i ? i.globalValue : undefined); }
 // Built-in moods you removed from the menu (Kural Settings → Moods): user settings only too.
 function hiddenMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.hiddenMoods") : null; return i ? i.globalValue : undefined; }
 // The moods in the model menu: the built-in ones you kept, then yours (prompts.js shownMoods, customMoods).

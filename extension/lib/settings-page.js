@@ -13,6 +13,7 @@ const { fontScale } = require("./ui");
 const { versionLabel } = require("./version");
 const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
+const shortcuts = require("./chat/shortcuts");
 const usageSwitch = require("./ai/usage-switch");
 const connectors = require("./ai/connectors");
 const connectorsOff = require("./ai/connectors-off");
@@ -27,6 +28,9 @@ const os = require("os");
 const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
 const saveMoods = (list) => vscode.workspace.getConfiguration("kural").update("chat.moods",
   list.map((m) => ({ id: m.id, name: m.label, hint: m.hint, instructions: m.instructions })), vscode.ConfigurationTarget.Global);
+// Your shortcuts: the user setting kural.chat.shortcuts (never a project's).
+const userShortcuts = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.shortcuts"); return shortcuts.clean(i ? i.globalValue : undefined); };
+const saveShortcuts = (list) => vscode.workspace.getConfiguration("kural").update("chat.shortcuts", list.length ? list : undefined, vscode.ConfigurationTarget.Global);
 // Built-in moods removed from the chat's menu (kural.chat.hiddenMoods): their ids, in the built-in order.
 const hiddenMoods = () => {
   const i = vscode.workspace.getConfiguration("kural").inspect("chat.hiddenMoods"), v = i && Array.isArray(i.globalValue) ? i.globalValue : [];
@@ -86,7 +90,7 @@ class SettingsPage {
     this.gs.onChange(() => this.push());
     this.context.subscriptions.push(usage.onChange(() => this.push()),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.usageSwitch", "kural.chat.fullClaudeCodeSetup", "kural.tabCompletion.learnFromActivity", "kural.modelRouter.learn", "kural.localModels"].some((k) => e.affectsConfiguration(k))) this.push();
+        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.chat.shortcuts", "kural.usageSwitch", "kural.chat.fullClaudeCodeSetup", "kural.tabCompletion.learnFromActivity", "kural.modelRouter.learn", "kural.localModels"].some((k) => e.affectsConfiguration(k))) this.push();
       }));
   }
 
@@ -163,6 +167,7 @@ class SettingsPage {
       learn: this.learning ? this.learning() : null,
       localContext: vscode.workspace.getConfiguration("kural").get("localModels.contextLength") || 32768,
       moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), hidden: hiddenMoods(), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
+      shortcuts: { mine: userShortcuts(), limits: shortcuts.LIMITS },
       section: this.section || null };
   }
 
@@ -184,6 +189,16 @@ class SettingsPage {
     }
     const next = list.some((x) => x.id === mood.id) ? list.map((x) => x.id === mood.id ? mood : x) : [...list, mood];
     await saveMoods(next);
+    return "";
+  }
+
+  // A new or changed shortcut (old: its name before, when you edit one). "" when saved, else what to fix.
+  async saveShortcut(m) {
+    const name = shortcuts.nameOf(m.name), text = String(m.text || "").trim(), list = userShortcuts();
+    const old = typeof m.old === "string" && list.some((x) => x.name === m.old) ? m.old : null;
+    const error = shortcuts.problem(name, text, list.filter((x) => x.name !== old));
+    if (error) return error;
+    await saveShortcuts(old ? list.map((x) => x.name === old ? { name, text } : x) : [...list, { name, text }]);
     return "";
   }
 
@@ -341,6 +356,13 @@ class SettingsPage {
         break;
       }
       case "deleteMood": await saveMoods(userMoods().filter((x) => x.id !== m.id)); this.push(); break;
+      case "saveShortcut": {
+        const error = await this.saveShortcut(m);
+        if (this.panel) this.panel.webview.postMessage({ type: "shortcutSaved", reqId: m.reqId, error });
+        this.push();
+        break;
+      }
+      case "deleteShortcut": await saveShortcuts(userShortcuts().filter((x) => x.name !== m.name)); this.push(); break;
       case "hideMood": await this.hideMood(m.id, !!m.hidden); this.push(); break;
       case "shown": this.section = null; break;   // (the page scrolled to the section it was asked to show)
     }

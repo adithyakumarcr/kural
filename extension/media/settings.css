@@ -130,3 +130,6 @@ header .title { flex: 1 1 260px; }
 .learn-text .small { padding-left: 22px; line-height: 1.4; }
 .info-tip { display: inline-grid; place-items: center; cursor: help; opacity: .8; }
 .info-tip:hover, .info-tip:focus { opacity: 1; outline: none; }
+
+/* Shortcuts: the name as you type it. */
+.mono { font-family: var(--vscode-editor-font-family, monospace); }

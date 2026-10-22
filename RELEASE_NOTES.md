@@ -15,6 +15,9 @@
   runs (through Claude), reconnects Atlassian once if it failed, and says what's wrong with Try again (#105).
 - **Turn a connector off without removing it.** Kural Settings → an AI's page → Connectors: untick **On** and Kural's
   Claude or ChatGPT chats stop using it, in every project. Plugin connectors say which plugin they come with (#105).
+- **Your own shortcuts.** Write a prompt once in Kural Settings → Shortcuts, give it a name like `pr-summary`, and type
+  `/pr-summary` anywhere in a message ("hi! please do /pr-summary"): it goes in as a chip and the AI gets its text.
+  Works with every AI (#107).
 
 ## What's new in 1.2.1-beta.2
 

@@ -115,6 +115,16 @@ your next message, because which tools the model has is fixed when it starts.
   to filter (by name or what it does), **Tab** or **Enter** puts it in, then write what it's for and send. It needs
   **Use my Claude Code setup** on (Kural Settings → Claude). Claude Code's commands that only work on its own screen
   (`/model`, `/config`, `/mcp`…) aren't listed: Kural has its own way for those (the model menu, Kural Settings).
+- **Your shortcuts** (every AI): a name that stands for a text you write once, like `/pr-summary` or `/test`.
+  - Make them in **Kural Settings → Shortcuts**: a name (lowercase letters, digits and `-`) and what it stands for (up
+    to 4,000 characters). With none yet, the "/" list ends with **Make a shortcut…**.
+  - Type **/** at the start of your message or after a space anywhere ("hi! please do /pr-summary"), pick it, and it
+    goes in as a chip. Point at the chip to see its text.
+  - The AI gets your message as you wrote it, plus what each shortcut stands for. History and the tab's title show
+    `/pr-summary`. Typed by hand as a whole word, a shortcut counts too.
+  - Yours come first in the list and win over a Claude skill with the same name. In the middle of a message the list
+    shows only your shortcuts (Claude runs a skill only at the start).
+  - They're kept in your user settings (`kural.chat.shortcuts`) for every project; a project's settings can't add one.
 - **Text from the chat**: select part of an answer (or of a message you sent) and click **Add to chat** beside it. It goes
   into your message as a quote (its first words; point at it to read it all), and the AI gets the whole selected text
   (up to 8,000 characters) with your message.

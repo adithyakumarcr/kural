@@ -603,6 +603,14 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   it before everything Kural adds (handoff, notes, context: they become its arguments); its echo comes back as
   `<command-name>/name</command-name>…` (`onEcho` matches it). Checked live: initialize doesn't change permission
   prompts. Tests: `test/slash.test.js` (fake-claude-chat answers initialize).
+- **Your shortcuts** (`lib/chat/shortcuts.js` no vscode; issue #107, Adithya: every AI, a chip, user settings only):
+  `kural.chat.shortcuts` [{name, text}], read with `inspect().globalValue` like the moods; edited in Kural Settings →
+  Shortcuts (`saveShortcut`/`deleteShortcut`, `kural.settings.shortcuts`). The page's "/" opens at the start (shortcuts,
+  then Claude's skills) or after a space (shortcuts only; nothing matching closes it, so a path like /usr/bin stays
+  quiet); a pick inserts a pill `{kind: "shortcut", name, text}`. `textOf`/`titleOf` write it as `/name`, so History and
+  handoffs carry the name; `buildPrompt` adds `notes()` (chips, then hand-typed whole words that are yours; each once; a
+  deleted shortcut's chip keeps its text) to the `<context>` block, which also keeps the message from starting with
+  "/name" for Claude Code. `slashOf` leaves out skills named like a shortcut (yours wins). Test: `test/shortcuts.test.js`.
 - **Enhance prompt** (`lib/enhance/`: `index.js` Enhancer, no vscode; `repo-tools.js` the sandbox; `repo-mcp.js` its MCP
   server; `system-prompt.md` the prompt, read on every click; Adithya, 20 Oct 2026): the wand beside Send → `enhance` →
   `chat.enhance` → a short-lived agent of the chat's AI's middle model (`pick`: Claude `claude-sonnet-5-5`; Codex/Gemini

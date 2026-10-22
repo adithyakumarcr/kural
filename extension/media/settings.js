@@ -7,6 +7,7 @@
   const app = document.getElementById("app");
   const post = (m) => vscode.postMessage(m);
   let S = null;
+  const SHORTCUTS_INFO = "A name that stands for a text you write once. Type / in the chat box (at the start or after a space) and pick it; Kural sends its text to the AI with your message. Works with every AI.";
   const MOODS_INFO = "How the chat's AI works with you. Pick one in the chat's model menu, under Mood. Your own moods show there next to the built-in ones; remove a built-in one you don't use with its ×. A new chat starts with the first mood in the menu.";
 
   function el(tag, props = {}, ...kids) {
@@ -445,12 +446,93 @@
     post({ type: "shown" });
   }
 
+  // ---------- Shortcuts ----------
+  // Your shortcuts (issue #107): "/pr-summary" in the chat box stands for a text you write here once. Drawn on its own
+  // like the moods (renderShortcuts), so a redraw never takes the form away while you type.
+  const shortcutsBox = el("section", { class: "moods-sec", id: "shortcuts" });
+  let K = { form: null, confirm: null, drawn: "" };   // form: { old, fields: { name, text }, count, error, busy, reqId }
+  const SHORTCUT_EXAMPLES = [
+    { name: "pr-summary", text: "Write a summary of this pull request: what changed and why, in a few bullet points, then how to test it." },
+    { name: "test", text: "Test it: run the tests that cover what changed, fix what fails, and tell me what passed and what failed." },
+    { name: "explain", text: "Explain this step by step, in plain words, as if I'm new to this code." },
+  ];
+  function openShortcutForm(x) {
+    const L = S.shortcuts.limits;
+    const name = el("input", { class: "in", spellcheck: "false", maxlength: L.name, placeholder: "e.g. pr-summary" });
+    const text = el("textarea", { class: "in", spellcheck: "true", rows: "7", maxlength: L.text, placeholder: "e.g. Write a summary of this pull request: what changed and why, then how to test it." });
+    name.value = x ? x.name : ""; text.value = x ? x.text : "";
+    const count = el("span", { class: "muted small count" });
+    const counted = () => { count.textContent = `${text.value.length} / ${L.text}`; };
+    text.addEventListener("input", counted); counted();
+    K.form = { old: x ? x.name : null, fields: { name, text }, count, error: "", busy: false };
+    renderShortcuts(true);
+    name.focus();
+  }
+  function saveShortcut() {
+    const F = K.form; if (!F || F.busy) return;
+    F.busy = true; F.error = ""; F.reqId = Date.now();
+    post({ type: "saveShortcut", reqId: F.reqId, old: F.old, name: F.fields.name.value, text: F.fields.text.value });
+    renderShortcuts(true);
+  }
+  function shortcutForm() {
+    const F = K.form, X = F.fields;
+    const row = (label, input, note) => el("label", { class: "field" }, el("span", { class: "flabel" }, label, note ? el("span", { class: "muted small" }, " ", note) : null), input);
+    const example = (x) => { X.name.value = x.name; X.text.value = x.text; X.text.dispatchEvent(new Event("input")); X.text.focus(); };
+    return el("div", { class: "mood-form" },
+      el("div", { class: "mood-form-main" },
+        el("h3", {}, F.old ? "Change this shortcut" : "Add a shortcut"),
+        row("Name", X.name, "(you type it after /: lowercase letters, digits and -)"),
+        row("What it stands for", X.text, "(sent to the AI with your message)"),
+        el("div", { class: "row" }, F.count, el("span", { class: "grow" }),
+          F.error ? el("span", { class: "err" }, icon("warning"), " ", F.error) : null),
+        el("div", { class: "row" },
+          el("button", { class: "btn primary", disabled: F.busy, onclick: saveShortcut }, F.busy ? "Saving…" : "Save"),
+          el("button", { class: "btn", onclick: () => { K.form = null; renderShortcuts(true); } }, "Cancel"))),
+      el("aside", { class: "mood-tips" },
+        el("h4", {}, icon("lightbulb"), " How it works"),
+        el("ul", {},
+          el("li", {}, el("strong", {}, "Type / in the chat box"), " ", el("span", { class: "muted" }, "at the start or after a space, then pick it: it goes in as a chip.")),
+          el("li", {}, el("strong", {}, "Mix it with your words."), " ", el("span", { class: "muted" }, "\"hi! please do /pr-summary\": the AI gets your message and what the shortcut stands for.")),
+          el("li", {}, el("strong", {}, "Every AI."), " ", el("span", { class: "muted" }, "Claude, Gemini, ChatGPT and your own model. Yours wins over a Claude skill with the same name."))),
+        el("h4", {}, "Start from an example"),
+        el("div", { class: "examples" }, SHORTCUT_EXAMPLES.map((x) => el("button", { class: "btn", title: x.text, onclick: () => example(x) }, `/${x.name}`)))));
+  }
+  function renderShortcuts(force) {
+    const D = S.shortcuts;
+    if (!D) return;
+    const key = JSON.stringify(D.mine) + (K.confirm || "");
+    if (!force && key === K.drawn) return;
+    K.drawn = key;
+    const mine = D.mine.map((x) => el("div", { class: "mood-item" },
+      el("div", { class: "row" }, el("strong", { class: "mono" }, `/${x.name}`), el("span", { class: "grow" }),
+        el("button", { class: "btn", onclick: () => openShortcutForm(x) }, icon("edit"), " Edit"),
+        K.confirm === x.name
+          ? el("button", { class: "btn danger", onclick: () => { K.confirm = null; post({ type: "deleteShortcut", name: x.name }); } }, "Delete it?")
+          : el("button", { class: "btn quiet", title: "Delete this shortcut", onclick: () => { K.confirm = x.name; renderShortcuts(true); } }, icon("trash"))),
+      el("div", { class: "muted small clamp2" }, x.text)));
+    shortcutsBox.replaceChildren(...[
+      el("div", { class: "sechead" }, el("h2", {}, "Shortcuts"),
+        el("span", { class: "muted info-tip", tabindex: "0", "aria-label": SHORTCUTS_INFO, title: SHORTCUTS_INFO }, icon("info")), el("span", { class: "grow" }),
+        K.form ? null : el("button", { class: "btn", onclick: () => openShortcutForm(null) }, icon("add"), " Add a shortcut")),
+      D.mine.length ? el("div", { class: "mood-list" }, mine) : (K.form ? null : el("p", { class: "muted small" }, "No shortcuts yet. Make one for a prompt you type often, like /pr-summary.")),
+      K.form ? shortcutForm() : null].filter(Boolean));
+  }
+  // From the chat's "Make a shortcut…": the Shortcuts section, with a new shortcut's form open.
+  function showShortcuts() {
+    if (!S) return;
+    go("main");
+    if (!K.form) openShortcutForm(null);
+    shortcutsBox.scrollIntoView({ block: "start" });
+    post({ type: "shown" });
+  }
+
   // From the chat's model menu (the gear beside an AI's name): that AI's page. "usage" (the AI Usage panel's link): the
   // chat's AI page at its switch-point section.
   let shownSection = null;   // (the host keeps sending the section until the page says "shown": go once)
   function showSection(section) {
     if (!S) return;
     if (section === "moods") return showMoods();
+    if (section === "shortcuts") return showShortcuts();
     if (section === "usage") {
       go("ai", S.chatAI && S.chatAI !== "local" && cardOf(S.chatAI) ? S.chatAI : "claude");
       const sw = document.getElementById("switch"); if (sw) sw.scrollIntoView({ block: "start" });
@@ -483,6 +565,7 @@
           icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage")),
       el("div", { class: "cards" }, S.cards.map(card)),
       moodsBox,
+      shortcutsBox,
       learnSection(),
       el("div", { class: "sechead" }, el("h2", {}, "More")),
       el("div", { class: "links" },
@@ -504,6 +587,7 @@
   function render(force) {
     if (!S) return;
     renderMoods(false);
+    renderShortcuts(false);
     if (V.view === "catalog") {
       if (V.drawn !== "catalog") { stage.replaceChildren(CAT.root); V.drawn = "catalog"; }
       return renderCatalogList(!!force);
@@ -532,6 +616,11 @@
     if (m.type === "moodSaved" && M.form && M.form.reqId === m.reqId) {
       M.form.busy = false;
       if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
+    }
+    if (m.type === "shortcutSaved" && K.form && K.form.reqId === m.reqId) {
+      K.form.busy = false;
+      if (m.error) K.form.error = m.error; else K.form = null;
+      renderShortcuts(true);
     }
     if (m.type === "show") { shownSection = m.section; showSection(m.section); }
     if (m.type === "catalogResults" && m.id === CAT.ai && m.reqId === CAT.reqId) {
