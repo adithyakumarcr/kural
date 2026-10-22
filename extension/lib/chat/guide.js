@@ -271,7 +271,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): per AI, its Session and Weekly
   limits with when they reset, always shown; only the tokens are under "Tokens" (click to open). Session = the 5-hour
   limit (Claude and Codex); Gemini has weekly limits.
-  The status bar shows only each AI's Session limit: the chat's AI with when it resets ("Claude Session 50% · resets
+  The status bar shows only each AI's Session limit: the chat's AI as "Usage" with when it resets ("Usage 50% · resets
   42m"), the others short ("Codex 12%"); Gemini, which has only weekly limits, shows its name. Weekly numbers stay in
   the hover at every usage level; hover for every AI's Session and Weekly limits; orange
   from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from

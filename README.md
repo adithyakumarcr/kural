@@ -357,7 +357,7 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
   for tokens consumed and tokens in context. **Kural Settings → AI Usage** adds optional automatic switching at an
   editable percentage (70% initially): the same chat and its context continue with another available service below
   the threshold, after active work finishes. This works with manual models and Auto. The status bar
-  shows the Session limit (`Claude Session 50% · resets 42m`; orange from 80 %, red from 95 %); hover for every limit,
+  shows the Session limit (`Usage 50% · resets 42m`; orange from 80 %, red from 95 %); hover for every limit,
   click for the panel.
 - **A simpler window.** VS Code's Run and Debug side bar, Debug Console and Ports are hidden (while you debug with F5
   the debug views show anyway); the setting `kural.showDebugViews` brings them back. Tab Completion and Model Router

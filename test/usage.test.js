@@ -48,10 +48,10 @@ check("other names: Codex's windows, Gemini's weekly limits, Opus's own week, nu
 check("status bar: only Session usage; weekly limits stay on hover even at 100 %", () => {
   const S = (p, reset = 42) => ({ id: "five_hour", label: "Session", usedPercent: p, resetsAt: now + reset * min });
   const W = (p) => ({ id: "seven_day", label: "Week", usedPercent: p, resetsAt: now + (3 * 1440 + 4 * 60) * min });
-  assert.deepStrictEqual(meter("Claude", { windows: [S(50), W(25)] }, true, now), { text: "$(dashboard) Claude Session 50% · resets 42m", top: 50 });
+  assert.deepStrictEqual(meter("Claude", { windows: [S(50), W(25)] }, true, now), { text: "$(dashboard) Usage 50% · resets 42m", top: 50 });
   assert.deepStrictEqual(meter("Codex", { windows: [S(12), W(3)] }, false, now), { text: "$(dashboard) Codex 12%", top: 12 });
   // Weekly pressure still colors the item without adding weekly numbers to its label.
-  assert.deepStrictEqual(meter("Claude", { windows: [S(10), W(85)] }, true, now), { text: "$(dashboard) Claude Session 10% · resets 42m", top: 85 });
+  assert.deepStrictEqual(meter("Claude", { windows: [S(10), W(85)] }, true, now), { text: "$(dashboard) Usage 10% · resets 42m", top: 85 });
   assert.deepStrictEqual(meter("Codex", { windows: [S(10), W(100)] }, false, now), { text: "$(dashboard) Codex 10%", top: 100 });
   // Saved before the rename ("5-hour") still counts as the session.
   assert.strictEqual(meter("Claude", { windows: [{ id: "five_hour", label: "5-hour", usedPercent: 30 }, W(5)] }, false, now).text, "$(dashboard) Claude 30%");

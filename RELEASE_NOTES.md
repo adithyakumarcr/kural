@@ -1,3 +1,8 @@
+## Not released yet
+
+- **The status bar says Usage.** The chat's AI reads `Usage 20% · resets 3h 50m` instead of `Claude Session 20% · …`;
+  hover to see which AI it is.
+
 ## What's new in 1.2.1-beta.2
 
 - **Calmer answers, easier to read.** Real headings, the point first in a box, roomy text, and color only where it means

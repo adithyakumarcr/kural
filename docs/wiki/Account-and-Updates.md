@@ -22,9 +22,9 @@ others short. Hover it for everything: every AI's Session and Weekly limits and 
 
 | Shows | Means |
 |---|---|
-| `Claude Session 50% · resets 42m` | the chat's AI: its Session limit used, and when it resets |
+| `Usage 50% · resets 42m` | the chat's AI: its Session limit used, and when it resets (hover to see which AI) |
 | `Codex 12%` | another AI you use: its Session limit used |
-| `Claude Session 10% · resets 42m` with a warning color | a Weekly limit is near its limit; hover for its percentage and reset time |
+| `Usage 10% · resets 42m` with a warning color | a Weekly limit is near its limit; hover for its percentage and reset time |
 | `Gemini` | Google Gemini has only weekly limits: hover for its usage |
 
 **Tokens.** Under **Tokens**, how many tokens it read and wrote today, in the last 7 days and the last 30 days.

@@ -189,8 +189,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Saved in globalState `kural.usage.v1` so the bar shows the last numbers at startup. In words (`usage.limitName`,
   `until`, `inWords`): the 5-hour window is called **Session** everywhere (Adithya), then "Weekly", "Weekly (Opus)",
   "Weekly (Gemini)"; numbers saved as "5-hour" by older versions still read as the Session. The status bar shows only the
-  Session limit (Adithya: weekly only on hover): the chat's AI (`brain.engineOf(currentModel())`) "Codex Session 50% ·
-  resets 42m", the others short ("Codex 12%"); weekly limits stay on hover even near their limit. Gemini (weekly only)
+  Session limit (Adithya: weekly only on hover): the chat's AI (`brain.engineOf(currentModel())`) "Usage 50% ·
+  resets 42m" (Adithya, 22 Oct 2026: "Usage", not "Claude Session"; the hover names the AI), the others short ("Codex 12%"); weekly limits stay on hover even near their limit. Gemini (weekly only)
   shows its name. Warning colors still consider every window, including Weekly. The hover has every AI's
   Session and Weekly in full. `chat.onChoice` (model pick, tab switch) redraws it. Clicking it
   opens the **AI Usage** bottom panel (`lib/usage-panel.js`, view `kural.usagePanel`, command `kural.showUsage`).
