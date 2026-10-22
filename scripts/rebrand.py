@@ -524,6 +524,33 @@ def skip_github_probe(text):
     return SPEECH_PROBE.sub(lambda m: SPEECH_PROBE_MARK + m.group(1), text, count=1)
 
 
+# The terminal's suggestion list matches only from the start (Adithya, issue #106: "ori" showed ./.dockerignore and
+# ./.python-version, d-o-cke-r-i-gnore). VS Code's terminal completion model (SimpleCompletionModel) scores items with
+# firstMatchCanBeWeak: the typed letters may be anywhere in the name. An item now stays only if its name starts with what
+# you typed (case doesn't matter; a leading "./" or ".\" is skipped, so "do" still finds ./docs/); the score and the
+# highlight are VS Code's own. The same scorer call is in the editor's suggest model, so it's found after the terminal
+# model's constructor (the only one that sets firstMatchCanBeWeak:!0 and then this._options={}). Kural's own whole-line
+# items start with what you typed, or replace nothing (lib/tab/terminal.js suggestionItem), so they always stay.
+TERMINAL_PREFIX_MARK = "/*kural-prefix*/"
+TERMINAL_MODEL = re.compile(r'this\._fuzzyScoreOptions=\{\.\.\.[\w$]+\.default,firstMatchCanBeWeak:!0\};this\._options=\{\}\}')
+TERMINAL_SCORE = re.compile(r'let ([\w$]+)=([\w$]+)\(([\w$]+),([\w$]+),([\w$]+),([\w$]+)\.textLabel,\6\.labelLow,0,this\._fuzzyScoreOptions\);')
+
+
+def terminal_suggest_prefix(text):
+    if TERMINAL_PREFIX_MARK in text:
+        return text
+    models = list(TERMINAL_MODEL.finditer(text))
+    call = TERMINAL_SCORE.search(text, models[0].end(), models[0].end() + 4000) if len(models) == 1 else None
+    if not call:
+        print(f"::warning::the terminal's suggestion list not found as expected ({len(models)} models); it keeps matching letters "
+              "anywhere in a name")
+        return text
+    _, _, _, low, pos, item = call.groups()
+    gate = (f'if({low}.length>{pos}&&!{TERMINAL_PREFIX_MARK}((h,w)=>h.startsWith(w)||/^\\.[\\\\/]/.test(h)&&h.slice(2).startsWith(w))'
+            f'({item}.labelLow,{low}.slice({pos})))continue;')
+    return text[:call.start()] + gate + text[call.start():]
+
+
 # Kural's browser keeps nothing (Adithya, 18 Oct 2026): no cookies, logins, cache or site data on disk, a fresh browser every
 # time Kural starts. VS Code saves them by default (workbench.browser.dataStorage "default" = "global" = the partition
 # "persist:vscode-browser"), and on a Mac Chromium encrypts saved cookies with the "Kural Safe Storage" keychain item, which
@@ -633,7 +660,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))))
+    new = terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))))))
     if new == text:
         return
     data = new.encode("utf-8")

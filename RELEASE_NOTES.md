@@ -8,6 +8,8 @@
   light purple and secondary text is darker (#104).
 - **Add to Chat and Edit Selection buttons.** Select code and two buttons float in the editor's corner: Add to Chat
   (Ctrl/Cmd+L) and Edit Selection (Ctrl/Cmd+K) (#104).
+- **Terminal suggestions match from the start.** Typing `git push ori` no longer lists `./.dockerignore` because its
+  letters o, r, i appear somewhere inside; the list shows only names that start with what you typed (#106).
 
 ## What's new in 1.2.1-beta.2
 

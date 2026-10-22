@@ -270,7 +270,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
-  The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
+  The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work. The list shows only
+  names that start with what you typed (case doesn't matter; a leading ./ is skipped): "ori" finds origin, never
+  ./.dockerignore.
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): per AI, its Session and Weekly
   limits with when they reset, always shown; only the tokens are under "Tokens" (click to open). Session = the 5-hour
   limit (Claude and Codex); Gemini has weekly limits.

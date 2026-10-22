@@ -709,6 +709,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (`;`/`let`, minified decorators); 1.140's browser comment step (`_insertElementCommentReference`) lets Kural's
   stand-in (`__kural`) pass. After a VSCodium update, try by hand: terminal Tab plain words (`inputData`, kind 101) and
   the browser's element picker (both use VS Code internals).
+- **Terminal suggestions match from the start** (`rebrand.py` `terminal_suggest_prefix`, issue #106): VS Code's terminal
+  completion model (`SimpleCompletionModel`) scores with `firstMatchCanBeWeak`, so "ori" listed ./.dockerignore. A gate
+  before its scorer call keeps an item only if its lowercase label starts with the typed word (or does after "./"/".").
+  The same call is in the editor's suggest model: found after the terminal model's constructor only. Needs a full
+  `./install.sh`. Test: `test/rebrand-terminal-suggest.test.js` (stand-in + the real workbench).
 - **Remove Kural's data** (`lib/remove-data/`: `core.js` no vscode, `index.js` the command `kural.removeData`, also Kural
   Settings → More): before uninstalling. At once: `devices.remove` (returns whether the key came off), `core.removeGate`
   (entry + `.kural-backup` + `~/.kural/agy-gate`), connectors with keys in `connector-keys` (`keyedConnectors`,
