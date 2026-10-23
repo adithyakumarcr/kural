@@ -1,3 +1,16 @@
+## Not released yet
+
+- **Diagrams in answers.** A Mermaid block in an answer (flowchart, sequence, class, state, ER, pie, Gantt…) is drawn as
+  the diagram once it's complete, on your computer. **Code** shows its text, a click opens it full size.
+- **Ctrl+K's box stays open, and it's small.** It opened under the selection and closed again at once: Kural took the
+  box's own input for another file coming to the front. It now starts two lines tall (VS Code's minimum was five) and
+  grows as you type.
+- **Answered questions get out of the way.** Once you answer (or skip) a question card it becomes one line in the
+  timeline, "You answered · …", in its place. It used to stay whole under the answer, every option still showing,
+  while the AI went on working above it.
+- **Add to Chat and Edit Selection pop up by themselves.** Select code and the two buttons show at the cursor, no need
+  to point at a label first.
+
 ## What's new in 1.2.1-beta.3
 
 - **Shorter commit messages.** The sparkle button in Source Control writes at most 200 characters: a subject line, and a

@@ -1,8 +1,11 @@
-// Select code in the editor and, right where the selection ends, a small label says what you can do with it:
-// "Add to Chat ⌘L · Edit ⌘K" (Adithya, 22 Oct 2026: the two buttons sat in the editor's bottom-right corner, far from
-// the code). Point at it (or at the selected code) and the same two are buttons you can click. The label is a decoration
-// after the line's end, so it never moves the code; it comes a moment after the selection stops changing and goes as
-// soon as the selection does, or you type. Setting kural.editor.selectionButtons turns it off.
+// Select code in the editor and, a moment after the selection stops changing, two buttons show right at the cursor:
+// "Add to Chat · Edit Selection" (Adithya, 23 Oct 2026: show that design directly, not a plain label you have to point
+// at). Extensions can't put clickable things inside the code, so it's the editor's hover, opened by Kural without taking
+// the keyboard (editor.action.showHover, focus "noAutoFocus"): you keep typing or extending the selection, and it goes
+// when the cursor moves, you type, or press Esc. Another extension's hover for that spot (a type, a blame line) can show
+// in the same box. Pointing at the selected code brings it back. Without that command (an older editor), the plain label
+// after the line's end comes instead ("Add to Chat ⌘L · Edit ⌘K"; it never moves the code). Setting
+// kural.editor.selectionButtons turns both off.
 const vscode = require("vscode");
 
 const SCHEMES = new Set(["file", "untitled", "vscode-remote", "vscode-userdata"]);
@@ -33,14 +36,20 @@ function registerSelectionBar(context, { busy = () => false } = {}) {
   };
   // The line the label goes on: where the selection ends (a selection ending at a line's start: the line before).
   const lineOf = (sel) => (sel.end.character === 0 && sel.end.line > sel.start.line ? sel.end.line - 1 : sel.end.line);
-  const show = (editor) => {
+  let noHover = false;   // (editor.action.showHover failed once: the label from then on)
+  const show = async (editor) => {
     hide();
     const sel = editor.selection, doc = editor.document;
     if (!on() || busy() || sel.isEmpty || !SCHEMES.has(doc.uri.scheme) || editor.selections.length > 1) return;
     const line = lineOf(sel), end = doc.lineAt(line).range.end;
     const editable = !doc.isClosed && vscode.workspace.fs.isWritableFileSystem(doc.uri.scheme) !== false;
-    editor.setDecorations(editable ? types.edit : types.read, [new vscode.Range(end, end)]);
     shown = { editor, line, editable };
+    // (Only in the editor you're typing in: the hover opens at its cursor.)
+    if (!noHover && vscode.window.state.focused && vscode.window.activeTextEditor === editor) {
+      try { await vscode.commands.executeCommand("editor.action.showHover", { focus: "noAutoFocus" }); return; }
+      catch { noHover = true; }
+    }
+    if (shown && shown.editor === editor) editor.setDecorations(editable ? types.edit : types.read, [new vscode.Range(end, end)]);
   };
   const later = (editor) => {
     clearTimeout(timer);

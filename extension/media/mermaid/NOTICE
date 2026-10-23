@@ -1,0 +1,5 @@
+Mermaid 12.2.0 (https://github.com/mermaid-js/mermaid), dist/mermaid.min.js from the npm package, used as-is.
+MIT (LICENSE). It bundles DOMPurify (Apache-2.0 or MPL-2.0, its notice is kept inside the file) and other MIT/ISC parts.
+sha256 a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f
+The chat loads it only when an answer has a ```mermaid block (media/chat.js mermaidCard).
+To update: npm pack mermaid@<version>, copy dist/mermaid.min.js and LICENSE here, change this file.

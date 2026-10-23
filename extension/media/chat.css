@@ -191,6 +191,16 @@ body.chat-dragging .tab, body.chat-dragging .col-head { cursor: grabbing; }
 .code-file { color: var(--vscode-textLink-foreground); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .code-file:hover { text-decoration: underline; }
 .code pre { margin: 0; padding: 9px 11px; overflow-x: auto; }
+/* A ```mermaid block: the diagram, or its code (Code / Diagram; media/chat.js mermaidCard). */
+.code.mermaid .mm-code, .code.mermaid.show-code:not(.mm-failed) .mm-view { display: none; }
+.code.mermaid.show-code .mm-code { display: block; }
+.mm-view { padding: 12px; overflow-x: auto; text-align: center; }
+.mm-img { max-width: 100%; height: auto; cursor: zoom-in; vertical-align: top; }
+.mm-note { color: var(--muted); font-size: calc(12px * var(--fs, 1)); }
+.mm-err { display: block; text-align: left; white-space: pre-wrap; color: var(--vscode-errorForeground); }
+.code.mermaid.mm-failed .mm-view { border-bottom: 1px solid var(--border); }
+/* Where Mermaid measures a diagram's labels, off screen (its own <style> is blocked by the page's CSP; same font). */
+.mm-measure { position: absolute; left: -10000px; top: 0; width: 1200px; font-family: "trebuchet ms", verdana, arial, sans-serif; font-size: 16px; }
 .code pre code { background: none; padding: 0; font-family: var(--vscode-editor-font-family); font-size: calc(12px * var(--fs, 1)); line-height: 1.5; white-space: pre; }
 .cb { background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 1px 8px; font-size: calc(11.5px * var(--fs, 1)); color: var(--muted); white-space: nowrap; }
 .cb:hover:not([disabled]) { background: var(--hover); color: var(--vscode-foreground); }
