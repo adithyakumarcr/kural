@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.2.1-beta.3
 
 - **Shorter commit messages.** The sparkle button in Source Control writes at most 200 characters: a subject line, and a
   line or two more only when needed (#104).
