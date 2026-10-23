@@ -1,8 +1,14 @@
 # Inline Edit (Ctrl+K)
 
-Select code, press **Ctrl+K** (**Cmd+K** on a Mac) and say what to change. Kural shows a read-only diff, red and
+Select code, press **Ctrl+K** (**Cmd+K** on a Mac) and a box opens right under the selection, in the code: say what to
+change and press **Enter** (**Shift+Enter** for a new line; **Esc** or **Cancel** closes it). Kural shows a read-only diff, red and
 green; keep it (**Ctrl+Enter**, **Cmd+Enter** on a Mac, or **Accept** above it) or reject it (**Ctrl+Shift+Backspace**,
 **Cmd+Shift+Backspace** on a Mac, or **Reject**). With nothing selected, Ctrl+K proposes new code at the cursor.
+
+While code is selected, a small label shows right after the selection: **Add to Chat ⌘L · Edit ⌘K** (Ctrl+L / Ctrl+K on
+Windows and Linux). Point at it, or at the selected code, and the two are buttons: **Add to Chat** puts the selection into
+your chat message, **Edit Selection** does the same as Ctrl+K. (Read-only files get Add to Chat only.) The label never
+moves your code; the setting `kural.editor.selectionButtons` turns it off.
 
 It uses the chat's model (Claude or [[Your Own Model]]).
 

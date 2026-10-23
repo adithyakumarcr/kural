@@ -107,6 +107,7 @@ header .title { flex: 1 1 260px; }
 .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
 .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); }
+.srv-row.off strong { color: var(--muted); font-weight: 500; }
 .nowrap { white-space: nowrap; }
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-hi); cursor: pointer; text-align: left; }
 .linkbtn:hover { text-decoration: underline; }
@@ -129,3 +130,20 @@ header .title { flex: 1 1 260px; }
 .learn-text .small { padding-left: 22px; line-height: 1.4; }
 .info-tip { display: inline-grid; place-items: center; cursor: help; opacity: .8; }
 .info-tip:hover, .info-tip:focus { opacity: 1; outline: none; }
+
+/* Shortcuts: the name as you type it. */
+.mono { font-family: var(--vscode-editor-font-family, monospace); }
+/* "Add agent": the AIs not set up yet, in a list under the button. */
+.add-wrap { position: relative; }
+.add-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; width: 340px; max-width: 80vw; display: flex; flex-direction: column; padding: 4px;
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background)); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.28); }
+.add-item { display: flex; align-items: flex-start; gap: 10px; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px 10px; font: inherit; color: inherit; cursor: pointer; }
+.add-item:hover, .add-item:focus-visible { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.12)); outline: none; }
+.add-item .codicon { font-size: 1.2em; color: var(--accent-hi); margin-top: 1px; }
+.add-item.foot { border-top: 1px solid var(--border); border-radius: 0 0 6px 6px; margin-top: 2px; align-items: center; color: var(--muted); }
+/* Advanced: folded under its heading. */
+.advanced { margin-top: 26px; }
+.advanced > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.advanced > summary::-webkit-details-marker { display: none; }
+.advanced > summary::before { content: ""; width: 0; height: 0; border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .15s; }
+.advanced[open] > summary::before { transform: rotate(90deg); }

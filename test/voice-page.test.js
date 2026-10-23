@@ -88,6 +88,18 @@ const types = (posts) => posts.map((p) => p.type);
     assert.strictEqual(media.tracksStopped, 1, "the microphone is released");
   });
 
+  await check("Done is the same button all through the recording (redrawn under the mouse, a click was lost), and one press stops it", async () => {
+    const { v, posts, bar, advance } = setup({ seconds: 1 });
+    v.button.click(); v.onState({ tabId: "t1", phase: "recording" }); await tick();
+    const done = bar().button("Done"), mic = v.button.kids[0];
+    advance(200); advance(200); advance(1000);
+    assert.strictEqual(bar().button("Done"), done, "not replaced by the timer");
+    assert.strictEqual(v.button.kids[0], mic, "the mic's icon isn't redrawn either");
+    assert.ok(bar().textContent.includes("0:01"), bar().textContent);
+    done.click(); await tick(); await tick(); await tick();
+    assert.deepStrictEqual(posts[posts.length - 1], { type: "voiceStop", tabId: "t1" });
+  });
+
   await check("Esc while recording posts voiceCancel and inserts nothing", async () => {
     const { v, posts, inserted, media } = setup();
     v.button.click(); v.onState({ tabId: "t1", phase: "recording" }); await tick();

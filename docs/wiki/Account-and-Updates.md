@@ -61,8 +61,9 @@ off keeps your current model choice; **Auto** retains its existing routing and u
 The person icon next to it shows the name on the account the chat's AI uses (for example "Peasant Adithya"); hover
 for who's logged in where. (The name comes from what Claude Code, Gemini or Codex saved on your computer at login, and
 only when it belongs to the same account; otherwise the email shows.) Click it for **Kural Settings**, an
-editor tab (also the Chat panel's **...** menu, or **Kural: Settings**). It is a short overview: a card each for Claude,
-Google Gemini, ChatGPT (Codex) and your own model:
+editor tab (also the gear on the chat's tab line, or **Kural: Settings**). It is a short overview: a card for each AI
+you've set up (Claude, Google Gemini, ChatGPT (Codex), your own model). The ones you haven't set up take no room:
+**Add agent** (top right of *Your AI*) lists them, and picking one opens [[Getting Started]] at that AI. Each card has:
 
 - **Who's logged in**: email, plan, organization.
 - **Usage**: the meter's numbers; and **Usage page**, which opens the provider's own usage page in your browser.
@@ -71,9 +72,9 @@ Google Gemini, ChatGPT (Codex) and your own model:
 
 Each AI's page has:
 
-- **Connectors** (Claude and ChatGPT (Codex)): the list with each one's status, **Sign in** when one needs it, and remove.
-  **Add connector** opens a searchable list (Popular ones and the official MCP directory). For Claude, the **Use my
-  Claude Code setup** checkbox and **Reload** are there too. See [[Chat]] and [[Google Gemini and ChatGPT]].
+- **Connectors** (Claude and ChatGPT (Codex)): **Open Connectors** goes to the **Connectors** tab beside Extensions and
+  Plugins, where you add, sign in to, turn off and remove them (see [[Plugins]]). Claude's page keeps the **Use my
+  Claude Code setup** checkbox and **Reload**.
 - **Switch to another AI near a limit**: when to move a chat to another AI (Session and Weekly, see above).
 - **Your own model** (on its page): **Find & download models…** (see [[Your Own Model]]), change model, context length.
 
@@ -83,12 +84,19 @@ The card's other actions:
   with a test request and carries on.
 - **Log out**: logs that program out on this computer (also in the terminal). Its models wait until you log in again;
   the others keep working.
-- **Log in** (when you're logged out), or **Set up** (when you haven't yet).
-- **Get started**, **Check for updates**, **Kural guide** (this wiki), **Ask for a feature**.
-- **Moods**: the chat's moods. The four built-in ones, and your own: **Add a mood** (name, a one-line hint,
-  instructions for the AI), with tips on what works best and examples to start from; **Edit** and delete them. See
-  [[Chat]].
-- **Export settings / Import settings**: your Kural preferences to a file and back (another computer, a fresh
+- **Log in** (when you're logged out).
+
+Below the cards:
+
+- **Preferences** (called moods before): how the chat's AI works with you. The four built-in ones, and your own: **Add a
+  preference** (name, a one-line hint, instructions for the AI), with tips on what works best and examples to start
+  from; **Edit** and delete them. See [[Chat]].
+- **Shortcuts** and **What Kural learns**.
+- **More**: **Get started**, **Profiles**, **Export settings / Import settings**, **Kural guide** (this wiki), **Ask for a
+  feature**. **Check for updates** and the version are at the top of the page.
+- **Advanced** (folded until you open it): **All settings**, **Kural's log**, **Crash reports**, **Remove Kural's data**.
+  (The AI Usage, Tab Completion and Model Router panels open from their status bar items.)
+**Export settings / Import settings**: your Kural preferences to a file and back (another computer, a fresh
   install). You choose what goes in: Kural's settings (not program paths: they differ per computer), your editor settings
   and keyboard shortcuts, the extensions you installed (installed again on import), chat defaults, saved devices (names
   and addresses; no keys or passwords: each device needs **Set up again** once). Importing shows what the file has and
@@ -96,7 +104,7 @@ The card's other actions:
   terminal, set a proxy or turn on Auto, and shortcuts that type into the terminal; extensions are listed and install
   only after you click Install. Export leaves out settings that look like passwords, tokens or keys; still check the
   file before you share it. Also **Kural: Export Settings** / **Kural: Import Settings**.
-- **Crash reports**: see below.
+**Crash reports**: see below.
 
 Kural asks the programs who's logged in (`claude auth status`, Codex's account info, Antigravity's `/model`); it never
 reads your login itself. Also in the Chat panel's **…** menu, or Command Palette → **Kural: Account**.

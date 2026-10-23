@@ -69,12 +69,12 @@ your next message, because which tools the model has is fixed when it starts.
   record over too.
 - **The gear.** Each section heading in the menu (Auto · Model Router, Claude, Google Gemini, ChatGPT (Codex), On this
   computer) has a gear button. Auto's opens the Model Router panel; the others open that AI's page in Kural Settings
-  (its connectors, its switch points near a limit, its login). There is no "Configure Model Router…" item any more: use
+  (where its connectors are, its switch points near a limit, its login). There is no "Configure Model Router…" item any more: use
   the gear.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
   Medium / High / Max). Google Gemini's models come in thinking levels; the menu lists each model once and the
   intensity picks its level (the nearest one the model has; a line under the buttons says which it has).
-- **Mood.**
+- **Preference** (called mood before).
   - **Default**: balanced.
   - **Explorer**: looks around and compares options before settling.
   - **Critic**: questions the request and the code, finds flaws.
@@ -89,17 +89,17 @@ your next message, because which tools the model has is fixed when it starts.
     page reloads by itself. Lesson pages need Agent or Auto mode (the AI writes the page; in Plan and Ask it explains in
     the chat). They're kept privately in Kural's storage (not in your project), served only to this computer, can't load
     anything from the internet, and are deleted with the chat.
-  - **Your own moods**: **Add your own mood…** (at the end of the moods) opens **Kural Settings → Moods**. A mood has a
+  - **Your own**: **Add your own…** (at the end of the row) opens **Kural Settings → Preferences**. One has a
     name, a one-line hint (shown when you point at it) and instructions for the AI. What works best: who the AI should
     be and how it works with you ("Work like a pair programmer sitting next to me"), concrete behaviors (what to do
     first, what to always or never do), the tone and length you want, when to ask you and when to decide, all in a few
     sentences. Start from an example (Pair programmer, Strict reviewer, Explain like I'm new) and change it. Edit or
-    delete them there too; a chat whose mood you deleted gets the first mood in the menu. They're saved in your
+    delete them there too; a chat whose preference you deleted gets the first one in the menu. They're saved in your
     settings (`kural.chat.moods`), so **Export settings** takes them along.
-  - **Remove the built-in moods you don't use**, Default too: **Kural Settings → Moods**, the **×** on a mood. **Restore**
-    brings it back. The menu always keeps at least one mood, and a new chat starts with the first one left (setting
+  - **Remove the built-in ones you don't use**, Default too: **Kural Settings → Preferences**, the **×** on one.
+    **Restore** brings it back. The menu always keeps at least one, and a new chat starts with the first one left (setting
     `kural.chat.hiddenMoods`).
-  - Changing the mood (or the mode) in the middle of a chat applies from your next message: Kural tells the AI what
+  - Changing the preference (or the mode) in the middle of a chat applies from your next message: Kural tells the AI what
     changed along with it.
 - **Multiple agents** (Claude, ChatGPT and Gemini models): a team instead of one assistant. See [[Multiple Agents]].
 
@@ -115,15 +115,24 @@ your next message, because which tools the model has is fixed when it starts.
   to filter (by name or what it does), **Tab** or **Enter** puts it in, then write what it's for and send. It needs
   **Use my Claude Code setup** on (Kural Settings → Claude). Claude Code's commands that only work on its own screen
   (`/model`, `/config`, `/mcp`…) aren't listed: Kural has its own way for those (the model menu, Kural Settings).
+- **Your shortcuts** (every AI): a name that stands for a text you write once, like `/pr-summary` or `/test`.
+  - Make them in **Kural Settings → Shortcuts**: a name (lowercase letters, digits and `-`) and what it stands for (up
+    to 4,000 characters). With none yet, the "/" list ends with **Make a shortcut…**.
+  - Type **/** at the start of your message or after a space anywhere ("hi! please do /pr-summary"), pick it, and it
+    goes in as a chip. Point at the chip to see its text.
+  - The AI gets your message as you wrote it, plus what each shortcut stands for. History and the tab's title show
+    `/pr-summary`. Typed by hand as a whole word, a shortcut counts too.
+  - Yours come first in the list and win over a Claude skill with the same name. In the middle of a message the list
+    shows only your shortcuts (Claude runs a skill only at the start).
+  - They're kept in your user settings (`kural.chat.shortcuts`) for every project; a project's settings can't add one.
 - **Text from the chat**: select part of an answer (or of a message you sent) and click **Add to chat** beside it. It goes
   into your message as a quote (its first words; point at it to read it all), and the AI gets the whole selected text
   (up to 8,000 characters) with your message.
 - **+ → Add files**: files, images, PDFs. You can also paste a screenshot, or hold **Shift** and drag files from Kural's
   own file explorer into the chat. (Dropping files from outside Kural doesn't work: VS Code doesn't pass them on.)
-- **+ → Link ticket** (Claude): link a Jira epic, story or task; Kural then knows which ticket you're working on in every
-  message, and reads its details from Jira when needed. Needs the Atlassian connector in Claude (claude.ai → Settings →
-  Connectors).
-- **+ → Pick from a browser**: opens the [[Browser]] to select an element of your app and add it here.
+- **+** has only **Add files** and **Link device** now. *Link ticket* and *Pick from a browser* were taken out: a Jira
+  ticket linked before keeps its chip (× unlinks it), and the [[Browser]]'s own inspect button adds an element of your
+  app to the chat.
 - **+ → Link device**: a Raspberry Pi or another computer over SSH; the AI can then run commands and change files on
   it (see [[Devices]]).
 - The composer shows only context you choose. Attach a file with **@** or **+ → Add files**; opening it does not attach it.
@@ -152,7 +161,8 @@ part it's explaining is **highlighted** in the answer and kept on screen. Code i
 token runs out within a minute"), never read out symbol by symbol.
 
 - **It starts at once.** A short opener plays right away ("Alright, let me walk you through this."), and the walkthrough
-  is spoken sentence by sentence while the rest is still being made.
+  follows while the rest is still being made, as one voice: short sentences of the same part are spoken together, and
+  the silence the voice leaves around each clip is trimmed, so there's only a short natural pause between sentences.
 - **The player** sits just above the chat box, so it stays in view while you scroll: **Pause/Play**, **Rewind 5 s** (also
   back into the sentence before), the **speed** and **✕**, with three lines of what's being said (the sentence before,
   the one now, the next). There's no slider. The speaker button again also stops it. If you scroll the chat yourself,
@@ -247,10 +257,10 @@ it took (Read, Searched, Edited +18 −3, Ran npm test · passed). Click a step 
   models' thinking, never the raw thinking. Kural shows it as it comes and summarizes nothing itself. Models on your
   computer (Qwen3, DeepSeek-R1, gpt-oss) and open models through Codex send their raw thinking, word by word. Gemini
   (Antigravity) passes no thinking on.
-- At about 14 lines it scrolls inside, following the newest line. Scroll up in it to read and it stays there;
-  **Latest** brings you back to the newest line.
-- It never folds by itself while you watch, so nothing below it jumps. When you open the chat later, earlier answers'
-  timelines are folded to their header: click to open one.
+- While it works it grows as tall as the chat, then scrolls inside, following the newest line. Scroll up in it to
+  read and it stays there; **Latest** brings you back to the newest line.
+- When it's done it folds to its header ("Worked for 34 s · …") and the answer comes up under it. Click the header to
+  open it again; if you opened or folded it yourself, that stays. Earlier answers' timelines are folded too.
 - What needs you (a permission card, a question), agents' cards, the team's messages and pictures stay outside it.
 
 ### Answering a question: pick, then Send
@@ -282,6 +292,11 @@ list, `- [ ]` lines when several may be picked, or a yes/no question), the optio
 - **Scrolling.** While an answer streams, the chat follows it. Scroll up to read and it stays where you are;
   **Latest** brings you back down.
 - **Stop** (the square button, or Esc) stops the answer.
+- **In the Explorer**, as it works: a file the AI reads turns **blue** for a moment, a file it changes turns **yellow**
+  until its answer ends (a dot beside the name; hover says "Kural is reading this" / "Kural is changing this"). Every
+  chat's work shows. What a command touches isn't shown (Kural can't tell). The colors are theme colors
+  (`kural.explorer.reading`, `kural.explorer.changing` in `workbench.colorCustomizations`); the setting
+  `kural.explorer.showAIActivity` turns it off.
 
 ## Notifications
 
@@ -344,6 +359,8 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
 
 ## Tabs, history, two chats
 
+- **The tab line** has all the chat's buttons (the panel's title bar has none of its own): **+** (new chat), **Split**,
+  the clock (**History**), the gear (**Kural Settings**) and **…** (Get started, Check for updates, What's new).
 - **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close. A chat
   you haven't used for 10 minutes and that isn't on screen lets its AI program go (to save memory; at most two idle ones
   stay ready); it starts again in the same conversation when you open it or send to it, in a second or two.
@@ -380,26 +397,35 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
 ## Commit messages in Source Control
 
 In the Source Control panel, the sparkle button in the commit message box (and in the panel's title bar) writes a
-commit message for you: from your staged changes, or all changes when nothing is staged, in the style of your recent
-commits, with the chat's model. Edit it if you like and commit as usual.
+short commit message for you (at most 200 characters: a subject line, and a line or two more only when needed): from
+your staged changes, or all changes when nothing is staged, in the style of your recent commits, with the chat's model.
+Edit it if you like and commit as usual.
 
 ## Your Claude Code setup
 
 With a Claude model, the chat uses your whole Claude Code setup: MCP servers, connectors, plugins, skills, hooks and
 `CLAUDE.md` files. You manage the connectors in Kural, not in a terminal:
 
-1. **Kural Settings → Settings** on the Claude card (or the gear beside Claude in the model menu). That opens Claude's page.
-2. **Connectors → Add connector.** Search, or pick one from Popular.
+1. **Extensions → Connectors** (the third tab of the Extensions side bar, **Ctrl+Shift+X**; or **Kural: Show Connectors**,
+   or **Open Connectors** on Claude's page in Kural Settings). It shows the chat's AI's connectors; **Connectors for**
+   at the top picks Claude or ChatGPT.
+2. **Add connector.** Search, or pick one from Popular.
 3. **Add.** Fill in a token or a folder only if it asks. On a Mac and Linux Kural keeps the token in a private file and the
    connector reads it when it starts, so other programs on your computer never see it. A result from the public MCP directory (not one of the Popular ones) first shows the exact
    command or address it will run, since nobody checked it: add it only if you trust it.
 4. **Sign in**, if the connector needs your account. A terminal opens: type `/mcp`, pick the connector, then Authenticate.
 
 Connectors are added for all your projects, and your chats continue. **Add one by hand** at the bottom of the list takes a
-command or a web address. **Remove** is the trash icon; connectors from claude.ai are changed on claude.ai.
+command or a web address. **Remove** is the trash icon; connectors from claude.ai are removed on claude.ai, and a
+plugin's connector goes with its plugin (Extensions → Plugins).
 
-Small options on Claude's page: **Use my Claude Code setup (connectors, plugins, skills)** is the checkbox (setting
-`kural.chat.fullClaudeCodeSetup`); off = a faster, minimal setup. **Reload** starts Claude again.
+**On** turns a connector off or on **everywhere in Kural**: untick it and Kural's chats of that AI (in every project)
+don't use it; its tools are hidden from the AI. It still connects in the background, and `claude` or `codex` in a
+terminal still has it. Chats pick the change up when they're not busy, in the same conversation.
+
+Small options under Claude's connectors (and on Claude's page in Kural Settings): **Use my Claude Code setup
+(connectors, plugins, skills)** is the checkbox (setting `kural.chat.fullClaudeCodeSetup`); off = a faster, minimal
+setup. **Reload** starts Claude again.
 
 The model menu no longer shows the setup. The full Claude Code terminal is one shortcut away: **Ctrl+Esc**.
 

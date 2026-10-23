@@ -1,13 +1,15 @@
-// Kural Settings page (an editor tab). Talks to lib/settings-page.js. It is a short overview (one card per AI, moods, what
-// Kural learns, links) and, one step in, a page per AI (its connectors, when to switch away from it); the connector
-// catalog is one step further. One webview, one view at a time, always with a way back: V.view = main | ai | catalog | manual.
+// Kural Settings page (an editor tab). Talks to lib/settings-page.js. It is a short overview (a card per AI you use and
+// "Add agent" for the others, preferences, shortcuts, what Kural learns, links, Advanced) and, one step in, a page per AI
+// (where its connectors are, when to switch away from it, its account). One view at a time, always with a way back:
+// V.view = main | ai. (Connectors themselves are in the side bar: lib/connectors.)
 (function () {
   const vscode = acquireVsCodeApi();
   document.documentElement.style.setProperty("--fs", document.documentElement.dataset.fs || 1);
   const app = document.getElementById("app");
   const post = (m) => vscode.postMessage(m);
   let S = null;
-  const MOODS_INFO = "How the chat's AI works with you. Pick one in the chat's model menu, under Mood. Your own moods show there next to the built-in ones; remove a built-in one you don't use with its ×. A new chat starts with the first mood in the menu.";
+  const SHORTCUTS_INFO = "A name that stands for a text you write once. Type / in the chat box (at the start or after a space) and pick it; Kural sends its text to the AI with your message. Works with every AI.";
+  const MOODS_INFO = "How the chat's AI works with you. Pick one in the chat's model menu, under Preference. Your own show there next to the built-in ones; remove a built-in one you don't use with its ×. A new chat starts with the first one in the menu.";
 
   function el(tag, props = {}, ...kids) {
     const n = document.createElement(tag);
@@ -46,16 +48,15 @@
 
   // Where you are. ai: the AI whose page (or catalog) it is; added: "Added Notion." shown once on that AI's page;
   // confirm: the connector whose remove is waiting for a second click; hint: what to do after Sign in (Claude).
-  const V = { view: "main", ai: null, added: "", error: "", confirm: null, hint: null, drawn: "" };
+  // addOpen: the "Add agent" list is open; advanced: the Advanced section is unfolded.
+  const V = { view: "main", ai: null, drawn: "", addOpen: false, advanced: false };
   const stage = el("div", { class: "stage" });
   const cardOf = (id) => ((S && S.cards) || []).find((c) => c.id === id);
   function go(view, ai) {
     V.view = view; if (ai) V.ai = ai;
-    V.added = ""; V.error = "";
-    V.confirm = null; V.hint = null; S && (S.cardsWaiting = false);
+    S && (S.cardsWaiting = false);
     render(true);
     if (window.scrollTo) window.scrollTo(0, 0);
-    if (view === "ai" && connOf(V.ai).supported) post({ type: "connectors", id: V.ai });
   }
   const connOf = (id) => (S && S.connectors && S.connectors[id]) || { supported: false };
   const back = (label, to) => el("button", { class: "back", onclick: to }, icon("chevron-left"), " ", label);
@@ -116,35 +117,17 @@
 
   const section = (title, ...kids) => el("section", { class: "sec" }, el("div", { class: "sechead" }, el("h2", {}, title), el("span", { class: "grow" }), kids.shift()), kids);
 
-  function connectorRow(id, x) {
-    const K = connOf(id), sure = V.confirm === x.name;
-    return el("div", { class: "srv-row" },
-      el("span", { class: "dot " + (x.ok ? "ok" : "warn") }), el("strong", { class: "ell", title: x.target }, x.name), el("span", { class: "grow" }),
-      el("span", { class: "muted small", title: x.why || x.status }, x.ok ? "Connected" : x.needsAuth ? "Needs sign-in" : /fail/i.test(x.status) ? "Failed" : x.status),
-      x.managed ? el("span", { class: "muted small", title: "Added on claude.ai: change it there" }, "on claude.ai")
-        : [x.needsAuth ? el("button", { class: "btn", onclick: () => { V.hint = id === "claude" ? x.name : null; post({ type: "signIn", id, name: x.name }); render(); } }, "Sign in") : null,
-          sure ? [el("button", { class: "btn danger", disabled: K.busy, onclick: () => { V.confirm = null; post({ type: "removeConnector", id, name: x.name, reqId: Date.now() }); } }, "Remove?"),
-            el("button", { class: "pill-btn", "aria-label": "Keep it", title: "Keep it", onclick: () => { V.confirm = null; render(); } }, icon("close"))]
-            : el("button", { class: "pill-btn", title: `Remove ${x.name}`, "aria-label": `Remove ${x.name}`, disabled: K.busy, onclick: () => { V.confirm = x.name; render(); } }, icon("trash"))]);
-  }
+  // Connectors live in the side bar now (Extensions | Plugins | Connectors; Adithya, 22 Oct 2026): a pointer there, and
+  // Claude's own setup switch (plugins, skills) stays here.
   function connectorsSection(c) {
-    const id = c.id, K = connOf(id), kids = [];
-    if (!K.supported) return section("Connectors", null, el("p", { class: "muted" }, "Kural can't add connectors to Google Gemini yet."));
-    if (V.added) kids.push(el("div", { class: "ok-note small" }, icon("check"), " ", V.added));
-    if (V.error) kids.push(el("div", { class: "err small" }, icon("warning"), " ", V.error));
-    if (K.loading && !(K.servers || []).length) kids.push(el("div", { class: "muted small" }, icon("loading", "spin"), id === "claude" ? " checking each connector…" : " loading…"));
-    else if (K.error) kids.push(el("div", { class: "err small" }, icon("warning"), " Couldn't list them: ", K.error));
-    else if (K.servers && !K.servers.length) kids.push(el("div", { class: "muted small" }, "No connectors yet."));
-    for (const x of K.servers || []) {
-      kids.push(connectorRow(id, x));
-      if (V.hint === x.name) kids.push(el("div", { class: "muted small hint" }, `A terminal opened. Type /mcp, pick ${x.name}, then Authenticate.`));
-    }
-    kids.push(el("div", { class: "muted small" }, id === "claude" ? "Claude starts again with a new connector; your chats continue." : "New ChatGPT chats use a new connector."));
-    if (id === "claude") kids.push(el("div", { class: "row wrap quiet-opts" },
-      el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.fullSetup, onchange: (e) => post({ type: "fullSetup", on: e.target.checked }) }), "Use my Claude Code setup (plugins, skills)"),
-      el("span", { class: "grow" }),
-      el("button", { class: "btn quiet", title: "Start Claude again with your setup: same conversations", onclick: () => post({ type: "reloadSetup" }) }, icon("refresh"), " Reload")));
-    return section("Connectors", el("button", { class: "btn primary", disabled: K.busy, onclick: () => openCatalog(id) }, icon("add"), " Add connector"), kids);
+    const id = c.id;
+    if (!connOf(id).supported) return section("Connectors", null, el("p", { class: "muted" }, "Kural can't manage Google Gemini's connectors yet."));
+    return [section("Connectors", el("button", { class: "btn primary", onclick: () => post({ type: "showConnectors", id }) }, icon("plug"), " Open Connectors"),
+        el("p", { class: "muted small" }, "Add, sign in to, turn off and remove connectors in the side bar: Extensions, then its Connectors tab.")),
+      id === "claude" ? section("Claude Code setup", null, el("div", { class: "row wrap quiet-opts" },
+        el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.fullSetup, onchange: (e) => post({ type: "fullSetup", on: e.target.checked }) }), "Use my Claude Code setup (plugins, skills)"),
+        el("span", { class: "grow" }),
+        el("button", { class: "btn quiet", title: "Start Claude again with your setup: same conversations", onclick: () => post({ type: "reloadSetup" }) }, icon("refresh"), " Reload"))) : null];
   }
   function switchSection(c) {
     const C = ctl(c.id), guard = S.usageSwitch || {}, lim = (guard.limits || {})[c.id] || { session: guard.threshold, weekly: guard.threshold };
@@ -184,132 +167,6 @@
         c.page ? el("button", { class: "btn quiet", onclick: () => post({ type: "usagePage", id: c.id }) }, icon("link-external"), " Usage page") : null,
         btn("Switch account", "switch", { id: c.id }, "quiet"), btn("Log out", "logOut", { id: c.id }, "quiet")));
   }
-
-  // ---------- Add connector: a catalog you search ----------
-  const CAT = { ai: null, q: "", reqId: 0, items: [], note: "", loading: false, expanded: null, adding: null, errors: {}, fields: {}, timer: 0, folder: null, root: null };
-  function buildCatalog() {
-    if (CAT.root) return;
-    CAT.title = el("h1", {}, "Add a connector");
-    CAT.back = back("", () => go("ai", CAT.ai));
-    CAT.search = el("input", { class: "in search", type: "search", placeholder: "Search connectors", spellcheck: "false", autocomplete: "off", "aria-label": "Search connectors" });
-    CAT.search.addEventListener("input", () => { clearTimeout(CAT.timer); CAT.timer = setTimeout(() => runSearch(CAT.search.value), 300); });
-    CAT.list = el("div", { class: "cat-list" });
-    CAT.root = el("div", { class: "sub" }, CAT.back, CAT.title, CAT.search, CAT.list,
-      el("div", { class: "cat-foot" }, el("button", { class: "linkbtn", onclick: () => openManual() }, "Add one by hand (command or web address)")));
-  }
-  function openCatalog(ai) {
-    buildCatalog();
-    Object.assign(CAT, { ai, q: "", items: [], note: "", loading: false, expanded: null, adding: null, errors: {}, fields: {}, folder: null });
-    clearTimeout(CAT.timer);
-    CAT.search.value = "";
-    CAT.back.replaceChildren(icon("chevron-left"), " ", (cardOf(ai) || { name: "Back" }).name);
-    go("catalog", ai);
-    runSearch("");
-    if (CAT.search.focus) CAT.search.focus();
-  }
-  function runSearch(q) {
-    CAT.q = q.trim(); CAT.reqId = Date.now() + Math.random(); CAT.loading = !!CAT.q;
-    post({ type: "catalogSearch", id: CAT.ai, query: CAT.q, reqId: CAT.reqId });
-    renderCatalogList();
-  }
-  // Already there: a connector with this address or package (Claude shows the address with "(HTTP)" after it).
-  function isAdded(item) {
-    const norm = (u) => String(u || "").trim().replace(/\s+\((?:HTTP|SSE)\)$/i, "").replace(/\/+$/, "").toLowerCase();
-    const url = norm(item.url), pkg = (item.package || "").toLowerCase();
-    // (the address as a whole, or the package as a whole word, with or without @version: "notion" is not "notion-helper")
-    return (connOf(CAT.ai).servers || []).some((s) => (url && norm(s.target) === url)
-      || (pkg && String(s.target).toLowerCase().split(/\s+/).some((w) => w === pkg || w.startsWith(pkg + "@"))));
-  }
-  function fieldsFor(item) {
-    if (CAT.fields[item.id]) return CAT.fields[item.id];
-    const F = CAT.fields[item.id] = {};
-    for (const i of item.inputs || []) {
-      F[i.key] = el("input", { class: "in grow", type: i.secret ? "password" : "text", spellcheck: "false", autocomplete: "off", placeholder: i.placeholder || "", "aria-label": i.label });
-      F[i.key].addEventListener("keydown", (e) => { if (e.key === "Enter") submitItem(item); });
-    }
-    return F;
-  }
-  function startAdd(item) {
-    if (CAT.adding) return;
-    // (Directory items are never added in one click: you see what will run first.)
-    if (((item.inputs || []).length || item.from === "registry") && CAT.expanded !== item.id) {
-      CAT.expanded = item.id; renderCatalogList(true);
-      const first = Object.values(fieldsFor(item))[0]; if (first && first.focus) first.focus();
-    } else submitItem(item);
-  }
-  function submitItem(item) {
-    if (CAT.adding) return;
-    const F = fieldsFor(item), values = {};
-    for (const i of item.inputs || []) {
-      values[i.key] = F[i.key].value.trim();
-      if (!values[i.key]) { CAT.errors[item.id] = `Fill in ${i.label}.`; renderCatalogList(true); return; }
-    }
-    CAT.adding = item.id; CAT.errors[item.id] = "";
-    post({ type: "addCatalog", id: CAT.ai, item: item.id, values, reqId: Date.now() });
-    renderCatalogList(true);
-  }
-  function fieldsBox(item) {
-    const F = fieldsFor(item);
-    return el("div", { class: "cat-fields" },
-      item.from === "registry" ? el("div", { class: "muted small" }, "From the public MCP directory, not checked by Kural.") : null,
-      item.from === "registry" && item.shows ? el("code", { class: "cat-cmd" }, item.shows) : null,
-      (item.inputs || []).map((i) => el("label", { class: "field" }, el("span", { class: "flabel" }, i.label),
-        el("div", { class: "row" }, F[i.key],
-          i.folder ? el("button", { class: "btn", onclick: () => { CAT.folder = { item: item.id, key: i.key, reqId: Date.now() }; post({ type: "pickFolder", reqId: CAT.folder.reqId }); } }, icon("folder"), " Browse") : null),
-        i.link ? el("button", { class: "linkbtn small", onclick: () => post({ type: "openLink", url: i.link.url }) }, i.link.label) : null)),
-      el("div", { class: "row" },
-        el("button", { class: "btn primary", disabled: !!CAT.adding, onclick: () => submitItem(item) }, CAT.adding === item.id ? [icon("loading", "spin"), " Adding…"] : "Add"),
-        el("button", { class: "btn quiet", disabled: !!CAT.adding, onclick: () => { CAT.expanded = null; renderCatalogList(true); } }, "Cancel")));
-  }
-  function catRow(item) {
-    const open = CAT.expanded === item.id, busy = CAT.adding === item.id;
-    return el("div", { class: "cat-row" + (open ? " open" : "") },
-      el("div", { class: "cat-main" },
-        el("div", { class: "cat-text" }, el("strong", {}, item.name), el("div", { class: "muted small desc" }, item.description),
-          item.unsupported ? el("div", { class: "muted small" }, item.unsupported) : null),
-        isAdded(item) ? el("span", { class: "muted small nowrap" }, icon("check"), " Added")
-          : item.unsupported || open ? null
-          : busy ? icon("loading", "spin")
-          : el("button", { class: "btn", disabled: !!CAT.adding, onclick: () => startAdd(item) }, "Add")),
-      open ? fieldsBox(item) : null,
-      CAT.errors[item.id] ? el("div", { class: "err small" }, icon("warning"), " ", CAT.errors[item.id]) : null);
-  }
-  // The list only: the search box is never redrawn, so typing in it is safe. A field being typed in keeps its row (waits).
-  function renderCatalogList(force) {
-    if (!CAT.list) return;
-    const a = document.activeElement;
-    if (!force && a && a !== CAT.search && /^(input|textarea)$/i.test(a.tagName || a.tag || "") && Object.values(CAT.fields).some((F) => Object.values(F).includes(a))) { CAT.waiting = true; return; }
-    CAT.waiting = false;
-    const kids = [];
-    kids.push(el("div", { class: "cat-head muted small" }, CAT.q ? "Results" : "Popular", CAT.loading ? [" ", icon("loading", "spin")] : null));
-    if (!CAT.items.length && !CAT.loading) kids.push(el("p", { class: "muted" }, CAT.q ? "Nothing found. Try another word, or add one by hand below." : "Loading…"));
-    for (const item of CAT.items) kids.push(catRow(item));
-    if (CAT.note) kids.push(el("div", { class: "muted small" }, icon("info"), " ", CAT.note));
-    CAT.list.replaceChildren(...kids);
-  }
-
-  // "Add one by hand": for power users; the old form.
-  const MAN = { error: "", reqId: 0, busy: false };
-  function buildManual() {
-    if (MAN.root) return;
-    MAN.name = el("input", { class: "in", placeholder: "name, e.g. github", spellcheck: "false", "aria-label": "Name" });
-    MAN.kind = el("select", { class: "in", "aria-label": "Kind" }, el("option", { value: "command" }, "Command"), el("option", { value: "url" }, "Web address"));
-    MAN.value = el("input", { class: "in grow", placeholder: "npx -y @modelcontextprotocol/server-github", spellcheck: "false", "aria-label": "Command or address" });
-    MAN.kind.addEventListener("change", () => { MAN.value.placeholder = MAN.kind.value === "url" ? "https://example.com/mcp" : "npx -y @modelcontextprotocol/server-github"; });
-    MAN.err = el("div", { class: "err small" });
-    MAN.go = el("button", { class: "btn primary", onclick: () => {
-      MAN.reqId = Date.now(); MAN.error = ""; MAN.busy = true; manualDraw();
-      post({ type: "addConnector", id: V.ai, reqId: MAN.reqId, connector: { name: MAN.name.value, kind: MAN.kind.value, value: MAN.value.value } });
-    } }, "Add");
-    MAN.root = el("div", { class: "sub" }, back("Add a connector", () => go("catalog")), el("h1", {}, "Add one by hand"),
-      el("p", { class: "muted" }, "For a connector that isn't in the list. Give it a short name, then the command that starts it or its web address."),
-      el("div", { class: "add-conn" }, MAN.name, MAN.kind, MAN.value), MAN.err, el("div", { class: "row" }, MAN.go));
-  }
-  function manualDraw() {
-    MAN.err.replaceChildren(...(MAN.error ? [icon("warning"), " ", MAN.error] : []));
-    MAN.go.disabled = MAN.busy;
-  }
-  function openManual() { buildManual(); MAN.error = ""; MAN.busy = false; manualDraw(); go("manual"); }
 
   function link(iconName, label, hint, type) {
     return el("button", { class: "link", onclick: () => post({ type }) }, icon(iconName), el("span", { class: "lt" }, el("span", {}, label), hint ? el("span", { class: "muted small" }, hint) : null));
@@ -377,7 +234,7 @@
     const row = (label, input, note) => el("label", { class: "field" }, el("span", { class: "flabel" }, label, note ? el("span", { class: "muted small" }, " ", note) : null), input);
     return el("div", { class: "mood-form" },
       el("div", { class: "mood-form-main" },
-        el("h3", {}, F.id ? "Change this mood" : "Add a mood"),
+        el("h3", {}, F.id ? "Change this preference" : "Add a preference"),
         row("Name", X.name, "(shown in the model menu)"),
         row("One-line hint", X.hint, "(shown when you point at it)"),
         row("Instructions for the AI", X.instructions),
@@ -404,7 +261,7 @@
         el("button", { class: "pill-btn", title: `Put ${m.label} back in the chat's model menu`, onclick: () => post({ type: "hideMood", id: m.id, hidden: false }) }, icon("discard"), " Restore"))
       : el("span", { class: "pill", title: m.hint }, m.label, el("span", { class: "muted" }, ` · ${m.hint}`),
         el("button", { class: "pill-btn", disabled: last, "aria-label": `Remove ${m.label}`,
-          title: last ? "The chat needs at least one mood" : `Remove ${m.label} from the chat's model menu`,
+          title: last ? "The chat needs at least one preference" : `Remove ${m.label} from the chat's model menu`,
           onclick: () => post({ type: "hideMood", id: m.id, hidden: true }) }, icon("close")))));
   }
   function renderMoods(force) {
@@ -419,14 +276,14 @@
         el("button", { class: "btn", onclick: () => openMoodForm(m) }, icon("edit"), " Edit"),
         M.confirm === m.id
           ? el("button", { class: "btn danger", onclick: () => { M.confirm = null; post({ type: "deleteMood", id: m.id }); } }, "Delete it?")
-          : el("button", { class: "btn quiet", title: `Delete this mood (chats using it go to ${m.label === first ? "the next mood" : first})`, onclick: () => { M.confirm = m.id; renderMoods(true); } }, icon("trash"))),
+          : el("button", { class: "btn quiet", title: `Delete this preference (chats using it go to ${m.label === first ? "the next one" : first})`, onclick: () => { M.confirm = m.id; renderMoods(true); } }, icon("trash"))),
       el("div", { class: "muted small clamp2" }, m.instructions)));
     moodsBox.replaceChildren(...[   // (replaceChildren writes a null as the word "null": left out)
-      el("div", { class: "sechead" }, el("h2", {}, "Moods"),
+      el("div", { class: "sechead" }, el("h2", {}, "Preferences"),
         el("span", { class: "muted info-tip", tabindex: "0", "aria-label": MOODS_INFO, title: MOODS_INFO }, icon("info")), el("span", { class: "grow" }),
-        M.form ? null : el("button", { class: "btn", onclick: () => openMoodForm(null) }, icon("add"), " Add a mood")),
+        M.form ? null : el("button", { class: "btn", onclick: () => openMoodForm(null) }, icon("add"), " Add a preference")),
       builtInMoods(D),
-      D.mine.length ? el("div", { class: "mood-list" }, mine) : (M.form ? null : el("p", { class: "muted small" }, "No moods of your own yet.")),
+      D.mine.length ? el("div", { class: "mood-list" }, mine) : (M.form ? null : el("p", { class: "muted small" }, "No preferences of your own yet.")),
       M.form ? moodForm() : null].filter(Boolean));
   }
 
@@ -439,12 +296,93 @@
     post({ type: "shown" });
   }
 
+  // ---------- Shortcuts ----------
+  // Your shortcuts (issue #107): "/pr-summary" in the chat box stands for a text you write here once. Drawn on its own
+  // like the moods (renderShortcuts), so a redraw never takes the form away while you type.
+  const shortcutsBox = el("section", { class: "moods-sec", id: "shortcuts" });
+  let K = { form: null, confirm: null, drawn: "" };   // form: { old, fields: { name, text }, count, error, busy, reqId }
+  const SHORTCUT_EXAMPLES = [
+    { name: "pr-summary", text: "Write a summary of this pull request: what changed and why, in a few bullet points, then how to test it." },
+    { name: "test", text: "Test it: run the tests that cover what changed, fix what fails, and tell me what passed and what failed." },
+    { name: "explain", text: "Explain this step by step, in plain words, as if I'm new to this code." },
+  ];
+  function openShortcutForm(x) {
+    const L = S.shortcuts.limits;
+    const name = el("input", { class: "in", spellcheck: "false", maxlength: L.name, placeholder: "e.g. pr-summary" });
+    const text = el("textarea", { class: "in", spellcheck: "true", rows: "7", maxlength: L.text, placeholder: "e.g. Write a summary of this pull request: what changed and why, then how to test it." });
+    name.value = x ? x.name : ""; text.value = x ? x.text : "";
+    const count = el("span", { class: "muted small count" });
+    const counted = () => { count.textContent = `${text.value.length} / ${L.text}`; };
+    text.addEventListener("input", counted); counted();
+    K.form = { old: x ? x.name : null, fields: { name, text }, count, error: "", busy: false };
+    renderShortcuts(true);
+    name.focus();
+  }
+  function saveShortcut() {
+    const F = K.form; if (!F || F.busy) return;
+    F.busy = true; F.error = ""; F.reqId = Date.now();
+    post({ type: "saveShortcut", reqId: F.reqId, old: F.old, name: F.fields.name.value, text: F.fields.text.value });
+    renderShortcuts(true);
+  }
+  function shortcutForm() {
+    const F = K.form, X = F.fields;
+    const row = (label, input, note) => el("label", { class: "field" }, el("span", { class: "flabel" }, label, note ? el("span", { class: "muted small" }, " ", note) : null), input);
+    const example = (x) => { X.name.value = x.name; X.text.value = x.text; X.text.dispatchEvent(new Event("input")); X.text.focus(); };
+    return el("div", { class: "mood-form" },
+      el("div", { class: "mood-form-main" },
+        el("h3", {}, F.old ? "Change this shortcut" : "Add a shortcut"),
+        row("Name", X.name, "(you type it after /: lowercase letters, digits and -)"),
+        row("What it stands for", X.text, "(sent to the AI with your message)"),
+        el("div", { class: "row" }, F.count, el("span", { class: "grow" }),
+          F.error ? el("span", { class: "err" }, icon("warning"), " ", F.error) : null),
+        el("div", { class: "row" },
+          el("button", { class: "btn primary", disabled: F.busy, onclick: saveShortcut }, F.busy ? "Saving…" : "Save"),
+          el("button", { class: "btn", onclick: () => { K.form = null; renderShortcuts(true); } }, "Cancel"))),
+      el("aside", { class: "mood-tips" },
+        el("h4", {}, icon("lightbulb"), " How it works"),
+        el("ul", {},
+          el("li", {}, el("strong", {}, "Type / in the chat box"), " ", el("span", { class: "muted" }, "at the start or after a space, then pick it: it goes in as a chip.")),
+          el("li", {}, el("strong", {}, "Mix it with your words."), " ", el("span", { class: "muted" }, "\"hi! please do /pr-summary\": the AI gets your message and what the shortcut stands for.")),
+          el("li", {}, el("strong", {}, "Every AI."), " ", el("span", { class: "muted" }, "Claude, Gemini, ChatGPT and your own model. Yours wins over a Claude skill with the same name."))),
+        el("h4", {}, "Start from an example"),
+        el("div", { class: "examples" }, SHORTCUT_EXAMPLES.map((x) => el("button", { class: "btn", title: x.text, onclick: () => example(x) }, `/${x.name}`)))));
+  }
+  function renderShortcuts(force) {
+    const D = S.shortcuts;
+    if (!D) return;
+    const key = JSON.stringify(D.mine) + (K.confirm || "");
+    if (!force && key === K.drawn) return;
+    K.drawn = key;
+    const mine = D.mine.map((x) => el("div", { class: "mood-item" },
+      el("div", { class: "row" }, el("strong", { class: "mono" }, `/${x.name}`), el("span", { class: "grow" }),
+        el("button", { class: "btn", onclick: () => openShortcutForm(x) }, icon("edit"), " Edit"),
+        K.confirm === x.name
+          ? el("button", { class: "btn danger", onclick: () => { K.confirm = null; post({ type: "deleteShortcut", name: x.name }); } }, "Delete it?")
+          : el("button", { class: "btn quiet", title: "Delete this shortcut", onclick: () => { K.confirm = x.name; renderShortcuts(true); } }, icon("trash"))),
+      el("div", { class: "muted small clamp2" }, x.text)));
+    shortcutsBox.replaceChildren(...[
+      el("div", { class: "sechead" }, el("h2", {}, "Shortcuts"),
+        el("span", { class: "muted info-tip", tabindex: "0", "aria-label": SHORTCUTS_INFO, title: SHORTCUTS_INFO }, icon("info")), el("span", { class: "grow" }),
+        K.form ? null : el("button", { class: "btn", onclick: () => openShortcutForm(null) }, icon("add"), " Add a shortcut")),
+      D.mine.length ? el("div", { class: "mood-list" }, mine) : (K.form ? null : el("p", { class: "muted small" }, "No shortcuts yet. Make one for a prompt you type often, like /pr-summary.")),
+      K.form ? shortcutForm() : null].filter(Boolean));
+  }
+  // From the chat's "Make a shortcut…": the Shortcuts section, with a new shortcut's form open.
+  function showShortcuts() {
+    if (!S) return;
+    go("main");
+    if (!K.form) openShortcutForm(null);
+    shortcutsBox.scrollIntoView({ block: "start" });
+    post({ type: "shown" });
+  }
+
   // From the chat's model menu (the gear beside an AI's name): that AI's page. "usage" (the AI Usage panel's link): the
   // chat's AI page at its switch-point section.
   let shownSection = null;   // (the host keeps sending the section until the page says "shown": go once)
   function showSection(section) {
     if (!S) return;
     if (section === "moods") return showMoods();
+    if (section === "shortcuts") return showShortcuts();
     if (section === "usage") {
       go("ai", S.chatAI && S.chatAI !== "local" && cardOf(S.chatAI) ? S.chatAI : "claude");
       const sw = document.getElementById("switch"); if (sw) sw.scrollIntoView({ block: "start" });
@@ -460,9 +398,11 @@
   // Redrawing it moved the field, which took your cursor away and saved a half-typed number ("8" of "85").
   const typingNow = () => {
     const a = document.activeElement;
-    return !!a && /^(input|textarea|select)$/i.test(a.tagName || a.tag || "") && a.type !== "checkbox" && a !== CAT.search;
+    return !!a && /^(input|textarea|select)$/i.test(a.tagName || a.tag || "") && a.type !== "checkbox";
   };
   function mainView() {
+    // Only the AIs you use get a card; the rest are one "Add agent" button.
+    const shown = S.cards.filter((c) => c.state !== "off"), rest = S.cards.filter((c) => c.state === "off");
     return el("div", { class: "main" },
       el("header", {},
         el("div", { class: "title" }, el("h1", {}, "Kural Settings"),
@@ -473,47 +413,60 @@
             el("button", { class: "btn primary", disabled: S.checking, onclick: () => post({ type: "updates" }) }, icon(S.checking ? "loading" : "sync", S.checking ? "spin" : ""), " Check for updates")),
           el("label", { class: "check small" }, el("input", { type: "checkbox", checked: S.autoUpdates, onchange: (e) => post({ type: "autoUpdates", value: e.target.checked }) }), "Look for updates once a day"))),
       el("div", { class: "sechead" }, el("h2", {}, "Your AI"), el("span", { class: "grow" }),
-        el("button", { class: "btn", disabled: S.refreshing, title: "Ask each AI for its usage now (Claude: one tiny request)", onclick: () => post({ type: "refresh" }) },
-          icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage")),
-      el("div", { class: "cards" }, S.cards.map(card)),
+        shown.some((c) => c.windows.length || c.tokens) ? el("button", { class: "btn quiet", disabled: S.refreshing, title: "Ask each AI for its usage now (Claude: one tiny request)", onclick: () => post({ type: "refresh" }) },
+          icon("refresh", S.refreshing ? "spin" : ""), " Refresh usage") : null,
+        addAgent(rest)),
+      shown.length ? el("div", { class: "cards" }, shown.map(card))
+        : el("p", { class: "muted" }, "No AI is set up yet. Add one: Claude, Google Gemini, ChatGPT or a model on this computer."),
       moodsBox,
+      shortcutsBox,
       learnSection(),
       el("div", { class: "sechead" }, el("h2", {}, "More")),
       el("div", { class: "links" },
         link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
-        link("dashboard", "AI Usage panel", "every limit, at the bottom", "usagePanel"),
         link("organization", "Profiles", "personal and work: separate Claude and ChatGPT accounts", "profiles"),
-        link("symbol-keyword", "Tab Completion", "engine, speed, model", "tab"),
-        link("git-compare", "Model Router", "what reads your requests, which AIs Auto uses", "router"),
-        link("search", "Find & download models", "models on this computer, with Ollama", "findModels"),
         link("export", "Export settings", "your preferences to a file, for another computer", "exportSettings"),
         link("desktop-download", "Import settings", "from a file you exported", "importSettings"),
-        link("settings", "All settings", "Kural's, in VS Code's settings", "allSettings"),
-        link("list-unordered", "Kural's log", "every request, with timings", "log"),
-        link("bug", "Crash reports", "what went wrong when Kural closed unexpectedly", "crashes"),
-        link("trash", "Remove Kural's data", "before uninstalling: keys, logins, chats and settings", "removeData"),
         link("book", "Kural guide", "what every feature does", "guide"),
-        link("lightbulb", "Ask for a feature", "on GitHub", "feature")));
+        link("lightbulb", "Ask for a feature", "on GitHub", "feature")),
+      // Advanced: folded until you open it (kept open across the page's redraws).
+      el("details", { class: "advanced", open: V.advanced, ontoggle: (e) => { V.advanced = e.target.open; } },
+        el("summary", {}, el("h2", {}, "Advanced")),
+        el("div", { class: "links" },
+          link("settings", "All settings", "Kural's, in VS Code's settings", "allSettings"),
+          link("list-unordered", "Kural's log", "every request, with timings", "log"),
+          link("bug", "Crash reports", "what went wrong when Kural closed unexpectedly", "crashes"),
+          link("trash", "Remove Kural's data", "before uninstalling: keys, logins, chats and settings", "removeData"))));
+  }
+  // "Add agent": the AIs that aren't set up yet, in a short list under the button (they took a big card each before:
+  // Adithya, 22 Oct 2026). Each opens Get started at that AI.
+  function addAgent(rest) {
+    if (!rest.length) return null;
+    const list = V.addOpen ? el("div", { class: "add-menu", role: "menu" },
+      rest.map((c) => el("button", { class: "add-item", role: "menuitem", onclick: () => { V.addOpen = false; post({ type: "setUp", id: c.id }); render(true); } },
+        icon(ICONS[c.id] || "account"), el("span", { class: "lt" }, el("span", {}, c.name), el("span", { class: "muted small" }, c.what)))),
+      el("button", { class: "add-item foot", role: "menuitem", onclick: () => { V.addOpen = false; post({ type: "getStarted" }); render(true); } },
+        icon("rocket"), el("span", {}, "Get started, step by step"))) : null;
+    return el("div", { class: "add-wrap" },
+      el("button", { class: "btn primary", "aria-expanded": String(!!V.addOpen), onclick: () => { V.addOpen = !V.addOpen; render(true); } },
+        icon("add"), " Add agent", icon("chevron-down")), list);
   }
   function render(force) {
     if (!S) return;
     renderMoods(false);
-    if (V.view === "catalog") {
-      if (V.drawn !== "catalog") { stage.replaceChildren(CAT.root); V.drawn = "catalog"; }
-      return renderCatalogList(!!force);
-    }
-    if (V.view === "manual") {
-      if (V.drawn !== "manual") { stage.replaceChildren(MAN.root); V.drawn = "manual"; }
-      return;
-    }
+    renderShortcuts(false);
     if (!force && typingNow()) { S.cardsWaiting = true; return; }
     S.cardsWaiting = false;
     stage.replaceChildren(V.view === "ai" ? aiView() : mainView());
     V.drawn = V.view;
   }
   app.replaceChildren(stage);
+  // (The "Add agent" list closes on a click elsewhere or Escape.)
+  const closeAdd = () => { if (V.addOpen) { V.addOpen = false; render(true); } };
+  window.addEventListener("click", (e) => { if (!(e.target.closest && e.target.closest(".add-wrap"))) closeAdd(); });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAdd(); });
   // (A redraw that waited while you typed happens when you leave the field.)
-  window.addEventListener("focusout", () => setTimeout(() => { if (S && S.cardsWaiting) render(); if (CAT.waiting) renderCatalogList(); }, 0));
+  window.addEventListener("focusout", () => setTimeout(() => { if (S && S.cardsWaiting) render(); }, 0));
 
   window.addEventListener("message", (e) => {
     const m = e.data;
@@ -527,28 +480,12 @@
       M.form.busy = false;
       if (m.error) { M.form.error = m.error; renderMoods(true); } else { M.form = null; renderMoods(true); }
     }
+    if (m.type === "shortcutSaved" && K.form && K.form.reqId === m.reqId) {
+      K.form.busy = false;
+      if (m.error) K.form.error = m.error; else K.form = null;
+      renderShortcuts(true);
+    }
     if (m.type === "show") { shownSection = m.section; showSection(m.section); }
-    if (m.type === "catalogResults" && m.id === CAT.ai && m.reqId === CAT.reqId) {
-      Object.assign(CAT, { items: m.items || [], note: m.note || "", loading: false });
-      renderCatalogList();
-    }
-    if (m.type === "catalogDone" && m.id === CAT.ai) {
-      CAT.adding = null;
-      const item = CAT.items.find((x) => x.id === m.item);
-      if (m.error) { CAT.errors[m.item] = m.error; renderCatalogList(true); }
-      else { go("ai", m.id); V.added = `Added ${item ? item.name : "the connector"}.${item && item.signIn ? " Sign in to finish." : ""}`; render(true); }
-    }
-    if (m.type === "folder" && CAT.folder && CAT.folder.reqId === m.reqId) {
-      const f = CAT.folder; CAT.folder = null;
-      const F = CAT.fields[f.item];
-      if (m.path && F && F[f.key]) F[f.key].value = m.path;
-    }
-    if (m.type === "connectorDone") {
-      if (V.view === "manual" && m.reqId === MAN.reqId) {
-        MAN.busy = false; MAN.error = m.error || "";
-        if (!m.error) { MAN.name.value = ""; MAN.value.value = ""; go("ai", V.ai); V.added = "Added."; render(true); } else manualDraw();
-      } else if (m.error && V.view === "ai") { V.added = ""; V.error = m.error; render(true); }
-    }
   });
   setInterval(() => { if (S) render(); }, 30000);   // ("resets in", "updated … ago")
   post({ type: "ready" });

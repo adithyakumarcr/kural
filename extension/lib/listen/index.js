@@ -1,10 +1,12 @@
 // Listen, the host side (no vscode inside: the chat wires it). The page sends the answer's numbered blocks; a quick model
 // writes a short spoken walkthrough as pieces (script.js), each piece is split into sentences (speech.js) and the voice
-// helper (speaker.js) turns each sentence into audio, which goes to the page that asked, and only there:
+// helper (speaker.js) turns them into audio (the first alone, then up to three of one part together), which goes to the
+// page that asked, and only there:
 //   listenState {tabId, index, phase: ask {size, model} | downloading {pct} | preparing | playing | stopped | error {message}}
-//   listenAudio {tabId, index, seq, n, gen, block, text, pcm Int16Array, rate, opener?}
-//     (n: the sentence's number; gen: bumped when the speed changes and the sentences from one on are made again, so
-//     the page drops what it has from there; block null for the opener)
+//   listenAudio {tabId, index, seq, n, gen, block, text, pcm Int16Array, rate, opener?, group?}
+//     (n: the (first) sentence's number; gen: bumped when the speed changes and the sentences from one on are made again,
+//     so the page drops what it has from there; block null for the opener; group [{n, text, w}]: several sentences in
+//     this sound, w how long each is)
 //   listenEnd   {tabId, index, partial?}
 // One at a time in the window. A finished walkthrough is saved on the answer (msg.listen); the audio never is.
 const fs = require("fs");
@@ -21,6 +23,9 @@ const OPENERS = ["Alright, let's dig in!", "Okay! Here's the short version.", "R
   "So! Here's what's going on.", "Okay, let's go through this together!"];
 const CLOSING = "That's all I could put together.";
 const VOICE_STOPPED = "The voice stopped. Try again.";
+// Sentences said in one voice request: at most GROUP_MAX of one part, GROUP_CHARS characters together (the voice engine
+// splits text over 300 characters itself, with a pause).
+const GROUP_MAX = 3, GROUP_CHARS = 260;
 const NO_VOICE = "Listen's voice isn't available for this computer yet.";
 // The speeds in the bar's menu (the voice itself speaks faster or slower: the pitch stays natural).
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -132,12 +137,13 @@ class Listen {
     if (job.pumping || job.ended) return;
     job.pumping = (async () => {
       while (!job.ended && job.next < job.sentences.length) {
-        const n = job.next, gen = job.gen, s = job.sentences[n];
-        const ok = await this.speakSentence(job, s, n, gen);
+        const n = job.next, gen = job.gen, group = this.groupFrom(job, n);
+        const ok = await this.speakGroup(job, group, gen);
         if (job.ended) break;
         if (gen !== job.gen) continue;   // (the speed changed meanwhile: job.next was set again)
         if (!ok) break;
-        job.next = n + 1;
+        job.next = group[group.length - 1] + 1;
+        job.spoken = (job.spoken || 0) + 1;
       }
       job.pumping = null;
     })();
@@ -152,19 +158,39 @@ class Listen {
     }
   }
 
+  // The sentences spoken in one go from n: the next ones of the same part while they're short together (one voice
+  // request says them with one flow; one at a time, each started and ended on its own and the walkthrough sounded
+  // chopped). The first one alone, so the voice starts soon.
+  groupFrom(job, n) {
+    const out = [n], first = job.sentences[n];
+    if (!job.spoken) return out;
+    let chars = forVoice(first.text, this.tags).length;
+    for (let k = n + 1; k < job.sentences.length && out.length < GROUP_MAX; k++) {
+      const s = job.sentences[k], len = forVoice(s.text, this.tags).length;
+      if (s.block !== first.block || chars + len + 1 > GROUP_CHARS) break;
+      out.push(k); chars += len + 1;
+    }
+    return out;
+  }
+
   // false: the voice failed (the job has ended with an error) or was stopped.
-  async speakSentence(job, s, n, gen) {
-    const say = forVoice(s.text, this.tags);
-    if (!withoutTags(say).trim()) return true;
+  async speakGroup(job, group, gen) {
+    const parts = group.map((n) => ({ n, say: forVoice(job.sentences[n].text, this.tags), text: forVoice(job.sentences[n].text, []) }))
+      .filter((x) => withoutTags(x.say).trim());
+    if (!parts.length) return true;
     let r;
-    try { r = await this.speaker.speak(say, { speed: job.speed }); } catch (e) {
+    try { r = await this.speaker.speak(parts.map((x) => x.say).join(" "), { speed: job.speed }); } catch (e) {
       if (gen !== job.gen) return true;   // (cancelled for a new speed)
       if (!job.ended && !e.cancelled) { this.log(`listen: ${e.message}`); this.fail(job, VOICE_STOPPED); }
       return false;
     }
     if (job.ended) return false;
     if (gen !== job.gen) return true;
-    if (r.pcm.length) this.audio(job, { n, gen, block: s.block, text: forVoice(s.text, []), pcm: r.pcm, rate: r.rate });
+    if (!r.pcm.length) return true;
+    const a = { n: parts[0].n, gen, block: job.sentences[group[0]].block, text: parts.map((x) => x.text).join(" "), pcm: r.pcm, rate: r.rate };
+    // (Each sentence's share of the sound, for the lines and the highlight: w = how long it is.)
+    if (parts.length > 1) a.group = parts.map((x) => ({ n: x.n, text: x.text, w: withoutTags(x.say).length || 1 }));
+    this.audio(job, a);
     return true;
   }
 

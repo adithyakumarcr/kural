@@ -38,12 +38,15 @@ check("the guide tells the chat about the calm chat", () => {
   for (const s of ["Ask about this question", "Claude's summary", "Pick, then Send", "Watch out"]) assert.ok(guide.includes(s), s);
 });
 
-// (In one block: "Not released yet" until a release names it "What's new in <version>"; newer blocks may come above it.)
-check("the release notes have it, in one block", () => {
+// (It shipped in 1.2.1-beta.2: that release's block. Newer changes go above it, under "Not released yet".)
+check("the release notes have it, in 1.2.1-beta.2's block", () => {
   const notes = fs.readFileSync(path.join(root, "RELEASE_NOTES.md"), "utf8");
   assert.ok(/^## (Not released yet|What's new in )/.test(notes), "a block at the top");
-  const blocks = notes.split(/\n(?=## )/);
-  assert.ok(blocks.some((b) => ["thinking", "Ask about this question", "Send"].every((s) => b.includes(s))), "a block with all of it");
+  const start = notes.indexOf("## What's new in 1.2.1-beta.2\n");
+  assert.ok(start >= 0, "1.2.1-beta.2's block");
+  const next = notes.indexOf("\n## ", start + 1);
+  const block = next < 0 ? notes.slice(start) : notes.slice(start, next);
+  for (const s of ["thinking", "Ask about this question", "Send"]) assert.ok(block.includes(s), s);
 });
 
 console.log(failed ? `chat-colors: ${failed} FAILED` : "chat-colors: ALL PASS");

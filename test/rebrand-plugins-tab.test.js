@@ -1,5 +1,5 @@
-// Extensions | Plugins (scripts/rebrand.py add_plugins_tab): VS Code's Extensions side bar gets a second tab, Kural's
-// Plugins view (extension/lib/plugins).
+// Extensions | Plugins | Connectors (scripts/rebrand.py add_plugins_tab): VS Code's Extensions side bar gets two more
+// tabs, Kural's Plugins view (extension/lib/plugins) and Connectors view (extension/lib/connectors).
 //   1. the patch on a tiny stand-in with VS Code's shapes, run with a small fake DOM: the switch above the search box,
 //      VS Code's own views hidden on Plugins (and Kural's view given the side bar's title), the heights layout() leaves,
 //      Refresh, the command _kural.extensionsTabs (also before the side bar exists), the choice kept, nothing twice.
@@ -67,7 +67,8 @@ function load(text) {
   return ctx;
 }
 const plain = (o) => JSON.parse(JSON.stringify(o));
-const HIDE = { notEquals: ["kural.extensionsTab", "plugins"] };
+const HIDE = { and: [{ notEquals: ["kural.extensionsTab", "plugins"] }, { notEquals: ["kural.extensionsTab", "connectors"] }] };
+const TABS = ["extensions", "plugins", "connectors"];
 
 (async () => {
   // ---------- 1. the stand-in ----------
@@ -93,8 +94,9 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
   await check("VS Code's views there hide on Plugins; Kural's view gets the side bar's title; elsewhere nothing changes; never twice", () => {
     const reg = new ctx.Reg(), ext = { id: "workbench.view.extensions", title: { value: "Extensions & Plugins", original: "Extensions" } };
     const installed = { id: "workbench.views.extensions.installed", when: { k: 1 } }, popular = { id: "workbench.views.extensions.popular" };
-    const kural = { id: "kural.plugins", when: { mine: 1 } }, files = { id: "files", when: { k: 2 } };
-    reg.addViews([installed, popular, kural], ext); reg.addViews([files], { id: "workbench.view.explorer" });
+    const kural = { id: "kural.plugins", when: { mine: 1 } }, files = { id: "files", when: { k: 2 } }, conn = { id: "kural.connectors", when: { c: 1 } };
+    reg.addViews([installed, popular, kural, conn], ext);
+    assert.deepStrictEqual(conn.when, { c: 1 }); assert.strictEqual(conn.singleViewPaneContainerTitle, "Extensions & Plugins"); reg.addViews([files], { id: "workbench.view.explorer" });
     assert.deepStrictEqual(plain(installed.when), { and: [{ k: 1 }, HIDE] });
     assert.deepStrictEqual(plain(popular.when), HIDE);
     assert.deepStrictEqual(kural.when, { mine: 1 }); assert.strictEqual(kural.singleViewPaneContainerTitle, "Extensions & Plugins");
@@ -105,7 +107,7 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 
   await check("the command switches a side bar that doesn't exist yet: it opens on Plugins", () => {
     const res = ctx.CR._commands.get("_kural.extensionsTabs")(null, "plugins");
-    assert.deepStrictEqual(plain(res), { tab: "plugins" });
+    assert.deepStrictEqual(plain(res), { tab: "plugins", tabs: TABS });
     const v = new ctx.JYe(), el = doc.createElement("div");
     v.create(el);
     assert.strictEqual(v.contextKeyService.keys["kural.extensionsTab"], "plugins");
@@ -115,11 +117,11 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
 
   const view = new ctx.JYe(), el = doc.createElement("div");
   view.create(el);
-  const bar = el.children[0], seg = bar.children[0], [be, bp] = seg.children;
-  await check("the switch comes first, above the search box: Extensions | Plugins, Extensions chosen", () => {
+  const bar = el.children[0], seg = bar.children[0], [be, bp, bc] = seg.children;
+  await check("the switch comes first, above the search box: Extensions | Plugins | Connectors, Extensions chosen", () => {
     assert.strictEqual(bar.className, "kural-ext-tabs"); assert.strictEqual(seg.attrs.role, "tablist");
-    assert.deepStrictEqual([be.dataset.tab, bp.dataset.tab], ["extensions", "plugins"]);
-    assert.deepStrictEqual([be.children[1].text, bp.children[1].text], ["Extensions", "Plugins"]);
+    assert.deepStrictEqual([be.dataset.tab, bp.dataset.tab, bc.dataset.tab], TABS);
+    assert.deepStrictEqual([be.children[1].textContent, bp.children[1].textContent, bc.children[1].textContent], ["Extensions", "Plugins", "Connectors"]);
     assert.strictEqual(el.children[1].className, "header");
     assert.ok(be.classList.contains("on") && !bp.classList.contains("on"));
     assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "extensions");
@@ -149,17 +151,34 @@ print("SAME_TWICE" if once == twice else "CHANGED_TWICE")
     be.click(); await view.refresh();
     assert.strictEqual(view.refreshed, 1); assert.strictEqual(view.laidOut.height, 800 - 41 - 34);
   });
-  await check("the arrow keys switch too", () => {
+  await check("Connectors: like Plugins (VS Code's views and the search box hide, its view gets the focus, Refresh is its own)", async () => {
+    bc.click();
+    assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "connectors");
+    assert.ok(el.classList.contains("kural-plugins-on") && bc.classList.contains("on") && !bp.classList.contains("on"));
+    assert.strictEqual(view.laidOut.height, 800 - 34);
+    assert.strictEqual(view.commandService.ran.slice(-1)[0], "kural.connectors.focus");
+    await view.refresh();
+    assert.strictEqual(view.commandService.ran.slice(-1)[0], "kural.connectors.refresh"); assert.strictEqual(view.refreshed, 1);
+    be.click();
+  });
+  await check("the arrow keys switch too (round the three)", () => {
     seg.dispatch("keydown", { key: "ArrowRight" });
     assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "plugins"); assert.strictEqual(doc.activeElement, bp);
+    seg.dispatch("keydown", { key: "ArrowRight" });
+    assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "connectors"); assert.strictEqual(doc.activeElement, bc);
+    seg.dispatch("keydown", { key: "ArrowRight" });
+    assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "extensions");
     seg.dispatch("keydown", { key: "ArrowLeft" });
+    assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "connectors");
+    seg.dispatch("keydown", { key: "ArrowRight" });
     assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "extensions");
   });
   await check("the command: switches the open side bar and says which tab shows", () => {
     const cmd = ctx.CR._commands.get("_kural.extensionsTabs");
-    assert.deepStrictEqual(plain(cmd(null, "plugins")), { tab: "plugins" });
+    assert.deepStrictEqual(plain(cmd(null, "plugins")), { tab: "plugins", tabs: TABS });
     assert.ok(el.classList.contains("kural-plugins-on"));
-    assert.deepStrictEqual(plain(cmd(null)), { tab: "plugins" });
+    assert.deepStrictEqual(plain(cmd(null)), { tab: "plugins", tabs: TABS });
+    assert.deepStrictEqual(plain(cmd(null, "connectors")), { tab: "connectors", tabs: TABS });
     cmd(null, "extensions");
     assert.strictEqual(view.contextKeyService.keys["kural.extensionsTab"], "extensions");
   });
@@ -226,7 +245,7 @@ print("TITLE=" + str(len(rebrand.EXT_TITLE.findall(once))))
     assert.strictEqual(text.split("/*kural-plugins-tab*/").length - 1, 3);
     assert.strictEqual(text.split('case"extensions":return this.viewContainersRegistry.get("workbench.view.extensions")').length - 1, 1);
     assert.strictEqual(text.split("this.__kuralLayout?this.__kuralLayout(").length - 1, 1);
-    assert.strictEqual(text.split('if(this.__kuralTab==="plugins")return void await this.commandService.executeCommand("kural.plugins.refresh")').length - 1, 1);
+    assert.strictEqual(text.split('if(this.__kuralTab==="plugins"||this.__kuralTab==="connectors")return void await this.commandService.executeCommand("kural."+this.__kuralTab+".refresh")').length - 1, 1);
   });
   await check("this build's side bar title can be found (for Extensions & Plugins)", () => assert.ok(/TITLE=1/.test(real.stdout), real.stdout));
   fs.rmSync(tmp, { recursive: true, force: true });

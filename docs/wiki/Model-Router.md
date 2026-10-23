@@ -63,7 +63,7 @@ Local assistance and automatic chat retrieval are disabled in Restricted Mode. N
 
 ## Model changes and conversation transfer
 
-**Switch points.** Kural Settings → **AI Usage** → **Switch AI near a limit** (off by default) turns it on. Each AI's card
+**Switch points.** Kural Settings → an AI's **Settings** → **Switch to another AI near a limit** (off by default) turns it on. Each AI's card
 sets its own points: "Move the chat to another AI when the Session limit is [70] % used or a Weekly limit is [70] %
 used" (1 to 99 %, 70 % by default; Gemini has Weekly only). When it's on, Auto excludes models over their AI's points
 while a suitable model is available below them. A chat with a model you picked yourself moves to another available

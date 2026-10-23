@@ -323,18 +323,21 @@ def hide_debug_views(text):
     return text[:run.end()] + "hideIfEmpty:!0," + text[run.end():]
 
 
-# Extensions | Plugins: VS Code's Extensions side bar gets a second tab, Plugins (Kural's view "kural.plugins": the AI
-# plugins of the chat's AI, extension/lib/plugins), with the same switch as Kural's Search & Ask. Four parts:
+# Extensions | Plugins | Connectors: VS Code's Extensions side bar gets two more tabs, Plugins (Kural's view
+# "kural.plugins": the AI plugins of the chat's AI, extension/lib/plugins) and Connectors (view "kural.connectors": its
+# MCP servers, extension/lib/connectors; Adithya, 22 Oct 2026), with the same switch as Kural's Search & Ask. Four parts:
 #   1. the views extension point lets an extension add views to "extensions" (VS Code allows only explorer, debug, scm,
 #      remote); Kural's package.json adds kural.plugins there, shown when `kural.extensionsTab == plugins`.
-#   2. VS Code's own views in that side bar (Installed, Popular, search results…) get `kural.extensionsTab != plugins`,
+#   2. VS Code's own views in that side bar (Installed, Popular, search results…) get `kural.extensionsTab != plugins`
+#      and `!= connectors`,
 #      in the views registry's addViews (after hide_debug_views' code there, so apply this one after it).
 #      Kural's own view gets the side bar's title for when it's the only view showing (else "Extensions & Plugins: Plugins").
 #   3. the side bar's create() puts the switch above its search box (lined up with it: the header's own padding) and keeps
 #      the choice in the side bar's own saved state; layout() leaves room for it, and on Plugins the search box hides (its
 #      height counts 0); refresh() (the title bar's Refresh) refreshes the plugins while Plugins shows.
-#   4. a command `_kural.extensionsTabs` ("plugins" | "extensions" → switches; → {tab}): "Kural: Show Plugins" uses it,
-#      and Kural looks for it to know this patch is there (without it, Plugins has a side bar of its own).
+#   4. a command `_kural.extensionsTabs` ("plugins" | "extensions" | "connectors" → switches; → {tab, tabs}): "Kural: Show
+#      Plugins" uses it, and Kural looks for it to know this patch is there (without it, Plugins has a side bar of its
+#      own; a patch whose `tabs` has no "connectors", an older Kural's, puts Connectors in that side bar too).
 # The side bar's title becomes "Extensions & Plugins" (rebrand_messages). All four parts are found by shape; if one is
 # missing (another VSCodium), nothing is changed and a ::warning:: says so. Applying it again changes nothing.
 PT_MARK = "/*kural-plugins-tab*/"
@@ -352,38 +355,38 @@ PT_CSS = (".extensions-viewlet>.kural-ext-tabs{height:34px;box-sizing:border-box
           ".kural-ext-tab:hover{color:var(--vscode-foreground)}.kural-ext-tab:focus-visible{outline:1px solid var(--vscode-focusBorder);outline-offset:-1px}"
           ".kural-ext-tab.on{background:color-mix(in srgb,#8b6cef 25%,transparent);color:var(--vscode-foreground);font-weight:600}"
           ".vs .kural-ext-tab.on,.hc-light .kural-ext-tab.on{background:color-mix(in srgb,#6447d6 25%,transparent)}"
-          ".kural-ext-tab .codicon{font-size:14px}.extensions-viewlet.kural-plugins-on>.header{display:none}"
+          ".kural-ext-tab .codicon{font-size:14px;flex-shrink:0}.kural-ext-label{overflow:hidden;text-overflow:ellipsis}.extensions-viewlet.kural-plugins-on>.header{display:none}"
           # (VS Code sizes the views' area as 100% minus its 41 px header in CSS: minus the switch's 34 px too.)
           ".extensions-viewlet.kural-tabs>.extensions{height:calc(100% - 75px)}.extensions-viewlet.kural-tabs.kural-plugins-on>.extensions{height:calc(100% - 34px)}")
 # (Inside create(): `this` is the side bar. Plain DOM calls, no minified helpers, so nothing else has to be found.)
 PT_CREATE_CODE = PT_MARK + (
     'try{const r=this.root,doc=r.ownerDocument,bar=doc.createElement("div"),seg=doc.createElement("div");bar.className="kural-ext-tabs";'
-    'seg.className="kural-ext-seg";seg.setAttribute("role","tablist");seg.setAttribute("aria-label","Extensions or Plugins");'
+    'seg.className="kural-ext-seg";seg.setAttribute("role","tablist");seg.setAttribute("aria-label","Extensions, Plugins or Connectors");'
     'const mk=(id,ic,label)=>{const b=doc.createElement("button");b.className="kural-ext-tab";b.setAttribute("role","tab");b.dataset.tab=id;b.title=label;'
-    'const i=doc.createElement("span");i.className="codicon codicon-"+ic;b.append(i,doc.createTextNode(label));return b};'
-    'const be=mk("extensions","extensions","Extensions"),bp=mk("plugins","sparkle","Plugins");seg.append(be,bp);bar.append(seg);r.append(bar);r.classList.add("kural-tabs");'
+    'const i=doc.createElement("span");i.className="codicon codicon-"+ic;const l=doc.createElement("span");l.className="kural-ext-label";l.textContent=label;b.append(i,l);return b};'
+    'const T=["extensions","plugins","connectors"],B={extensions:mk("extensions","extensions","Extensions"),plugins:mk("plugins","sparkle","Plugins"),connectors:mk("connectors","plug","Connectors")};'
+    'seg.append(B.extensions,B.plugins,B.connectors);bar.append(seg);r.append(bar);r.classList.add("kural-tabs");'
     'const key=this.contextKeyService.createKey("kural.extensionsTab","extensions");'
-    'const set=(t,focus)=>{t=t==="plugins"?"plugins":"extensions";this.__kuralTab=t;key.set(t);try{this.searchViewletState["kural.tab"]=t}catch{}'
-    'be.classList.toggle("on",t==="extensions");bp.classList.toggle("on",t==="plugins");'
-    'be.setAttribute("aria-selected",String(t==="extensions"));bp.setAttribute("aria-selected",String(t==="plugins"));'
-    'r.classList.toggle("kural-plugins-on",t==="plugins");if(this._dimension)this.layout(this._dimension);'
-    'if(focus)t==="plugins"?this.commandService.executeCommand("kural.plugins.focus"):this.searchBox&&this.searchBox.focus()};'
-    'be.addEventListener("click",()=>set("extensions",!0));bp.addEventListener("click",()=>set("plugins",!0));'
+    'const set=(t,focus)=>{t=T.includes(t)?t:"extensions";this.__kuralTab=t;key.set(t);try{this.searchViewletState["kural.tab"]=t}catch{}'
+    'for(const k of T){B[k].classList.toggle("on",t===k);B[k].setAttribute("aria-selected",String(t===k))}'
+    'r.classList.toggle("kural-plugins-on",t!=="extensions");if(this._dimension)this.layout(this._dimension);'
+    'if(focus)t==="extensions"?this.searchBox&&this.searchBox.focus():this.commandService.executeCommand("kural."+t+".focus")};'
+    'for(const k of T)B[k].addEventListener("click",()=>set(k,!0));'
     'seg.addEventListener("keydown",x=>{if(x.key==="ArrowLeft"||x.key==="ArrowRight"){x.preventDefault();'
-    'const n=this.__kuralTab==="plugins"?"extensions":"plugins";set(n,!1);(n==="plugins"?bp:be).focus()}});'
+    'const n=T[(T.indexOf(this.__kuralTab)+(x.key==="ArrowRight"?1:2))%3];set(n,!1);B[n].focus()}});'
     'this.__kuralTabs=bar;this.__kuralSet=set;'
     # (Lined up with the search box below: the header's own side padding, read once it exists.)
     'this.__kuralLayout=h=>{if(!this.__kuralAligned&&this.header)try{const cs=doc.defaultView.getComputedStyle(this.header);'
     'bar.style.paddingLeft=cs.paddingLeft;bar.style.paddingRight=cs.paddingRight;this.__kuralAligned=!0}catch{}'
-    'return(this.__kuralTab==="plugins"?0:h)+(bar.offsetHeight||34)};'
+    'return(this.__kuralTab==="extensions"?h:0)+(bar.offsetHeight||34)};'
     'globalThis.__kuralExtView=this;const want=globalThis.__kuralExtWant;globalThis.__kuralExtWant=void 0;'
     'set(want||this.searchViewletState&&this.searchViewletState["kural.tab"],!1);'
     'if(!doc.getElementById("kural-ext-tabs-css")){const s=doc.createElement("style");s.id="kural-ext-tabs-css";s.textContent='
     + json.dumps(PT_CSS) + ';doc.head.append(s)}}catch(x){console.error("kural: the Plugins tab",x)}')
 PT_COMMAND_CODE = PT_MARK + (
     'C.registerCommand("_kural.extensionsTabs",(a,t)=>{const v=globalThis.__kuralExtView;'
-    'if(t==="plugins"||t==="extensions"){if(v&&v.__kuralSet)v.__kuralSet(t,!0);else globalThis.__kuralExtWant=t}'
-    'return{tab:v&&v.__kuralTab||globalThis.__kuralExtWant||"extensions"}});')
+    'if(t==="plugins"||t==="extensions"||t==="connectors"){if(v&&v.__kuralSet)v.__kuralSet(t,!0);else globalThis.__kuralExtWant=t}'
+    'return{tab:v&&v.__kuralTab||globalThis.__kuralExtWant||"extensions",tabs:["extensions","plugins","connectors"]}});')
 
 
 def add_plugins_tab(text):
@@ -408,14 +411,14 @@ def add_plugins_tab(text):
     views, cont = adds[0][0].group(1), adds[0][0].group(2)
     view_code = (f'{PT_MARK}try{{const _kx=globalThis.__kuralExtViews||(globalThis.__kuralExtViews=new WeakSet);'
                  f'if({cont}&&{cont}.id==="workbench.view.extensions")for(const _kv of {views})try{{if(!_kv||_kx.has(_kv))continue;'
-                 f'if(_kv.id==="kural.plugins"){{const _kt={cont}.title;_kv.singleViewPaneContainerTitle=typeof _kt=="string"?_kt:_kt&&_kt.value||"Extensions";_kx.add(_kv);continue}}'
-                 f'const _kn={c}.notEquals("kural.extensionsTab","plugins");_kv.when=_kv.when?{c}.and(_kv.when,_kn):_kn;_kx.add(_kv)}}catch{{}}}}catch{{}}')
+                 f'if(_kv.id==="kural.plugins"||_kv.id==="kural.connectors"){{const _kt={cont}.title;_kv.singleViewPaneContainerTitle=typeof _kt=="string"?_kt:_kt&&_kt.value||"Extensions";_kx.add(_kv);continue}}'
+                 f'const _kn={c}.and({c}.notEquals("kural.extensionsTab","plugins"),{c}.notEquals("kural.extensionsTab","connectors"));_kv.when=_kv.when?{c}.and(_kv.when,_kn):_kn;_kx.add(_kv)}}catch{{}}}}catch{{}}')
     # From the end of the file backwards, so each place found above stays where it was.
     edits = [
         (end[0].start() + 1, end[0].start() + 1, PT_COMMAND_CODE.replace("C.registerCommand", commands[0] + ".registerCommand")),
         (layout[0].start(), layout[0].end(), f'this.header.style.height=`${{{layout[0].group(1)}}}px`{layout[0].group(2)}super.layout(new {layout[0].group(3)}('
                                              f'{layout[0].group(4)}.width,{layout[0].group(4)}.height-(this.__kuralLayout?this.__kuralLayout({layout[0].group(1)}):{layout[0].group(1)})))'),
-        (refresh[0].end(), refresh[0].end(), 'if(this.__kuralTab==="plugins")return void await this.commandService.executeCommand("kural.plugins.refresh");'),
+        (refresh[0].end(), refresh[0].end(), 'if(this.__kuralTab==="plugins"||this.__kuralTab==="connectors")return void await this.commandService.executeCommand("kural."+this.__kuralTab+".refresh");'),
         (create[0].end(), create[0].end(), PT_CREATE_CODE),
         (adds[0][1].start(), adds[0][1].start(), view_code),
         (container[0].end(), container[0].end(), 'case"extensions":return this.viewContainersRegistry.get("workbench.view.extensions");'),
@@ -522,6 +525,33 @@ def skip_github_probe(text):
               "GitHub login at every start (a Mac's 'Kural Safe Storage' prompt)")
         return text
     return SPEECH_PROBE.sub(lambda m: SPEECH_PROBE_MARK + m.group(1), text, count=1)
+
+
+# The terminal's suggestion list matches only from the start (Adithya, issue #106: "ori" showed ./.dockerignore and
+# ./.python-version, d-o-cke-r-i-gnore). VS Code's terminal completion model (SimpleCompletionModel) scores items with
+# firstMatchCanBeWeak: the typed letters may be anywhere in the name. An item now stays only if its name starts with what
+# you typed (case doesn't matter; a leading "./" or ".\" is skipped, so "do" still finds ./docs/); the score and the
+# highlight are VS Code's own. The same scorer call is in the editor's suggest model, so it's found after the terminal
+# model's constructor (the only one that sets firstMatchCanBeWeak:!0 and then this._options={}). Kural's own whole-line
+# items start with what you typed, or replace nothing (lib/tab/terminal.js suggestionItem), so they always stay.
+TERMINAL_PREFIX_MARK = "/*kural-prefix*/"
+TERMINAL_MODEL = re.compile(r'this\._fuzzyScoreOptions=\{\.\.\.[\w$]+\.default,firstMatchCanBeWeak:!0\};this\._options=\{\}\}')
+TERMINAL_SCORE = re.compile(r'let ([\w$]+)=([\w$]+)\(([\w$]+),([\w$]+),([\w$]+),([\w$]+)\.textLabel,\6\.labelLow,0,this\._fuzzyScoreOptions\);')
+
+
+def terminal_suggest_prefix(text):
+    if TERMINAL_PREFIX_MARK in text:
+        return text
+    models = list(TERMINAL_MODEL.finditer(text))
+    call = TERMINAL_SCORE.search(text, models[0].end(), models[0].end() + 4000) if len(models) == 1 else None
+    if not call:
+        print(f"::warning::the terminal's suggestion list not found as expected ({len(models)} models); it keeps matching letters "
+              "anywhere in a name")
+        return text
+    _, _, _, low, pos, item = call.groups()
+    gate = (f'if({low}.length>{pos}&&!{TERMINAL_PREFIX_MARK}((h,w)=>h.startsWith(w)||/^\\.[\\\\/]/.test(h)&&h.slice(2).startsWith(w))'
+            f'({item}.labelLow,{low}.slice({pos})))continue;')
+    return text[:call.start()] + gate + text[call.start():]
 
 
 # Kural's browser keeps nothing (Adithya, 18 Oct 2026): no cookies, logins, cache or site data on disk, a fresh browser every
@@ -633,7 +663,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))))
+    new = terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))))))
     if new == text:
         return
     data = new.encode("utf-8")
