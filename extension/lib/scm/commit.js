@@ -8,18 +8,35 @@ const { isHomeOrAbove } = require("../paths");
 
 const DIFF_CHARS = 14000;   // enough to see what changed; long diffs are cut (the file list stays complete)
 
-const SYSTEM_PROMPT = `You write git commit messages in the Conventional Commits style. You get the changes (a diff, maybe cut), the
-list of every changed file and the author's recent commit messages. Reply with ONLY the commit message inside
-<msg>...</msg>:
+// Short on purpose (Adithya, issue #104): about 200 characters in all. Longer replies are cut by `concise`.
+const MAX_CHARS = 200;
+
+const SYSTEM_PROMPT = `You write short git commit messages in the Conventional Commits style. You get the changes (a diff, maybe cut),
+the list of every changed file and the author's recent commit messages. Reply with ONLY the commit message inside
+<msg>...</msg>, at most ${MAX_CHARS} characters in total:
 - Subject: "<type>(<optional scope>): <summary>", at most 72 characters, imperative mood, lower case after the colon, no
   final period. Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert. Use "!" after the type for a
   breaking change.
-- A blank line, then a body wrapped at 72 characters: a few "- " bullets (or short lines) saying WHAT changed and WHY, so
-  that together they cover every changed file and every kind of change in the diff (also files that are only listed).
-  Leave out the body only for a tiny change.
-- A footer ("BREAKING CHANGE: ..." or "Refs: ...") only when it applies.
+- Only when the subject can't say it all: a blank line, then one or two short lines saying what changed and why. Sum up;
+  don't list every file.
 If their recent messages clearly use another style (other prefixes, language), keep their style but still follow these
-rules for length and structure. No quotes around it, no explanations, nothing outside the tags.`;
+rules for length. No quotes around it, no explanations, nothing outside the tags.`;
+
+// A reply longer than MAX_CHARS: the subject and as many whole lines after it as fit (a subject alone that's too long is
+// cut at a word).
+function concise(msg, max = MAX_CHARS) {
+  const lines = String(msg || "").trim().split("\n").map((l) => l.trimEnd());
+  if (!lines[0]) return "";
+  let out = lines[0];
+  if (out.length > max) return out.slice(0, max).replace(/\s+\S*$/, "").trim() || out.slice(0, max);
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) { if (!out.endsWith("\n")) out += "\n"; continue; }   // (a blank line: kept once)
+    const next = `${out}\n${line}`;
+    if (next.length > max) break;
+    out = next;
+  }
+  return out.replace(/\n+$/, "");
+}
 
 function gitApi() {
   const ext = vscode.extensions.getExtension("vscode.git");
@@ -61,8 +78,11 @@ async function changesText(repo) {
   const staged = (st.indexChanges || []);
   const loose = [...(st.workingTreeChanges || []), ...(st.untrackedChanges || [])];
   let diff = "", which = "staged";
+  // (Not diffWithHEAD(): without a path it gives a list of changes, not text; that broke the button whenever nothing was
+  // staged. diff(false) = the working tree against the index; new files are read below.)
   if (staged.length) diff = await repo.diff(true);
-  else { which = "all changes (nothing is staged)"; try { diff = await repo.diffWithHEAD(); } catch { diff = await repo.diff(false); } }
+  else { which = "all changes (nothing is staged)"; diff = await repo.diff(false); }
+  if (typeof diff !== "string") diff = "";
   const files = (staged.length ? staged : loose).map((c) => `${STATUS[c.status] || "changed"}: ${rootRel(c) || rel(c)}`);
   const seen = new Set(), list = files.filter((f) => !seen.has(f) && seen.add(f));
   // New files have no diff: show the start of small text ones.
@@ -105,7 +125,7 @@ function registerCommitMessages(context, session) {
         const text = await changesText(repo);
         if (!text) { vscode.window.showInformationMessage("Kural: there are no changes to describe."); return; }
         const t0 = Date.now();
-        const msg = tidy(await session.ask(`${text}\n\nWrite the commit message for these changes.`));
+        const msg = concise(tidy(await session.ask(`${text}\n\nWrite a short commit message (at most ${MAX_CHARS} characters) for these changes.`)));
         log(`commit message: ${msg ? `${msg.split("\n")[0].length} char subject` : "none"} in ${Date.now() - t0} ms`);
         if (!msg) { vscode.window.showWarningMessage("Kural couldn't write a commit message (see Kural: Show Log)."); return; }
         repo.inputBox.value = msg;
@@ -115,4 +135,4 @@ function registerCommitMessages(context, session) {
   }));
 }
 
-module.exports = { registerCommitMessages, SYSTEM_PROMPT, tidy };
+module.exports = { registerCommitMessages, SYSTEM_PROMPT, tidy, concise, MAX_CHARS };

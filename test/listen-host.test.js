@@ -66,6 +66,17 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     assert.strictEqual(tab.messages[1].listen.model, "Haiku 4.5");
     assert.ok(state.saves >= 1);
   });
+  await check("one flow: after the first sentence, short ones of the same part are said in one request (each one's share told)", async () => {
+    const { listen, sent, tab, spoken } = setup({ pieces: [{ block: 0, text: "First. Second one. Third one here. Fourth." }, { block: 1, text: "Other part." }] });
+    await listen.start("A", tab, 1, BLOCKS);
+    await until(() => sent.some((s) => s.msg.type === "listenEnd"));
+    const audio = sent.filter((s) => s.msg.type === "listenAudio" && !s.msg.opener).map((s) => s.msg);
+    assert.deepStrictEqual(audio.map((a) => [a.n, a.block, a.text]), [[0, 0, "First."], [1, 0, "Second one. Third one here. Fourth."], [4, 1, "Other part."]]);
+    assert.deepStrictEqual(audio[1].group.map((g) => [g.n, g.text]), [[1, "Second one."], [2, "Third one here."], [3, "Fourth."]]);
+    assert.ok(audio[1].group.every((g) => g.w > 0) && audio[1].group[1].w > audio[1].group[2].w);
+    assert.strictEqual(audio[0].group, undefined);
+    assert.ok(spoken.includes("Second one. Third one here. Fourth."), "one voice request");
+  });
   await check("every message went to the pane that started it", async () => {
     const { listen, sent, tab } = setup();
     await listen.start("A", tab, 1, BLOCKS);

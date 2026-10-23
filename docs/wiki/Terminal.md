@@ -6,6 +6,10 @@ command line; nothing runs until you press **Enter**.
 The initial **Show suggestions / don't show this again** hint is hidden by default. Suggestions still appear while
 you type; **Ctrl+Space** opens them manually.
 
+The list shows only names that **start with** what you typed, like the shell's own Tab: `git push ori` finds
+`origin`, not `./.dockerignore` (whose letters o, r, i are somewhere in the middle). Case doesn't matter, and a leading
+`./` is skipped, so `do` still finds `./docs/`.
+
 ## Finishing a command
 
 Start a command and Kural suggests the rest, from your recent commands, `git status` and what you've been doing in this

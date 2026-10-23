@@ -31,6 +31,7 @@ const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
 const { SideChats } = require("./side");
 const slashList = require("./slash");
+const shortcuts = require("./shortcuts");
 const { Enhancer } = require("../enhance");
 const { Voice } = require("../voice");
 const { Listen } = require("../listen");
@@ -130,6 +131,7 @@ class ChatView {
     this.context = context;
     this.apply = apply;          // (code, uri, ask) => Promise   (Apply button on code blocks)
     this.activity = null;        // what you've been doing, for Tab (activity.js); set by extension.js
+    this.explorer = null;        // what the AI reads and changes now, shown in the Explorer (lib/explorer); set by extension.js
     this.tickets = new Tickets(() => vscode.workspace.isTrusted ? this.root() : ws.workDir());   // Jira search for "+ → Link ticket"
     // ("v1.1.0-alpha.3", or "Unreleased version · main (…)" when built from the code: lib/version.js)
     this.version = require("../version").versionLabel(context.extensionPath, context.extension.packageJSON.version);
@@ -231,6 +233,7 @@ class ChatView {
     c.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => this.setupChanged("trusted")));
     c.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("kural.chat.moods") || e.affectsConfiguration("kural.chat.hiddenMoods")) this.moodsChanged();
+      if (e.affectsConfiguration("kural.chat.shortcuts")) this.post({ type: "shortcuts", shortcuts: userShortcuts() });
       if (e.affectsConfiguration("kural.usageSwitch")) this.usageChanged();
     }));
     const watcher = vscode.workspace.createFileSystemWatcher("**/*", false, true, false);
@@ -463,7 +466,7 @@ class ChatView {
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
     this.postTabs();
-    if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: tab.setup });
+    if (tab.setup) this.post({ type: "setup", tabId: tab.id, setup: { ...tab.setup, jira: atlassianState(tab.setup) } });   // (a saved one may be older)
     this.post({ type: "slash", tabId: tab.id, slash: this.slashView(tab) });
     this.warm(tab);
     this.save();
@@ -1351,7 +1354,7 @@ class ChatView {
     // steers: messages you sent while it answered, given to the program but not taken in yet (see queueSend);
     // expect: every message given to the program, in order, until its echo says it was taken in (onEcho).
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map(),
-      steers: [], expect: [] };
+      steers: [], expect: [], engine: engineOf(tab.model) };
     // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
     r.teamFile = nativeTeam ? path.join(privateTmp("teams"), `${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
@@ -1575,9 +1578,11 @@ class ChatView {
       : !fullSetup() ? "Turn on \"Use my Claude Code setup\" (Kural Settings, Claude) to use your skills and commands." : "Loading your skills…" };
   }
   // "/name rest" when name is one of this chat's commands: { lead: "/name ", rest }.
+  // (Your shortcut wins over a skill with the same name: Kural expands it, Claude Code never sees it as a command.)
   slashOf(tab, text) {
     if (!isClaude(tab.model)) return null;
-    const s = slashList.split(text, this.slashes().get(tab.id));
+    const mine = new Set(userShortcuts().map((x) => x.name));
+    const s = slashList.split(text, (this.slashes().get(tab.id) || []).filter((c) => !mine.has(c.name)));
     return s ? { lead: `/${s.name} `, rest: s.rest } : null;
   }
 
@@ -1601,6 +1606,8 @@ class ChatView {
         parts.push(`Part of this chat I selected:\n${String(c.text || "").slice(0, 8001).split("\n").map((l) => `> ${l}`).join("\n")}`);
       } else if (c.kind === "element") {
         parts.push(elementNote(c.element || {}));
+      } else if (c.kind === "shortcut") {
+        continue;   // (below: each shortcut once, chips and typed ones alike)
       } else if (c.kind === "file" || c.kind === "current") {
         const uri = this.resolvePath(c.path);
         let body = null;
@@ -1611,6 +1618,8 @@ class ChatView {
           : `${label} (large — read it with your tools if you need it)`);
       }
     }
+    // Your shortcuts (/pr-summary): what each one stands for (lib/chat/shortcuts.js).
+    parts.push(...shortcuts.notes(text, contexts, userShortcuts()));
     return parts.length ? `<context>\n${parts.join("\n\n")}\n</context>\n\n${text}` : text;
   }
 
@@ -1630,13 +1639,13 @@ class ChatView {
   }
 
   static textOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "shortcut" ? `/${s.ctx.name}` : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
       : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
   }
 
   // A tab title from your first message; pills read as "main.py (L3-9)".
   static titleOf(segments) {
-    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? s.ctx.label
+    return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "shortcut" ? `/${s.ctx.name}` : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? s.ctx.label
       : `${path.basename(s.ctx.path)}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`)
       .join("").replace(/\s+/g, " ").trim().slice(0, 40);
   }
@@ -2158,7 +2167,9 @@ class ChatView {
     if (m.type === "system" && m.subtype === "init" && m.model) {
       tab.modelName = shownModel(tab, m.model);
       if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name: tab.modelName });
-      this.noteSetup(tab, r, m);
+      // (Only Claude reports your connectors. ChatGPT's, Gemini's and a local model's adapters send an empty list, which
+      // said "Atlassian isn't connected" and closed Link ticket after every answer they gave: issue #105.)
+      if (r.engine === "claude") this.noteSetup(tab, r, m);
       return;
     }
     // What Claude Code keeps running in the background (agents, a long command like a dev server), also after the answer
@@ -2234,6 +2245,9 @@ class ChatView {
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
       this.postTabs();
     }
+    // (A tool call's result: the Explorer stops showing a read soon after; the lead's and the agents' alike.)
+    if (m.type === "user" && this.explorer && m.message && Array.isArray(m.message.content))
+      for (const c of m.message.content) if (c && c.type === "tool_result") this.explorer.finished(tab.id, c.tool_use_id);
     if (m.type === "stream_event") {
       if (parent) return;   // helpers' own text stays inside their card; only the lead talks in the chat
       const e = m.event;
@@ -2295,6 +2309,7 @@ class ChatView {
           continue;
         }
         if (b.name === "AskUserQuestion") continue;   // shown as a question card instead
+        if (this.explorer) this.explorer.started(tab.id, b.id, b.name, b.input);
         const step = { k: "tool", name: b.name, detail: toolDetail(b.name, b.input, this.root()), id: b.id };
         const owner = parent && r.agents.get(parent);
         if (owner && b.name === "mcp__team__post") {
@@ -2473,6 +2488,7 @@ class ChatView {
   // The answer is complete (or stopped): close it and tidy up.
   finishReply(tab, r, m) {
     const reply = r.turn.reply;
+    if (this.explorer) this.explorer.ended(tab.id);
     reply.waitingFor = [];
     clearTimeout(r.idleTimer);
     clearInterval(r.watchdog); clearInterval(r.busyTimer);
@@ -2861,10 +2877,10 @@ class ChatView {
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
         w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: allMoods(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
+          moods: allMoods(), shortcuts: userShortcuts(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
         w.postMessage(this.tabsFor(pane));
         w.postMessage({ type: "full", tab: this.viewTab(t) });
-        if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: t.setup });
+        if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: { ...t.setup, jira: atlassianState(t.setup) } });
         pane.ready = true;
         for (const q of pane.queue.splice(0)) w.postMessage(q);
         // The side panel's page (re)loaded: its columns start again in it (each says "ready" in turn). (Also with one
@@ -3046,6 +3062,12 @@ class ChatView {
         else if (["claude", "codex", "agy", "local"].includes(m.ai)) vscode.commands.executeCommand("kural.account", m.ai);
         break;
       case "showUsage": vscode.commands.executeCommand("kural.showUsage"); break;
+      // The tab line's gear and "…" menu (they were in the panel's title bar).
+      case "panelCommand": {
+        const id = { settings: "kural.account", getStarted: "kural.getStarted", updates: "kural.checkForUpdates", whatsNew: "kural.whatsNew" }[m.what];
+        if (id) vscode.commands.executeCommand(id);
+        break;
+      }
       case "setEffort": if (valid(EFFORTS, m.effort)) {
         tab.effort = m.effort; tab.effortPinned = !!tab.autoRoute; this.remember(tab); this.postTabs(); this.save();
         if (tab.status === "idle") this.warm(tab);
@@ -3070,6 +3092,7 @@ class ChatView {
       case "setMood": if (valid(allMoods(), m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
       // "Add your own mood…" in the model menu: Kural Settings, at Moods (lib/settings-page.js).
       case "editMoods": vscode.commands.executeCommand("kural.settings.moods"); break;
+      case "editShortcuts": vscode.commands.executeCommand("kural.settings.shortcuts"); break;
       case "toggleRole": if (TEAMS_ENABLED && valid(ROLES, m.role)) {
         const roles = tab.roles || [];
         tab.roles = roles.includes(m.role) ? roles.filter((r) => r !== m.role) : [...roles, m.role].slice(0, FRIENDS.length);
@@ -3374,6 +3397,8 @@ function permDetail(tool, input) {
 function fullSetup() { return !!cfg().get("chat.fullClaudeCodeSetup") && vscode.workspace.isTrusted; }
 // Your own moods, from your user settings only (never a project's: their instructions go into the AI's prompt).
 function userMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.moods") : null; return i ? i.globalValue : undefined; }
+// Your shortcuts (Kural Settings → Shortcuts), from your user settings only too: their text goes to the AI.
+function userShortcuts() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.shortcuts") : null; return shortcuts.clean(i ? i.globalValue : undefined); }
 // Built-in moods you removed from the menu (Kural Settings → Moods): user settings only too.
 function hiddenMoods() { const c = cfg(), i = typeof c.inspect === "function" ? c.inspect("chat.hiddenMoods") : null; return i ? i.globalValue : undefined; }
 // The moods in the model menu: the built-in ones you kept, then yours (prompts.js shownMoods, customMoods).

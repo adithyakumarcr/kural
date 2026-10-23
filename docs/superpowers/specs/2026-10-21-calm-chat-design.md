@@ -51,6 +51,9 @@ Gemini (Antigravity doesn't pass it on), a setting to hide thinking.
   saying what the thinking is: "Claude's summary", "ChatGPT's summary" or "raw".
 - At about 14 lines (300 px) it scrolls inside and follows the newest line. Scroll up inside it and it stops following;
   a **Latest** button takes you back. It never folds by itself while you watch (that jump is why it's one line today).
+  - *Changed 22 Oct 2026 (issue #104, Adithya):* while it runs it may grow as tall as the chat (not 300 px), and when that
+    part of the answer is done it folds to its header, so the answer comes up under it. The one jump this makes, at the
+    end, is the point. Your own open/fold click still wins.
 - When a chat is opened or redrawn, the timelines of earlier answers start folded to their header; click to open.
 
 **Questions: pick, then Send**

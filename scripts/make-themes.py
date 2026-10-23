@@ -169,17 +169,18 @@ DARK_T = {"comment": "#6a9955", "string": "#ce9178", "escape": "#d7ba7d", "regex
 LIGHT_P = {"main": "#6447d6", "hover": "#5a3cc8", "focus": "#6447d6", "link": "#5a3cc8", "linkActive": "#4a2fb0", "cursor": "#6447d6",
            "soft": "#6447d624", "badge": "#e3ddfa", "badgeFg": "#3d2a8c"}
 LIGHT = {
-    "fg": "#3b3b3b", "fgStrong": "#1f1f1f", "desc": "#616161", "error": "#e51400", "sel": "#add6ff", "border": "#e5e5e5", "shadow": "#00000029",
-    "icon": "#3b3b3b", "iconInactive": "#616161", "codeblock": "#f0f0f0", "preformat": "#a31515",
-    "editor": "#ffffff", "editorFg": "#1f1f1f", "chrome": "#f8f8f8", "lineNo": "#6e7681", "lineNoActive": "#1f1f1f",
+    # (issue #104: stronger than VS Code's Light Modern, so side bar, panels, borders and the selected row stand out)
+    "fg": "#3b3b3b", "fgStrong": "#1f1f1f", "desc": "#545454", "error": "#e51400", "sel": "#add6ff", "border": "#d0d0d0", "shadow": "#00000029",
+    "icon": "#3b3b3b", "iconInactive": "#545454", "codeblock": "#f0f0f0", "preformat": "#a31515",
+    "editor": "#ffffff", "editorFg": "#1f1f1f", "chrome": "#f2f2f2", "lineNo": "#5c636c", "lineNoActive": "#1f1f1f",
     "selInactive": "#e5ebf1", "selHi": "#add6ff80", "wordHi": "#57575740", "wordHiStrong": "#0e639c40", "lineHi": "#eeeeee",
     "find": "#a8ac94", "findHi": "#ea5c0055", "range": "#fdff0033", "indent": "#d3d3d3", "indentActive": "#939393", "whitespace": "#d3d3d3",
     "bracketBg": "#0064001a", "bracketBorder": "#b9b9b9", "br1": "#0431fa", "br2": "#319331", "br3": "#7b3814",
     "ghost": "#6e6e6e", "codelens": "#616161", "added": "#2ea043", "modified": "#005fb8", "deleted": "#f85149",
-    "warning": "#bf8803", "info": "#1a85ff", "widget": "#ffffff", "listActive": "#e8e8e8", "listActiveFg": "#000000",
-    "listInactive": "#e4e6f1", "listHover": "#f2f2f2", "match": "#0066bf", "slider": "#64646466", "sliderHover": "#646464b3",
+    "warning": "#bf8803", "info": "#1a85ff", "widget": "#ffffff", "listActive": "#dcd5fa", "listActiveFg": "#000000",
+    "listInactive": "#e6e2f5", "listHover": "#e6e6e6", "match": "#0066bf", "slider": "#64646466", "sliderHover": "#646464b3",
     "sliderActive": "#00000099", "diffIns": "#9ccc2c40", "diffDel": "#ff000033", "diffInsLine": "#9bb95533", "diffDelLine": "#ff000033",
-    "input": "#ffffff", "inputBorder": "#cecece", "placeholder": "#767676", "secondary": "#e5e5e5", "secondaryHover": "#cccccc",
+    "input": "#ffffff", "inputBorder": "#a8a8a8", "placeholder": "#6b6b6b", "secondary": "#e5e5e5", "secondaryHover": "#cccccc",
     "gitModified": "#895503", "gitUntracked": "#007100", "gitDeleted": "#ad0707", "gitConflict": "#ad0707", "peek": "#f2f8fc",
     # (darker than VS Code's own, so every color reads on the light panel: test/theme.test.js)
     "ansi": {"Black": "#000000", "Red": "#c02a3a", "Green": "#2c7a34", "Yellow": "#8a5d00", "Blue": "#1d5bbf", "Magenta": "#a01eb0",

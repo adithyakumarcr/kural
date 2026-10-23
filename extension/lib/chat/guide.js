@@ -64,8 +64,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Listen (the speaker button under a finished answer, beside Fork from here): Kural talks you through the answer like a
   friend explaining it, in a voice made on this computer (Supertonic 3, offline), while the part it explains is
   highlighted and kept on screen. It's a short walkthrough of the main points (about a minute or two), not the text read
-  out, told with some enthusiasm; code is explained, not read. It starts at once (a short opener, then sentence by sentence
-  while the rest is made). The player sits just above the chat box: Pause/Play, Rewind 5 s, the speed (0.5x, 0.75x, 1x,
+  out, told with some enthusiasm; code is explained, not read. It starts at once (a short opener, then the rest as it's made;
+  short sentences of one part are said together, and the silence the voice leaves around each is trimmed, so it flows
+  like one voice with short natural pauses). The player sits just above the chat box: Pause/Play, Rewind 5 s, the speed (0.5x, 0.75x, 1x,
   1.25x, 1.5x, 2x: the voice itself speaks faster or slower, and the speed you pick becomes the default), ✕, and three
   lines of what's said (the sentence before, the one now, the next); no slider; the button again stops it. The first
   click asks to download the voice, about 430 MB, once. The words come from the chat's quickest model (Haiku, or
@@ -76,8 +77,15 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   "/" at the start of the message lists your skills and commands (Claude models with "Use my Claude Code setup" on: your
   plugins' skills such as Superpowers' superpowers:brainstorming, your own, and Claude Code's like /code-review); type
   to filter, Tab or Enter puts it in, then add what it's for and send.
-  Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a Jira ticket
-  (Claude only); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
+  Your shortcuts (every AI): a name that stands for a text you write once, like /pr-summary or /test. Make them in Kural
+  Settings → Shortcuts (or "Make a shortcut…" at the end of the "/" list when you have none). Type "/" at the start of
+  the message or after a space anywhere ("hi! please do /pr-summary"), pick it, and it goes in as a chip; the AI gets
+  your message as written plus what the shortcut stands for. Typed by hand as a whole word it counts too. Yours come
+  first in the list and win over a Claude skill with the same name. Kept in your user settings (kural.chat.shortcuts),
+  for every project; a project can't add one.
+  Files are attached only when you choose them: @ mentions a file; + adds files, images, PDFs, or links a device (no
+  Jira ticket or browser pick there any more: a ticket linked before keeps its chip with ×; the browser bar's own
+  inspect button adds elements); paste a screenshot; select text in the chat (an answer or your own message) and click "Add to chat"
   beside it: it goes into your message as a quote, and the AI gets the whole selected text. Side chat: select text in an
   answer and press Ask (beside Add to chat) to ask a quick question about it right under the answer; a fast model answers
   (Haiku, or the lightest Gemini model, or your own model; not ChatGPT, which can't be limited to answering), without tools. It's separate from the conversation (the
@@ -85,17 +93,17 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   box remember it; Add to chat under a side answer brings that Q&A into your message. Model menu (bottom of the chat): Auto (Model Router), Claude's Opus/Sonnet/Haiku, Google Gemini and
   ChatGPT (Codex) models (only the AIs you've set up), or a model on this computer (once you have one that can chat).
   The gear beside each name opens its settings: Auto's opens the Model Router; Claude's, Gemini's, ChatGPT's and your
-  own model's open Kural Settings at that AI's card (connectors, when to switch away near a limit); intensity Low to Max (for Gemini it picks the model's thinking
-  level); moods (Explorer, Critic, Learn: teaches you
+  own model's open Kural Settings at that AI's page (where its connectors are, when to switch away near a limit); intensity Low to Max (for Gemini it picks the model's thinking
+  level); preferences (the menu's "Preference" row, called moods before: Explorer, Critic, Learn: teaches you
   step by step and checks what you know first; in Learn, ask "explain it on a webpage" (Agent or Auto mode) and the AI
   builds a lesson page, a short slide deck with diagrams and few words, shown in Kural's browser beside the chat (the
   Explorer and the terminal close for a big screen; arrows or the dots move; the AI teaches it slide by slide in the
   chat; select text or click a visual on the page, then "Add to chat"; the page reloads when the AI changes it; kept
-  privately, deleted with the chat); and your own: "Add your own mood…" at the end of the moods opens Kural
-  Settings → Moods: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete them
-  there; built-in moods you don't use (Default too) can be removed there with their ×, and Restore brings one back; the
-  menu keeps at least one, and a new chat starts with the first mood left; a changed mood or mode applies from the next
-  message); Multiple agents are switched off for now (one agent per chat). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
+  privately, deleted with the chat); and your own: "Add your own…" at the end of the row opens Kural
+  Settings → Preferences: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete
+  them there; built-in ones you don't use (Default too) can be removed there with their ×, and Restore brings one back;
+  the menu keeps at least one, and a new chat starts with the first one left; a changed preference or mode applies from
+  the next message); Multiple agents are switched off for now (one agent per chat). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
   this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and Kural-managed teams always do
@@ -106,9 +114,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   s" and then "Worked for 34 s · 2 thoughts, 3 reads, 1 command", with a tag saying what the thinking is:
   "Claude's summary" or "ChatGPT's summary" (Anthropic and OpenAI only send a summary of their models' thinking, never the raw
   thinking: Kural shows it as it comes and summarizes nothing itself) or "raw" (models on this computer, open models
-  through Codex); Gemini (Antigravity) passes no thinking on. At about 14 lines it scrolls inside, following the newest
-  line; scroll up in it to read and it stays there until Latest. It never folds by itself while you watch; when you open
-  the chat later, earlier answers' timelines are folded to their header (click to open). The answer is below it.
+  through Codex); Gemini (Antigravity) passes no thinking on. While it works it grows as tall as the chat, then scrolls
+  inside, following the newest line; scroll up in it to read and it stays there until Latest. When it's done it folds to
+  its header ("Worked for 34 s · …"; click to open it again) and the answer comes up under it.
   Answers are drawn calmly ("Calm reading"): real headings, the point first in a box (an answer that starts with
   "**Done:** …", "**Goal:**", "**In short:**"), callouts whose color means something (GitHub's alerts: > [!NOTE] blue
   Note, > [!TIP] green Tip, > [!IMPORTANT] purple Important, > [!WARNING] amber Watch out, > [!CAUTION] red Risk), quotes,
@@ -143,8 +151,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   click one to see it full size in its own tab. Links to
   files in an answer (and file names in \`code\`) open the file (at the line), also when the answer gives only its name
   or a path from another folder: Kural finds it in the project (several with that name: you pick one); web links open
-  in Kural's browser tab. The clock
-  button: every chat from every workspace (search, pin, delete). Drag a chat tab out of the Kural panel and let go (in
+  in Kural's browser tab. The chat's tab line holds all its buttons (the panel's title bar has none of its own): +
+  (new chat), Split, the clock (every chat from every workspace: search, pin, delete), the gear (Kural Settings) and "…"
+  (Get started, Check for updates, What's new). Drag a chat tab out of the Kural panel and let go (in
   the editor area, say) to open it beside the code, in an editor group next to the one you're in (VS Code's own
   above/below drop zones don't show for it: move its editor tab afterwards for that); it then shows only that chat, and
   leaves the side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code"). To bring it back:
@@ -155,10 +164,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   × (back among the tabs); drag a title to move that chat (to a side, onto another chat, onto the first column: back
   among the tabs, or out of the panel: beside the code); drag the line between two to resize. Made narrower, they stack
   above each other. They come back after a restart.
-- Source Control panel: the sparkle button in the commit message box writes a commit message from your staged changes
-  (or all changes), in the style of your recent commits, with the chat's model; edit it and commit as usual.
-- Kural's browser (Command Palette "Kural: Open Browser", or + in the chat: "Pick from a browser", or ANY web link in an
-  answer, which opens there instead of the outside browser): real web pages inside Kural, your app on localhost or any
+- Source Control panel: the sparkle button in the commit message box writes a short commit message (at most 200
+  characters: a subject line, maybe a line or two more) from your staged changes (or all changes), in the style of your
+  recent commits, with the chat's model; edit it and commit as usual.
+- Kural's browser (Command Palette "Kural: Open Browser", or ANY web link in an answer, which opens there instead of the
+  outside browser): real web pages inside Kural, your app on localhost or any
   site, with Design Mode like Cursor. The browser bar's inspect button ("Add Element to Chat", Cmd/Ctrl+Shift+C): click
   something on the page and it's added to your message with its HTML, size and computed CSS and a picture of it; "Comment
   on Elements" adds what you want changed ("make this bigger") as the start of your message; its dropdown also adds a
@@ -188,8 +198,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Agent mode; Claude and Codex models, not Gemini or a model on this computer). Click the device's chip
   for a terminal on it. Command Palette "Kural: Devices": terminal, link to the chat, set up again (after reinstalling
   the device: asks the password once more), forget its host key, remove (also takes Kural's key off the device).
-- Your own models: Kural Settings → Your own model → "Find & download models…" (or "Kural: Find and Download
-  Models"): Ollama's models that can use tools, sized for this computer. They work offline and show in the model menu
+- Your own models: Kural Settings → Add agent → Your own model (Get started), then its card's Settings → "Find &
+  download models…" (or "Kural: Find and Download Models"): Ollama's models that can use tools, sized for this computer. They work offline and show in the model menu
   once one can chat.
 - Search & Ask (left side bar, magnifier icon), two tabs. Search (Ctrl+Shift+F, Replace Ctrl+Shift+H): find and
   replace in the project's files, everything VS Code's own Search did (Kural hides that one): Match Case, Whole Word,
@@ -199,7 +209,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Ask (Ctrl+Alt+A): describe what you're looking for in plain words; Kural lists the exact places. Ask always uses the
   fastest model you have (Claude's Haiku, or the lightest Gemini or Codex model; your own model if that's all), not the
   chat's model; each result list shows which. An empty box shows no results (in both tabs).
-- Extensions & Plugins (the Extensions icon on the left, Ctrl+Shift+X), two tabs like Search & Ask: Extensions is VS
+- Extensions & Plugins (the Extensions icon on the left, Ctrl+Shift+X), three tabs like Search & Ask: Extensions is VS
   Code's own (Open VSX: search, install, update, turn off); Plugins: the AI plugins (skills, commands, agents, hooks, MCP
   servers) of the chat's AI, from that AI's own plugin manager. It follows the chat's model (Claude's plugins for a
   Claude model, ChatGPT's for Codex, Gemini's for Gemini; a model on this computer has none); "Plugins for" shows another
@@ -220,7 +230,30 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   on (Kural Settings → Claude). Claude's and ChatGPT's plugins belong to the profile; Gemini's are the same in every
   profile. "Kural: Show Plugins" opens it. (If VS Code's Extensions side bar can't take the tab, Plugins has a side bar
   of its own: the plug icon.)
-- Inline edit (Ctrl+K, Cmd+K on a Mac): select code, say what to change, review a read-only red/green diff, Accept or Reject. The original file changes only on Accept.
+  Connectors (the third tab; "Kural: Show Connectors"; they used to be on each AI's page in Kural Settings): the
+  connectors (MCP servers) of the chat's AI, Claude's or ChatGPT's ("Connectors for" shows the other; Gemini and a model
+  on this computer have none here). Each with its status, Sign in when one needs it (Codex opens its login; Claude opens
+  a terminal where you type /mcp), an On box (untick it to turn the connector off everywhere in Kural: Kural's chats of
+  that AI, in every project, don't use it; it still connects in the background, and claude/codex in a terminal aren't
+  affected), remove (yours; claude.ai's are removed on claude.ai, a plugin's with its plugin in the Plugins tab). "Add
+  connector" opens a searchable list: Popular ones (Notion, Linear, Sentry, Atlassian, Asana, Stripe, Vercel, Supabase,
+  Hugging Face, Context7, Cloudflare docs, Playwright, GitHub, Filesystem) and the official MCP directory as you type
+  (those show the exact command or address and ask you to confirm: nobody checked them); Add, and fill in a token or
+  folder only if it asks (on Mac and Linux a token is kept in a private file in Kural's storage, never on a command line;
+  Windows passes it to the program directly); "Add one by hand" at the bottom takes a command or web address; ChatGPT
+  can't use ones that need a key header or the older SSE kind. Claude's also has "Use my Claude Code setup (plugins,
+  skills)" and Reload.
+- Inline edit (Ctrl+K, Cmd+K on a Mac): select code (or put the cursor on a line to write new code there) and a box
+  opens right under it, in the code: say what to change (Enter sends, Shift+Enter is a new line, Esc or Cancel closes
+  it), then review a read-only red/green diff, Accept or Reject. The original file changes only on Accept.
+- With code selected in the editor, a small label appears right after the selection: "Add to Chat ⌘L · Edit ⌘K"
+  (Ctrl+L / Ctrl+K on Windows and Linux; only Add to Chat in read-only files). Point at it, or at the selected code,
+  and the two are buttons to click: Add to Chat (the selection goes into your chat message) and Edit Selection (inline
+  edit). It never moves the code; setting kural.editor.selectionButtons turns it off.
+- The Explorer shows what the AI is working on as it works, in every chat: a file it reads turns blue for a moment, a
+  file it changes turns yellow until its answer ends (a dot beside the name; hover: "Kural is reading this" / "Kural is
+  changing this"). Commands it runs aren't shown (Kural can't tell which files they touch). Colors:
+  kural.explorer.reading and kural.explorer.changing in workbench.colorCustomizations; off: kural.explorer.showAIActivity.
 - Model Router (Auto in the model menu, like Cursor's): Balance, Cost (saves your usage limits: lightest model that can
   do it, the most capable only for complex work) or Intelligence (a step more capable; quick questions still go to a
   cheaper model; "Build it" on an agreed plan goes to a light model such as Haiku in Balance and Cost, and a step that
@@ -243,7 +276,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   of the AIs you set up).
 - Tab Completion: grey suggestions as you type; Tab accepts. Click the icon in the status bar to enable or disable
   suggestions (sparkle while on, crossed out while off; Ctrl+Alt+Space also toggles). Its hover has a Tab Completion
-  settings link, or Kural Settings → Tab Completion opens its panel: on/off, speed, engine (Auto, local or Claude) and model.
+  settings link, or the Tab Completion tab in the bottom panel: on/off, speed, engine (Auto, local or Claude) and model.
   A model on this computer is used only after "Set up" there (or your own model in Get started). Set up is one click:
   without Ollama it downloads and installs Ollama first (download %, install %; on Linux it asks for the password),
   then downloads the model. If the installation fails, Kural offers ollama.com's own
@@ -267,11 +300,13 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Terminal: Kural suggests the whole command line; Tab fills it in, Enter runs it. Plain words work too: type what you
   want ("i want to delete the file install.sh", "push this to the fix/login branch", "commit with message fixed the
   login") and Kural suggests the command (rm install.sh), first in the list; Tab puts it in place of your words.
-  The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work.
+  The terminal's initial "Show suggestions" hint is hidden by default; suggestions still work. The list shows only
+  names that start with what you typed (case doesn't matter; a leading ./ is skipped): "ori" finds origin, never
+  ./.dockerignore.
 - AI Usage (bottom panel, next to Terminal; Command Palette "Kural: Show AI Usage"): per AI, its Session and Weekly
   limits with when they reset, always shown; only the tokens are under "Tokens" (click to open). Session = the 5-hour
   limit (Claude and Codex); Gemini has weekly limits.
-  The status bar shows only each AI's Session limit: the chat's AI with when it resets ("Claude Session 50% · resets
+  The status bar shows only each AI's Session limit: the chat's AI as "Usage" with when it resets ("Usage 50% · resets
   42m"), the others short ("Codex 12%"); Gemini, which has only weekly limits, shows its name. Weekly numbers stay in
   the hover at every usage level; hover for every AI's Session and Weekly limits; orange
   from 80 %, red from 95 %; click it for the panel. Also tokens per AI: read (and how much from
@@ -297,22 +332,19 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   approval gate (Antigravity hooks) relies on Antigravity running its hooks; use a separately isolated account for
   untrusted content.
 - The status bar's person icon shows the name on the account the chat's AI uses ("Peasant Adithya"); hover for all.
-- Kural Settings (an editor tab: status bar person icon, the Kural panel's ... menu, or "Kural Settings"): a short
-  overview. A card each for Claude, Google Gemini, ChatGPT (Codex) and your own model: who you're logged in as, plan,
-  usage bars, and Settings (that AI's own page; the model menu's gear opens the same page), log in / log out / switch
-  account / set up. An AI's page: Connectors (Claude and ChatGPT: each with its status, Sign in when one needs it (Codex
-  opens its login; Claude opens a terminal where you type /mcp), remove; "Add connector" opens a searchable list: Popular
-  ones (Notion, Linear, Sentry, Atlassian, Asana, Stripe, Vercel, Supabase, Hugging Face, Context7, Cloudflare docs,
-  Playwright, GitHub, Filesystem) and the official MCP directory as you type (those show the exact command
-  or address and ask you to confirm: nobody checked them); Add, and fill in a token or folder only if
-  it asks (on Mac and Linux a token is kept in a private file in Kural's storage, never on a command line; Windows passes
-  it to the program directly); "Add one by hand" at the bottom takes a command or web address; ChatGPT can't use ones that need a key header
-  or the older SSE kind; Claude also: "Use my Claude Code setup (plugins, skills)" and Reload; Gemini: no connectors
-  yet), then "Switch to another AI near a limit". Your own model's page: Find & download models, change model, context
-  length. Then Moods (your own chat moods: add, edit, delete; remove or restore the built-in ones); What Kural learns
-  (Tab Completion learning from your work, off by default; Auto learning which models you prefer, on by default; each
-  with "Delete what it learned"); then Kural's version and Check for updates, Get started, Tab Completion, Profiles,
-  all settings, the log, crash reports, the guide, Export settings / Import settings (a file with Kural's settings,
+- Kural Settings (an editor tab: status bar person icon, the gear on the chat's tab line, or "Kural Settings"): a short
+  overview. A card for each AI you've set up (Claude, Google Gemini, ChatGPT (Codex), your own model): who you're
+  logged in as, plan, usage bars, and Settings (that AI's own page; the model menu's gear opens the same page), log in.
+  The AIs not set up yet take no room: "Add agent" (top right of Your AI) lists them, and picking one opens Get started
+  at it. An AI's page: Connectors (a button to the Connectors tab beside Extensions and Plugins, where they're managed;
+  Claude's page also has "Use my Claude Code setup (plugins, skills)" and Reload), then "Switch to another AI near a
+  limit", then its account (usage page, switch account, log out). Your own model's page: Find & download models, change
+  model, context length. Then Preferences (called moods before: your own: add, edit, delete; remove or restore the
+  built-in ones); Shortcuts (your "/" shortcuts: add, edit, delete, with examples); What Kural learns (Tab Completion
+  learning from your work, off by default; Auto learning which models you prefer, on by default; each with "Delete what
+  it learned"); More (Get started, Profiles, Export settings / Import settings, the guide, Ask for a feature); and
+  Advanced, folded until you open it: all settings, Kural's log, crash reports, Remove Kural's data. Kural's version
+  and Check for updates are at the top. Export settings / Import settings: a file with Kural's settings,
   editor settings, shortcuts, extensions, chat defaults, devices; settings that look like passwords or keys are left
   out, but check the file before sharing it; you pick what to import. Import never takes settings that pick a program,
   start a terminal, set a proxy or turn on Auto, nor shortcuts that type into the terminal; extensions install only
@@ -327,12 +359,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   see what those click, so it couldn't keep the AI from publishing; it uses Kural's browser instead).
   "Build it" switches to Agent (Auto only if the chat is already in Auto). Kural's browser opens only http/https
   addresses; without the editor's Integrated Browser a page opens in your web browser.
-  Kural's log: "Kural: Show Log" (Command Palette) or Kural Settings → the log (an editor tab; Kural hides VS Code's
+  Kural's log: "Kural: Show Log" (Command Palette) or Kural Settings → Advanced → Kural's log (an editor tab; Kural hides VS Code's
   Output tab; the Kural panel's title bar has no log button).
 - Crash reports: when Kural closed unexpectedly, the next start saves a report (macOS's crash reports, VS Code's logs, which
   windows ended) on this computer and offers Show report / Report a bug (copies it; you paste it into the bug form).
   "Kural: Show Crash Reports" lists them.
-- Updates: Kural checks once a day; also Help > Check for Updates, the Kural panel's ... menu, or Kural Settings. A
+- Updates: Kural checks once a day; also Help > Check for Updates, the "…" on the chat's tab line, or Kural Settings. A
   final version is offered final versions only, a test version (alpha, beta, rc) also newer test versions; the setting
   kural.updates.testVersions offers test versions to anyone. It
   installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), checks the new copy is whole
@@ -350,7 +382,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   code-signed yet: click the small "More info" link, then "Run anyway" ("Unknown publisher"). Kural's own updates don't
   ask again. No "Run anyway" at all: Smart App Control or a company policy blocks unsigned programs.
 - Themes: Kural Dark and Kural Light (Preferences: Color Theme): like VS Code's own, code in many colors, purple for
-  buttons and focus.
+  buttons and focus. Kural Light has stronger contrast than VS Code's light theme: the side bar and panels are a shade
+  darker than the editor, with clearer borders, a light purple selected row and darker secondary text.
 - Profiles: a profile is a separate Kural setup with its own Claude and ChatGPT (Codex) accounts, e.g. a personal one and
   a work one. The status bar item (person or briefcase icon and the profile's name) shows the current one; click it to
   switch, or for "New profile…" (Personal or Work, a name, share chats or keep them separate) and "Manage profiles…"
@@ -379,12 +412,11 @@ const GUIDE_LOCAL = `
 About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
 work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
 that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
-Ask; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; the mic beside it (Ctrl+Alt+V) turns what you say into text; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and moods; hover a message to Edit it, Restore code, or
-Fork from here; the clock button has every chat); Ctrl+K proposes changes to selected code in a read-only diff; Tab Completion; plain words in
-the terminal ("push this to main", then Tab); Search & Ask; Extensions & Plugins (the chat's AI's plugins beside VS
+Ask; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; the mic beside it (Ctrl+Alt+V) turns what you say into text; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and preferences; hover a message to Edit it, Restore code, or
+Fork from here; the tab line has +, the clock (every chat), the gear (Kural Settings) and …); Ctrl+K asks in a box under the selected code and proposes changes in a read-only diff; the Explorer shows the files the AI reads (blue) and changes (yellow); Tab Completion; plain words in
+the terminal ("push this to main", then Tab); Search & Ask; Extensions & Plugins (the chat's AI's plugins and connectors beside VS
 Code's extensions); Kural's browser; devices over SSH; the Model Router (Auto);
-Kural Settings (accounts, usage switching, moods, updates). Jira
-tickets and Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
+Kural Settings (accounts, usage switching, preferences, updates). Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and
 link [Ask for this feature](${ISSUES}).`;
 
 module.exports = { GUIDE, GUIDE_LOCAL, ISSUES, WIKI };

@@ -91,14 +91,14 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
   const page = new SettingsPage({ subscriptions: [], extensionUri: {}, extensionPath: "/x", extension: { packageJSON: { version: "1" } } }, { onChange() {} }, { onChange() {} });
   await check("Kural Settings: add, change and delete a mood; it says what's wrong", async () => {
     settings.user = []; settings.workspace = undefined;
-    assert.strictEqual(await page.saveMood({ name: "", instructions: "x" }), "Give the mood a name.");
-    assert.strictEqual(await page.saveMood({ name: "Mine", instructions: " " }), "Write what the AI should do in this mood.");
-    assert.match(await page.saveMood({ name: "Critic", instructions: "x" }), /already a mood called Critic/);
+    assert.strictEqual(await page.saveMood({ name: "", instructions: "x" }), "Give the preference a name.");
+    assert.strictEqual(await page.saveMood({ name: "Mine", instructions: " " }), "Write what the AI should do with this preference.");
+    assert.match(await page.saveMood({ name: "Critic", instructions: "x" }), /already a preference called Critic/);
     assert.match(await page.saveMood({ name: "x".repeat(31), instructions: "x" }), /30 characters/);
     assert.strictEqual(await page.saveMood({ name: "Pair programmer", hint: "small steps", instructions: "Work like a pair programmer." }), "");
     assert.deepStrictEqual(settings.user, [{ id: "custom-pair-programmer", name: "Pair programmer", hint: "small steps", instructions: "Work like a pair programmer." }]);
     assert.strictEqual(updates.at(-1).target, vscode.ConfigurationTarget.Global);
-    assert.match(await page.saveMood({ name: "pair programmer", instructions: "again" }), /already a mood/);
+    assert.match(await page.saveMood({ name: "pair programmer", instructions: "again" }), /already a preference/);
     // Renamed: the same mood (its id stays, so chats using it keep it).
     assert.strictEqual(await page.saveMood({ id: "custom-pair-programmer", name: "Pair partner", instructions: "Work with me." }), "");
     assert.deepStrictEqual(settings.user.map((m) => [m.id, m.name]), [["custom-pair-programmer", "Pair partner"]]);

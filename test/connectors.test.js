@@ -15,6 +15,11 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
     assert.strictEqual(out[0].target, "npx -y @modelcontextprotocol/server-github");
     assert.deepStrictEqual(C.parseClaudeList("No MCP servers configured. Use `claude mcp add` to add a server."), []);
   });
+  await check("a plugin's connector is the plugin's (Claude Code 2.1.296's own line)", () => {
+    const [x] = C.parseClaudeList("plugin:github:github: https://api.githubcopilot.com/mcp/ (HTTP) - ✘ Failed to connect — HTTP 400: Error POSTing to endpoint: bad request: Authorization header is badly formatted\n");
+    assert.deepStrictEqual([x.name, x.managed, x.plugin, x.status, x.ok], ["plugin:github:github", "plugin", "github", "Failed to connect", false]);
+    assert.ok(/Authorization header/.test(x.why));
+  });
   await check("Codex's list (JSON)", () => {
     const out = C.parseCodexList(JSON.stringify([{ name: "docs", enabled: true, transport: { type: "streamable_http", url: "https://x.dev/mcp" } },
       { name: "fs", enabled: false, transport: { type: "stdio", command: "npx", args: ["-y", "fs-server"] } }]));

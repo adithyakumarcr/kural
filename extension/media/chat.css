@@ -247,6 +247,8 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--vscode-foreground); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); user-select: all; }
 .pill-icon { font-size: calc(10px * var(--fs, 1)); opacity: .75; font-family: var(--vscode-editor-font-family); }
 .pill.selection { background: color-mix(in srgb, var(--blue) 16%, transparent); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.pill.shortcut { cursor: default; font-family: var(--vscode-editor-font-family, monospace); }
+.pop-make { color: var(--muted); }
 .pill.quote { cursor: default; max-width: calc(100% - 4px); vertical-align: bottom; }
 .pill.quote .pill-text { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* "Add to chat" beside text you select in the chat (chat.js placeQuoteBtn). */
@@ -455,8 +457,9 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .agent-say.clamp, .agent-think.clamp { max-height: 4.4em; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
 
 .team-wait { color: var(--muted); font-style: italic; }
-/* How it worked: the timeline (media/timeline.js). Thoughts in readable text between the steps it took; at about 14 lines
-   it scrolls inside, following the newest line. It never folds by itself while you watch (nothing below it jumps). */
+/* How it worked: the timeline (media/timeline.js). Thoughts in readable text between the steps it took. While it runs it
+   may grow as tall as the chat (--tl-max, set by chat.js from the list's height), then scrolls inside, following the newest
+   line; when that part of the answer is done it folds to its header (issue #104). A finished one opened again: 300 px. */
 .thv { margin: 2px 0 12px; }
 .th-head { display: flex; align-items: center; gap: 7px; font-size: calc(12.5px * var(--fs, 1)); color: var(--muted); margin: 0 0 8px; user-select: none; cursor: pointer; min-width: 0; }
 .th-head:hover { color: var(--vscode-foreground); }
@@ -471,6 +474,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .thv.folded > .tbox-wrap { display: none; }
 .tbox-wrap { position: relative; }
 .tbox { max-height: 300px; overflow-y: auto; padding: 2px 6px 2px 0; margin-bottom: 4px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+.thv.live .tbox { max-height: var(--tl-max, 300px); }
 .latest { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; background: var(--accent); color: var(--on-accent);
   border: 0; border-radius: 12px; padding: 2px 11px; font: inherit; font-size: calc(11.5px * var(--fs, 1)); cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.35); }
 .latest.hidden { display: none; }

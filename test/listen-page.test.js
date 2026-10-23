@@ -60,6 +60,7 @@ class Ctx {
   suspend() { this.state = "suspended"; this.suspended = (this.suspended || 0) + 1; return Promise.resolve(); }
 }
 const live = (ctx) => ctx.started.filter((x) => !x.s.stopped);
+const PAUSE = 0.09, PAUSE_PART = 0.24;   // (media/listen.js: between sentences of one part, and when the part changes)
 
 function page({ visiting = false, why = "" } = {}) {
   const sent = [], ticks = [];
@@ -87,7 +88,8 @@ function page({ visiting = false, why = "" } = {}) {
   const tick = () => ticks.forEach((f) => f());
   const btn = () => root.querySelector('[data-i="1"] .listen-btn');
   const bar = () => L.dock.querySelector(".listen-bar");   // (the player above the chat box)
-  const audio = (seq, block, secs, text = `sentence ${seq}`, n = seq, gen = 0) => L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq, n, gen, block, text, pcm: new Int16Array(Math.round(secs * 100)), rate: 100 });
+  // (Voiced from end to end: a clip's silent edges are trimmed, media/listen.js voiced.)
+  const audio = (seq, block, secs, text = `sentence ${seq}`, n = seq, gen = 0) => L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq, n, gen, block, text, pcm: new Int16Array(Math.round(secs * 100)).fill(3000), rate: 100 });
   return { L, tab, root, sent, tick, btn, bar, audio, draw };
 }
 
@@ -128,7 +130,7 @@ function page({ visiting = false, why = "" } = {}) {
     assert.deepStrictEqual(p.sent, []);
     assert.match(p.bar().textContent, /Nothing to explain in this answer\./);
   });
-  await check("click: listenStart with the blocks; the bar shows; the sounds are scheduled back to back", () => {
+  await check("click: listenStart with the blocks; the bar shows; the sounds are scheduled one after the other, a short pause between", () => {
     const p = page();
     p.btn().on.click();
     const start = p.sent.find((m) => m.type === "listenStart");
@@ -139,7 +141,7 @@ function page({ visiting = false, why = "" } = {}) {
     p.audio(0, null, 1); p.audio(1, 0, 2); p.audio(2, 2, 3);
     const s = live(ctx);
     assert.strictEqual(s.length, 3);
-    for (let k = 1; k < s.length; k++) assert.ok(Math.abs(s[k].when - (s[k - 1].when + s[k - 1].dur)) < 1e-9, `${k}`);
+    for (let k = 1; k < s.length; k++) assert.ok(Math.abs(s[k].when - (s[k - 1].when + s[k - 1].dur + PAUSE_PART)) < 1e-9, `${k}`);   // (each in another part)
     assert.ok(s.every((x) => x.offset === 0));
   });
   await check("the bar shows the sentence being spoken and its block is highlighted and scrolled to", () => {
@@ -164,7 +166,7 @@ function page({ visiting = false, why = "" } = {}) {
     let s = live(ctx);
     assert.strictEqual(s.length, 2);
     assert.ok(Math.abs(s[0].offset - 2) < 1e-9 && s[1].offset === 0);
-    assert.ok(Math.abs(s[1].when - (s[0].when + 2)) < 1e-9);
+    assert.ok(Math.abs(s[1].when - (s[0].when + 2 + PAUSE_PART)) < 1e-9);
     ctx.currentTime = s[0].when + 1; p.bar().querySelector(".listen-rewind").on.click();
     s = live(ctx);
     assert.strictEqual(s[0].offset, 0);
@@ -230,9 +232,9 @@ function page({ visiting = false, why = "" } = {}) {
   await check("audio that arrives as an ArrayBuffer, a plain array or a numbered object still plays, at its length", () => {
     const p = page(); p.btn().on.click(); const ctx = Ctx.last;
     const msg = (seq, pcm) => p.L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq, block: 0, text: "x", pcm, rate: 100 });
-    msg(0, new Int16Array(200).buffer);
-    msg(1, Array.from({ length: 300 }, () => 5));
-    const obj = {}; for (let k = 0; k < 100; k++) obj[k] = 7;
+    msg(0, new Int16Array(200).fill(900).buffer);
+    msg(1, Array.from({ length: 300 }, () => 900));
+    const obj = {}; for (let k = 0; k < 100; k++) obj[k] = 900;
     msg(2, obj);
     assert.deepStrictEqual(live(ctx).map((x) => x.dur), [2, 3, 1]);
   });
@@ -288,6 +290,33 @@ function page({ visiting = false, why = "" } = {}) {
     p.audio(2, 0, 1, "First.", 0, 1); p.L.onMessage({ type: "listenEnd", tabId: "t1", index: 1 });
     ctx.currentTime += 3; p.tick();
     assert.strictEqual(p.bar(), null, "closes after the new end");
+  });
+  await check("one flow: a clip's silent edges are trimmed (a little kept, faded), sentences of one part get a short pause", () => {
+    const p = page(); p.btn().on.click(); const ctx = Ctx.last;
+    const clip = (silentBefore, voiced, silentAfter) => { const a = new Int16Array(silentBefore + voiced + silentAfter); a.fill(3000, silentBefore, silentBefore + voiced); return a; };
+    p.L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq: 0, n: 0, block: 0, text: "One.", pcm: clip(30, 100, 40), rate: 100 });
+    p.L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq: 1, n: 1, block: 0, text: "Two.", pcm: clip(25, 200, 50), rate: 100 });
+    const s = live(ctx);
+    // 100 voiced samples + 3 before (0.03 s) + 8 after (0.08 s), at 100 a second. (The real voice left 0.35-0.5 s before
+    // and 0.4-0.65 s after each sentence: measured 22 Oct 2026.)
+    assert.ok(Math.abs(s[0].dur - 1.11) < 1e-9, String(s[0].dur)); assert.ok(Math.abs(s[1].dur - 2.11) < 1e-9, String(s[1].dur));
+    assert.ok(Math.abs(s[1].when - (s[0].when + s[0].dur + PAUSE)) < 1e-9);
+    // A clip of silence only is left out.
+    p.L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq: 2, n: 2, block: 0, text: "…", pcm: new Int16Array(50), rate: 100 });
+    assert.strictEqual(live(ctx).length, 2);
+  });
+  await check("several sentences in one sound: each its share (by length) for the lines, played as one", () => {
+    const p = page(); p.btn().on.click(); const ctx = Ctx.last;
+    p.L.onMessage({ type: "listenAudio", tabId: "t1", index: 1, seq: 0, n: 3, block: 1, text: "Short. A longer one.", rate: 100, pcm: new Int16Array(300).fill(3000),
+      group: [{ n: 3, text: "Short.", w: 1 }, { n: 4, text: "A longer one.", w: 2 }] });
+    const s = live(ctx);
+    assert.strictEqual(s.length, 2);
+    assert.ok(Math.abs(s[1].when - (s[0].when + 1)) < 1e-9, "no pause inside one sound");
+    assert.ok(Math.abs(s[1].offset - 1) < 1e-9, "the second part starts a third of the way in");
+    ctx.currentTime = s[0].when + 1.5; p.tick();
+    assert.match(p.bar().textContent, /A longer one\./);
+    const lines = p.L.dock.querySelectorAll(".listen-line").map((n) => n.textContent);
+    assert.deepStrictEqual(lines, ["Short.", "A longer one.", ""]);
   });
   await check("messages about another chat or answer aren't Listen's business here", () => {
     const p = page();

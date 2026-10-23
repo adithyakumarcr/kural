@@ -11,6 +11,8 @@ const { initLog, log, findClaude, ClaudeSession } = require("./lib/ai/claude");
 const { showLog } = require("./lib/log");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/tab/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edit/inline");
+const { InlineAsk } = require("./lib/edit/inline-ask");
+const { registerSelectionBar } = require("./lib/edit/selection-bar");
 const { Updater } = require("./lib/updates");
 const { WhatsNew } = require("./lib/whats-new");
 const { terminalTab, TERMINAL_SYSTEM_PROMPT, INTENT_SYSTEM_PROMPT } = require("./lib/tab/terminal");
@@ -18,6 +20,8 @@ const { ReviewManager } = require("./lib/edit/review");
 const { ChatView } = require("./lib/chat");
 const { SearchView } = require("./lib/search");
 const { Plugins } = require("./lib/plugins");
+const { Connectors } = require("./lib/connectors");
+const { registerExplorerActivity } = require("./lib/explorer");
 const { TabPanel } = require("./lib/tab/panel");
 const { LocalEngine } = require("./lib/tab/local");
 const { Activity } = require("./lib/tab/activity");
@@ -73,6 +77,10 @@ function activate(context) {
   // Which profile this window runs as (lib/profiles): first, before anything starts Claude or Codex or reads chats, because
   // the profile decides which logins those programs use and where chats are kept.
   const profileStore = applyActive(context);
+  // Connectors you turned off in Kural Settings (per profile: its own accounts and connectors). Read by every Claude and
+  // Codex Kural starts, so before any of them.
+  const offKey = () => scope.key("kural.connectors.off.v1", "account");
+  require("./lib/ai/connectors-off").init(() => context.globalState.get(offKey()) || {}, (v) => context.globalState.update(offKey(), v));
   // Crash reports: what went wrong when Kural last closed unexpectedly (lib/crash), and errors in Kural's own code.
   crashLog = new CrashLog(context);
   crashLog.start();
@@ -202,6 +210,9 @@ function activate(context) {
   const tabPanel = new TabPanel(context, SPEEDS, local);
   tabPanel.register();
   const review = new ReviewManager();
+  // Ctrl+K asks in a box under the selection (lib/edit/inline-ask.js); a selection gets "Add to Chat · Edit" beside it.
+  const inlineAsk = new InlineAsk(context);
+  registerSelectionBar(context, { busy: () => !!inlineAsk.pending });
   review.register(context);
   // A Ctrl+K or Apply change you accepted: Tab learns what you asked for and where.
   review.onDone = (meta, accepted, uri) => {
@@ -210,6 +221,8 @@ function activate(context) {
   const getState = () => state;
   const chat = new ChatView(context, (code, uri, ask) => applyCode(editSession, review, getState, code, uri, ask));
   chat.activity = activity;
+  // The Explorer shows the files the AI reads (blue) and changes (yellow) as it works (lib/explorer).
+  chat.explorer = registerExplorerActivity(context);
   chat.readyCheck = () => getStarted.ready;           // Claude or your own model set up
   chat.localDefault = () => getStarted.localModel;    // new chats use it when Claude isn't set up
   // A chat answering with a model on this computer keeps Ollama busy: Tab Completion lets Claude help meanwhile
@@ -304,8 +317,11 @@ function activate(context) {
   // Plugins (beside Extensions: "Extensions | Plugins"): the plugins of the chat's AI, from its own plugin manager.
   const plugins = new Plugins(context, { getStarted, chat });
   plugins.register();
+  // Connectors (beside Extensions and Plugins: "Extensions | Plugins | Connectors"): the chat's AI's MCP servers.
+  const connectorsView = new Connectors(context, { chat });
+  connectorsView.register();
   // (The chat's model changed: the meters, whose account it is, and whose plugins the Plugins tab shows.)
-  chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); plugins.chatChanged(); }, 0);
+  chat.onChoice = () => setTimeout(() => { account.drawMeters(); account.draw(); plugins.chatChanged(); connectorsView.chatChanged(); }, 0);
   const searchView = new SearchView(context,router,() => chat.active());
   searchView.register();
   // You changed a name (typed over it, or a Tab suggestion changed it): offer to change it where else it's used
@@ -349,7 +365,11 @@ function activate(context) {
       account.page.push();
       if (!(o && o.quiet)) vscode.window.showInformationMessage("Tab Completion forgot what it learned in this workspace.");
     }),
-    vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState) : getStarted.open()),
+    vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState, inlineAsk) : getStarted.open()),
+    // The label right after a selection in the editor (lib/edit/selection-bar.js) and its hover's buttons: what Ctrl/Cmd+L
+    // and Ctrl/Cmd+K do there.
+    vscode.commands.registerCommand("kural.selection.addToChat", () => vscode.commands.executeCommand("kural.chat.open")),
+    vscode.commands.registerCommand("kural.selection.edit", () => vscode.commands.executeCommand("kural.inlineEdit")),
     vscode.commands.registerCommand("kural.toggleTab", async () => {
       const on = !cfg().get("tabCompletion.enabled");
       await cfg().update("tabCompletion.enabled", on, vscode.ConfigurationTarget.Global);

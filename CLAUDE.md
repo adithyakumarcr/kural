@@ -48,6 +48,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/getstarted.js` (the Get started page, `media/getstarted.*`), `lib/account.js` (Account status item, usage meter,
     log in/out), `lib/settings-page.js` (Kural Settings tab, `media/settings.*`), `lib/usage-panel.js` (AI Usage panel), `lib/paths.js` (what the AI may touch without asking),
     `lib/updates.js` (updates), `lib/search/` (Search & Ask side bar), `lib/plugins/` (the Plugins tab beside Extensions), `lib/workspace.js` (folders; `workDir()` when none is open),
+    `lib/connectors/` (the Connectors tab beside Extensions and Plugins), `lib/explorer/` (the AI's reads and changes in the Explorer),
     `lib/crash/` (crash reports), `lib/settings-io.js` (export/import), `lib/scm/commit.js` (Source Control commit message),
     `lib/log.js`, `lib/ui.js` (font size).
   - `media/codicons/` — the Codicons icon font (CC BY 4.0) for every Kural page.
@@ -213,8 +214,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Saved in globalState `kural.usage.v1` so the bar shows the last numbers at startup. In words (`usage.limitName`,
   `until`, `inWords`): the 5-hour window is called **Session** everywhere (Adithya), then "Weekly", "Weekly (Opus)",
   "Weekly (Gemini)"; numbers saved as "5-hour" by older versions still read as the Session. The status bar shows only the
-  Session limit (Adithya: weekly only on hover): the chat's AI (`brain.engineOf(currentModel())`) "Claude Session 50% ·
-  resets 42m", the others short ("Codex 12%"); weekly limits stay on hover even near their limit. Gemini (weekly only)
+  Session limit (Adithya: weekly only on hover): the chat's AI (`brain.engineOf(currentModel())`) "Usage 50% ·
+  resets 42m" (Adithya, 22 Oct 2026: "Usage", not "Claude Session"; the hover names the AI), the others short ("Codex 12%"); weekly limits stay on hover even near their limit. Gemini (weekly only)
   shows its name. Warning colors still consider every window, including Weekly. The hover has every AI's
   Session and Weekly in full. `chat.onChoice` (model pick, tab switch) redraws it. Clicking it
   opens the **AI Usage** bottom panel (`lib/usage-panel.js`, view `kural.usagePanel`, command `kural.showUsage`).
@@ -313,7 +314,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **Jira tickets** (`lib/chat/tickets.js`): no Jira login in Kural. Search = a Haiku `claude` helper with the full setup
   (so the Atlassian connector is there), only Atlassian tools allowed, JSON answer. claude.ai connectors connect in the
   background after Claude starts: `waitForAtlassian()` polls `mcp_status` until it's connected before asking (asking at
-  once gave "Atlassian tools not available"). The helper is reused between searches, stopped after 5 idle minutes. `tab.ticket` is saved with the
+  once gave "Atlassian tools not available"); a `failed` one gets one `mcp_reconnect` control request (Claude Code
+  2.1.296) first. The + menu never blocks on the chat's last connector report (issue #105: Codex/agy/engine adapters send
+  `init` with `mcp_servers: []`, which read as "Atlassian isn't connected" after every non-Claude answer): only Claude's
+  init updates `tab.setup` (`r.engine`), and `atlassianState` warns only for the minimal setup; the search itself reports
+  real failures (Try again). The helper is reused between searches, stopped after 5 idle minutes. `tab.ticket` is saved with the
   chat; `ticketNote()` is added to every message. Atlassian *read* tools (get/search/lookup…) are auto-allowed in the
   chat; writes still ask. Test without Jira: `claude mcp add -s user atlassian -- node test/fake-atlassian-mcp.js`.
 - **Chat page streaming** (`media/chat.js`): blocks are wrapped in `.blk[data-b]`; deltas patch one block per frame
@@ -590,6 +595,34 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   checked: a real Gemini chat using a plugin's skills (agy wasn't logged in; Kural starts agy with
   `--disable-slash-commands`, which agy's help says also stops "skill expansion" in print mode), a real Codex chat with
   a plugin, Windows and Linux.
+- **UI clean-up of 22 Oct 2026** (Adithya): the chat panel's title bar has no buttons of its own (package.json
+  `view/title` has none for `kural.chat`): +, Split, History, Kural Settings (gear) and "…" (`openMenu("more")`, opens
+  downwards; host `panelCommand` maps names to commands) are on the page's tab line. + has Add files and Link device only
+  (Link ticket's code stays for chips linked before). Kural Settings: cards only for AIs that aren't `off`; the others
+  are "Add agent" (`addAgent`, a list → `setUp`); Moods are called **Preferences** in the UI (ids, settings and code keep
+  "mood"); More is short; Advanced (`<details>`, `V.advanced` kept across the 30-s redraws) has all settings, the log,
+  crash reports, Remove Kural's data. **Connectors** moved to `lib/connectors/` + `media/connectors.*` (views
+  `kural.connectors` in the Extensions side bar, `kural.connectorsAlone` in the Plugins side bar of its own); the AI's
+  page in Settings only links there (`showConnectors`). `rebrand.py add_plugins_tab` now makes THREE tabs (Extensions |
+  Plugins | Connectors; context `kural.extensionsTab`; VS Code's views get `!= plugins` AND `!= connectors`;
+  `_kural.extensionsTabs` answers `{tab, tabs}`: Kural uses `tabs.includes("connectors")` to know the new patch is there;
+  an older patch → `kural.connectorsAlone`). Needs a full `./install.sh`. **Ctrl+K's question** (`lib/edit/inline-ask.js`)
+  is a comment thread of Kural's controller `kural.inlineEdit` under the selection's last line (contextValue `kural-edit`;
+  `thread.reveal(…, {focus: Reply})` needs the proposal `commentReveal`); Send / Cancel are
+  `comments/commentThread/context` items, Enter = `editor.action.submitComment` and Esc = cancel when `commentEditorFocused
+  && commentThread == kural-edit`; no comment widget → the old input box. Checked against VS Code 1.140's code, NOT
+  clicked live. **The selection's label** (`lib/edit/selection-bar.js`): an `after` decoration at the end of the line
+  where the selection ends ("Add to Chat ⌘L · Edit ⌘K"), a HoverProvider gives the clickable links; it replaced the
+  `editor/content` buttons in the editor's corner (proposal `contribEditorContentMenu` dropped). NOT clicked live. **The
+  Explorer** (`lib/explorer/`): a FileDecorationProvider fed by the chat's tool_use (`started`) / tool_result
+  (`finished`) / `finishReply` (`ended`); reads blue (2.5 s after), changes yellow (until the answer ends + 4 s); colors
+  `kural.explorer.reading/changing` in package.json `colors`. **Listen**: the voice leaves 0.35–0.5 s of silence before
+  and 0.4–0.65 s after every clip (measured 22 Oct 2026 with the real Supertonic), which was the "stop after every
+  sentence"; the page trims it (`voiced`, `QUIET`) and adds its own short pause (`PAUSE`, `PAUSE_PART`); the host says
+  up to 3 short sentences of one part in one request after the first (`groupFrom`, `group` [{n, text, w}] in
+  listenAudio). **Voice input**: the recording bar is drawn once and only its clock/level change (`liveUpdate`): it was
+  rebuilt 5x a second and a click on Done got lost. **Commit message**: `repo.diffWithHEAD()` without a path returns
+  Change[], not text ("diff.trim is not a function" with nothing staged): `repo.diff(false)`.
 - **The "/" list** (`lib/chat/slash.js` no vscode; Adithya, 20 Oct 2026: skills like Claude Code's own "/"): a chat's
   Claude process sends the `initialize` control request at start (`opts.commands`, full setup only; no model request)
   and Claude Code answers `{commands: [{name, description, argumentHint, aliases, builtin}]}`, later `commands_changed`
@@ -599,6 +632,14 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   it before everything Kural adds (handoff, notes, context: they become its arguments); its echo comes back as
   `<command-name>/name</command-name>…` (`onEcho` matches it). Checked live: initialize doesn't change permission
   prompts. Tests: `test/slash.test.js` (fake-claude-chat answers initialize).
+- **Your shortcuts** (`lib/chat/shortcuts.js` no vscode; issue #107, Adithya: every AI, a chip, user settings only):
+  `kural.chat.shortcuts` [{name, text}], read with `inspect().globalValue` like the moods; edited in Kural Settings →
+  Shortcuts (`saveShortcut`/`deleteShortcut`, `kural.settings.shortcuts`). The page's "/" opens at the start (shortcuts,
+  then Claude's skills) or after a space (shortcuts only; nothing matching closes it, so a path like /usr/bin stays
+  quiet); a pick inserts a pill `{kind: "shortcut", name, text}`. `textOf`/`titleOf` write it as `/name`, so History and
+  handoffs carry the name; `buildPrompt` adds `notes()` (chips, then hand-typed whole words that are yours; each once; a
+  deleted shortcut's chip keeps its text) to the `<context>` block, which also keeps the message from starting with
+  "/name" for Claude Code. `slashOf` leaves out skills named like a shortcut (yours wins). Test: `test/shortcuts.test.js`.
 - **Enhance prompt** (`lib/enhance/`: `index.js` Enhancer, no vscode; `repo-tools.js` the sandbox; `repo-mcp.js` its MCP
   server; `system-prompt.md` the prompt, read on every click; Adithya, 20 Oct 2026): the wand beside Send → `enhance` →
   `chat.enhance` → a short-lived agent of the chat's AI's middle model (`pick`: Claude `claude-sonnet-5-5`; Codex/Gemini
@@ -709,6 +750,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (`;`/`let`, minified decorators); 1.140's browser comment step (`_insertElementCommentReference`) lets Kural's
   stand-in (`__kural`) pass. After a VSCodium update, try by hand: terminal Tab plain words (`inputData`, kind 101) and
   the browser's element picker (both use VS Code internals).
+- **Terminal suggestions match from the start** (`rebrand.py` `terminal_suggest_prefix`, issue #106): VS Code's terminal
+  completion model (`SimpleCompletionModel`) scores with `firstMatchCanBeWeak`, so "ori" listed ./.dockerignore. A gate
+  before its scorer call keeps an item only if its lowercase label starts with the typed word (or does after "./"/".").
+  The same call is in the editor's suggest model: found after the terminal model's constructor only. Needs a full
+  `./install.sh`. Test: `test/rebrand-terminal-suggest.test.js` (stand-in + the real workbench).
 - **Remove Kural's data** (`lib/remove-data/`: `core.js` no vscode, `index.js` the command `kural.removeData`, also Kural
   Settings → More): before uninstalling. At once: `devices.remove` (returns whether the key came off), `core.removeGate`
   (entry + `.kural-backup` + `~/.kural/agy-gate`), connectors with keys in `connector-keys` (`keyedConnectors`,
@@ -818,6 +864,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   (list does health checks: seconds; the mark before the status varies: ✓ ✗ × !; "claude.ai …" ones are managed on
   claude.ai, no remove); Codex = `codex mcp list --json|add [--url]|remove`; Gemini (agy) and Ollama: none. A Claude change
   → `chat.setupChanged()`. Names are checked (`NAME_RE`, never starting with "-"); commands are split without a shell.
+  "plugin:<plugin>:<server>" ones are the plugin's (`managed: "plugin"`, no remove). **On/off everywhere in Kural**
+  (`lib/ai/connectors-off.js`, issue #105, Adithya chose Kural-wide over Claude's per-project `/mcp disable`): globalState
+  `kural.connectors.off.v1` (account scope) = `{claude: [names], codex: [names]}`; ClaudeProcess adds
+  `--disallowedTools mcp__<name, non [A-Za-z0-9_-] → _>` unless safe mode/strict MCP (checked live with 2.1.296: Figma's
+  42 tools gone, Atlassian's 21 stay; it still connects); CodexAgent passes `enabled = false` for them in every mode
+  (`lockdownArgs(mode, names, off)`, names from `connectorNames`: an unknown name would make Codex refuse its config).
+  Claude Code 2.1.296 also has `mcp_toggle` (persists to the project's `disabledMcpServers`) and `mcp_reconnect`.
 - **Usage switch points** (`lib/ai/usage-switch.js`): `kural.usageSwitch.enabled` + per AI `kural.usageSwitch.limits`
   {claude|codex|agy: {session, weekly}} (missing → `threshold`). `over(model, settings)` uses `model.limitParts`
   (`policy.limitParts`: Session windows vs the rest) else `limitUsed`; chat `overLimit(provider, model)`.

@@ -33,7 +33,7 @@ function parseClaudeList(text) {
     const m = /^(.+?): (.+) - (?:[^\w\s]\s*)?(.+)$/u.exec(line.trim());
     if (!m || /^checking\b/i.test(line)) continue;
     const name = m[1].trim(), [status, ...why] = m[3].trim().split(/\s+[—–]\s+/);
-    out.push({ name, target: require("./connector-catalog").unwrapTarget(m[2].trim()), status, why: why.join(" — "), ok: /^connected$/i.test(status), needsAuth: /authenticat|sign.?in|log.?in/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : "" });
+    out.push({ name, target: require("./connector-catalog").unwrapTarget(m[2].trim()), status, why: why.join(" — "), ok: /^connected$/i.test(status), needsAuth: /authenticat|sign.?in|log.?in/i.test(status), managed: /^claude\.ai /i.test(name) ? "claude.ai" : /^plugin:/i.test(name) ? "plugin" : "", plugin: (/^plugin:([^:]+):/.exec(name) || [])[1] || "" });
   }
   return out;
 }

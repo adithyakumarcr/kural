@@ -365,6 +365,34 @@
       {
         "command": "kural.plugins.show",
         "title": "Kural: Show Plugins"
+      },
+      {
+        "command": "kural.connectors.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kural.connectors.show",
+        "title": "Kural: Show Connectors"
+      },
+      {
+        "command": "kural.selection.addToChat",
+        "title": "Add to Chat",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.selection.edit",
+        "title": "Edit Selection",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.inlineEdit.submit",
+        "title": "Send"
+      },
+      {
+        "command": "kural.inlineEdit.cancel",
+        "title": "Cancel",
+        "icon": "$(close)"
       }
     ],
     "viewsContainers": {
@@ -376,7 +404,7 @@
         },
         {
           "id": "kural-plugins",
-          "title": "Plugins",
+          "title": "Plugins & Connectors",
           "icon": "media/plugins-icon.svg"
         }
       ],
@@ -419,6 +447,12 @@
           "id": "kural.plugins",
           "name": "Plugins",
           "when": "kural.extensionsTab == plugins"
+        },
+        {
+          "type": "webview",
+          "id": "kural.connectors",
+          "name": "Connectors",
+          "when": "kural.extensionsTab == connectors"
         }
       ],
       "kural-plugins": [
@@ -427,6 +461,12 @@
           "id": "kural.pluginsAlone",
           "name": "Plugins",
           "when": "kural.pluginsAlone"
+        },
+        {
+          "type": "webview",
+          "id": "kural.connectorsAlone",
+          "name": "Connectors",
+          "when": "kural.connectorsAlone"
         }
       ],
       "kural": [
@@ -462,21 +502,6 @@
     "menus": {
       "view/title": [
         {
-          "command": "kural.chat.newTab",
-          "when": "view == kural.chat",
-          "group": "navigation@1"
-        },
-        {
-          "command": "kural.account",
-          "when": "view == kural.chat",
-          "group": "9_kural@1"
-        },
-        {
-          "command": "kural.getStarted",
-          "when": "view == kural.chat",
-          "group": "9_kural@2"
-        },
-        {
           "command": "kural.search.refresh",
           "when": "view == kural.search && kural.searchTab != ask",
           "group": "navigation@1"
@@ -484,6 +509,11 @@
         {
           "command": "kural.plugins.refresh",
           "when": "view == kural.pluginsAlone",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kural.connectors.refresh",
+          "when": "view == kural.connectorsAlone",
           "group": "navigation@1"
         },
         {
@@ -566,6 +596,10 @@
           "when": "false"
         },
         {
+          "command": "kural.connectors.refresh",
+          "when": "false"
+        },
+        {
           "command": "kural.search.clear",
           "when": "false"
         },
@@ -612,6 +646,22 @@
         {
           "command": "kural.chat.moveToPanel",
           "when": "activeCustomEditorId == kural.chatTab || activeWebviewPanelId == kural.chatEditor"
+        },
+        {
+          "command": "kural.selection.addToChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.selection.edit",
+          "when": "false"
+        },
+        {
+          "command": "kural.inlineEdit.submit",
+          "when": "false"
+        },
+        {
+          "command": "kural.inlineEdit.cancel",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -671,6 +721,25 @@
           "command": "kural.scm.commitMessage",
           "when": "scmProvider == git",
           "group": "navigation"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "kural.inlineEdit.submit",
+          "group": "inline@1",
+          "when": "commentController == kural.inlineEdit"
+        },
+        {
+          "command": "kural.inlineEdit.cancel",
+          "group": "inline@2",
+          "when": "commentController == kural.inlineEdit"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "kural.inlineEdit.cancel",
+          "group": "inline@1",
+          "when": "commentController == kural.inlineEdit"
         }
       ]
     },
@@ -786,6 +855,28 @@
         "command": "kural.search.prev",
         "key": "shift+f4",
         "when": "kural.searchHasResults"
+      },
+      {
+        "command": "kural.selection.addToChat",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "kural.selection.edit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "editorTextFocus && editorHasSelection && !editorReadonly"
+      },
+      {
+        "command": "editor.action.submitComment",
+        "key": "enter",
+        "when": "commentEditorFocused && commentThread == kural-edit && !suggestWidgetVisible"
+      },
+      {
+        "command": "kural.inlineEdit.cancel",
+        "key": "escape",
+        "when": "commentEditorFocused && commentThread == kural-edit"
       }
     ],
     "configuration": {
@@ -829,7 +920,7 @@
           "default": 75,
           "minimum": 0,
           "maximum": 2000,
-          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Open its panel from Kural Settings → Tab Completion or the settings link in the status icon's hover."
+          "description": "How fast suggestions come: ms to wait after your last key (0 = as you type). Open its panel from the Tab Completion tab in the bottom panel or the settings link in the status icon's hover."
         },
         "kural.chat.model": {
           "type": "string",
@@ -932,7 +1023,7 @@
               "instructions"
             ]
           },
-          "markdownDescription": "Your own moods for the chat, next to Default, Explorer, Critic and Learn: a name, a one-line hint, and instructions for the AI. Edit them in **Kural Settings → Moods**."
+          "markdownDescription": "Your own preferences (called moods before) for the chat, next to Default, Explorer, Critic and Learn: a name, a one-line hint, and instructions for the AI. Edit them in **Kural Settings → Preferences**."
         },
         "kural.chat.hiddenMoods": {
           "type": "array",
@@ -948,7 +1039,30 @@
               "learn"
             ]
           },
-          "markdownDescription": "Built-in moods removed from the chat's model menu. New chats start with the first mood left. Remove or restore them in **Kural Settings → Moods**."
+          "markdownDescription": "Built-in preferences (called moods before) removed from the chat's model menu. New chats start with the first one left. Remove or restore them in **Kural Settings → Preferences**."
+        },
+        "kural.chat.shortcuts": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "name",
+              "text"
+            ]
+          },
+          "markdownDescription": "Your shortcuts for the chat: type `/` and a name (`/pr-summary`) anywhere in a message, and Kural sends the text you wrote for it, with every AI. Edit them in **Kural Settings → Shortcuts**."
         },
         "kural.fontSize": {
           "type": "number",
@@ -970,7 +1084,7 @@
             "The local model (Claude helps if Ollama isn't available, or while a chat keeps it busy)",
             "Always Claude"
           ],
-          "description": "What writes Tab Completion suggestions. Open its panel from Kural Settings → Tab Completion or the settings link in the status icon's hover."
+          "description": "What writes Tab Completion suggestions. Open its panel from the Tab Completion tab in the bottom panel or the settings link in the status icon's hover."
         },
         "kural.tabCompletion.localModel": {
           "type": "string",
@@ -1048,9 +1162,51 @@
           "scope": "application",
           "markdownDescription": "Each AI's own switch points, set on its card in **Kural Settings**: `{ \"claude\": { \"session\": 80, \"weekly\": 90 }, \"codex\": {…}, \"agy\": {…} }`. When the AI's Session limit (a few hours) or Weekly limit is this much used (1-99 %), the chat carries on with another AI. A missing one uses `kural.usageSwitch.threshold`.",
           "properties": {
-            "claude": { "type": "object", "properties": { "session": { "type": "integer", "minimum": 1, "maximum": 99 }, "weekly": { "type": "integer", "minimum": 1, "maximum": 99 } } },
-            "codex": { "type": "object", "properties": { "session": { "type": "integer", "minimum": 1, "maximum": 99 }, "weekly": { "type": "integer", "minimum": 1, "maximum": 99 } } },
-            "agy": { "type": "object", "properties": { "session": { "type": "integer", "minimum": 1, "maximum": 99 }, "weekly": { "type": "integer", "minimum": 1, "maximum": 99 } } }
+            "claude": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 99
+                },
+                "weekly": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 99
+                }
+              }
+            },
+            "codex": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 99
+                },
+                "weekly": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 99
+                }
+              }
+            },
+            "agy": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 99
+                },
+                "weekly": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 99
+                }
+              }
+            }
           }
         },
         "kural.modelRouter.learn": {
@@ -1161,6 +1317,16 @@
             "additionalProperties": false
           },
           "description": "Per-model quality, speed and token-efficiency hints, rated 1 (low) to 3 (high). These are not measured guarantees."
+        },
+        "kural.explorer.showAIActivity": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "The Explorer shows the files the chat's AI is working on as it works: blue while it reads a file, yellow while it changes one."
+        },
+        "kural.editor.selectionButtons": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "With code selected in the editor, a small label right after the selection says **Add to Chat** (Ctrl/Cmd+L) and **Edit** (Ctrl/Cmd+K); point at it to click them."
         }
       }
     },
@@ -1196,29 +1362,45 @@
             "id": "setup",
             "title": "Choose your AI",
             "description": "Use Claude, Google Gemini, ChatGPT (Codex), or a model on your computer. Kural helps you install it, log in, and check that it works.\n[Set up your AI](command:kural.getStarted)",
-            "completionEvents": ["onContext:kural.aiReady"],
-            "media": { "markdown": "media/welcome-setup.md" }
+            "completionEvents": [
+              "onContext:kural.aiReady"
+            ],
+            "media": {
+              "markdown": "media/welcome-setup.md"
+            }
           },
           {
             "id": "project",
             "title": "Open a project",
             "description": "Open a folder to work with its files, or clone a Git repository.\n[Open Folder](command:workbench.action.files.openFolder)\n[Clone Git Repository](command:git.clone)",
-            "completionEvents": ["onContext:workspaceFolderCount != 0"],
-            "media": { "markdown": "media/welcome-project.md" }
+            "completionEvents": [
+              "onContext:workspaceFolderCount != 0"
+            ],
+            "media": {
+              "markdown": "media/welcome-project.md"
+            }
           },
           {
             "id": "chat",
             "title": "Make your first change",
             "description": "Tell Kural what you want to change. Review each edit, then keep it or undo it.\n[Open Chat](command:kural.chat.open)",
-            "completionEvents": ["onCommand:kural.chat.open"],
-            "media": { "markdown": "media/welcome-chat.md" }
+            "completionEvents": [
+              "onCommand:kural.chat.open"
+            ],
+            "media": {
+              "markdown": "media/welcome-chat.md"
+            }
           },
           {
             "id": "theme",
             "title": "Make the editor yours",
             "description": "Choose Kural Dark, Kural Light, or another installed theme.\n[Choose a Color Theme](command:workbench.action.selectTheme)",
-            "completionEvents": ["onCommand:workbench.action.selectTheme"],
-            "media": { "markdown": "media/welcome-theme.md" }
+            "completionEvents": [
+              "onCommand:workbench.action.selectTheme"
+            ],
+            "media": {
+              "markdown": "media/welcome-theme.md"
+            }
           }
         ]
       }
@@ -1283,6 +1465,28 @@
         ],
         "priority": "default"
       }
+    ],
+    "colors": [
+      {
+        "id": "kural.explorer.reading",
+        "description": "The Explorer: a file Kural's AI is reading right now.",
+        "defaults": {
+          "dark": "#5AA9F6",
+          "light": "#1B6AC9",
+          "highContrast": "#75BEFF",
+          "highContrastLight": "#0F4A85"
+        }
+      },
+      {
+        "id": "kural.explorer.changing",
+        "description": "The Explorer: a file Kural's AI is changing right now.",
+        "defaults": {
+          "dark": "#E5C07B",
+          "light": "#8A6100",
+          "highContrast": "#FFD580",
+          "highContrastLight": "#6B4A00"
+        }
+      }
     ]
   },
   "author": "Adithya Chinnakkonda",
@@ -1290,6 +1494,7 @@
     "terminalCompletionProvider",
     "terminalDataWriteEvent",
     "contribSourceControlInputBoxMenu",
-    "browser"
+    "browser",
+    "commentReveal"
   ]
 }

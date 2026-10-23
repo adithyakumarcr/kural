@@ -11,6 +11,7 @@ window.KURAL_CHAT = function (app, port) {
     tabs: [], activeId: null, tab: null,
     models: [], efforts: [], modes: [], teamSizes: [2, 3, 4, 5], version: "",
     attachments: [], setups: {},
+    shortcuts: [],   // your shortcuts [{ name, text }] (Kural Settings → Shortcuts; lib/chat/shortcuts.js)
     slash: {},    // tab id -> { items: [{ name, description, hint, aliases, builtin }], why? }: the "/" list (lib/chat/slash.js)
     files: [], popup: null, menu: null,
     history: [], showHistory: false, historyQuery: "", historyScope: "all", hereName: "", confirmDelete: null, renaming: null,
@@ -55,7 +56,7 @@ window.KURAL_CHAT = function (app, port) {
   const moodLabel = (id) => (S.moods.find((m) => m.id === id) || { label: "" }).label;
   const effortLabel = (id) => (S.efforts.find((e) => e.id === id) || { label: "Medium" }).label;
   const modeLabel = (id) => (S.modes.find((m) => m.id === id) || { label: "Agent" }).label;
-  const pillLabel = (c) => c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : c.kind === "element" || c.kind === "quote" ? c.label : base(c.path);
+  const pillLabel = (c) => c.kind === "shortcut" ? `/${c.name}` : c.kind === "selection" ? `${base(c.path)} (L${c.startLine}-${c.endLine})` : c.kind === "element" || c.kind === "quote" ? c.label : base(c.path);
   // Show ⌘ instead of Ctrl on a Mac.
   const MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
   // "Ctrl+" is ⌘ on a Mac; "Control+" means the Control key everywhere (⌃ on a Mac).
@@ -252,7 +253,10 @@ window.KURAL_CHAT = function (app, port) {
   const splitBtn = el("button", { class: "icon-btn", "aria-label": "Split",
     onmouseenter: () => { splitBtn.title = port.canSplit() ? "Split: a new chat beside this one (or drag a tab to a side of the chat)" : port.full() ? NO_ROOM : "Open a new chat beside the code (or drag a tab out of this panel)"; },
     onclick: () => { closeHistory(); if (!port.split()) flash(NO_ROOM, 2600); } }, icon("split-horizontal"));
-  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn);
+  // Kural Settings and "…" live here too (they were in the panel's title bar, with a second "+": Adithya, one place).
+  const settingsBtn = el("button", { class: "icon-btn", title: "Kural Settings", onclick: () => { closeHistory(); post({ type: "panelCommand", what: "settings" }); } }, icon("settings-gear"));
+  const moreBtn = el("button", { class: "icon-btn", title: "More", onclick: (e) => openMenu("more", e.currentTarget) }, icon("ellipsis"));
+  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn, moreBtn);
   tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   // A chat in a column of its own (split): its title instead of the tab bar. Drag the title to move it; × puts it back
   // among the tabs.
@@ -266,6 +270,11 @@ window.KURAL_CHAT = function (app, port) {
   const toBottom = () => { listEl.scrollTop = listEl.scrollHeight; jumpBtn.classList.add("hidden"); };
   const follow = () => { if (stick) toBottom(); else jumpBtn.classList.remove("hidden"); };
   listEl.addEventListener("scroll", () => { stick = atBottom(); if (stick) jumpBtn.classList.add("hidden"); });
+  // How tall a running timeline may grow: the chat's visible height, less room for the message above it and the answer's
+  // first lines (chat.css .thv.live .tbox). Per column: stacked columns are shorter.
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => {
+    if (listEl.clientHeight) listEl.style.setProperty("--tl-max", `${Math.max(300, listEl.clientHeight - 140)}px`);
+  }).observe(listEl);
   const historyEl = el("div", { class: "history hidden" });
   const localEl = el("div", { class: "history local hidden" });   // "Local models": search, download, use
   const chipsEl = el("div", { class: "chips" });
@@ -417,7 +426,7 @@ window.KURAL_CHAT = function (app, port) {
         el("div", { class: "brand" }, "Kural"),
         el("div", { class: "brand-sub" }, "AI-powered code editor"),
         el("div", { class: "tagline" }, "A weapon, a voice for your ideas."),
-        el("div", { class: "hints" }, hint("@", "mention a file"), hint("/", "skills"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
+        el("div", { class: "hints" }, hint("@", "mention a file"), hint("/", "shortcuts, skills"), hint("+", "attach"), hint("Ctrl+K", "edit in place")),
         S.version ? el("div", { class: "version" }, S.version) : null));
     } else {
       t.messages.forEach((m, i) => listEl.append(messageNode(m, i)));
@@ -458,6 +467,11 @@ window.KURAL_CHAT = function (app, port) {
   // Pills in sent messages open the file when clicked; pills you're still typing don't. A quote (text you selected in
   // the chat) opens nothing: pointing at it shows what it says.
   function pillNode(ctx, openable = true) {
+    if (ctx.kind === "shortcut") {   // your shortcut: pointing at it shows the text it stands for
+      const now = S.shortcuts.find((x) => x.name === ctx.name);
+      return el("span", { class: "pill shortcut", contenteditable: "false", "data-ctx": JSON.stringify(ctx), title: String((now || ctx).text || "").slice(0, 600) },
+        el("span", { class: "pill-icon" }, icon("zap")), el("span", { class: "pill-text" }, pillLabel(ctx)));
+    }
     const quote = ctx.kind === "quote";
     return el("span", { class: `pill ${ctx.kind}`, contenteditable: "false", "data-ctx": JSON.stringify(ctx),
       title: quote ? String(ctx.text || "").slice(0, 600) : ctx.kind === "element" ? `${ctx.label} on ${ctx.path}${ctx.element && ctx.element.text ? `\n"${ctx.element.text.slice(0, 80)}"` : ""}` : openable ? `Open ${ctx.path}` : ctx.path,
@@ -800,10 +814,11 @@ window.KURAL_CHAT = function (app, port) {
     return "Claude's summary";
   }
   // n: which part of the answer (see parts); live: the last part (its timeline shows what it's doing now). Open while it
-  // works and after, in this window; an answer drawn later (you opened the chat) starts folded. Your choice stays.
+  // works (as tall as the chat: --tl-max); once that part is done it folds to its header, so the answer comes up
+  // (Adithya, issue #104). Your own click (open or fold) stays.
   function stepsNode(m, ks, n = 0, live = true) {
     const running = m.running && live;
-    const open = m._stepsOpen && n in m._stepsOpen ? m._stepsOpen[n] : (running || !!m._liveHere);
+    const open = m._stepsOpen && n in m._stepsOpen ? m._stepsOpen[n] : running;
     const state = ((m._tl = m._tl || {})[n] = m._tl[n] || { follow: true });
     const last = ks[ks.length - 1];
     const items = ks.map((k) => {
@@ -1226,10 +1241,12 @@ window.KURAL_CHAT = function (app, port) {
     const node = r.startContainer;
     if (node.nodeType !== 3 || !input.contains(node)) return closePopup();
     const before = node.data.slice(0, r.startOffset);
-    // "/" as the first thing in the box: Claude runs a skill or command only when the message starts with it.
-    const sl = before.match(/^\/([^\s/]*)$/);
-    if (sl && atStart(node)) {
-      S.popup = { kind: "slash", node, start: 0, end: r.startOffset, query: sl[1], index: 0, items: [] };
+    // "/" as the first thing in the box: your shortcuts, then Claude's skills and commands (Claude runs one only when
+    // the message starts with it). "/" after a space anywhere else: your shortcuts ("hi! please do /pr-summary").
+    const sl = before.match(/(?:^|\s)\/([^\s/]*)$/);
+    if (sl) {
+      S.popup = { kind: "slash", node, start: r.startOffset - sl[1].length - 1, end: r.startOffset, query: sl[1], index: 0, items: [],
+        skills: sl.index === 0 && atStart(node) };
       return renderPopup();
     }
     const m = before.match(/(?:^|\s)@([^\s@]*)$/);
@@ -1279,15 +1296,30 @@ window.KURAL_CHAT = function (app, port) {
     popupEl.replaceChildren(...rows);
   }
 
+  // Your shortcuts first (marked "Your shortcut"), then, at the start of the message, Claude's skills and commands (a
+  // skill with a shortcut's name is left out: yours wins). Without shortcuts the last row makes one (Kural Settings).
   function renderSlash(P) {
     const list = S.tab && S.slash[S.tab.id] || { items: [], why: "Loading your skills…" };
-    P.items = list.items.map((c) => [slashScore(c, P.query), c]).filter((x) => x[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 50).map((x) => x[1]);
+    const mine = S.shortcuts.map((x) => ({ name: x.name, description: x.text.split("\n").find((l) => l.trim()) || "", text: x.text, shortcut: true }));
+    const names = new Set(mine.map((x) => x.name));
+    const pool = [...mine, ...(P.skills ? list.items.filter((c) => !names.has(c.name)) : [])];
+    const ranked = (items) => items.map((c) => [slashScore(c, P.query), c]).filter((x) => x[0] > 0).sort((a, b) => b[0] - a[0]).map((x) => x[1]);
+    P.items = [...ranked(pool.filter((c) => c.shortcut)), ...ranked(pool.filter((c) => !c.shortcut))].slice(0, 50);
+    if (!mine.length) P.items.push({ make: true, name: "" });
     P.index = Math.min(P.index, Math.max(0, P.items.length - 1));
     popupEl.classList.remove("hidden");
-    const rows = P.items.length
-      ? P.items.map((c, i) => el("div", { class: `pop-item pop-cmd ${i === P.index ? "sel" : ""}`, title: c.description || c.name, onmousedown: (e) => { e.preventDefault(); P.index = i; pickMention(); } },
-        el("span", { class: "pop-name" }, `/${c.name}`), c.hint && el("span", { class: "pop-hint" }, c.hint), el("span", { class: "pop-desc" }, c.description || "")))
-      : [el("div", { class: "pop-empty" }, list.items.length ? "No skill or command matches" : list.why || "No skills or commands")];
+    const row = (c, i) => c.make
+      ? el("div", { class: `pop-item pop-cmd pop-make ${i === P.index ? "sel" : ""}`, title: "A name that stands for a text you write once, like /pr-summary (Kural Settings → Shortcuts)", onmousedown: (e) => { e.preventDefault(); P.index = i; pickMention(); } },
+        icon("add"), el("span", { class: "pop-desc" }, "Make a shortcut…"))
+      : el("div", { class: `pop-item pop-cmd ${i === P.index ? "sel" : ""}`, title: c.shortcut ? c.text.slice(0, 600) : c.description || c.name, onmousedown: (e) => { e.preventDefault(); P.index = i; pickMention(); } },
+        el("span", { class: "pop-name" }, `/${c.name}`), c.shortcut ? el("span", { class: "pop-hint" }, "Your shortcut") : c.hint && el("span", { class: "pop-hint" }, c.hint),
+        el("span", { class: "pop-desc" }, c.description || ""));
+    // In the middle of a message nothing matching closes the list ("see /usr/bin" is a path); there, "Make a shortcut…"
+    // shows only right after the "/".
+    const found = P.items.some((c) => !c.make);
+    if (!P.skills && !found && (mine.length || P.query)) { closePopup(); return; }
+    const why = list.items.length || mine.length ? "No shortcut, skill or command matches" : list.why || "No skills or commands";
+    const rows = [...(found || !P.skills ? [] : [el("div", { class: "pop-empty" }, why)]), ...P.items.filter((c) => found || c.make).map(row)];
     popupEl.replaceChildren(...rows);
     const sel = popupEl.querySelector(".pop-item.sel");
     if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: "nearest" });
@@ -1297,8 +1329,15 @@ window.KURAL_CHAT = function (app, port) {
     const P = S.popup;
     if (!P || !P.items.length) return;
     if (P.kind === "slash") {
-      // "/brain" → "/superpowers:brainstorming " (what you typed after it stays).
       const c = P.items[P.index], r = document.createRange();
+      if (c.make) { closePopup(); post({ type: "editShortcuts" }); return; }
+      if (c.shortcut) {   // "/pr" → the /pr-summary chip
+        r.setStart(P.node, Math.max(0, P.start)); r.setEnd(P.node, Math.min(P.node.data.length, P.end));
+        closePopup();
+        insertPill({ kind: "shortcut", name: c.name, text: c.text }, r);
+        return;
+      }
+      // "/brain" → "/superpowers:brainstorming " (what you typed after it stays).
       r.setStart(P.node, 0); r.setEnd(P.node, Math.min(P.node.data.length, P.end));
       closePopup();
       const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
@@ -1403,18 +1442,21 @@ window.KURAL_CHAT = function (app, port) {
     let items;
     menuEl.classList.toggle("wide", kind === "ticket" || kind === "device");
     if (kind === "add") {
-      const jira = (S.setups[t.id] || {}).jira || { ok: true };
+      // (No "Link ticket" or "Pick from a browser" here any more, Adithya 22 Oct 2026: the browser's own bar adds
+      // elements, and a ticket already linked keeps its chip with ×.)
       items = [
         el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "attachPick" }); } },
           el("span", { class: "mi-icon" }, icon("attach")), el("span", { class: "mi-label" }, "Add files"), el("span", { class: "mi-hint" }, "images, PDFs, code")),
-        el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
-          el("span", { class: "mi-icon" }, icon("issues")), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
-          jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected")),
-        el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "browserPick" }); } },
-          el("span", { class: "mi-icon" }, icon("inspect")), el("span", { class: "mi-label" }, "Pick from a browser"), el("span", { class: "mi-hint" }, "your app: click an element to add it")),
         el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
           el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
           el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];
+    } else if (kind === "more") {
+      // The tab line's "…" (it was the panel title bar's; Adithya: everything in one place).
+      const run = (what) => () => { closeMenu(); post({ type: "panelCommand", what }); };
+      const row = (what, ic, label, hint) => el("div", { class: "mi", onclick: run(what) },
+        el("span", { class: "mi-icon" }, icon(ic)), el("span", { class: "mi-label" }, label), hint ? el("span", { class: "mi-hint" }, hint) : null);
+      items = [row("settings", "settings-gear", "Kural Settings"), row("getStarted", "rocket", "Get started", "set up an AI"),
+        row("updates", "sync", "Check for updates"), row("whatsNew", "megaphone", "What's new")];
     } else if (kind === "device") {
       items = deviceItems(t);
     } else if (kind === "ticket") {
@@ -1446,19 +1488,21 @@ window.KURAL_CHAT = function (app, port) {
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         levelNote(t),
-        // Moods: the four built-in ones, then yours (Kural Settings → Moods), then a way to add one.
-        el("div", { class: "mh" }, "Mood"),
+        // Preferences (moods in the code): the four built-in ones, then yours (Kural Settings → Preferences), then a way to add one.
+        el("div", { class: "mh" }, "Preference"),
         el("div", { class: "moods" }, S.moods.map((md) => el("button", { class: `mood-chip${t.mood === md.id ? " on" : ""}`, title: md.hint || "",
           "aria-pressed": String(t.mood === md.id), onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label)),
-          el("button", { class: "mood-chip mood-add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
-            onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own mood…")),
+          el("button", { class: "mood-chip mood-add", title: "Add your own: who the AI should be and how it works with you (Kural Settings → Preferences)",
+            onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own…")),
         ];
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");
     const a = anchor.getBoundingClientRect(), col = app.getBoundingClientRect();   // (placed in the column: chat.css .col)
     menuEl.style.left = Math.max(6, Math.min(a.left - col.left, col.width - menuEl.offsetWidth - 6)) + "px";
-    menuEl.style.bottom = (col.bottom - a.top + 6) + "px";
+    // (The tab line's "…" is at the top: its menu opens downwards; the box's menus open upwards.)
+    if (kind === "more") { menuEl.style.top = (a.bottom - col.top + 4) + "px"; menuEl.style.bottom = ""; }
+    else { menuEl.style.top = ""; menuEl.style.bottom = (col.bottom - a.top + 6) + "px"; }
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }
@@ -1692,7 +1736,8 @@ ${d.system}` : ""}`,
     out.push(el("div", { class: "ticket-search" }, U.input));
     if (U.searching) out.push(el("div", { class: "ticket-status" }, el("span", { class: "dots small" }, el("span"), el("span"), el("span")),
       " ", U.status || (U.query ? `Searching Jira for “${U.query}”…` : "Getting your recent tickets…")));
-    else if (U.error) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), U.error));
+    else if (U.error) out.push(el("div", { class: "ticket-warn" }, el("span", { class: "warn-tri" }, icon("warning"), " "), U.error),
+      el("div", { class: "mi", onclick: () => ticketSearch(U.query) }, el("span", { class: "mi-icon" }, icon("refresh")), el("span", { class: "mi-label" }, "Try again")));
     else if (U.issues && !U.issues.length) out.push(el("div", { class: "ticket-status" }, U.note || "No tickets found. Try other words or the ticket's key."));
     for (const i of (!U.searching && U.issues) || []) out.push(el("div", { class: `mi ticket-row${t.ticket && t.ticket.key === i.key ? " on" : ""}`, title: i.summary,
       onclick: () => { post({ type: "linkTicket", tabId: t.id, ticket: i }); closeMenu(); input.focus(); } },
@@ -1789,8 +1834,9 @@ ${d.system}` : ""}`,
     switch (m.type) {
       case "config":
         S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false; S.clis = m.clis || [];
-        S.moods = m.moods || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.pics = m.pics || S.pics;
+        S.moods = m.moods || []; S.shortcuts = m.shortcuts || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.pics = m.pics || S.pics;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
+      case "shortcuts": S.shortcuts = m.shortcuts || []; if (S.popup && S.popup.kind === "slash") renderPopup(); break;
       case "moods": S.moods = m.moods || S.moods; renderFoot(); if (S.menu === "model") openMenu.refresh(); break;
       case "tabs":
         const wasStatus = S.tab && S.tab.status;
@@ -1864,15 +1910,13 @@ ${d.system}` : ""}`,
       case "delta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
         const msg = S.tab.messages[i];
-        msg._liveHere = true;
         let b = msg.blocks[msg.blocks.length - 1];
         if (!b || b.k !== "text") { b = { k: "text", text: "" }; msg.blocks.push(b); b.text += m.text; appendBlock(i); break; }
         b.text += m.text; schedulePatch(i, msg.blocks.length - 1);
       } break;
-      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i]._liveHere = true; S.tab.messages[i].blocks.push(m.block); appendBlock(i); } } break;
+      case "block": if (mine) { const i = lastAssistant(); if (i >= 0) { S.tab.messages[i].blocks.push(m.block); appendBlock(i); } } break;
       case "thinkDelta": if (mine) {
         const i = lastAssistant(); if (i < 0) break;
-        S.tab.messages[i]._liveHere = true;
         const blocks = S.tab.messages[i].blocks, b = blocks[blocks.length - 1];
         if (b && b.k === "think") { b.text += m.text; schedulePatch(i, blocks.length - 1); }
       } break;

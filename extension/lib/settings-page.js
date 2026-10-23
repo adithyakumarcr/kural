@@ -13,18 +13,17 @@ const { fontScale } = require("./ui");
 const { versionLabel } = require("./version");
 const { USAGE } = require("./account");
 const { MOODS, MOOD_EXAMPLES, MOOD_LIMITS, customMoods, moodId } = require("./chat/prompts");
+const shortcuts = require("./chat/shortcuts");
 const usageSwitch = require("./ai/usage-switch");
 const connectors = require("./ai/connectors");
-// Connector keys: a private folder per profile (its accounts), never on a command line (APP-9).
-const keyDir = () => require("./profiles/scope").dir("connector-keys", "account");
-const catalog = require("./ai/connector-catalog");
-const { withProfileEnv, profileEnv } = require("./profiles/env");
-const os = require("os");
 
 // Your own moods: the user setting kural.chat.moods (never a project's).
 const userMoods = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.moods"); return customMoods(i ? i.globalValue : undefined); };
 const saveMoods = (list) => vscode.workspace.getConfiguration("kural").update("chat.moods",
   list.map((m) => ({ id: m.id, name: m.label, hint: m.hint, instructions: m.instructions })), vscode.ConfigurationTarget.Global);
+// Your shortcuts: the user setting kural.chat.shortcuts (never a project's).
+const userShortcuts = () => { const i = vscode.workspace.getConfiguration("kural").inspect("chat.shortcuts"); return shortcuts.clean(i ? i.globalValue : undefined); };
+const saveShortcuts = (list) => vscode.workspace.getConfiguration("kural").update("chat.shortcuts", list.length ? list : undefined, vscode.ConfigurationTarget.Global);
 // Built-in moods removed from the chat's menu (kural.chat.hiddenMoods): their ids, in the built-in order.
 const hiddenMoods = () => {
   const i = vscode.workspace.getConfiguration("kural").inspect("chat.hiddenMoods"), v = i && Array.isArray(i.globalValue) ? i.globalValue : [];
@@ -39,44 +38,8 @@ class SettingsPage {
     this.panel = null;
     this.checking = false;
     this.refreshing = false;
-    this.conn = {};       // ai -> { loading, servers, error, supported, at, busy, message }
     this.chat = null;     // (set by extension.js: Claude's setup is reloaded through the chat)
     this.learning = null; // (set by extension.js: what Tab and Auto learned here, for "What Kural learns")
-    this.items = {};      // ai -> { id: catalog item } of the last search (what "Add" refers to: the page sends only an id)
-  }
-
-  // Each AI's program and the environment to run it in (for its connectors).
-  program(id) {
-    if (id === "claude") { const c = require("./ai/claude"); return { bin: c.findClaude(), env: c.cleanEnv() }; }
-    return { bin: brain.cli && brain.cli[id] ? brain.cli[id].bin : null, env: withProfileEnv() };   // (Codex: this profile's CODEX_HOME)
-  }
-  // The project folder, when you trust it (Claude then lists the project's own connectors too, and starts them to check).
-  projectDir() {
-    const f = vscode.workspace.workspaceFolders;
-    return vscode.workspace.isTrusted && f && f.length && f[0].uri.scheme === "file" ? f[0].uri.fsPath : undefined;
-  }
-  // List an AI's connectors (asked when its card shows; Claude checks each one, which takes a few seconds).
-  async loadConnectors(id, force) {
-    if (!connectors.SUPPORTED[id]) return;
-    const c = this.conn[id] || (this.conn[id] = {});
-    if (c.loading || (!force && c.at && Date.now() - c.at < 60000)) return;
-    c.loading = true; this.push();
-    try {
-      const { bin, env } = this.program(id), r = await connectors.list(id, bin, env, this.projectDir());
-      // A connector just added that you sign in to: say so until it's signed in (Codex can't always tell: "unknown").
-      for (const x of r.servers || []) if ((c.fresh || {})[x.name] && !x.needsAuth && (id === "codex" ? !/o.?auth|bearer/i.test(x.auth || "") : !x.ok)) {
-        x.needsAuth = true; if (id === "codex") { x.status = "Needs sign-in"; x.ok = false; }
-      }
-      Object.assign(c, r, { at: Date.now() });
-    }
-    catch (e) { Object.assign(c, { servers: [], error: e.message, at: Date.now() }); }
-    finally { c.loading = false; this.push(); }
-  }
-  // After a connector was added or removed: Claude's chats start again with it (same conversations); Codex reads its
-  // settings when it starts, so the next Codex chat has it.
-  afterConnectorChange(id) {
-    if (id === "claude" && this.chat) this.chat.setupChanged("connectors changed");
-    this.loadConnectors(id, true);
   }
 
   register() {
@@ -84,7 +47,7 @@ class SettingsPage {
     this.gs.onChange(() => this.push());
     this.context.subscriptions.push(usage.onChange(() => this.push()),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.usageSwitch", "kural.chat.fullClaudeCodeSetup", "kural.tabCompletion.learnFromActivity", "kural.modelRouter.learn", "kural.localModels"].some((k) => e.affectsConfiguration(k))) this.push();
+        if (["kural.chat.moods", "kural.chat.hiddenMoods", "kural.chat.shortcuts", "kural.usageSwitch", "kural.chat.fullClaudeCodeSetup", "kural.tabCompletion.learnFromActivity", "kural.modelRouter.learn", "kural.localModels"].some((k) => e.affectsConfiguration(k))) this.push();
       }));
   }
 
@@ -155,23 +118,24 @@ class SettingsPage {
       version: versionLabel(this.context.extensionPath, this.context.extension.packageJSON.version),
       autoUpdates: vscode.workspace.getConfiguration("kural").get("updates.autoCheck") !== false,
       usageSwitch: usageSwitch.options(vscode.workspace.getConfiguration("kural")),
-      connectors: Object.fromEntries(["claude", ...CLI_IDS, "local"].map((id) => [id, connectors.SUPPORTED[id] ? { supported: true, ...(this.conn[id] || {}) } : { supported: false }])),
+      connectors: Object.fromEntries(["claude", ...CLI_IDS, "local"].map((id) => [id, { supported: !!connectors.SUPPORTED[id] }])),
       fullSetup: vscode.workspace.getConfiguration("kural").get("chat.fullClaudeCodeSetup") !== false,
       learn: this.learning ? this.learning() : null,
       localContext: vscode.workspace.getConfiguration("kural").get("localModels.contextLength") || 32768,
       moods: { builtIn: MOODS.map(({ id, label, hint }) => ({ id, label, hint })), hidden: hiddenMoods(), mine: userMoods(), examples: MOOD_EXAMPLES, limits: MOOD_LIMITS },
+      shortcuts: { mine: userShortcuts(), limits: shortcuts.LIMITS },
       section: this.section || null };
   }
 
   // Add or change one of your moods ({ id?, name, hint, instructions }); returns an error to show, or "".
   async saveMood(m) {
     const name = String((m && m.name) || "").replace(/\s+/g, " ").trim(), instructions = String((m && m.instructions) || "").trim();
-    if (!name) return "Give the mood a name.";
-    if (!instructions) return "Write what the AI should do in this mood.";
+    if (!name) return "Give the preference a name.";
+    if (!instructions) return "Write what the AI should do with this preference.";
     if (name.length > MOOD_LIMITS.name) return `Keep the name to ${MOOD_LIMITS.name} characters.`;
     if (instructions.length > MOOD_LIMITS.instructions) return `Keep the instructions to ${MOOD_LIMITS.instructions} characters: a few sentences work best.`;
     const list = userMoods(), others = list.filter((x) => x.id !== m.id);
-    if ([...MOODS, ...others].some((x) => x.label.toLowerCase() === name.toLowerCase())) return `There's already a mood called ${name}.`;
+    if ([...MOODS, ...others].some((x) => x.label.toLowerCase() === name.toLowerCase())) return `There's already a preference called ${name}.`;
     const mood = { id: m.id && list.some((x) => x.id === m.id) ? m.id : null, label: name, hint: String(m.hint || "").replace(/\s+/g, " ").trim().slice(0, MOOD_LIMITS.hint), instructions };
     if (!mood.id) {   // a new one: an id from its name ("custom-pair-programmer"), kept when you rename it later
       const base = moodId(name);
@@ -181,6 +145,16 @@ class SettingsPage {
     }
     const next = list.some((x) => x.id === mood.id) ? list.map((x) => x.id === mood.id ? mood : x) : [...list, mood];
     await saveMoods(next);
+    return "";
+  }
+
+  // A new or changed shortcut (old: its name before, when you edit one). "" when saved, else what to fix.
+  async saveShortcut(m) {
+    const name = shortcuts.nameOf(m.name), text = String(m.text || "").trim(), list = userShortcuts();
+    const old = typeof m.old === "string" && list.some((x) => x.name === m.old) ? m.old : null;
+    const error = shortcuts.problem(name, text, list.filter((x) => x.name !== old));
+    if (error) return error;
+    await saveShortcuts(old ? list.map((x) => x.name === old ? { name, text } : x) : [...list, { name, text }]);
     return "";
   }
 
@@ -219,71 +193,15 @@ class SettingsPage {
       case "tab": vscode.commands.executeCommand("kural.tabPanel.focus"); break;
       case "router": vscode.commands.executeCommand("kural.modelRouter"); break;
       case "findModels": vscode.commands.executeCommand("kural.findModels"); break;
-      case "connectors": await this.loadConnectors(m.id, !!m.force); break;
-      case "addConnector": case "removeConnector": {
-        const c = this.conn[m.id] || (this.conn[m.id] = {});
-        if (c.busy) break;
-        c.busy = true; c.message = ""; this.push();
-        let r;
-        try {
-          const { bin, env } = this.program(m.id);
-          r = m.type === "addConnector" ? await connectors.add(m.id, bin, env, m.connector || {}) : await connectors.remove(m.id, bin, env, m.name, this.projectDir(), keyDir());
-        } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
-        if (this.panel) this.panel.webview.postMessage({ type: "connectorDone", id: m.id, reqId: m.reqId, error: r.error || "" });
-        if (r.ok) this.afterConnectorChange(m.id); else this.push();
-        break;
-      }
+      // (Connectors are in the side bar now: lib/connectors.)
+      case "showConnectors": vscode.commands.executeCommand("kural.connectors.show", m.id); break;
       case "fullSetup":
         await vscode.workspace.getConfiguration("kural").update("chat.fullClaudeCodeSetup", !!m.on, vscode.ConfigurationTarget.Global);
         if (this.chat) this.chat.setupChanged(m.on ? "switched to your full setup" : "switched to the minimal setup");
         this.push();
         break;
-      case "reloadSetup": if (this.chat) this.chat.setupChanged("reload asked for"); this.loadConnectors("claude", true); break;
+      case "reloadSetup": if (this.chat) this.chat.setupChanged("reload asked for"); break;
       case "usagePanel": vscode.commands.executeCommand("kural.showUsage"); break;
-      case "catalogSearch": {
-        const ai = connectors.SUPPORTED[m.id] ? m.id : null;
-        if (!ai) break;
-        const r = await catalog.search(m.query);
-        const map = this.items[ai] = this.items[ai] || {};
-        for (const it of r.items) map[it.id] = it;
-        const names = ((this.conn[ai] || {}).servers || []).map((x) => x.name);
-        if (this.panel) this.panel.webview.postMessage({ type: "catalogResults", id: ai, reqId: m.reqId, note: r.note, items: r.items.map((it) => catalog.forAi(ai, it)), names });
-        break;
-      }
-      case "addCatalog": {
-        const ai = m.id, c = this.conn[ai] || (this.conn[ai] = {});
-        const item = catalog.BUILT_IN.find((b) => b.id === m.item) || (this.items[ai] || {})[m.item];
-        if (c.busy || !connectors.SUPPORTED[ai]) break;
-        let r;
-        if (!item) r = { error: "Search again, then add it." };
-        else {
-          c.busy = true; c.message = "";
-          try {
-            const { bin, env } = this.program(ai);
-            // (The names already there, fresh: a name taken since the page listed them would make the program refuse.)
-            const have = (await connectors.list(ai, bin, env, this.projectDir())).servers.map((x) => x.name);
-            r = await connectors.addItem(ai, bin, env, item, m.values || {}, have, keyDir());
-          } catch (e) { r = { error: e.message }; } finally { c.busy = false; }
-        }
-        if (r.ok && item.signIn) (c.fresh = c.fresh || {})[r.name] = true;
-        if (this.panel) this.panel.webview.postMessage({ type: "catalogDone", id: ai, item: m.item, reqId: m.reqId, error: r.error || "", name: r.name || "" });
-        if (r.ok) this.afterConnectorChange(ai);
-        break;
-      }
-      case "pickFolder": {
-        const f = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, openLabel: "Choose folder",
-          defaultUri: vscode.Uri.file(os.homedir()) });
-        if (this.panel) this.panel.webview.postMessage({ type: "folder", reqId: m.reqId, path: f && f[0] ? f[0].fsPath : "" });
-        break;
-      }
-      case "openLink": open(m.url); break;
-      case "signIn": {
-        const args = connectors.signInArgs(m.id, m.name), { bin } = this.program(m.id);
-        if (!args || !bin) break;
-        const t = vscode.window.createTerminal({ name: `Sign in to ${m.name}`, shellPath: bin, shellArgs: args, cwd: os.tmpdir(), env: profileEnv() });
-        t.show();
-        break;
-      }
       case "learn": {
         const key = m.which === "tab" ? "tabCompletion.learnFromActivity" : m.which === "router" ? "modelRouter.learn" : null;
         if (key) await vscode.workspace.getConfiguration("kural").update(key, !!m.on, vscode.ConfigurationTarget.Global);
@@ -326,6 +244,13 @@ class SettingsPage {
         break;
       }
       case "deleteMood": await saveMoods(userMoods().filter((x) => x.id !== m.id)); this.push(); break;
+      case "saveShortcut": {
+        const error = await this.saveShortcut(m);
+        if (this.panel) this.panel.webview.postMessage({ type: "shortcutSaved", reqId: m.reqId, error });
+        this.push();
+        break;
+      }
+      case "deleteShortcut": await saveShortcuts(userShortcuts().filter((x) => x.name !== m.name)); this.push(); break;
       case "hideMood": await this.hideMood(m.id, !!m.hidden); this.push(); break;
       case "shown": this.section = null; break;   // (the page scrolled to the section it was asked to show)
     }

@@ -10,8 +10,8 @@ deleted once.) On a Mac this also means the browser never needs the keychain.
 
 ## Open it
 
-- **Kural: Open Browser** (Command Palette), or **+ → Pick from a browser** in the chat (it asks for the address, e.g.
-  `3000` or `localhost:5173`, then turns the picker on).
+- **Kural: Open Browser** (Command Palette). (The chat's + no longer has *Pick from a browser*: open the page, then use
+  the browser bar's inspect button.)
 - **Any web link** in a chat answer opens here, not in your outside browser. So does a `localhost` link in the terminal
   (setting `workbench.browser.openLocalhostLinks`, on by default in Kural).
 

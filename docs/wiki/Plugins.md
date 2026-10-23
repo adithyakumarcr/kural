@@ -1,6 +1,6 @@
 # Extensions & Plugins
 
-The Extensions icon in the left side bar (Ctrl+Shift+X, Cmd+Shift+X on a Mac) has two tabs, like [[Search and Ask]]:
+The Extensions icon in the left side bar (Ctrl+Shift+X, Cmd+Shift+X on a Mac) has three tabs, like [[Search and Ask]]:
 
 - **Extensions**: VS Code's own Extensions view, as it always was (extensions from Open VSX: search, install, update,
   turn off).
@@ -8,7 +8,26 @@ The Extensions icon in the left side bar (Ctrl+Shift+X, Cmd+Shift+X on a Mac) ha
   the AI's own program loads (Claude Code, Codex or Antigravity). For example
   [Superpowers](https://github.com/obra/superpowers) (brainstorm, plan, test-first build).
 
-"Kural: Show Plugins" opens the Plugins tab from the Command Palette.
+- **Connectors**: the **connectors** (MCP servers) of the AI your chat uses, Claude's or ChatGPT's: add, sign in, turn
+  off in Kural, remove (see [Connectors](#connectors) below).
+
+"Kural: Show Plugins" opens the Plugins tab from the Command Palette, "Kural: Show Connectors" the Connectors tab.
+
+## Connectors
+
+They used to be on each AI's page in Kural Settings; now they're here, beside the extensions and plugins. The tab
+follows the chat's model (Claude's connectors for a Claude model, ChatGPT's for Codex); **Connectors for** shows the
+other one. Google Gemini and a model on this computer have none Kural can manage.
+
+- Each connector shows its state (Connected, Needs sign-in, Failed, Off in Kural). **Sign in** opens a terminal (Claude:
+  type `/mcp`, pick it, Authenticate; Codex: its own login). **On** turns it off or on everywhere in Kural (its tools
+  are hidden from Kural's chats of that AI; `claude` or `codex` in a terminal still has it). The trash icon removes
+  yours (it asks on the row first); claude.ai's are removed on claude.ai, a plugin's with its plugin.
+- **Add connector**: Popular ones (Notion, Linear, Sentry, Atlassian, GitHub…) and the official MCP directory as you
+  type. A directory result shows the exact command or address first (nobody checked it). Fill in a token or a folder
+  only if it asks. **Add one by hand** takes a command or a web address.
+- Claude: **Use my Claude Code setup (plugins, skills)** and **Reload** are at the bottom. See [[Chat]].
+- Without Kural's Extensions side bar tab (another VSCodium's code), Connectors sit in the Plugins side bar of their own.
 
 ## Whose plugins
 
