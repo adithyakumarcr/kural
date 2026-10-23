@@ -69,7 +69,7 @@ connectorsOff.init(() => offList, async (v) => { offList = v; });
     await connectorsOff.set("claude", "claude.ai Atlassian MCP", true);
     const w = await waitForAtlassian(fakeProc([ATL("connected")]), 5000);
     await connectorsOff.set("claude", "claude.ai Atlassian MCP", false);
-    assert.ok(/turned off in Kural Settings/.test(w.error), w.error);
+    assert.ok(/turned off in Kural \(Extensions → Connectors\)/.test(w.error), w.error);
   });
   console.log(fail ? `tickets: ${fail} FAILED` : "tickets: ALL PASS");
   process.exit(fail ? 1 : 0);

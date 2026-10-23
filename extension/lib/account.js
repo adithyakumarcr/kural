@@ -1,5 +1,5 @@
 // Your accounts, in the status bar:
-//   - the usage meter: only each AI's Session limit (the 5-hour one), the chat's AI in words ("Claude Session 45% ·
+//   - the usage meter: only each AI's Session limit (the 5-hour one), the chat's AI in words ("Usage 45% ·
 //     resets 42m"), the others short ("Codex 12%"); a weekly limit only once it's at 80 %+ ("… | Weekly 85% · resets 3d
 //     4h"); Gemini (weekly limits only) when it's the chat's AI or nearly full. The hover: every AI's limits in full.
 //     Orange from 80 %, red from 95 %. It comes from lib/ai/usage.js, which the
@@ -141,7 +141,7 @@ class Account {
   }
 
   // One item per AI with numbers, showing only its Session limit (Adithya: the weekly ones on hover; "keep it simple and
-  // decluttered"): the chat's AI with when it resets ("Claude Session 50% · resets 42m"), the others short ("Codex 12%").
+  // decluttered"): the chat's AI with when it resets ("Usage 50% · resets 42m"), the others short ("Codex 12%").
   // Weekly limits stay in the hover, including near their limit. Their pressure still colors the item.
   drawMeters() {
     const chat = engineOf();
@@ -236,8 +236,10 @@ function meter(name, u, mine, now = Date.now()) {
   if (!windows.length) return null;
   const session = windows.find(usage.isSession);
   const resets = (w) => mine && w.resetsAt ? ` · resets ${usage.until(w.resetsAt, now, true)}` : "";
-  const label = session ? ` ${mine ? "Session " : ""}${pct(session)}${resets(session)}` : "";
-  return { text: `$(dashboard) ${name}${label}`, top: Math.max(0, ...windows.map((w) => Number(w.usedPercent) || 0)) };
+  const top = Math.max(0, ...windows.map((w) => Number(w.usedPercent) || 0));
+  // The chat's AI reads "Usage 20% · resets 3h 50m" (Adithya: "Usage", not "Claude Session"; the hover names the AI).
+  if (session && mine) return { text: `$(dashboard) Usage ${pct(session)}${resets(session)}`, top };
+  return { text: `$(dashboard) ${name}${session ? ` ${pct(session)}` : ""}`, top };
 }
 // The hover: every AI's limits in full (Session and Weekly, when each resets), the one you point at first.
 function hoverText(entries, chat, now = Date.now()) {

@@ -70,8 +70,8 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 
 ## Connectors
 
-- **ChatGPT (Codex)**: added the same way as Claude's (see [[Chat]]): Kural Settings → the ChatGPT card → **Settings** →
-  **Connectors** → **Add connector** (a searchable list, Popular ones first; fill in a token or folder only if it asks).
+- **ChatGPT (Codex)**: added the same way as Claude's (see [[Chat]]): **Extensions → Connectors**, *Connectors for*
+  ChatGPT → **Add connector** (a searchable list, Popular ones first; fill in a token or folder only if it asks).
   **Sign in** opens the login in your browser when one needs your account. **Add one by hand** takes a command or a web
   address (like `codex mcp add`); **remove** is the trash icon. New ChatGPT chats use them. It can't use connectors that
   need a key header (like GitHub's) or the older SSE kind (Atlassian, Asana); the list says so.

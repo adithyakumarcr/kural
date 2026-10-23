@@ -73,7 +73,7 @@ async function waitForAtlassian(proc, maxMs = 30000) {
       continue;
     }
     if (s && s.status === "failed") return { error: "Atlassian couldn't connect, also after trying again. Check it on claude.ai (Settings → Connectors), then try again." };
-    if (!s && all.length) return { error: "The Atlassian connector is turned off in Kural Settings (your AI's page → Connectors). Turn it on to link tickets." };
+    if (!s && all.length) return { error: "The Atlassian connector is turned off in Kural (Extensions → Connectors). Turn it on to link tickets." };
     // Not in the list at all, and nothing else is still connecting: it isn't set up.
     if (res && !s && Date.now() - t0 > 8000 && !servers.some((x) => x.status === "pending"))
       return { error: "Atlassian isn't connected. Add the Atlassian connector on claude.ai (Settings → Connectors), or run `claude mcp add` for an Atlassian MCP server." };

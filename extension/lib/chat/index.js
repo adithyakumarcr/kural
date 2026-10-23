@@ -131,6 +131,7 @@ class ChatView {
     this.context = context;
     this.apply = apply;          // (code, uri, ask) => Promise   (Apply button on code blocks)
     this.activity = null;        // what you've been doing, for Tab (activity.js); set by extension.js
+    this.explorer = null;        // what the AI reads and changes now, shown in the Explorer (lib/explorer); set by extension.js
     this.tickets = new Tickets(() => vscode.workspace.isTrusted ? this.root() : ws.workDir());   // Jira search for "+ → Link ticket"
     // ("v1.1.0-alpha.3", or "Unreleased version · main (…)" when built from the code: lib/version.js)
     this.version = require("../version").versionLabel(context.extensionPath, context.extension.packageJSON.version);
@@ -2244,6 +2245,9 @@ class ChatView {
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
       this.postTabs();
     }
+    // (A tool call's result: the Explorer stops showing a read soon after; the lead's and the agents' alike.)
+    if (m.type === "user" && this.explorer && m.message && Array.isArray(m.message.content))
+      for (const c of m.message.content) if (c && c.type === "tool_result") this.explorer.finished(tab.id, c.tool_use_id);
     if (m.type === "stream_event") {
       if (parent) return;   // helpers' own text stays inside their card; only the lead talks in the chat
       const e = m.event;
@@ -2305,6 +2309,7 @@ class ChatView {
           continue;
         }
         if (b.name === "AskUserQuestion") continue;   // shown as a question card instead
+        if (this.explorer) this.explorer.started(tab.id, b.id, b.name, b.input);
         const step = { k: "tool", name: b.name, detail: toolDetail(b.name, b.input, this.root()), id: b.id };
         const owner = parent && r.agents.get(parent);
         if (owner && b.name === "mcp__team__post") {
@@ -2483,6 +2488,7 @@ class ChatView {
   // The answer is complete (or stopped): close it and tidy up.
   finishReply(tab, r, m) {
     const reply = r.turn.reply;
+    if (this.explorer) this.explorer.ended(tab.id);
     reply.waitingFor = [];
     clearTimeout(r.idleTimer);
     clearInterval(r.watchdog); clearInterval(r.busyTimer);
@@ -3056,6 +3062,12 @@ class ChatView {
         else if (["claude", "codex", "agy", "local"].includes(m.ai)) vscode.commands.executeCommand("kural.account", m.ai);
         break;
       case "showUsage": vscode.commands.executeCommand("kural.showUsage"); break;
+      // The tab line's gear and "…" menu (they were in the panel's title bar).
+      case "panelCommand": {
+        const id = { settings: "kural.account", getStarted: "kural.getStarted", updates: "kural.checkForUpdates", whatsNew: "kural.whatsNew" }[m.what];
+        if (id) vscode.commands.executeCommand(id);
+        break;
+      }
       case "setEffort": if (valid(EFFORTS, m.effort)) {
         tab.effort = m.effort; tab.effortPinned = !!tab.autoRoute; this.remember(tab); this.postTabs(); this.save();
         if (tab.status === "idle") this.warm(tab);

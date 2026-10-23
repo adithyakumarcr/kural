@@ -6,18 +6,38 @@
   chat; when it's done it folds to "Worked for 34 s · …" and the answer comes up under it (#104).
 - **Clearer Kural Light.** The side bar and panels stand apart from the editor, borders are clearer, the selected row is
   light purple and secondary text is darker (#104).
-- **Add to Chat and Edit Selection buttons.** Select code and two buttons float in the editor's corner: Add to Chat
-  (Ctrl/Cmd+L) and Edit Selection (Ctrl/Cmd+K) (#104).
+- **Add to Chat and Edit right where you selected.** Select code and a small label appears right after the selection:
+  Add to Chat (Ctrl/Cmd+L) · Edit (Ctrl/Cmd+K); point at it to click them. It never moves your code (#104).
+- **Ctrl+K asks in the code.** The box for what to change opens right under the selection, not in the bar at the top
+  of the window. Enter sends, Shift+Enter is a new line, Esc closes it.
+- **See what the AI is working on in the Explorer.** A file it reads turns blue for a moment, a file it changes turns
+  yellow until its answer ends, for every chat, as it happens.
+- **Connectors moved beside Extensions and Plugins.** Extensions now has three tabs: Extensions | Plugins | Connectors.
+  The Connectors tab follows the chat's AI (Claude or ChatGPT): add, sign in, turn off in Kural, remove.
+- **Listen flows like one voice.** Every sentence the voice made came with about a second of silence around it, so the
+  walkthrough stopped after each one. The silence is trimmed now, with a short natural pause instead, and short
+  sentences of one part are spoken together.
+- **Voice input's Done works on the first click.** The bar redrew five times a second while you talked and replaced the
+  Done button under your mouse, so a click often got lost.
+- **Suggest a commit message works with nothing staged.** It failed with "diff.trim is not a function" when you hadn't
+  staged anything.
+- **A tidier chat panel.** One + (on the tab line); Kural Settings and … (Get started, Check for updates, What's new)
+  moved down there too. + has Add files and Link device only (Link ticket and Pick from a browser are gone; the
+  browser's own inspect button adds elements).
+- **A cleaner Kural Settings.** Only the AIs you use get a card; the others are under **Add agent**. Moods are called
+  **Preferences**. **More** is short, and the log, crash reports and Remove Kural's data are under **Advanced**.
 - **Terminal suggestions match from the start.** Typing `git push ori` no longer lists `./.dockerignore` because its
   letters o, r, i appear somewhere inside; the list shows only names that start with what you typed (#106).
 - **Link ticket works again after other AIs answered.** An answer from ChatGPT, Gemini or a model on your computer made
   Kural think the Atlassian connector wasn't connected, and + → Link ticket then offered no search. Now the search always
   runs (through Claude), reconnects Atlassian once if it failed, and says what's wrong with Try again (#105).
-- **Turn a connector off without removing it.** Kural Settings → an AI's page → Connectors: untick **On** and Kural's
+- **Turn a connector off without removing it.** Extensions → Connectors: untick **On** and Kural's
   Claude or ChatGPT chats stop using it, in every project. Plugin connectors say which plugin they come with (#105).
 - **Your own shortcuts.** Write a prompt once in Kural Settings → Shortcuts, give it a name like `pr-summary`, and type
   `/pr-summary` anywhere in a message ("hi! please do /pr-summary"): it goes in as a chip and the AI gets its text.
   Works with every AI (#107).
+- **The status bar says Usage.** The chat's AI reads `Usage 20% · resets 3h 50m` instead of `Claude Session 20% · …`;
+  hover to see which AI it is.
 
 ## What's new in 1.2.1-beta.2
 

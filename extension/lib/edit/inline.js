@@ -42,7 +42,8 @@ function notReady(state) {
 }
 
 // ---------- Ctrl+K ----------
-async function inlineEdit(session, review, state) {
+// ask: lib/edit/inline-ask.js (the box under the selection); without it, the input bar at the top.
+async function inlineEdit(session, review, state, ask) {
   const ed = vscode.window.activeTextEditor;
   if (!ed) return;
   if (review.busy()) { vscode.window.showInformationMessage("Kural: accept or reject the current change first."); return; }
@@ -60,13 +61,15 @@ async function inlineEdit(session, review, state) {
   }
   const generating = sel.isEmpty;
 
-  const instruction = await vscode.window.showInputBox({
+  // (The question opens under the last line it's about: the selection's, or the line you're on.)
+  const instruction = ask ? await ask.ask(ed, Math.max(0, end - 1), { generating }) : await vscode.window.showInputBox({
     title: generating ? "Kural: generate code here" : "Kural: edit selection",
     prompt: generating ? "What should Kural write here?" : "How should Kural change the selected code?",
     placeHolder: generating ? "e.g. a function that converts mm/s to m/min" : "e.g. add input validation and a docstring",
     ignoreFocusOut: true,
   });
   if (!instruction) return;
+  if (doc.isClosed) { log("edit: the file was closed meanwhile; nothing asked"); return; }
 
   const lines = (a, b) => { const o = []; for (let l = Math.max(0, a); l < Math.min(doc.lineCount, b); l++) o.push(doc.lineAt(l).text); return o.join("\n"); };
   const selected = lines(start, end);

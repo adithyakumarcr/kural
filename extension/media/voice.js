@@ -172,17 +172,28 @@
     // You typed in the box: the "From your voice" note goes.
     function typed() { if (S.phase === "done") close(); }
 
+    let live = null, shownIcon = null;   // the recording bar's clock and level, while it's drawn; the mic's icon
+    function liveUpdate() {
+      const ms = S.rec ? d.now() - S.rec.started : 0, words = `Listening… ${mmss(ms)}`;
+      if (live.clock.textContent !== words) { live.clock.textContent = words; live.clock.title = words; }
+      live.fill.style.width = `${Math.round((S.rec ? S.rec.level : 0) * 100)}%`;   // (the page's CSP forbids style="" attributes)
+    }
     function render() {
       const t = d.tab();
       const here = !!t && t.id === S.tabId;
       button.classList.toggle("hidden", !!(t && t.visiting));
       button.classList.toggle("recording", here && S.phase === "recording");
       button.disabled = here && busy();
-      button.replaceChildren(d.icon(here && S.phase === "recording" ? "mic-filled" : "mic"));
+      // (Only when it changes: the recording redraws five times a second, and an element replaced between the press and
+      // the release of a click never gets the click. Done took two or three presses.)
+      const ic = here && S.phase === "recording" ? "mic-filled" : "mic";
+      if (shownIcon !== ic) { shownIcon = ic; button.replaceChildren(d.icon(ic)); }
       const show = here && S.phase !== "idle" && S.phase !== "starting";
       bar.classList.toggle("hidden", !show);
       bar.classList.toggle("err", show && S.phase === "error");
-      if (!show) { bar.replaceChildren(); return; }
+      if (!show) { bar.replaceChildren(); live = null; return; }
+      if (S.phase === "recording" && live) return liveUpdate();
+      live = null;
       const spin = () => d.el("i", { class: "codicon codicon-loading codicon-modifier-spin", "aria-hidden": "true" });
       const text = (s) => d.el("span", { class: "enh-text", title: s }, s);
       const x = () => d.el("button", { class: "cb x", "aria-label": "Close", onclick: () => close() }, d.icon("close"));
@@ -197,13 +208,15 @@
             d.el("button", { class: "cb", onclick: () => { d.post({ type: "voiceDownloadStop" }); close(); } }, "Stop"));
           break;
         case "recording": {
-          const ms = S.rec ? d.now() - S.rec.started : 0;
+          // Drawn once; the clock and the level change in place after that (liveUpdate).
           const fill = d.el("span", { class: "voice-level-fill" });
-          fill.style.width = `${Math.round((S.rec ? S.rec.level : 0) * 100)}%`;   // (the page's CSP forbids style="" attributes)
           const level = d.el("span", { class: "voice-level", "aria-hidden": "true" }, fill);
-          bar.replaceChildren(d.el("span", { class: "voice-dot", "aria-hidden": "true" }), text(`Listening… ${mmss(ms)}`), level,
+          const clock = text("");
+          bar.replaceChildren(d.el("span", { class: "voice-dot", "aria-hidden": "true" }), clock, level,
             d.el("button", { class: "cb", onclick: () => stop() }, "Done"),
             d.el("button", { class: "cb x", "aria-label": "Cancel", title: "Cancel (Esc): nothing is kept", onclick: () => cancel() }, d.icon("close")));
+          live = { clock, fill };
+          liveUpdate();
           break;
         }
         case "sending": case "transcribing": bar.replaceChildren(spin(), text("Transcribing…")); break;

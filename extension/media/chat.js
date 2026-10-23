@@ -253,7 +253,10 @@ window.KURAL_CHAT = function (app, port) {
   const splitBtn = el("button", { class: "icon-btn", "aria-label": "Split",
     onmouseenter: () => { splitBtn.title = port.canSplit() ? "Split: a new chat beside this one (or drag a tab to a side of the chat)" : port.full() ? NO_ROOM : "Open a new chat beside the code (or drag a tab out of this panel)"; },
     onclick: () => { closeHistory(); if (!port.split()) flash(NO_ROOM, 2600); } }, icon("split-horizontal"));
-  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn);
+  // Kural Settings and "…" live here too (they were in the panel's title bar, with a second "+": Adithya, one place).
+  const settingsBtn = el("button", { class: "icon-btn", title: "Kural Settings", onclick: () => { closeHistory(); post({ type: "panelCommand", what: "settings" }); } }, icon("settings-gear"));
+  const moreBtn = el("button", { class: "icon-btn", title: "More", onclick: (e) => openMenu("more", e.currentTarget) }, icon("ellipsis"));
+  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn, moreBtn);
   tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   // A chat in a column of its own (split): its title instead of the tab bar. Drag the title to move it; × puts it back
   // among the tabs.
@@ -1439,18 +1442,21 @@ window.KURAL_CHAT = function (app, port) {
     let items;
     menuEl.classList.toggle("wide", kind === "ticket" || kind === "device");
     if (kind === "add") {
-      const jira = (S.setups[t.id] || {}).jira || { ok: true };
+      // (No "Link ticket" or "Pick from a browser" here any more, Adithya 22 Oct 2026: the browser's own bar adds
+      // elements, and a ticket already linked keeps its chip with ×.)
       items = [
         el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "attachPick" }); } },
           el("span", { class: "mi-icon" }, icon("attach")), el("span", { class: "mi-label" }, "Add files"), el("span", { class: "mi-hint" }, "images, PDFs, code")),
-        el("div", { class: "mi", title: jira.ok ? "" : jira.why, onclick: () => { closeMenu(); S.ticketUI = null; openMenu("ticket", anchor); } },
-          el("span", { class: "mi-icon" }, icon("issues")), el("span", { class: "mi-label" }, t.ticket ? "Change ticket" : "Link ticket"),
-          jira.ok ? el("span", { class: "mi-hint" }, "Jira epic, story, task…") : el("span", { class: "mi-hint warn-tri" }, icon("warning"), " Atlassian not connected")),
-        el("div", { class: "mi", onclick: () => { closeMenu(); post({ type: "browserPick" }); } },
-          el("span", { class: "mi-icon" }, icon("inspect")), el("span", { class: "mi-label" }, "Pick from a browser"), el("span", { class: "mi-hint" }, "your app: click an element to add it")),
         el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
           el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
           el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];
+    } else if (kind === "more") {
+      // The tab line's "…" (it was the panel title bar's; Adithya: everything in one place).
+      const run = (what) => () => { closeMenu(); post({ type: "panelCommand", what }); };
+      const row = (what, ic, label, hint) => el("div", { class: "mi", onclick: run(what) },
+        el("span", { class: "mi-icon" }, icon(ic)), el("span", { class: "mi-label" }, label), hint ? el("span", { class: "mi-hint" }, hint) : null);
+      items = [row("settings", "settings-gear", "Kural Settings"), row("getStarted", "rocket", "Get started", "set up an AI"),
+        row("updates", "sync", "Check for updates"), row("whatsNew", "megaphone", "What's new")];
     } else if (kind === "device") {
       items = deviceItems(t);
     } else if (kind === "ticket") {
@@ -1482,19 +1488,21 @@ window.KURAL_CHAT = function (app, port) {
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         levelNote(t),
-        // Moods: the four built-in ones, then yours (Kural Settings → Moods), then a way to add one.
-        el("div", { class: "mh" }, "Mood"),
+        // Preferences (moods in the code): the four built-in ones, then yours (Kural Settings → Preferences), then a way to add one.
+        el("div", { class: "mh" }, "Preference"),
         el("div", { class: "moods" }, S.moods.map((md) => el("button", { class: `mood-chip${t.mood === md.id ? " on" : ""}`, title: md.hint || "",
           "aria-pressed": String(t.mood === md.id), onclick: () => post({ type: "setMood", tabId: t.id, mood: md.id }) }, md.label)),
-          el("button", { class: "mood-chip mood-add", title: "Add your own mood: who the AI should be and how it works with you (Kural Settings → Moods)",
-            onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own mood…")),
+          el("button", { class: "mood-chip mood-add", title: "Add your own: who the AI should be and how it works with you (Kural Settings → Preferences)",
+            onclick: () => { closeMenu(); post({ type: "editMoods" }); } }, icon("add"), " Add your own…")),
         ];
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");
     const a = anchor.getBoundingClientRect(), col = app.getBoundingClientRect();   // (placed in the column: chat.css .col)
     menuEl.style.left = Math.max(6, Math.min(a.left - col.left, col.width - menuEl.offsetWidth - 6)) + "px";
-    menuEl.style.bottom = (col.bottom - a.top + 6) + "px";
+    // (The tab line's "…" is at the top: its menu opens downwards; the box's menus open upwards.)
+    if (kind === "more") { menuEl.style.top = (a.bottom - col.top + 4) + "px"; menuEl.style.bottom = ""; }
+    else { menuEl.style.top = ""; menuEl.style.bottom = (col.bottom - a.top + 6) + "px"; }
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }

@@ -78,8 +78,11 @@ async function changesText(repo) {
   const staged = (st.indexChanges || []);
   const loose = [...(st.workingTreeChanges || []), ...(st.untrackedChanges || [])];
   let diff = "", which = "staged";
+  // (Not diffWithHEAD(): without a path it gives a list of changes, not text; that broke the button whenever nothing was
+  // staged. diff(false) = the working tree against the index; new files are read below.)
   if (staged.length) diff = await repo.diff(true);
-  else { which = "all changes (nothing is staged)"; try { diff = await repo.diffWithHEAD(); } catch { diff = await repo.diff(false); } }
+  else { which = "all changes (nothing is staged)"; diff = await repo.diff(false); }
+  if (typeof diff !== "string") diff = "";
   const files = (staged.length ? staged : loose).map((c) => `${STATUS[c.status] || "changed"}: ${rootRel(c) || rel(c)}`);
   const seen = new Set(), list = files.filter((f) => !seen.has(f) && seen.add(f));
   // New files have no diff: show the start of small text ones.

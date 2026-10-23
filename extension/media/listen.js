@@ -2,12 +2,16 @@
 // talks you through the answer: a short spoken walkthrough in a voice made on this computer, while the part being
 // explained is highlighted. The page numbers the answer's rendered blocks (paragraphs, lists, code, tables, headings
 // outside the steps), tags them data-lb, and sends them with the click; the host answers with audio, one sentence at a
-// time, which Web Audio plays back to back (no <audio> element: the sentences join without gaps). The player sits just
-// above the chat box (it stays on screen while you scroll): Pause/Play, Rewind 5 s, the speed (0.5x–2x; your choice
-// becomes the default), ✕, and three lines: the sentence before, the one being spoken, the next. No slider.
+// time or a few together, which Web Audio plays back to back (no <audio> element), the silence at each clip's edges trimmed
+// so it flows like one voice. The player sits just above the chat box (it stays on screen while you scroll): Pause/Play,
+// Rewind 5 s, the speed (0.5x–2x; your choice becomes the default), ✕, and three lines: the sentence before, the one being
+// spoken, the next. No slider.
 // Loaded by chat.js as a plain script (window.KURAL_LISTEN = make) and by the test with require().
 (function () {
   const LEAD = 0.05;   // seconds between scheduling and the first sound (a sound scheduled in the past is cut)
+  // A clip's edges: below QUIET (of 32768) is silence; LEAD_IN / TAIL seconds of it are kept around the voice, FADE seconds
+  // fade in and out (no click where it was cut). PAUSE: between sentences of one part; PAUSE_PART: when the part changes.
+  const QUIET = 400, LEAD_IN = 0.03, TAIL = 0.08, FADE = 0.006, PAUSE = 0.09, PAUSE_PART = 0.24;
   const NOTHING = "Nothing to explain in this answer.";
   const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const ask = (size, model) => `Listen needs a voice: about ${Math.round((size || 0) / 1e6)} MB, downloaded once. The voice is made on this computer; the walkthrough's words are written by ${model || "your AI"} from this answer.`;
@@ -72,9 +76,10 @@
       return Math.min(P.end, P.from + Math.max(0, ctx.currentTime - P.startedAt));
     }
     function stopSources() { if (P) { for (const s of P.srcs) try { s.stop(); } catch { /* not started */ } P.srcs = []; } }
+    // (Several sentences can share one buffer, each its own part of it: it.off, it.dur.)
     function play(it, when, offset) {
       const s = ctx.createBufferSource();
-      s.buffer = it.buffer; s.connect(ctx.destination); s.start(when, offset);
+      s.buffer = it.buffer; s.connect(ctx.destination); s.start(when, (it.off || 0) + offset, Math.max(0.001, it.dur - offset));
       P.srcs.push(s);
     }
     // Everything from timeline position `pos`, starting now.
@@ -101,14 +106,40 @@
       if (a.gen != null && a.gen < P.gen) return;   // (made at the old speed)
       const pcm = samples(a.pcm);
       if (!pcm.length || !a.rate) return;
-      const buffer = ctx.createBuffer(1, pcm.length, a.rate), data = buffer.getChannelData(0);
-      for (let k = 0; k < pcm.length; k++) data[k] = pcm[k] / 32768;
-      const it = { buffer, block: a.block == null ? null : a.block, text: a.text || "", n: Number.isInteger(a.n) ? a.n : null, start: P.end, dur: buffer.duration };
-      P.items.push(it); P.end += it.dur;
-      if (!P.scheduled) return schedule(it.start);
-      const when = P.startedAt + (it.start - P.from);
-      if (when < ctx.currentTime) schedule(it.start);   // (it ran dry waiting for this one: go on from here, now)
-      else play(it, when, 0);
+      // The voice leaves silence at both ends of what it makes; played back to back that was a stop after every sentence.
+      // Trimmed, with one short pause of Kural's own: a breath between sentences, a little longer when the part changes.
+      const [from, to] = voiced(pcm, a.rate);
+      if (to <= from) return;
+      const buffer = ctx.createBuffer(1, to - from, a.rate), data = buffer.getChannelData(0);
+      const fade = Math.min(Math.round(a.rate * FADE), (to - from) >> 2);
+      for (let k = 0; k < to - from; k++) data[k] = (pcm[from + k] / 32768) * Math.min(1, (k + 1) / (fade || 1), (to - from - k) / (fade || 1));
+      const block = a.block == null ? null : a.block, last = P.items[P.items.length - 1];
+      const gap = !last ? 0 : last.block === block ? PAUSE : PAUSE_PART;
+      let start = P.end + gap;
+      // Several sentences made together (they flow better): each gets its share of the sound, by the length of its words.
+      const parts = Array.isArray(a.group) && a.group.length > 1 ? a.group : [{ n: a.n, text: a.text, w: 1 }];
+      const weight = parts.reduce((t, x) => t + (Number(x.w) > 0 ? Number(x.w) : 1), 0);
+      let off = 0;
+      const added = parts.map((x, k) => {
+        const dur = k === parts.length - 1 ? buffer.duration - off : buffer.duration * ((Number(x.w) > 0 ? Number(x.w) : 1) / weight);
+        const it = { buffer, off, block, text: x.text || "", n: Number.isInteger(x.n) ? x.n : null, start, dur };
+        off += dur; start += dur;
+        return it;
+      });
+      P.items.push(...added); P.end = start;
+      if (!P.scheduled) return schedule(added[0].start);
+      const when = P.startedAt + (added[0].start - P.from);
+      if (when < ctx.currentTime) schedule(added[0].start);   // (it ran dry waiting for this one: go on from here, now)
+      else for (const it of added) play(it, P.startedAt + (it.start - P.from), 0);
+    }
+    // Where the voice is in a clip: from just before the first sound to just after the last one ([from, to) in samples).
+    function voiced(pcm, rate) {
+      const loud = (k) => Math.abs(pcm[k]) > QUIET;
+      let a = 0, b = pcm.length;
+      while (a < b && !loud(a)) a++;
+      while (b > a && !loud(b - 1)) b--;
+      if (b <= a) return [0, 0];
+      return [Math.max(0, a - Math.round(rate * LEAD_IN)), Math.min(pcm.length, b + Math.round(rate * TAIL))];
     }
     function current() {
       const pos = position();
