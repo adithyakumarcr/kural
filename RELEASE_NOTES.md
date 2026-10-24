@@ -31,8 +31,15 @@
 - **Answered questions get out of the way.** Once you answer (or skip) a question card it becomes one line in the
   timeline, "You answered · …", in its place. It used to stay whole under the answer, every option still showing,
   while the AI went on working above it.
-- **Add to Chat and Edit Selection pop up by themselves.** Select code and the two buttons show at the cursor, no need
-  to point at a label first.
+- **Add to Chat and Quick Edit pop up by themselves.** Select code and the two buttons show at the cursor with their
+  keys ("Add to Chat ⌘L", "Quick Edit ⌘K"), no need to point at a label first.
+- **Ctrl+K works again after you close its box.** Closing it (Esc, Cancel) left the keyboard nowhere, so the next
+  Ctrl+K (Cmd+K) started one of VS Code's two-key shortcuts: "The key combination (⌘K, ⌘K) is not a command", and
+  nothing opened. The keyboard now goes back to your code.
+- **Quick Question and Send to Chat in Ctrl+K's box, like Cursor's.** Next to Edit (Enter), the box has **Quick
+  Question** (Alt+Enter): the fastest model you have answers about the selected code right in the box; ask again, or
+  press Enter to turn it into an edit that knows what you asked. **Send to Chat** (Ctrl/Cmd+L) puts the code and what
+  you typed into the chat's message box.
 
 ## What's new in 1.2.1-beta.3
 

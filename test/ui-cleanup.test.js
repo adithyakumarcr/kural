@@ -54,14 +54,20 @@ const tick = () => new Promise((r) => setImmediate(r));
     assert.ok(!pkg.enabledApiProposals.includes("contribEditorContentMenu"));
     assert.strictEqual(C.configuration.properties["kural.editor.selectionButtons"].default, true);
   });
-  await check("Ctrl+K's box: Send and Cancel on Kural's threads only; Enter sends, Esc cancels; it may take the focus", () => {
-    const ctx = C.menus["comments/commentThread/context"];
-    assert.deepStrictEqual(ctx.map((m) => [m.command, m.when]), [["kural.inlineEdit.submit", "commentController == kural.inlineEdit"], ["kural.inlineEdit.cancel", "commentController == kural.inlineEdit"]]);
+  await check("Ctrl+K's box: Edit, Quick Question, Send to Chat and Cancel on Kural's threads only, with their keys; it may take the focus", () => {
+    const ctx = C.menus["comments/commentThread/context"], on = "commentController == kural.inlineEdit";
+    const ids = ["kural.inlineEdit.submit", "kural.inlineEdit.question", "kural.inlineEdit.toChat", "kural.inlineEdit.cancel"];
+    assert.deepStrictEqual(ctx.map((m) => [m.command, m.when, m.group]), ids.map((id, i) => [id, on, `inline@${i + 1}`]));
     const kb = (cmd) => C.keybindings.find((k) => k.command === cmd && /commentThread == kural-edit/.test(k.when || ""));
     assert.strictEqual(kb("editor.action.submitComment").key, "enter");
     assert.strictEqual(kb("kural.inlineEdit.cancel").key, "escape");
+    assert.strictEqual(kb("kural.inlineEdit.question").key, "alt+enter");
+    assert.deepStrictEqual([kb("kural.inlineEdit.toChat").key, kb("kural.inlineEdit.toChat").mac], ["ctrl+l", "cmd+l"]);
+    // (Ctrl/Cmd+L in the box sends it to the chat: its binding comes after the chat's own Ctrl/Cmd+L, so it wins there.)
+    const at = (cmd, re) => C.keybindings.findIndex((k) => k.command === cmd && (!re || re.test(k.when || "")));
+    assert.ok(at("kural.inlineEdit.toChat") > at("kural.chat.toggle") && at("kural.inlineEdit.toChat") > at("kural.selection.addToChat"));
     assert.ok(pkg.enabledApiProposals.includes("commentReveal"));
-    for (const id of ["kural.inlineEdit.submit", "kural.inlineEdit.cancel"]) assert.ok(C.menus.commandPalette.some((m) => m.command === id && m.when === "false"), id);
+    for (const id of ids) assert.ok(C.menus.commandPalette.some((m) => m.command === id && m.when === "false"), id);
   });
   await check("Connectors: a view in the Extensions side bar (its tab) and one for a side bar of its own; a command to show it", () => {
     assert.ok(C.views.extensions.some((v) => v.id === "kural.connectors" && v.when === "kural.extensionsTab == connectors"));

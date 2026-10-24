@@ -687,8 +687,22 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   label to point at): a HoverProvider gives the clickable links, and when a selection rests Kural opens that hover itself
   (`editor.action.showHover` `{focus: "noAutoFocus"}`: keyboard-opened hovers stay on mouse moves, go on cursor moves);
   other providers' hovers for that spot share the box. That command failing once → the old `after` decoration label
-  ("Add to Chat ⌘L · Edit ⌘K"). It replaced the `editor/content` buttons in the editor's corner (proposal
-  `contribEditorContentMenu` dropped). **The box's height**: VS Code gives every comment input at least 90 px (5 lines);
+  ("Add to Chat ⌘L · Quick Edit ⌘K"). It replaced the `editor/content` buttons in the editor's corner (proposal
+  `contribEditorContentMenu` dropped). **The box's other buttons** (Adithya, 24 Oct 2026: like Cursor's): `comments/commentThread/context` = Edit
+  (`kural.inlineEdit.submit`, first: VS Code's `editor.action.submitComment` runs the FIRST button with the text), Quick
+  Question (`.question`, Alt+Enter), Send to Chat (`.toChat`, Ctrl/Cmd+L, listed after the chat's own Ctrl/Cmd+L so it
+  wins in the box), Cancel. A key passes no text, so `byKey` sets `nextMode` and runs submitComment: Edit then does
+  what the key asked for. VS Code's dropdown button (Cursor's "Edit Selection ▾") exists only for `additionalActions`,
+  which get no text: not usable. Quick Question (`lib/edit/quick-question.js`, no vscode): `brain.Session` with
+  `pick: brain.fastestModel` ("question" session, no tools), answers as comments in the thread (`draw`; your words
+  `appendText`, the answer untrusted Markdown), the box re-`reveal`ed after (VS Code folds the input once a button
+  ran), its Q&A (`talk`) go into the edit's prompt (`talkNote`). Send to Chat = `chat.addFromEditor` (Ctrl+L's pill +
+  your words). `finish` gives the keyboard back to the code (`workbench.action.focusActiveEditorGroup`; not after Send
+  to Chat, another file in front or a second Ctrl+K): a closed comment box leaves it on the page body, where the next
+  Cmd+K was VS Code's two-key prefix ("(⌘K, ⌘K) is not a command"). `comments.openView` defaults to "never" (the first
+  answer opened the Comments panel). Tests: `test/quick-question.test.js`. Clicked live 24 Oct 2026 (a test copy with
+  `--extensionDevelopmentPath`, the fake Claude, driven over CDP): the box's 4 buttons, Alt+Enter's answer in the box,
+  Send to Chat's chip, Esc then Cmd+K. **The box's height**: VS Code gives every comment input at least 90 px (5 lines);
   `rebrand.py small_edit_box` makes a `kural-edit` thread's 2 lines (first height + the size rule `MZt`, through the input's
   `_parentThread.commentThread`), others unchanged; needs a full `./install.sh`
   (`test/rebrand-small-edit-box.test.js`). NOT clicked live. **The

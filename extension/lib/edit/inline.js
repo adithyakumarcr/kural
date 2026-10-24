@@ -4,6 +4,7 @@
 const vscode = require("vscode");
 const { log } = require("../ai/claude");
 const { unwrap } = require("./code-reply");
+const quick = require("./quick-question");
 
 const EDIT_SYSTEM_PROMPT =
   "You are the code-editing engine inside the Kural code editor. " +
@@ -43,7 +44,8 @@ function notReady(state) {
 
 // ---------- Ctrl+K ----------
 // ask: lib/edit/inline-ask.js (the box under the selection); without it, the input bar at the top.
-async function inlineEdit(session, review, state, ask) {
+// more: { question(prompt, token) → the answer or null (Quick Question: the fastest model), toChat(doc, range, text) }.
+async function inlineEdit(session, review, state, ask, more = {}) {
   const ed = vscode.window.activeTextEditor;
   if (!ed) return;
   if (review.busy()) { vscode.window.showInformationMessage("Kural: accept or reject the current change first."); return; }
@@ -61,8 +63,20 @@ async function inlineEdit(session, review, state, ask) {
   }
   const generating = sel.isEmpty;
 
+  const lines = (a, b) => { const o = []; for (let l = Math.max(0, a); l < Math.min(doc.lineCount, b); l++) o.push(doc.lineAt(l).text); return o.join("\n"); };
+  const file = vscode.workspace.asRelativePath(doc.uri);
+  // Quick Question (Alt+Enter in the box): about the selection, or the line you're on; answered in the box.
+  const talk = [];
+  const question = more.question ? (text, earlier, token) => {
+    const at = sel.isEmpty ? sel.active.line : start, to = sel.isEmpty ? at + 1 : end;
+    return more.question(quick.buildPrompt({ file, lang: doc.languageId, region: lines(at, to), before: lines(at - 40, at),
+      after: lines(to, to + 20), selected: !sel.isEmpty, talk: earlier, question: text }), token);
+  } : null;
+  // Send to Chat (Ctrl/Cmd+L in the box): the selection (or the file) and your words go into the chat's message box.
+  const toChat = more.toChat ? (text) => more.toChat(doc, sel, text) : null;
+
   // (The question opens under the last line it's about: the selection's, or the line you're on.)
-  const instruction = ask ? await ask.ask(ed, Math.max(0, end - 1), { generating }) : await vscode.window.showInputBox({
+  const instruction = ask ? await ask.ask(ed, Math.max(0, end - 1), { generating, question, toChat, talk }) : await vscode.window.showInputBox({
     title: generating ? "Kural: generate code here" : "Kural: edit selection",
     prompt: generating ? "What should Kural write here?" : "How should Kural change the selected code?",
     placeHolder: generating ? "e.g. a function that converts mm/s to m/min" : "e.g. add input validation and a docstring",
@@ -71,11 +85,11 @@ async function inlineEdit(session, review, state, ask) {
   if (!instruction) return;
   if (doc.isClosed) { log("edit: the file was closed meanwhile; nothing asked"); return; }
 
-  const lines = (a, b) => { const o = []; for (let l = Math.max(0, a); l < Math.min(doc.lineCount, b); l++) o.push(doc.lineAt(l).text); return o.join("\n"); };
   const selected = lines(start, end);
   const prompt =
-    `EDIT request\nFile: ${vscode.workspace.asRelativePath(doc.uri)} (${doc.languageId})\n\n` +
+    `EDIT request\nFile: ${file} (${doc.languageId})\n\n` +
     `${lines(start - 80, start)}\n<<<REGION START>>>\n${generating && !selected.trim() ? "" : selected}\n<<<REGION END>>>\n${lines(end, end + 40)}\n\n` +
+    quick.talkNote(talk) +
     `Instruction: ${instruction}\n` +
     (generating ? "The region is empty: write new code to insert there." : "Reply with the replacement for the region.");
 

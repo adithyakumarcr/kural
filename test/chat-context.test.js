@@ -83,9 +83,11 @@ const root = path.join(__dirname, "..", "extension");
   await check("package.json: Ctrl/Cmd+L runs the switch (not in the terminal); no log button in the chat's title bar", () => {
     const keys = pkg.keybindings.filter((k) => k.key === "ctrl+l");
     // (The second one is the selection's "Add to Chat" button's own key, so the button reads "Add to Chat (⌘L)": with a
-    // selection in the editor the switch adds it to the chat too, the same thing. Issue #104.)
+    // selection in the editor the switch adds it to the chat too, the same thing. Issue #104. The third: Ctrl+K's box sends
+    // what you typed there to the chat.)
     assert.deepStrictEqual(keys.map((k) => [k.command, k.mac, k.when]), [["kural.chat.toggle", "cmd+l", "!terminalFocus"],
-      ["kural.selection.addToChat", "cmd+l", "editorTextFocus && editorHasSelection"]]);
+      ["kural.selection.addToChat", "cmd+l", "editorTextFocus && editorHasSelection"],
+      ["kural.inlineEdit.toChat", "cmd+l", "commentEditorFocused && commentThread == kural-edit"]]);
     assert.ok(pkg.commands.some((c) => c.command === "kural.chat.toggle"));
     assert.ok(!pkg.menus["view/title"].some((m) => m.command === "kural.showLog"));
     assert.ok(pkg.commands.some((c) => c.command === "kural.showLog"), "Kural: Show Log stays in the Command Palette");
@@ -100,6 +102,22 @@ const root = path.join(__dirname, "..", "extension");
     const css = fs.readFileSync(path.join(root, "media", "chat.css"), "utf8");
     assert.match(css, /^\.empty \{[^}]*user-select: none/m);
     assert.ok(!/^\.list \{[^}]*user-select: none/m.test(css), "(answers must stay selectable: Add to chat, Ask)");
+  });
+
+  await check("Ctrl+K's Send to Chat: the selected lines (nothing selected: the file) and your words go into the message", async () => {
+    vscode.Range = class { constructor(a, b, c, d) { Object.assign(this, { a, b, c, d }); } };
+    vscode.workspace.asRelativePath = (u) => u.path.replace(/^\/p\//, "");
+    const text = ["import time", "while not ready():", "    sleep(1)", "print('go')"];
+    const doc = { uri: { path: "/p/src/flow.py" }, languageId: "python", isClosed: false, lineAt: (l) => ({ text: text[l] }),
+      getText: (r) => text.slice(r.a, r.c + 1).join("\n") };
+    const posted = [], pane = { kind: "side" };
+    Object.assign(chat, { reveal: async () => {}, cur: () => pane, postTo: (to, m) => posted.push([to, m]) });
+    const sel = { isEmpty: false, start: { line: 1, character: 0 }, end: { line: 3, character: 0 } };
+    await chat.addFromEditor(doc, sel, "explain this");
+    assert.deepStrictEqual(posted[0], [pane, { type: "insertPill", text: " explain this", ctx: { kind: "selection", path: "src/flow.py", lang: "python",
+      startLine: 2, endLine: 3, code: "while not ready():\n    sleep(1)" } }]);
+    await chat.addFromEditor(doc, { isEmpty: true }, "");
+    assert.deepStrictEqual(posted[1][1], { type: "insertPill", text: "", ctx: { kind: "file", path: "src/flow.py" } });
   });
 
   console.log(failed ? `chat-context: ${failed} FAILED` : "chat-context: ALL PASS");
