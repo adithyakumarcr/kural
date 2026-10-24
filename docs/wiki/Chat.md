@@ -246,6 +246,12 @@ model if that is all you have). Ask more in the same box and it remembers the si
   nested lists, checkboxes, ~~struck-out~~ text, and numbered steps whose file is a chip that opens it. Tables line up
   number columns on the right and color status words: passed green, failed red, No grey ("Breaking change: No" isn't
   bad news). Kural asks every AI to write this way; an answer that doesn't still reads fine.
+- **Diagrams.** A ` ```mermaid ` block in an answer (a flowchart, sequence, class, state or ER diagram, a pie chart, a
+  Gantt chart…) is drawn as the diagram as soon as the block is complete. **Code** shows its text (and **Diagram** the
+  picture again), **Copy** copies the code, and a click on the diagram opens it full size in its own tab. When Mermaid
+  can't draw one, the block shows why, with its code. Diagrams are drawn on your computer by
+  [Mermaid](https://mermaid.js.org), which comes with Kural; nothing is sent anywhere. A diagram is only a picture: links
+  written in it don't open.
 
 ### Thinking: one timeline
 
@@ -272,7 +278,9 @@ list, `- [ ]` lines when several may be picked, or a yes/no question), the optio
 - Your picks stay on the question, and the line above the box shows "Your answer … (press Send)". Nothing is sent until
   you press **Send** (or Enter). What you type in the box goes with your answer as a note.
 - A card has no Submit button: the chat's Send answers it. **Skip** stays, and **Other…** takes your own words.
-- After you answer, the question keeps your picks (the others fade), so you can see later what you chose.
+- After you answer, a question card becomes one line in the timeline, in its place: "You answered · Which database?
+  Postgres" (or "Skipped the question"), so the AI's next steps follow it. Options at the end of an answer keep your
+  picks (the others fade), so you can see later what you chose.
 - Only the last answer of a chat that isn't working can be answered; older ones show what was picked.
 - **Ask about this question.** Not sure what to pick? Type your question in the box under the options and press
   **Ask**. The AI that asked answers right there, then asks again, changed if your question changed something

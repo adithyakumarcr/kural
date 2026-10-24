@@ -652,6 +652,43 @@ def patch_webview_microphone(app):
                 f.write(new)
 
 
+# Ctrl+K's question box (extension/lib/edit/inline-ask.js) is a comment thread, and VS Code gives every comment input at
+# least 5 lines (90 px; Adithya, 23 Oct 2026: "why such a huge block, keep it small"). Kural's box (contextValue
+# "kural-edit") starts at 2 lines and grows as you type, up to VS Code's own maximum; every other comment box is unchanged.
+# Two places: the reply area's first height (this._editorHeight=<90>, where this._commentThread is already set) and the
+# size rule every comment input uses (its parent widget's commentThread).
+SMALL_BOX_MARK = "/*kural-small-box*/"
+COMMENT_HEIGHTS = re.compile(r'([\w$]+)=90,([\w$]+)=450,[\w$]+=class extends [\w$]+\{constructor\(')
+COMMENT_SIZE_RULE = r'(function [\w$]+\(([\w$]+),([\w$]+),([\w$]+)\)\{)(let [\w$]+=\3\.getLayoutInfo\(\),[\w$]+=\3\.getOption\((\d+)\),.{0,300}?return \4\})'
+COMMENT_FIRST_HEIGHT = r'this\._editorHeight={MIN};this\._container='
+
+
+def small_edit_box(text):
+    if SMALL_BOX_MARK in text:
+        return text
+    heights = COMMENT_HEIGHTS.findall(text)
+    if len(heights) != 1:
+        print(f"::warning::the comment input's height not found as expected ({len(heights)} matches); Ctrl+K's box stays 5 lines tall")
+        return text
+    low = heights[0][0]
+    rule = re.compile(COMMENT_SIZE_RULE)
+    rules = [m for m in rule.finditer(text) if re.search(rf'[^\w$]{re.escape(low)}[^\w$]', m.group(5))]
+    first = re.compile(COMMENT_FIRST_HEIGHT.format(MIN=re.escape(low)))
+    firsts = first.findall(text)
+    if len(rules) != 1 or len(firsts) != 1:
+        print(f"::warning::the comment input's size rule not found as expected ({len(rules)}, {len(firsts)} matches); Ctrl+K's box "
+              "stays 5 lines tall")
+        return text
+    m = rules[0]
+    editor, option = m.group(3), m.group(6)
+    body = re.sub(rf'(?<![\w$]){re.escape(low)}(?![\w$])', "__kmin", m.group(5))
+    pick = (f'let __kmin={SMALL_BOX_MARK}{editor}._parentThread?.commentThread?.contextValue==="kural-edit"'
+            f'?2*{editor}.getOption({option}):{low};')
+    text = text[:m.start()] + m.group(1) + pick + body + text[m.end():]
+    return first.sub(lambda _: f'this._editorHeight=this._commentThread?.contextValue==="kural-edit"?36:{low};this._container=',
+                     text, count=1)
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -663,7 +700,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))))))
+    new = small_edit_box(terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))))))
     if new == text:
         return
     data = new.encode("utf-8")

@@ -7,6 +7,8 @@ const vscode = require("vscode");
 const { log } = require("../log");
 
 const CONTEXT = "kural-edit";
+// The input of a comment box (Kural's question, or any other): an editor of its own, not a file you're in.
+const isCommentInput = (ed) => !!ed && ed.document.uri.scheme === "comment";
 
 class InlineAsk {
   constructor(context) {
@@ -19,8 +21,12 @@ class InlineAsk {
     context.subscriptions.push(
       vscode.commands.registerCommand("kural.inlineEdit.submit", (reply) => this.answer(reply, true)),
       vscode.commands.registerCommand("kural.inlineEdit.cancel", (reply) => this.answer(reply, false)),
-      // (Another file in front: the question there goes.)
-      vscode.window.onDidChangeActiveTextEditor((ed) => { if (this.pending && (!ed || ed.document.uri.toString() !== this.pending.uri)) this.finish(undefined); }),
+      // (Another file in front: the question there goes. Not the box's own input: VS Code reports it as the active
+      // editor when it takes the keyboard (a "comment:" document), which closed the box the moment it opened.)
+      vscode.window.onDidChangeActiveTextEditor((ed) => {
+        if (!this.pending || isCommentInput(ed)) return;
+        if (!ed || ed.document.uri.toString() !== this.pending.uri) this.finish(undefined);
+      }),
       { dispose: () => this.finish(undefined) });
   }
 
@@ -79,4 +85,4 @@ class InlineAsk {
   }
 }
 
-module.exports = { InlineAsk, CONTEXT };
+module.exports = { InlineAsk, CONTEXT, isCommentInput };

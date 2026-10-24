@@ -126,7 +126,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   its answer (a question, then a numbered list, or "- [ ]" lines when several may be picked, or a yes/no question), a
   click picks an option and a second click un-picks it; the picks stay on the question, the line above the box shows
   "Your answer … (press Send)", and nothing is sent until you press Send (Enter); what you type in the box goes with
-  it as a note. The card has no Submit (Skip stays; "Other…" takes your own words). Only the last answer of an idle chat
+  it as a note. The card has no Submit (Skip stays; "Other…" takes your own words). Once answered (or skipped), a card
+  becomes one line in the answer's timeline ("You answered · …"), where it was. Only the last answer of an idle chat
   is clickable. "Ask about this question" (a box under the options): the AI that asked answers right there, then asks
   again, changed if needed ("Updated after your question"; "The question before you asked" opens the old one).
   Notifications: when an answer is done or needs you (a command or file to allow, a question, a plan to build, an
@@ -148,7 +149,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Next to the send button: how full the
   conversation's context window is (click: AI Usage; hover: tokens in context / context capacity, and total tokens consumed,
   read and written). Pictures in answers are shown;
-  click one to see it full size in its own tab. Links to
+  click one to see it full size in its own tab. Diagrams: a \`\`\`mermaid block in an answer (flowchart, sequence, class,
+  state, ER, pie, Gantt…) is drawn as the diagram once it's complete; Code shows its text, Copy copies it, a click opens it
+  full size; one Mermaid can't draw shows why, with its code. Drawn on this computer, nothing sent. Links to
   files in an answer (and file names in \`code\`) open the file (at the line), also when the answer gives only its name
   or a path from another folder: Kural finds it in the project (several with that name: you pick one); web links open
   in Kural's browser tab. The chat's tab line holds all its buttons (the panel's title bar has none of its own): +
@@ -246,10 +249,11 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code (or put the cursor on a line to write new code there) and a box
   opens right under it, in the code: say what to change (Enter sends, Shift+Enter is a new line, Esc or Cancel closes
   it), then review a read-only red/green diff, Accept or Reject. The original file changes only on Accept.
-- With code selected in the editor, a small label appears right after the selection: "Add to Chat ⌘L · Edit ⌘K"
-  (Ctrl+L / Ctrl+K on Windows and Linux; only Add to Chat in read-only files). Point at it, or at the selected code,
-  and the two are buttons to click: Add to Chat (the selection goes into your chat message) and Edit Selection (inline
-  edit). It never moves the code; setting kural.editor.selectionButtons turns it off.
+- With code selected in the editor, two buttons pop up at the cursor a moment after you stop selecting: Add to Chat
+  (the selection goes into your chat message; Ctrl/Cmd+L) and Edit Selection (inline edit; Ctrl/Cmd+K; not in read-only
+  files). They don't take the keyboard: keep typing or selecting; they go when the cursor moves, you type or press Esc,
+  and pointing at the selected code brings them back. Another extension's hover for that spot can show in the same box.
+  Setting kural.editor.selectionButtons turns them off. The Ctrl+K box starts two lines tall and grows as you type.
 - The Explorer shows what the AI is working on as it works, in every chat: a file it reads turns blue for a moment, a
   file it changes turns yellow until its answer ends (a dot beside the name; hover: "Kural is reading this" / "Kural is
   changing this"). Commands it runs aren't shown (Kural can't tell which files they touch). Colors:

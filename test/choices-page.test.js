@@ -166,5 +166,34 @@ check("a card you asked about stops counting: its picks reach neither Send nor t
   assert.ok(q.changes() > n);
 });
 
+check("forget: a card the chat draws as a one-line step (answered) stops waiting without being drawn again", () => {
+  const p = page(), c = p.C.card(card(), 5);
+  rows(c)[1].click(); rows(c)[2].click();
+  assert.ok(p.C.pending());
+  const n = p.changes();
+  p.C.forget("p1");
+  assert.strictEqual(p.C.pending(), null);
+  assert.strictEqual(p.C.anyPicked(), false);
+  assert.ok(p.changes() > n, "the line above the box is told");
+  p.C.forget("p1");   // (again, or one that never waited: nothing happens)
+  p.C.forget("nope");
+});
+
+// The bug (Adithya, 23 Oct 2026): after you answered a question card it stayed under the answer, whole, with every option,
+// while the AI went on thinking in the timeline above it. The real layout code from media/chat.js: an answered or skipped
+// card is a step (in the timeline, in order); one still waiting, or asked about, stays outside.
+check("an answered or skipped question goes into the timeline; a waiting one stays outside", () => {
+  const src = require("fs").readFileSync(require("path").join(__dirname, "../extension/media/chat.js"), "utf8");
+  const from = src.indexOf("  const doneQuestion"), to = src.indexOf("  function parts(m)");
+  assert.ok(from > 0 && to > from, "the layout code is found");
+  const { layoutOf } = new Function(`${src.slice(from, to)}; return { layoutOf };`)();
+  const m = (state) => ({ blocks: [{ k: "think", text: "a" }, { k: "question", pid: "q", state }, { k: "think", text: "b" },
+    { k: "tool", name: "Read" }, { k: "text", text: "Done." }] });
+  const ks = [0, 1, 2, 3, 4];
+  for (const state of ["answered", "skipped"]) assert.deepStrictEqual(layoutOf(m(state), ks), { group: [0, 1, 2, 3], outside: [4] }, state);
+  assert.deepStrictEqual(layoutOf(m("pending"), ks).outside, [1, 4], "a waiting card stays where you can answer it");
+  assert.deepStrictEqual(layoutOf(m("asked"), ks).outside, [1, 4], "one you asked about folds into its next card instead");
+});
+
 console.log(failed ? `choices-page: ${failed} FAILED` : "choices-page: ALL PASS");
 process.exit(failed ? 1 : 0);
