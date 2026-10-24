@@ -375,6 +375,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   "devices.test.js" opens test/devices.test.js; several → a QuickPick. A leading "/" not on this computer = the
   project's (test/links-fastest.test.js). Pictures (`img.md-img[data-path|data-url]`, attachments, tool/generated ones) open
   full size in a tab: local → VS Code's image viewer, web → a tiny WebviewPanel. web links → Kural's browser tab.
+- **Mermaid diagrams** (`media/mermaid-view.js` KURAL_MERMAID, `mermaidCard` in `media/chat.js`; `media/mermaid/` =
+  Mermaid's `dist/mermaid.min.js` from npm, 5.5 MB, as-is, see its NOTICE): a ```mermaid block is a diagram once it's
+  complete (streaming: plain code). Mermaid loads only at the first diagram (a script tag with the page's nonce; the URL
+  is `<html data-mermaid>`), never at start. Each diagram becomes a picture: the SVG written out as XML into a `data:`
+  `<img>`, so nothing in it runs or links (`securityLevel: "strict"`, outside `href`s removed). `htmlLabels: false`
+  (root option in Mermaid 12): HTML labels (`<br/>`) aren't valid XML and the picture didn't load. The page's CSP drops
+  Mermaid's own `<style>` while it measures, so chat.css `.mm-measure` sets the same font (else boxes came out too
+  tall). One render at a time, results kept by theme + code. Full size: `openImage` accepts only
+  `data:image/svg+xml`. Test: `test/mermaid-page.test.js` (headless Chrome, the chat's real CSP; skips without Chrome).
 - **Browser / Design Mode** (`lib/browser/index.js`): it's VS Code's own Integrated Browser (a real WebContentsView tab:
   any site, the element picker, screenshots, console logs). Kural's pieces: `kural.browser.open` (any web link in the chat,
   "Kural: Open Browser" → `workbench.action.browser.open {url, openToSide}`; bare names → `Browser.url`: localhost/IP =

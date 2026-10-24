@@ -227,6 +227,8 @@ window.KURAL_CHAT = function (app, port) {
     const lang = (info.split(/\s+/)[0] || "").replace(/^path=.*/, "");
     const pm = info.match(/path=(\S+)/), file = pm ? pm[1] : null;
     const btn = (label, title, onclick, cls) => el("button", { class: `cb ${cls || ""}`, title, onclick, disabled: !done }, label);
+    // (A diagram is drawn once its block is complete; while it streams in it's code like any other.)
+    if (/^mermaid$/i.test(lang) && done && window.KURAL_MERMAID) return mermaidCard(code, btn);
     const shell = isShellBlock(lang, code, file);
     return el("div", { class: "code" },
       el("div", { class: "code-head" },
@@ -240,6 +242,34 @@ window.KURAL_CHAT = function (app, port) {
           : [btn("Insert", "Insert at the cursor", () => post({ type: "insert", code })),
             btn("Apply", file ? `Apply to ${file} and review` : "Apply to the open file and review", () => post({ type: "apply", code, path: file }), "primary")]),
       el("pre", {}, el("code", {}, highlight(code, lang))));
+  }
+
+  // A ```mermaid block: the diagram (a picture: media/mermaid-view.js), Code shows the text instead. A diagram Mermaid
+  // can't draw shows its code and why. Click the picture: full size in a tab.
+  function mermaidCard(code, btn) {
+    const view = el("div", { class: "mm-view" }, el("span", { class: "mm-note" }, "Drawing the diagram…"));
+    const card = el("div", { class: "code mermaid" });
+    const toggle = btn("Code", "Show the diagram's Mermaid code", () => {
+      const showCode = card.classList.toggle("show-code");
+      toggle.textContent = showCode ? "Diagram" : "Code";
+      toggle.title = showCode ? "Show the diagram" : "Show the diagram's Mermaid code";
+    });
+    card.append(
+      el("div", { class: "code-head" }, el("span", { class: "code-lang" }, "mermaid"), el("span", { class: "spacer" }),
+        btn("Copy", "Copy the Mermaid code", () => post({ type: "copy", code })), toggle),
+      view,
+      el("pre", { class: "mm-code" }, el("code", {}, code)));
+    window.KURAL_MERMAID.draw(code).then((r) => {
+      if (r.error) {
+        card.classList.add("show-code", "mm-failed");
+        view.replaceChildren(el("span", { class: "mm-note mm-err" }, `Couldn't draw this diagram: ${r.error}`));
+        toggle.remove();
+        return;
+      }
+      view.replaceChildren(el("img", { class: "mm-img", src: r.src, width: r.w, height: r.h, alt: "Diagram",
+        title: "Click to open it full size", onclick: () => post({ type: "openImage", url: r.src }) }));
+    });
+    return card;
   }
 
   // ---------- layout ----------
@@ -498,7 +528,7 @@ window.KURAL_CHAT = function (app, port) {
     else if (b.k === "tool") w.append(toolNode(b));
     else if (b.k === "perm") w.append(permNode(b));
     else if (b.k === "agent") w.append(agentNode(b));
-    else if (b.k === "question") w.append(choices.card(b, S.tab.messages.indexOf(m), b._prior));
+    else if (b.k === "question") w.append(inSteps && doneQuestion(b) ? answeredNode(b) : choices.card(b, S.tab.messages.indexOf(m), b._prior));
     else if (b.k === "split") w.append(split.card(b));
     else if (b.k === "think") w.append(el("div", { class: "think-plain" }, b.text));   // (thoughts are drawn in the timeline)
     else if (b.k === "image") w.append(imageNode(b));
@@ -759,7 +789,10 @@ window.KURAL_CHAT = function (app, port) {
   // waiting for you (a permission or a question), agents' cards and pictures.
   // A message you added while it worked ("steer") splits the answer in parts, each with its own dropdown: what it did
   // after reading your message shows after it, not above it.
-  const isStep = (b) => b.k === "think" || b.k === "tool" || (b.k === "perm" && b.state !== "pending");
+  // (A question card you answered or skipped is a step too, one line: it stayed a full card under the timeline, with every
+  // option, while the AI went on thinking above it. One you asked about folds into its next card: askedInto.)
+  const doneQuestion = (b) => b.k === "question" && (b.state === "answered" || b.state === "skipped");
+  const isStep = (b) => b.k === "think" || b.k === "tool" || (b.k === "perm" && b.state !== "pending") || doneQuestion(b);
   function layoutOf(m, ks) {
     let last = -1;
     ks.forEach((k) => { if (isStep(m.blocks[k])) last = k; });
@@ -852,6 +885,18 @@ window.KURAL_CHAT = function (app, port) {
       file ? el("span", { class: "tool-file", onclick: () => post({ type: "openFile", path: file }) }, b.detail)
         : b.name === "Bash" || /run_command$/.test(b.name) ? el("code", {}, b.detail) : el("span", {}, b.detail),
       pic ? el("img", { class: "md-img tool-img", src: pic, alt: base(file), title: "Click to open it full size", onclick: () => post({ type: "openImage", path: file }) }) : null);
+  }
+
+  // A question card you answered (or skipped), as a step in the timeline: "You answered · Which database? Postgres".
+  function answeredNode(b) {
+    if (choices.forget) choices.forget(b.pid);   // (no longer waiting for picks)
+    const said = b.state === "answered" ? (b.questions || []).map((q) => {
+      const a = b.answers && b.answers[q.question];
+      return a == null || a === "" ? null : `${q.question} ${a}`;
+    }).filter(Boolean).join(" · ") : "";
+    return el("div", { class: "tool question-step" },
+      el("span", { class: "tool-name" }, b.state === "answered" ? "You answered" : "Skipped the question"), " ",
+      el("span", {}, said || ((b.questions || [])[0] || {}).question || ""));
   }
 
   // A picture the model made (saved by Kural as a file): shown in the answer; click opens it.

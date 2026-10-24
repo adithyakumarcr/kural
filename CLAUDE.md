@@ -431,6 +431,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   "devices.test.js" opens test/devices.test.js; several → a QuickPick. A leading "/" not on this computer = the
   project's (test/links-fastest.test.js). Pictures (`img.md-img[data-path|data-url]`, attachments, tool/generated ones) open
   full size in a tab: local → VS Code's image viewer, web → a tiny WebviewPanel. web links → Kural's browser tab.
+- **Mermaid diagrams** (`media/mermaid-view.js` KURAL_MERMAID, `mermaidCard` in `media/chat.js`; `media/mermaid/` =
+  Mermaid's `dist/mermaid.min.js` from npm, 5.5 MB, as-is, see its NOTICE): a ```mermaid block is a diagram once it's
+  complete (streaming: plain code). Mermaid loads only at the first diagram (a script tag with the page's nonce; the URL
+  is `<html data-mermaid>`), never at start. Each diagram becomes a picture: the SVG written out as XML into a `data:`
+  `<img>`, so nothing in it runs or links (`securityLevel: "strict"`, outside `href`s removed). `htmlLabels: false`
+  (root option in Mermaid 12): HTML labels (`<br/>`) aren't valid XML and the picture didn't load. The page's CSP drops
+  Mermaid's own `<style>` while it measures, so chat.css `.mm-measure` sets the same font (else boxes came out too
+  tall). One render at a time, results kept by theme + code. Full size: `openImage` accepts only
+  `data:image/svg+xml`. Test: `test/mermaid-page.test.js` (headless Chrome, the chat's real CSP; skips without Chrome).
 - **Browser / Design Mode** (`lib/browser/index.js`): it's VS Code's own Integrated Browser (a real WebContentsView tab:
   any site, the element picker, screenshots, console logs). Kural's pieces: `kural.browser.open` (any web link in the chat,
   "Kural: Open Browser" → `workbench.action.browser.open {url, openToSide}`; bare names → `Browser.url`: localhost/IP =
@@ -671,10 +680,18 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   is a comment thread of Kural's controller `kural.inlineEdit` under the selection's last line (contextValue `kural-edit`;
   `thread.reveal(…, {focus: Reply})` needs the proposal `commentReveal`); Send / Cancel are
   `comments/commentThread/context` items, Enter = `editor.action.submitComment` and Esc = cancel when `commentEditorFocused
-  && commentThread == kural-edit`; no comment widget → the old input box. Checked against VS Code 1.140's code, NOT
-  clicked live. **The selection's label** (`lib/edit/selection-bar.js`): an `after` decoration at the end of the line
-  where the selection ends ("Add to Chat ⌘L · Edit ⌘K"), a HoverProvider gives the clickable links; it replaced the
-  `editor/content` buttons in the editor's corner (proposal `contribEditorContentMenu` dropped). NOT clicked live. **The
+  && commentThread == kural-edit`; no comment widget → the old input box. VS Code's comment input is NOT a simple
+  widget, so when it takes the keyboard the extension host reports it as the active editor (a `comment:` document):
+  the box closed itself at once until `isCommentInput` was ignored there (and for the chat's `lastEditor`;
+  `test/inline-ask.test.js`). Checked against VS Code 1.140's code, NOT clicked live. **The selection's buttons** (`lib/edit/selection-bar.js`; Adithya, 23 Oct 2026: show the buttons, not a
+  label to point at): a HoverProvider gives the clickable links, and when a selection rests Kural opens that hover itself
+  (`editor.action.showHover` `{focus: "noAutoFocus"}`: keyboard-opened hovers stay on mouse moves, go on cursor moves);
+  other providers' hovers for that spot share the box. That command failing once → the old `after` decoration label
+  ("Add to Chat ⌘L · Edit ⌘K"). It replaced the `editor/content` buttons in the editor's corner (proposal
+  `contribEditorContentMenu` dropped). **The box's height**: VS Code gives every comment input at least 90 px (5 lines);
+  `rebrand.py small_edit_box` makes a `kural-edit` thread's 2 lines (first height + the size rule `MZt`, through the input's
+  `_parentThread.commentThread`), others unchanged; needs a full `./install.sh`
+  (`test/rebrand-small-edit-box.test.js`). NOT clicked live. **The
   Explorer** (`lib/explorer/`): a FileDecorationProvider fed by the chat's tool_use (`started`) / tool_result
   (`finished`) / `finishReply` (`ended`); reads blue (2.5 s after), changes yellow (until the answer ends + 4 s); colors
   `kural.explorer.reading/changing` in package.json `colors`. **Listen**: the voice leaves 0.35–0.5 s of silence before
@@ -885,7 +902,8 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   update, the draft stays. Live-checked with Claude Code 2.1.289 (one answer with both; the poem case: next turn).
   Tests: test/queue.test.js, the engine/codex/agy tests (fake-codex has `turn/steer`, FAKE_CODEX_NO_STEER).
 - **The thinking timeline** (`media/timeline.js`; `media/chat.js` `parts`/`layout`/`stepsNode`; spec
-  `docs/superpowers/specs/2026-10-21-calm-chat-design.md`): thinking, tools, answered permissions and the
+  `docs/superpowers/specs/2026-10-21-calm-chat-design.md`): thinking, tools, answered permissions, answered or skipped question cards (one line,
+  `answeredNode`; they stayed whole under the timeline while the AI thought on above them; `choices.forget`) and the
   text before the last step go into ONE timeline (`.thv`) per part of an answer (a `steer` block splits it into parts;
   only the last part's is live): thoughts in readable text between the steps, `max-height: 300px` then it scrolls
   inside, following the newest line (`state` {follow, top} kept per part in `m._tl`, so a redraw keeps your place;

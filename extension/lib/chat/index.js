@@ -12,6 +12,7 @@ const { ClaudeProcess, log, newSessionId, LOGIN_RE, findClaude, isSetUp } = requ
 const { projectInstructions } = require("./project");
 const { ChangeTracker, inProject } = require("./changes");
 const ws = require("../workspace");
+const { isCommentInput } = require("../edit/inline-ask");
 const { Attachments } = require("./attachments");
 const { within, runsLater, isHomeOrAbove, HOME_PROTECTED, privateTmp } = require("../paths");
 const { ChatArchive } = require("./archive");
@@ -239,7 +240,8 @@ class ChatView {
     c.subscriptions.push(
       watcher,
       vscode.window.registerWebviewViewProvider("kural.chat", this, { webviewOptions: { retainContextWhenHidden: true } }),
-      vscode.window.onDidChangeActiveTextEditor((ed) => { if (ed) this.lastEditor = ed; }),
+      // (A comment box's input isn't where Insert/Apply go: the file under it stays the last editor.)
+      vscode.window.onDidChangeActiveTextEditor((ed) => { if (ed && !isCommentInput(ed)) this.lastEditor = ed; }),
       // A folder added to (or removed from) the workspace: Claude gets access on its next start,
       // and @ mentions list its files.
       vscode.workspace.onDidChangeWorkspaceFolders(() => {
@@ -768,10 +770,11 @@ class ChatView {
     webview.options = { enableScripts: true, localResourceRoots: this.resourceRoots() };
     const nonce = require("crypto").randomBytes(16).toString("base64");
     const uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
-    webview.html = `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
+    // (data-mermaid: loaded by media/mermaid-view.js only when an answer has a diagram.)
+    webview.html = `<!doctype html><html data-fs="${fontScale()}" data-mermaid="${uri("mermaid/mermaid.min.js")}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("markdown.js")}"></script><script nonce="${nonce}" src="${uri("timeline.js")}"></script><script nonce="${nonce}" src="${uri("choices.js")}"></script><script nonce="${nonce}" src="${uri("split.js")}"></script><script nonce="${nonce}" src="${uri("listen.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("markdown.js")}"></script><script nonce="${nonce}" src="${uri("mermaid-view.js")}"></script><script nonce="${nonce}" src="${uri("timeline.js")}"></script><script nonce="${nonce}" src="${uri("choices.js")}"></script><script nonce="${nonce}" src="${uri("split.js")}"></script><script nonce="${nonce}" src="${uri("listen.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
     // (A message from a column of the side panel (split) says which: that column is a pane of its own.)
     webview.onDidReceiveMessage((m) => {
       const p = m && m.col ? (pane.layout || []).find((q) => q.col === m.col) : pane;
@@ -3203,12 +3206,14 @@ class ChatView {
       const uri = this.resolvePath(p);
       if (uri) { await vscode.commands.executeCommand("vscode.open", uri, { preview: false }); return; }
     }
-    if (!/^https:\/\//.test(url || "")) return;
-    const panel = vscode.window.createWebviewPanel("kural.picture", "Picture", vscode.ViewColumn.Active, { enableScripts: false });
+    // (A diagram from the chat (media/mermaid-view.js) is an SVG data: address: a picture, nothing in it runs.)
+    const diagram = /^data:image\/svg\+xml[;,]/.test(url || "");
+    if (!diagram && !/^https:\/\//.test(url || "")) return;
+    const panel = vscode.window.createWebviewPanel("kural.picture", diagram ? "Diagram" : "Picture", vscode.ViewColumn.Active, { enableScripts: false });
     const safe = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
     panel.webview.html = `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline';">
-<style>html,body{height:100%;margin:0;background:var(--vscode-editor-background)}body{display:grid;place-items:center}img{max-width:100%;max-height:100vh;object-fit:contain}</style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${diagram ? "data:" : "https:"}; style-src 'unsafe-inline';">
+<style>html,body{height:100%;margin:0;background:var(--vscode-editor-background)}body{display:grid;place-items:center}img{max-width:100%;max-height:100vh;object-fit:contain}${diagram ? "img{width:100%;height:100vh;padding:24px;box-sizing:border-box}" : ""}</style>
 </head><body><img src="${safe}" alt=""></body></html>`;
   }
 

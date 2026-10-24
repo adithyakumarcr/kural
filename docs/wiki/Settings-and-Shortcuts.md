@@ -36,7 +36,7 @@ Open them with **File → Preferences → Settings** and search for "Kural".
 | `kural.chat.moods` | (none) | your own chat preferences (called moods before: name, hint, instructions); edit them in Kural Settings → Preferences |
 | `kural.chat.shortcuts` | (none) | your "/" shortcuts in the chat (name, text); edit them in Kural Settings → Shortcuts |
 | `kural.chat.hiddenMoods` | (none) | built-in preferences (Default, Explorer, Critic, Learn) removed from the chat's model menu; remove or restore them in Kural Settings → Preferences |
-| `kural.editor.selectionButtons` | on | with code selected, a label right after the selection: Add to Chat (Ctrl/Cmd+L) and Edit (Ctrl/Cmd+K); point at it to click them |
+| `kural.editor.selectionButtons` | on | with code selected, Add to Chat (Ctrl/Cmd+L) and Edit Selection (Ctrl/Cmd+K) pop up at the cursor |
 | `kural.explorer.showAIActivity` | on | the Explorer shows the files the AI reads (blue) and changes (yellow) as it works; colors `kural.explorer.reading` / `kural.explorer.changing` |
 | `kural.usageSwitch.enabled` | off | move the same chat to another available AI when its reported usage reaches the AI's switch points; one switch for all AIs, shown on every AI's page in Kural Settings ("Switch to another AI near a limit") |
 | `kural.usageSwitch.threshold` | 70 | the switch point (1–99 %) for an AI without its own points; applies to Session and Weekly limits |

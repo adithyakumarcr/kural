@@ -38,20 +38,25 @@
       return el("div", { class: "q-ask" }, icon("question"), input, btn);
     }
 
-    // A question card (AskUserQuestion). prior: { before, answerText } when it's the new version of a card you asked about.
-    function card(b, i, prior) {
-      const qs = b.questions || [], state = b.state || "pending", pending = state === "pending";
-      const ck = `${tid()}|${b.pid}`;
-      // (A card that's answered, skipped or asked about, and the old version folded into this one, no longer waits: its
-      // picks go, and the line above the box is told.)
-      const gone = [!pending ? ck : null, prior && prior.before ? `${tid()}|${prior.before.pid}` : null].filter((k) => k && cards.has(k));
-      if (pending) cards.set(ck, { tabId: tid(), i, pid: b.pid, qs });
+    // A card that no longer waits (answered, skipped or asked about, or the old version folded into a new one): its picks
+    // go, and the line above the box is told. Also for a card the chat draws as a one-line step instead (forget).
+    function drop(keys) {
+      const gone = keys.filter((k) => k && cards.has(k));
       for (const k of gone) {
         const c = cards.get(k);
         cards.delete(k);
         c.qs.forEach((q, qi) => { const key = `${c.tabId}|${c.i}|${c.pid}|${qi}`; sel.delete(key); other.delete(key); });
       }
       if (gone.length) changed();
+    }
+    const forget = (pid) => drop([`${tid()}|${pid}`]);
+
+    // A question card (AskUserQuestion). prior: { before, answerText } when it's the new version of a card you asked about.
+    function card(b, i, prior) {
+      const qs = b.questions || [], state = b.state || "pending", pending = state === "pending";
+      const ck = `${tid()}|${b.pid}`;
+      if (pending) cards.set(ck, { tabId: tid(), i, pid: b.pid, qs });
+      drop([!pending ? ck : null, prior && prior.before ? `${tid()}|${prior.before.pid}` : null]);
       const title = pending ? (qs.length > 1 ? "A few questions for you" : "A question for you")
         : state === "answered" ? "You answered" : state === "asked" ? `You asked: ${b.ask || ""}` : "Skipped";
       const node = el("div", { class: `question ${state}` });
@@ -147,7 +152,7 @@
       for (const m of [sel, other]) for (const k of [...m.keys()]) if (k.startsWith(t)) m.delete(k);
       changed();
     }
-    return { card, options, pending, anyPicked, lineNode, clear };
+    return { card, options, pending, anyPicked, lineNode, clear, forget };
   }
 
   if (typeof window !== "undefined") window.KURAL_CHOICES = KURAL_CHOICES;

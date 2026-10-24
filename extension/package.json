@@ -1423,7 +1423,7 @@
         "kural.editor.selectionButtons": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "With code selected in the editor, a small label right after the selection says **Add to Chat** (Ctrl/Cmd+L) and **Edit** (Ctrl/Cmd+K); point at it to click them."
+          "markdownDescription": "With code selected in the editor, **Add to Chat** (Ctrl/Cmd+L) and **Edit Selection** (Ctrl/Cmd+K) pop up at the cursor a moment after you stop selecting."
         }
       }
     },

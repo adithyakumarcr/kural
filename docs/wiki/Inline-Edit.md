@@ -5,10 +5,13 @@ change and press **Enter** (**Shift+Enter** for a new line; **Esc** or **Cancel*
 green; keep it (**Ctrl+Enter**, **Cmd+Enter** on a Mac, or **Accept** above it) or reject it (**Ctrl+Shift+Backspace**,
 **Cmd+Shift+Backspace** on a Mac, or **Reject**). With nothing selected, Ctrl+K proposes new code at the cursor.
 
-While code is selected, a small label shows right after the selection: **Add to Chat ⌘L · Edit ⌘K** (Ctrl+L / Ctrl+K on
-Windows and Linux). Point at it, or at the selected code, and the two are buttons: **Add to Chat** puts the selection into
-your chat message, **Edit Selection** does the same as Ctrl+K. (Read-only files get Add to Chat only.) The label never
-moves your code; the setting `kural.editor.selectionButtons` turns it off.
+Select code and, a moment after you stop, two buttons pop up at the cursor: **Add to Chat** puts the selection into your
+chat message (Ctrl+L, Cmd+L on a Mac), **Edit Selection** does the same as Ctrl+K. (Read-only files get Add to Chat only.)
+They don't take the keyboard, so you can keep typing or extend the selection; they go when the cursor moves, when you
+type or press Esc, and pointing at the selected code brings them back. Another extension's information for that spot (a
+type, a blame line) can show in the same pop-up. The setting `kural.editor.selectionButtons` turns them off.
+
+The box Ctrl+K opens starts two lines tall and grows as you type more lines.
 
 It uses the chat's model (Claude or [[Your Own Model]]).
 
