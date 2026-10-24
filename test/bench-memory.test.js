@@ -26,7 +26,7 @@ const procs = [
   { pid: 10, ppid: 5, cmd: claude(`--model haiku --effort low --safe-mode --system-prompt-file ${prompt("p1.md", "You are the autocomplete engine of a code editor.\nYou get a file")}`) },
   { pid: 11, ppid: 5, cmd: claude(`--model haiku --safe-mode --permission-prompt-tool stdio --append-system-prompt-file ${prompt("p2.md", "You locate code for the user inside the Kural editor.")}`) },
   { pid: 12, ppid: 5, cmd: claude(`--model sonnet --include-partial-messages --thinking-display summarized --replay-user-messages --append-system-prompt-file ${prompt("p3.md", "You are working in the Kural editor...")}`) },
-  { pid: 13, ppid: 12, cmd: `${H(" (Plugin)")} ${APP}/Resources/app/extensions/kural/lib/chat/team-mcp.js` },
+  { pid: 13, ppid: 12, cmd: `${H(" (Plugin)")} ${APP}/Resources/app/extensions/kural/lib/devices/device-mcp.js` },
   { pid: 14, ppid: 5, cmd: claude(`--model haiku --system-prompt-file ${prompt("p4.md", "You are the autocomplete of a terminal. You get")}`) },
   { pid: 15, ppid: 5, cmd: "/opt/homebrew/bin/codex app-server" },
   { pid: 16, ppid: 5, cmd: "/usr/bin/git status --porcelain" },

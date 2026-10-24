@@ -50,7 +50,7 @@ When a reported Session or Weekly limit for the current model reaches its point,
 to another service you have set up that is below its points. This works with a model picked by hand and with **Auto**.
 Messages, attached context, tool results, changes, answered questions and the plan go along. A paused request continues
 on the next service; a completed answer switches before the next message. Active tools, approvals, background tasks
-and agents finish before the handoff. The new service must support the chat's attachments, team or linked device.
+and agents finish before the handoff. The new service must support the chat's attachments, parallel agents or linked device.
 
 If none can take over, the chat stays with its current service. Providers may report usage only after a request, so
 the points are a switching trigger and cannot guarantee that usage stops at exactly that percentage. Turning the switch

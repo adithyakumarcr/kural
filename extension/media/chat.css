@@ -310,14 +310,6 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 /* Queued messages (sent while it answered, not taken in yet): above the box. */
 .queue { margin: 0 0 6px; padding: 4px 8px 5px; border-radius: 7px; background: color-mix(in srgb, var(--accent) 9%, transparent); border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
 .queue.hidden { display: none; }
-.offer { margin: 0 0 6px; padding: 5px 8px; border-radius: 7px; display: flex; flex-direction: column; gap: 4px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
-.offer.hidden { display: none; }
-.offer-top { display: flex; align-items: center; gap: 6px; }
-.offer-text { flex: 1 1 auto; min-width: 0; }
-.offer-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.offer-btns { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }   /* (together, at the right; they wrap as a pair) */
-.offer-left { font-size: calc(11px * var(--fs, 1)); }
 .queue-head { font-size: calc(11px * var(--fs, 1)); color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .queue-item { font-size: calc(12px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 18px; }
 /* A message you sent while it answered, taken into that answer. */
@@ -433,11 +425,12 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .visit-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .h-empty { color: var(--muted); font-size: calc(12px * var(--fs, 1)); padding: 16px 4px; text-align: center; }
 
-/* modes, plan, team */
+/* modes, plan, agents */
 .mode-tag { font-size: calc(10.5px * var(--fs, 1)); padding: 0 6px; border-radius: 4px; margin-right: 4px; }
 .mode-tag.plan { background: color-mix(in srgb, var(--green) 20%, transparent); color: var(--green); }
 .mode-tag.ask { background: color-mix(in srgb, var(--blue) 20%, transparent); color: var(--blue); }
 .mode-tag.auto { background: color-mix(in srgb, var(--yellow) 20%, transparent); color: var(--yellow); }
+.mode-tag.debug { background: color-mix(in srgb, var(--red) 20%, transparent); color: var(--red); }
 .plan-bar { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; padding: 8px 10px; border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--green) 45%, transparent); background: color-mix(in srgb, var(--green) 8%, transparent); }
 .plan-q { font-size: calc(12px * var(--fs, 1)); }
@@ -445,7 +438,6 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .cb.solid { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .cb.solid:hover:not([disabled]) { background: var(--accent-hi); border-color: var(--accent-hi); color: var(--on-accent); }
 .perm-agent { color: var(--accent-hi); font-weight: 600; margin-right: 6px; }
-.team-note { font-size: calc(11px * var(--fs, 1)); color: var(--accent-hi); margin-bottom: 6px; }
 .agent { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; margin: 4px 0 8px; padding: 6px 9px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .agent.done { border-left-color: var(--green); }
 .agent.failed, .agent.stopped { border-left-color: var(--red); }
@@ -456,17 +448,12 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .agent-state { font-size: calc(11px * var(--fs, 1)); color: var(--muted); }
 .agent-steps { margin-top: 4px; padding-left: 2px; }
 .agent-steps .tool { margin-bottom: 2px; font-size: calc(11.5px * var(--fs, 1)); }
-.team-msg { margin: 3px 0; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: calc(12px * var(--fs, 1)); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
-.team-who { font-weight: 600; color: var(--accent-hi); }
-/* The agents' discussion, in the answer itself: a bit bigger than inside a card */
-.answer > .team-msg, .answer > .blk > .team-msg { margin: 6px 0; padding: 6px 10px; font-size: calc(13px * var(--fs, 1)); }
 .agent-activity { font-size: calc(11px * var(--fs, 1)); color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .agent-say, .agent-think { margin: 3px 0; font-size: calc(12px * var(--fs, 1)); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
 .agent-think { color: var(--muted); font-style: italic; }
 .agent-think::before { content: "Thinking: "; font-style: normal; font-weight: 600; }
 .agent-say.clamp, .agent-think.clamp { max-height: 4.4em; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
 
-.team-wait { color: var(--muted); font-style: italic; }
 /* How it worked: the timeline (media/timeline.js). Thoughts in readable text between the steps it took. While it runs it
    may grow as tall as the chat (--tl-max, set by chat.js from the list's height), then scrolls inside, following the newest
    line; when that part of the answer is done it folds to its header (issue #104). A finished one opened again: 300 px. */
@@ -508,7 +495,6 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .tool.more { opacity: .7; font-style: italic; }
 .dots.small span { width: 4px; height: 4px; }
 .version { margin-top: 30px; font-size: calc(11px * var(--fs, 1)); color: var(--muted); opacity: .7; }
-.seg.team button { font-size: calc(11px * var(--fs, 1)); }
 
 /* Claude's questions with options */
 /* Questions: pick, then Send (media/choices.js). A click picks (several where allowed); your picks stay on the question;
@@ -631,6 +617,7 @@ body.vscode-light .code pre code { color: var(--vscode-editor-foreground); }
 body.vscode-light .tk-c { color: #008000; } body.vscode-light .tk-s { color: #a31515; } body.vscode-light .tk-n { color: #098658; }
 body.vscode-light .tk-k, body.vscode-light .tk-l { color: #0000ff; } body.vscode-light .tk-tag { color: #800000; }
 body.vscode-light .tk-x { color: #af00db; } body.vscode-light .tk-f { color: #795e26; } body.vscode-light .tk-t { color: #267f99; }
+body.vscode-light .mode-tag.debug { background: color-mix(in srgb, var(--red) 14%, transparent); }
 body.vscode-light .popup { box-shadow: 0 6px 24px rgba(36,35,43,.14); }
 body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 
@@ -706,3 +693,23 @@ body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 .ctx-meter.high { color: var(--yellow); }
 .ctx-meter.high .ctx-ring { background: conic-gradient(var(--yellow) var(--p, 0deg), color-mix(in srgb, var(--vscode-foreground) 18%, transparent) 0); }
 .side .code-head .cb ~ .cb { display: none; }   /* (a side answer only answers: Copy stays, Insert and Apply do not) */
+
+/* Parallel agents (media/split.js): the plan card (it borrows the question card's frame and footer) and the model menu's
+   "Agents use" row. */
+.split-sum { font-size: calc(12.5px * var(--fs, 1)); margin-bottom: 6px; }
+.split-sum p { margin: 0 0 4px; }
+.split-row { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-top: 1px solid var(--border); }
+.split-n { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: calc(10.5px * var(--fs, 1)); font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-hi); }
+.split-task { flex: 1; min-width: 0; }
+.split-title { font-weight: 600; overflow-wrap: anywhere; }
+.split-files { font-size: calc(11px * var(--fs, 1)); color: var(--muted); font-family: var(--vscode-editor-font-family); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split .seg.split-seg { flex: none; margin: 0; }
+.split .seg.split-seg button { padding: 3px 9px; }
+.split-pick { flex: none; max-width: 45%; background: var(--vscode-dropdown-background, var(--surface)); color: var(--vscode-dropdown-foreground, var(--vscode-foreground));
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: calc(11.5px * var(--fs, 1)); }
+.split > .q-other { margin-top: 6px; }
+.split-workers { display: flex; align-items: center; gap: 6px; padding: 0 0 4px 8px; }
+.split-workers .mi-hint { margin-left: 0; padding-left: 22px; }
+.split-workers .seg { flex: 1; margin: 2px 8px 2px 0; }
+.split-workers .split-pick { flex: 1; max-width: none; margin-right: 8px; }

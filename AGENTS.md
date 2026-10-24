@@ -38,9 +38,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
     `agy.js`, `codex.js` — Gemini (Antigravity) / Codex agents and helpers; `clis.js` — both described once (install, login, test,
     models, usage page). `usage.js` — the usage hub (no vscode).
   - `lib/chat/` — `index.js` the chat backend (tabs, modes, models, questions, permissions, panes); `prompts.js`
-    (modes, `MOODS`, mood prompts); `team.js` (roles, team prompts) + `team-mcp.js` (the agents' board); `guide.js`
+    (modes, `MOODS`, mood prompts); `guide.js`
     (what Kural can do, appended to every chat's prompt); `archive.js` (History), `attachments.js`, `tickets.js`
     (Jira), `changes.js`. UI: `media/chat.js` + `media/chat.css` (a webview).
+  - `lib/split/` — parallel agents: `agent.js` (SplitAgent: plan, agents in git worktrees, merge, apply, check),
+    `worktrees.js` (the git work), `plan.js` (prompts); the plan card and menu section in `media/split.js`. `lib/git.js` finds git.
+  - `lib/fix/` — Fix with Kural: `core.js` (no vscode: `problemText`, `terminalText`, ANSI, the 8,000-character tail), `index.js` (`registerFix`: light bulb, terminal status bar button).
+  - `lib/rules/` — Rules: `.kural/rules/*.md` (and `.cursor/rules`), what each message gets (`registerRules`).
+  - `lib/agent-review/` — Agent Review: a read-only agent reviews the uncommitted changes, findings as comments (`registerAgentReview`).
+  - `lib/debug/` — Debug mode: `server.js` the log server on 127.0.0.1, the mode's prompt.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
@@ -103,7 +109,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   no special code. Model ids `codex:<id>` / `agy:<id>` (`default` = the program's own).
   Codex: `codex app-server`, one JSON object per line, approval `untrusted` + workspace-write sandbox in Agent/Auto
   (read-only in Plan/Ask), so commands and file changes come to Kural's `onPermission` (files: "Edit"/"Write" first, for
-  Undo). Neither Codex nor agy does agent teams or Codex's setup (`isClaude()` in the chat). Set up in Get started
+  Undo). Neither Codex nor agy does Codex's setup (`isClaude()` in the chat). Set up in Get started
   (`rec.codex`/`rec.agy`: bin, models) →
   `brain.setCli()`. **Install** (`lib/ai/install.js`, no vscode): no terminal; Homebrew on a Mac if present, else npm
   (PATH from your shell: a Dock-started app has a short PATH), Node too old/missing → pop-up with nodejs.org; npm
@@ -205,7 +211,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - **No unasked-for macOS permission prompts** (Music, Photos, Documents, Desktop, Downloads… are asked about when any
   process Kural starts opens them; Adithya: asking for what Kural doesn't need makes people distrust it). `lib/paths.js`
   (no vscode): `within` (links followed: `real`), `isProtected` (those folders, other homes, /Volumes), `isHomeOrAbove`,
-  `privateTmp` (a 0700 folder per run: attachments, team files, Codex/agy helpers; never fixed names in the shared /tmp).
+  `privateTmp` (a 0700 folder per run: attachments, parallel agents' worktrees, Codex/agy helpers; never fixed names in the shared /tmp).
   The AI reads/changes files without asking only inside `ws.aiRoots()` (project folders, workDir, temp; reading also
   globalStorage, `~/.Codex/projects|plans`, /tmp) or what you attached (`tab.granted`); elsewhere `onPermission` shows a
   file card (Allow/Skip, no "allow all"). So Read/Grep/Glob aren't in Codex's `--allowedTools` (Codex reads inside
@@ -237,38 +243,93 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Test all states without logging out: `test/fake-Codex.js` (state in `$FAKE_CLAUDE_STATE` or
   `<tmp>/kural-fake-Codex-state`: ok / loggedout / nocredit / old) with `kural.claudePath` pointing at it.
 - **Codex CLI flags** (see `ClaudeProcess.start`): `--safe-mode` skips the user's setup *and* any
-  `--mcp-config` we pass; with a team in safe mode we use `--setting-sources "" --disable-slash-commands`
+  `--mcp-config` we pass; with one in safe mode (a device, Kural's browser) we use `--setting-sources "" --disable-slash-commands`
   instead. Full setup (default) = no safe mode, no `--strict-mcp-config`.
 - **Control requests** over stdin: `interrupt`, `set_model` (works mid-answer), `mcp_status`, `stop_task` {task_id}
   (stops one background agent; it ends with status "killed"/"stopped").
   Permission requests (`can_use_tool`) are answered by `onPermission`; `AskUserQuestion` is answered by
   returning `updatedInput: { questions, answers }`.
-- **Agent teams**: Opus often runs agents in the background. The lead's turn ends ("result") while agents
-  work, and Codex starts new lead turns as each reports back. So the answer stays open until every agent
-  card is done (`task_started` / `task_notification` events, keyed by `tool_use_id`), and a late lead turn
-  reopens the answer. Only Stop ends a team answer early; `warm()` never restarts Codex while an agent works
-  (that would kill background agents). If Codex doesn't wake the lead after the last report, `conclude()`
-  asks it for the final answer (up to `MAX_NUDGES`, since a project has several phases). Codex reports a long
-  Bash command as a background task too (`task_started`/`task_notification` with the Bash call's id): only a
-  notification whose owner is an agent card sets `lastNotifyAt`, or every long command got the "All the agents you
-  started have reported back…" nudge (test/queue.test.js). Agent names come from `FRIENDS`; roles (with their duties) from `ROLES`; prompts from `teamPrompt()`.
-  **Roles** (Adithya's design): the lead is the Project Manager; Researcher (Rachel), Architect (Ross), Developer
-  (`DEVELOPERS`: Monica, Chandler, Joey; the PM starts 1–3), Tester (Phoebe); any combination. Split the work with
-  roles = `projectPrompt()`: requirements (PM asks you) → plan (Researcher/Architect, "PLAN:" to the lead) → your OK
-  (AskUserQuestion: Go ahead / Change the plan / Stop) → build + Tester review (max 2 rounds) → report. Without
-  developers, the plan is the result. `teamMembers()` gives who can exist; the team file's `started` says who the PM
-  actually started (the board waits only for them) and `busy` who's working (an empty wait then doesn't count).
-  Their board posts (`mcp__team__post`) go into the answer itself as bubbles (not the card), so the discussion is
-  where you read; cards hold tools, `task_progress` activity, and the agent's text/thinking.
-  **Stuck agents** (an agent waiting on the board for a teammate who already ended): the board has `finish`
-  (final position; wakes everyone waiting) and tells a reader to stop after 2 empty waits; Kural writes who has
-  ended to `KURAL_TEAM_FILE` (`{round, finished}`, new round per question), so agents that end without `finish`
-  count too. Watchdog (`watchAgents`, every 30 s): an agent with no event for `STUCK_MS` (6 min; env
-  `KURAL_STUCK_MS` for tests; not while you're being asked something) is stopped with the `stop_task` control
-  request; "Finish now" (`finishTeam`) stops all. A result within 4 s of an agent's report holds the answer open
-  (Codex wakes the lead once more) instead of closing and reopening it.
-  Same-model agents agree too easily: the prompts make each form its own position first, require evidence and
-  earned agreement, and hand work between roles for review. Test changes with a real run before shipping.
+- **Parallel agents** (`lib/split/`: `agent.js` SplitAgent, `worktrees.js` the git work, `plan.js` prompts and plan
+  parsing, all no vscode; `media/split.js` the plan card and the model menu's section; Adithya, 24 Oct 2026: like
+  Cursor's, split the work, not best-of-N; faster results and delegation to a cheaper model he picks). It replaced the
+  old agent team (roles, the board `team-mcp.js`, the "Use 3 agents?" offer, nudges and the stuck-agent watchdog,
+  switched off since 1.1). `brain.makeAgent` wraps ANY provider when `opts.split` is set, so the chat needs nothing
+  special: SplitAgent has ClaudeProcess's methods and events (each agent is a `Task` tool_use with `kural_agent`
+  {n, label} → an agent card; `task_started`/`task_progress`/`task_notification`; one `result` with
+  `kural_split_complete` at the very end). Per answer: the lead (the chat's model) plans read only (`PLAN`; every
+  forwarded request carries `mode`, and the chat's `onPermission` decides in the stricter of the two, `gatedMode`, like
+  agy's gate) → `parsePlan` (≤ `MAX_AGENTS` 4; not JSON or one task → the lead answers in place) → `Worktrees.open`
+  (no repository or no git → the lead answers in place, with a note) → the plan card (`onPlan` → chat `askPlan`,
+  block `k: "split"`, answered by `splitAnswer` {go, models} | {change} | false; Auto doesn't ask) → `snapshot()` (the
+  working tree INCLUDING uncommitted and untracked files, through a temporary `GIT_INDEX_FILE`: the user's index and
+  branch are never touched) → one detached worktree per agent, made one after another (git locks its worktree list),
+  then all agents at once in their worktree's project folder; an edit inside its worktree is allowed without a card,
+  one in the user's project refused, everything else goes to the chat's `onPermission` → each worktree committed →
+  merged one after another in a merge worktree (conflicts → the lead resolves them there, `RESOLVE`; markers left →
+  `merge --abort`, reported) → `apply`: every changed file through the chat's `onPermission` as a `Write` (policy +
+  checkpoint, so Files changed / Undo / Restore code work), read only AFTER it (it saves an unsaved editor first); a
+  file the user changed meanwhile → `git merge-file` (a clash keeps git's markers and the lead is told); created or
+  deleted meanwhile → theirs kept → the lead checks in the user's project (`VERIFY`) and its text is the answer.
+  Every git command runs with an empty `core.hooksPath` and `commit.gpgsign=false`; commits are Kural's (identity
+  env) and only dangling objects afterwards; `close()` removes the worktrees, `open()` prunes leftovers. git comes
+  from `lib/git.js` `findGit` (shared with the Plugins tab: on a Mac never /usr/bin/git without Apple's tools). Mac
+  paths: git gives `/private/var/…` for `/var/…`, so the project folder is mapped with real paths. Tab fields: `split`,
+  `workers` {engine: model} (`cleanWorkers`; `workersFor` = yours for the chat's AI, else `brain.fastestModel` of that
+  AI); `splitOn` = split + Agent/Auto + not local. The lead starts afresh each answer: the chat gives it
+  `splitHistory` (`conversationRecord` of the messages before the newest; no `carryOver` then, or it came twice); the
+  next ordinary answer after parallel ones gets `freshSession = "split"` (tab.splitTurns), so its program's own session
+  is handed the conversation. "Finish now" = `finishAgents` (stops the agents still working, the finished ones go on).
+  Tests: `test/split.test.js` (real git; stand-in agents; the real Codex adapter with `test/fake-codex.js`),
+  `test/split-chat.test.js` (the chat's half and the page on a tiny DOM), `test/audit-f1.test.js` (a step's mode);
+  live: `node test/split.live.js` (real Claude, Haiku leads and builds: 2 agents, ~17 s, checked 24 Oct 2026).
+  NOT checked live: Codex and Gemini with real accounts, the plan card clicked in Kural itself, Windows.
+- **Fix with Kural** (`lib/fix/`: `core.js` no vscode, `index.js` `registerFix(context, {chat, log})`; like
+  Cursor's "Fix in Chat"). A CodeActionProvider (`{scheme:"file"}` + untitled, QuickFix) offers "Fix with Kural" per Error/Warning
+  in range and "Fix all problems in this file with Kural" when the file has 2+ (`kural.fix.problem` {uri, diagnostics}; up to 25
+  problems, each with its lines ±3 numbered, `problemsText`). Terminal: `onDidStartTerminalShellExecution` starts reading
+  `execution.read()` (buffer capped at 64 KB), `onDidEndTerminalShellExecution` with a non-zero exit code keeps {command, cwd, exit code,
+  output} per terminal and shows a StatusBarItem "$(wand) Fix with Kural" for 15 s (never a notification) running
+  `kural.fix.terminal`, which sends the active terminal's last failed command or says there is none (needs shell integration).
+  **It never sends by itself**: `chat.addProblem({label, text, source, prompt})` (right after `addBrowserItems`) reveals the chat and
+  posts `insertPill` {kind "quote", source, text, label} + " Fix this."; you press Send. `buildPrompt` writes the quote sources
+  `problem` ("A problem in my code:"), `terminal` ("A command that failed in my terminal:") and `review` ("A finding from Kural's
+  review of my changes:") before the generic "Part of this chat I selected" (text cut at 12,000 characters). **`kural.chat.addContext`
+  {label, text, source, prompt}** (registered by `registerFix`, hidden from the palette) is the shared way in: Agent Review's "Fix in
+  Chat" runs it with `source: "review"`. Terminal text drops ANSI/OSC escapes (`stripAnsi`) and keeps the LAST 8,000 characters. Tests:
+  `test/fix.test.js` (core, buildPrompt, addProblem, the provider and terminal hooks on a stand-in vscode). NOT checked live in the app.
+- **Rules** (`lib/rules/`: core no vscode, `index.js` `registerRules(context, {log})`; commands `kural.rules.new`, `kural.rules.openFolder`).
+  `.kural/rules/*.md`, also `.cursor/rules`; header `description` / `globs` / `alwaysApply`; kinds Always, Auto attached (globs),
+  Agent requested (description only), Manual (a header with none filled in: only when the rule file is @-mentioned; New Rule's
+  template). A `.kural/rules/*.md` WITHOUT a header = Always (`kindOf`). `rulesText` (`core.systemText`: Always rules + a list of
+  the requested ones' descriptions and paths) is part of the chat's instructions (the `instructionsOf` fingerprint `rules`, so a
+  rule change reaches a running chat with its next message as `instructionsNote`; an old chat without that fingerprint counts as
+  having none). `rulesMessage` (`messageText`) adds Auto attached rules whose globs match a file/current/selection context, and
+  Manual ones, per message; `tab.rulesSent` is tied to the session id (`tab.rulesSession`), so any new session starts it again.
+  Caps: 20,000 characters a rule, 60,000 in all (a note says what was cut); never follows a link out of the project; a body
+  can't close `<kural_rules>`. `.cursor/rules/` is in `RUNS_LATER` (like `.kural/`): the AI writing a rule asks in Agent.
+- **Agent Review** (`lib/agent-review/`, `registerAgentReview(context, {brain, chat, log})`; commands `kural.review.quick|deep|clear|fix|dismiss`;
+  Source Control's title bar: the checklist button = Quick, "..." = Deep, `when scmProvider == git`). A short-lived agent through
+  `brain.makeAgent` in mode `ask` (read only: it can't change files or run commands), Quick = `brain.fastestModel()`, Deep = the chat's
+  model, JSON findings, shown as comments by the comment controller `kural-review` (the thread title's Fix in Chat = `kural.review.fix`
+  → `kural.chat.addContext` with `source: "review"`, Dismiss = `kural.review.dismiss`; `comments/commentThread/title` `when commentController == kural-review`).
+  `core.js` (no vscode): `collectDiff(root, git)` = staged + unstaged + untracked text changes against HEAD (the empty tree
+  without a commit), at the repository's top level; binaries, files over 200 KB and symlinks skipped (listed); git runs with
+  `--no-ext-diff --no-textconv` and `core.fsmonitor=false`, so the repository's config can't start a program. `packDiff` fits
+  whole-file diffs under 120,000 characters, smallest first, naming the rest for the reviewer to Read. `parseFindings` (unknown
+  severity → medium; findings on deleted files dropped). `run.js` `Reviewer`: tools Read/Grep/Glob, effort medium (Quick) /
+  high (Deep), 3 / 10 minutes; `onPermission` refuses anything but a read inside the repository (links out too); Gemini in
+  `plan` mode. Test: `test/agent-review.test.js` (real temp repos). NOT checked live: a real AI review, the comment threads.
+- **Debug mode** (`lib/debug/`: `server.js` the log server; mode id `debug`). A chat mode beside Agent, Auto, Plan, Ask that maps to
+  `agent` for providers and permissions (`decide()`, gate, Codex sandbox: it asks before commands like Agent), with its own prompt:
+  hypotheses → temporary logging that posts to the log server (127.0.0.1 only, a token) → you reproduce → read the logs → fix the cause
+  → remove the logging. Every line it adds is marked `kural-debug`, so a left-over is found by searching for it.
+  `agentLike(mode)` in the chat; `makeAgent` maps debug → agent once (before the split branch), `decide()`/`gatedMode()` treat
+  it as agent (else agy's gate, started in agent, would refuse). `DebugLogs` (lazy, one per ChatView, stopped on dispose): one
+  HTTP server on 127.0.0.1, random port, Host checked; per chat `/<32-byte hex token>/log` (sha256 lookup + timingSafeEqual);
+  POST ≤ 16 KB (413), JSON or text → an NDJSON line in a 0600 file from `privateTmp("debug")`, capped at 5 MB (oldest half
+  dropped); CORS preflight for POST only. `debugNote(url, file)` (`<kural_debug>`: endpoint, log file, one-liners) goes with
+  every Debug message (`send()`, `retryElsewhere`); the chat's log ends on close/delete. The log file is in the temp roots,
+  so reading it needs no card. Test: `test/debug-mode.test.js`. NOT checked live: a real Debug session in the app.
 - **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
   and `--forward-subagent-text`. Old Codex refuses unknown flags, so `supportedFlags()` probes once
   (`Codex -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. The answer is saved in
@@ -441,7 +502,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   Edit, Glob, Grep, Bash, AskUserQuestion: Codex's names and inputs, so the chat shows them and Undo works;
   file paths made absolute before the permission check) and emits Codex's stream-json events. Conversations are
   saved in globalStorage `local-chats/<session>.json` (resume). `jsonSchema` (Ask) = one more request with `format`.
-  Agent teams and Codex connectors/skills: Codex only (`teamSize` is 0 for local; the menu says so). Switching a
+  Parallel agents need a cloud AI (`splitOn` is false for local); Codex connectors/skills: Codex only. Switching a
   chat between Codex and local starts a new session with `carryOver` (the transcript). `prepareLocal`: Ollama running,
   ≥ `MIN_VERSION` (0.8: streamed tool calls), model downloaded, has "tools". Ctrl+K/Apply/commits with a local model:
   one non-streamed `/api/chat` (`askLocal` in `lib/ai/index.js`). Pictures an Ollama model returns become
@@ -565,17 +626,17 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   answer them next) and `giveBack` (page `unqueue`: back into the box). Old Codex without the flag: a flash to
   update, the draft stays. Live-checked with Codex 2.1.289 (one answer with both; the poem case: next turn).
   Tests: test/queue.test.js, the engine/codex/agy tests (fake-codex has `turn/steer`, FAKE_CODEX_NO_STEER).
-- **Steps dropdown** (`media/chat.js` `parts`/`layout`/`stepsNode`): thinking, tools (not team posts), answered permissions and
+- **Steps dropdown** (`media/chat.js` `parts`/`layout`/`stepsNode`): thinking, tools, answered permissions and
   the text before the last step go into ONE `.steps` group per part of an answer (a `steer` block, a message you
-  added while it worked, splits it into parts; only the last part's dropdown is live); pending permissions/questions, agent cards, team
-  posts, pictures and the text after the last step stay outside. An answer with steps is redrawn on each new block
+  added while it worked, splits it into parts; only the last part's dropdown is live); pending permissions/questions, agent cards,
+  pictures and the text after the last step stay outside. An answer with steps is redrawn on each new block
   (`appendBlock` → `rerender`); `patchBlock` still patches inside the group and refreshes `.steps-line`.
 - **Instructions changed mid-chat** (`instructionsNote`, `tab.sessionInstructions` fingerprints): Codex (checked
-  with 2.1.289) ignores `--append-system-prompt(-file)` on `--resume`, so a mode, mood or team change after the first
+  with 2.1.289) ignores `--append-system-prompt(-file)` on `--resume`, so a mode or mood change after the first
   message reached Codex never; now the next message starts with a `<kural_instructions_update>` saying what changed.
 - **Notifications** (`lib/chat/notify.js`, no vscode): done, or needs you (a permission, a question, a plan to build, an
   error, a login), while you're away (setting `kural.notifications`: whenAway / always / off; `onScreen()` =
-  `pane.view.visible` / `panel.visible` and the window's focus). One per answer (a team's at the end; none after Stop),
+  `pane.view.visible` / `panel.visible` and the window's focus). One per answer (parallel agents' at the end; none after Stop),
   one per chat at a time (toast id `kural-chat-<tabId>`), cleared when you answer or open the chat; a click shows it.
   Shown by `_kural.osToast` (rebrand.py patch: VS Code's own native toast, an Electron Notification, so it says Kural on
   every OS); without the patch: osascript / a PowerShell toast / notify-send (text passed as arguments), else VS Code's
@@ -623,7 +684,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   kural.chatTab`; disposes the pane and activates the chat in the side panel.
 
 ## Test
-- `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Codex needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, team board, what Tab learns, Tab panel page script, Get started checks).
+- `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Codex needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, parallel agents, what Tab learns, Tab panel page script, Get started checks).
 - `node test/completion.live.js` — real tab completions (needs `Codex` logged in): 11 cases + typing burst.
 - `node test/personal.live.js` — Tab and commit messages with vs without what you've been doing (real Haiku).
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts

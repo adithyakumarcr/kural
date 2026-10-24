@@ -55,7 +55,7 @@ function makeChat() {
 // A chat that has been talking with `from`: your constraint, what was sent with it, a tool's result, a file changed.
 function history(from) {
   return { id: `t-${from}-${Math.random().toString(36).slice(2, 7)}`, title: "Work", model: MODEL[from], engine: from, effort: "medium", mode: "agent",
-    mood: "default", team: 0, roles: [], teamStyle: "split", status: "idle", started: true, sessionId: "old-session", workspace: { key: proj, name: "proj", open: proj },
+    mood: "default", status: "idle", started: true, sessionId: "old-session", workspace: { key: proj, name: "proj", open: proj },
     messages: [
       { role: "user", segments: [{ t: "text", v: SAID[0] }], sentText: `${SAID[0]}\n<context>${SAID[1]}</context>` },
       { role: "assistant", model: MODEL[from], blocks: [{ k: "text", text: "I fixed the login and ran the tests." }],

@@ -66,7 +66,7 @@ Antigravity program, which runs the same Gemini models. Kural uses Antigravity a
 - The usage meter: Codex has a Session (5-hour) and a Weekly limit, like Claude: the status bar shows its Session.
   Gemini has only weekly limits: the status bar shows its name. Hover for every limit; the AI Usage panel has them all.
 - Kural Settings (person icon in the status bar): who's logged in, the usage page, switch account, log out.
-- [[Multiple Agents]]: project teams and discussions, with roles, live activity and shared reports between phases.
+- [[Parallel Agents]]: split a big request between agents of the same AI that work at once, on a model you pick.
 
 ## Connectors
 

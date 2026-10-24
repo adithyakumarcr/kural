@@ -12,6 +12,7 @@ it to your message instead (also while the chat is open).
 | **Auto** | edits files and runs commands without asking |
 | **Plan** | writes a plan and changes nothing; **Build it** carries the plan out (**Ctrl+P** switches Plan on/off) |
 | **Ask** | only answers |
+| **Debug** | like Agent, for bugs: adds temporary logging, asks you to reproduce, reads the logs, fixes the cause and removes the logging (see [[Debug Mode]]) |
 
 Every file change shows under the answer: open the before/after, **keep** it or **undo** it. Only your project's files
 are listed: a note the AI writes in the temp folder, or Claude Code's own plans and memory (`~/.claude`), aren't.
@@ -101,7 +102,8 @@ your next message, because which tools the model has is fixed when it starts.
     `kural.chat.hiddenMoods`).
   - Changing the preference (or the mode) in the middle of a chat applies from your next message: Kural tells the AI what
     changed along with it.
-- **Multiple agents** (Claude, ChatGPT and Gemini models): a team instead of one assistant. See [[Multiple Agents]].
+- **Parallel agents** (Claude, ChatGPT and Gemini models): **Split big tasks** splits a request between agents that work
+  at the same time on a model you pick, each in its own copy of the project; Kural merges their work. See [[Parallel Agents]].
 
 ## Adding things to your message
 
@@ -267,7 +269,7 @@ it took (Read, Searched, Edited +18 −3, Ran npm test · passed). Click a step 
   read and it stays there; **Latest** brings you back to the newest line.
 - When it's done it folds to its header ("Worked for 34 s · …") and the answer comes up under it. Click the header to
   open it again; if you opened or folded it yourself, that stays. Earlier answers' timelines are folded too.
-- What needs you (a permission card, a question), agents' cards, the team's messages and pictures stay outside it.
+- What needs you (a permission card, a question), agents' cards and pictures stay outside it.
 
 ### Answering a question: pick, then Send
 
@@ -311,8 +313,8 @@ list, `- [ ]` lines when several may be picked, or a yes/no question), the optio
 When an answer is done, or it needs you (a command or a file to allow, a question, a plan to build, an error, a
 login), Kural shows a system notification, like any app: "Fix the login is done" with the answer's first sentence, or
 "Fix the login needs your OK: Run this command? npm test". Click it to go to that chat. By default it only does this
-while you're not looking: Kural's window isn't in front, or that chat isn't on screen. An agent team's answer notifies
-once, when the whole team is done; Stop doesn't notify (that was you). Each chat has one notification at a time, and it
+while you're not looking: Kural's window isn't in front, or that chat isn't on screen. Parallel agents' answer notifies
+once, when all of them are done (and when the plan waits for your OK); Stop doesn't notify (that was you). Each chat has one notification at a time, and it
 goes away when you answer in Kural or open the chat.
 
 Setting `kural.notifications`: **whenAway** (the default), **always**, or **off**.
@@ -325,7 +327,7 @@ sent. On Ubuntu, Kural uses `notify-send` (package `libnotify-bin`).
 
 ## Your Mac stays awake while a chat works
 
-While any chat is working (an answer, an agent team), the Mac doesn't go to sleep by itself, so a long job isn't
+While any chat is working (an answer, parallel agents), the Mac doesn't go to sleep by itself, so a long job isn't
 paused halfway. The screen can still turn off, and closing the lid still sleeps it. When every chat is done, the Mac
 sleeps as usual again. Setting `kural.chat.keepAwake` (on by default) turns this off. macOS only for now.
 

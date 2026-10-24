@@ -1,5 +1,5 @@
 // System notifications for the chat (Adithya: "once the request is complete, or if it needs attention, a notification;
-// on every platform"). One when an answer is done (a team's: when the whole team is), and one when it needs you: a
+// on every platform"). One when an answer is done (with parallel agents: when all of them are), and one when it needs you: a
 // command or file to allow, a device command, a question, a plan to build, an error, a login. Only while you're not
 // looking (setting kural.notifications "whenAway", the default: Kural's window isn't in front, or that chat isn't on
 // screen); "always"; "off". Each chat has one notification at a time (a new one replaces it), and it's taken away when

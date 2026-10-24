@@ -5,7 +5,7 @@ function textOf(content) {
 }
 
 function record(journal, event) {
-  if (event.parent_tool_use_id) return; // Teams retain their own session; never hand a live team to another provider.
+  if (event.parent_tool_use_id) return; // (a parallel agent's own steps: its card in the answer records them)
   const content = event.message && event.message.content;
   if (!Array.isArray(content)) return;
   journal.tools = journal.tools || [];
@@ -62,8 +62,6 @@ function full(m) {
     ...((m.blocks || []).some((b) => b.k === "agent") ? {
       agents: m.blocks.filter((b) => b.k === "agent").map((b) => ({ name: b.name, role: b.role, state: b.state,
         steps: (b.steps || []).filter((s) => s.k !== "think").map((s) => ({ kind: s.k, name: s.name, text: s.text || s.detail || "" })) })) } : {}),
-    ...((m.blocks || []).some((b) => b.name === "mcp__team__post") ? {
-      teamReports: m.blocks.filter((b) => b.name === "mcp__team__post").map((b) => ({ agent: b.agent || "lead", role: b.role, text: b.detail })) } : {}),
     tools: m.journal && m.journal.tools || [], changes: m.changes || [], error: m.error };
 }
 
@@ -105,7 +103,6 @@ function at(m, level) {
   if (e.followUpAttachments) out.followUpAttachments = e.followUpAttachments;
   if (e.questions) out.questions = e.questions;
   if (e.agents) out.agents = e.agents.map((a) => ({ ...a, steps: a.steps.map((s) => ({ ...s, text: cut(s.text, level >= 3 ? 160 : 600) })) }));
-  if (e.teamReports) out.teamReports = e.teamReports.map((p) => ({ ...p, text: cut(p.text, [0, 3000, 1000, 300, 160][level]) }));
   const tools = e.tools || [];
   if (level < 4) out.tools = tools.map((t) => toolAt(t, level));
   else if (tools.length) out.steps = `${tools.length} (${[...new Set(tools.map((t) => t.name))].join(", ")}; ${tools.filter((t) => t.status === "failed").length} failed)`;

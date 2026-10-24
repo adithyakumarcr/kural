@@ -236,7 +236,7 @@ Per-component (rounded)
   });
   await check("Git on a Mac without Apple's tools isn't used (it would open Apple's install window)", async () => {
     // (PATH with no git, a "Mac" whose xcode-select fails: no git.)
-    const g = await core.findGit({ PATH: tmp }, "linux");
+    const g = await require("../extension/lib/git").findGit({ PATH: tmp }, "linux");
     assert.strictEqual(g, null);
   });
 

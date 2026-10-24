@@ -20,7 +20,7 @@ let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } };
 const source = (model = "sonnet") => ({
   id: "original", sessionId: "original-session", title: "Work on the login", model, engine: brain.engineOf(model),
-  effort: "high", effortPinned: true, mode: "ask", mood: "critic", team: 0, roles: ["tester"], teamStyle: "split",
+  effort: "high", effortPinned: true, mode: "ask", mood: "critic", split: true, workers: { claude: "haiku" },
   autoRoute: false, routingProfile: "cost", workspace: { key: tmp, name: "example", open: tmp },
   ticket: { key: "APP-1", summary: "Login" }, device: "test-device", status: "idle", started: true,
   allowAll: true, allowAllDevice: true, granted: ["/later/private"], tokens: { input: 900 }, context: { used: 1000 },
@@ -44,7 +44,7 @@ function fixture(tab) {
     attachments: new Attachments(), here: tab.workspace, post: (m) => posted.push(m), postTo: (_, m) => posted.push(m),
     listen: { why: () => "", tabClosed() {}, paneGone() {}, cut() {} },
     postTabs: () => {}, postHistory: () => {}, save: () => {}, warm: () => {}, isReady: () => true,
-    teamSize: () => 0, teamLabel: () => null, endDevice: () => {}, prepareLocal: async () => ({ ok: true }),
+    splitOn: () => false, endDevice: () => {}, prepareLocal: async () => ({ ok: true }),
     buildPrompt: async (text) => text, procKey: (t) => t.model, openSplit: (id) => opened.push(id), finishTurn: () => {},
     startProc: (t) => {
       const r = { proc: { send: (prompt) => sent.push(prompt), kill: () => {}, setModel: () => {} },
@@ -59,13 +59,13 @@ function fixture(tab) {
   await check("fork through an answer preserves context and choices, and leaves the original untouched", () => {
     const s = source(), before = JSON.stringify(s), f = copy(s);
     assert.strictEqual(f.messages.length, 2);
-    for (const key of ["model", "effort", "mode", "mood", "roles", "routingProfile", "ticket", "device", "workspace"]) assert.deepStrictEqual(f[key], s[key]);
+    for (const key of ["model", "effort", "mode", "mood", "split", "workers", "routingProfile", "ticket", "device", "workspace"]) assert.deepStrictEqual(f[key], s[key]);
     assert.strictEqual(f.started, false); assert.strictEqual(f.allowAll, false); assert.strictEqual(f.status, "idle");
     for (const key of ["engine", "context", "tokens", "allowAllDevice", "setup", "worktree"]) assert.strictEqual(f[key], undefined);
     assert.deepStrictEqual(f.granted, [image, pdf]); assert.strictEqual(f.messages[1].inherited, true);
     for (const text of ["Keep the API compatible", "Original file context", "original file contents"]) assert.ok(f.carryOver.text.includes(text));
     assert.ok(!f.carryOver.text.includes("MUST NOT LEAK")); assert.strictEqual(f.messages[1].planReady, undefined);
-    f.messages[0].segments[0].v = "Changed in fork"; f.roles.push("researcher"); f.ticket.summary = "New ticket";
+    f.messages[0].segments[0].v = "Changed in fork"; f.workers.claude = "opus"; f.ticket.summary = "New ticket";
     assert.strictEqual(JSON.stringify(s), before); assert.strictEqual(fs.readFileSync(code, "utf8"), "current code");
   });
   await check("a user-message boundary includes that message, but no answer or later history", () => {

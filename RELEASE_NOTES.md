@@ -1,5 +1,28 @@
 ## Not released yet
 
+- **Parallel agents, like Cursor's.** Turn on "Split big tasks" in the model menu (Agent or Auto mode, in a Git
+  repository) and the model you picked plans the request and splits it into up to four independent tasks. You see the
+  plan with a model for each agent (your default from the menu, for example Haiku), change any of them, and press Go
+  ahead. The agents work at the same time, each in its own copy of the project (a git worktree), so they never edit
+  your files directly. Kural merges their work, a conflict goes to the lead, and the result comes into your project
+  through the normal checkpoint (Undo, Files changed, Restore code all work). The lead then runs your checks and gives
+  one answer. A small request isn't split. Works with Claude, ChatGPT (Codex) and Gemini. Auto mode doesn't ask about
+  the plan; Stop leaves your files as they were; Finish now stops the slow agents and goes on with the finished ones.
+- **Fix with Kural.** The light bulb on an error or warning offers "Fix with Kural" (and "Fix all problems in this file
+  with Kural" with two or more). After a command fails in the terminal, "Fix with Kural" shows in the status bar for 15
+  seconds (also "Kural: Fix the Last Failed Command" and the terminal's right-click menu). The problem, with the code
+  around it or the command with its last 8,000 characters of output, is added to your message; you press Send.
+- **Rules.** Keep instructions for the AI in your project as `.kural/rules/*.md` (Kural also reads `.cursor/rules`):
+  Always, Auto attached (by file patterns), Agent requested (by description) or Manual (@-mention). "Kural: New Rule"
+  makes one; a change reaches a running chat with its next message.
+- **Agent Review.** The checklist button in Source Control reviews your uncommitted changes: Quick with the fastest
+  model, Deep (in the "..." menu) with the chat's model. Findings show as comments on the lines, with Fix in Chat and
+  Dismiss. It only reads.
+- **Debug mode.** A new mode in the chat's mode menu. The AI lists hypotheses, adds temporary logging that sends to a
+  log server on your computer (127.0.0.1), asks you to reproduce the bug, reads the logs, fixes the cause and removes
+  the logging. It asks before commands, like Agent.
+- **The old agent team is gone.** Roles, the message board and the "Use 3 agents?" offer (switched off since 1.1) were
+  replaced by parallel agents.
 - **Diagrams in answers.** A Mermaid block in an answer (flowchart, sequence, class, state, ER, pie, Gantt…) is drawn as
   the diagram once it's complete, on your computer. **Code** shows its text, a click opens it full size.
 - **Ctrl+K's box stays open, and it's small.** It opened under the selection and closed again at once: Kural took the

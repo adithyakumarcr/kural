@@ -43,7 +43,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   first switch to Auto explains this once; Gemini too, through Kural's gate; but the AI still never publishes in the
   browser, Gemini's own browser still asks, and so does a look into your Desktop, Documents, Downloads, Music, Pictures
   or Movies), Plan
-  (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
+  (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only), Debug (see Debug Mode below). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
   your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
   Enhance prompt (the wand beside Send): your rough request goes to a quicker model (Claude Sonnet 5.5; for a ChatGPT or
@@ -103,10 +103,21 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Settings → Preferences: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete
   them there; built-in ones you don't use (Default too) can be removed there with their ×, and Restore brings one back;
   the menu keeps at least one, and a new chat starts with the first one left; a changed preference or mode applies from
-  the next message); Multiple agents are switched off for now (one agent per chat). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
+  the next message). Parallel agents (like Cursor's): the model menu's "Split big tasks" (Agent and Auto, in a Git
+  repository, not with a model on this computer): the chat's model plans the request read only and splits it into up to
+  four independent tasks; a small request isn't split (it answers by itself). A plan card shows each agent's task, the
+  files it plans to change and its model: your default from the menu's "Agents use" row (the chat's AI's models: Opus,
+  Sonnet, Haiku for Claude; ChatGPT's or Gemini's for those), changeable per agent; Go ahead, Stop, or write what to
+  change (it plans again). Auto doesn't ask. The agents work at the same time, each in its own git worktree of your files
+  as they are (uncommitted ones too), shown as cards; they never touch your files. Kural merges their work (a conflict
+  goes to the lead) and brings the result into the project through the usual checkpoint (Files changed, Undo, Restore
+  code; a file you changed meanwhile is merged with yours); then the lead runs the project's checks and gives one
+  answer. Stop leaves your files as they were; Finish now stops the agents still working and goes on with the finished
+  ones. Faster for work that splits; cheaper when the agents use a lighter model. Your branch, index and history aren't
+  touched (no branch is made). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
-  this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and Kural-managed teams always do
+  this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and parallel agents always do
   that). Stop (the square button, or Esc) stops the answer and puts queued messages back into the box. Each change
   can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
   Claude Code's own plans and memory). How the AI worked is ONE timeline per answer: its thoughts in readable text between
@@ -133,7 +144,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Notifications: when an answer is done or needs you (a command or file to allow, a question, a plan to build, an
   error, a login), a system notification names the chat ("Fix the login is done"); click it to go there. By default only
   while you're not looking (Kural's window not in front, or that chat not on screen); setting kural.notifications:
-  whenAway, always, off. A team's answer notifies once, at the end; Stop doesn't. On a Mac the notification comes from
+  whenAway, always, off. Parallel agents' answer notifies once, at the end (and for the plan card); Stop doesn't. On a Mac the notification comes from
   the system's own notification command and shows as Script Editor; if none shows: System Settings > Notifications,
   allow Script Editor and Kural, and turn Focus / Do Not Disturb off. "Kural: Test Notification" sends one now and says
   how it was sent; Kural's log says why each notification was or wasn't sent. On Ubuntu: notify-send (libnotify-bin). While any chat works, the Mac
@@ -167,6 +178,27 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   × (back among the tabs); drag a title to move that chat (to a side, onto another chat, onto the first column: back
   among the tabs, or out of the panel: beside the code); drag the line between two to resize. Made narrower, they stack
   above each other. They come back after a restart.
+- Fix with Kural: the light bulb (Ctrl/Cmd+.) on an error or warning in the editor offers "Fix with Kural" (and "Fix
+  all problems in this file with Kural" with two or more); after a command fails in the terminal (needs the terminal's
+  shell integration) the status bar shows "Fix with Kural" for 15 seconds, and "Kural: Fix the Last Failed Command" and
+  the terminal's right-click menu do the same later. The problem (its message, the code around it; or the command, its
+  folder, exit code and the last 8,000 characters of output) is added to your message as a pill with "Fix this." after
+  it: you read it and press Send, nothing is sent by itself.
+- Rules: instructions for the AI kept in the project as .kural/rules/*.md (Kural also reads .cursor/rules). Each file
+  starts with a header: description, globs (file patterns), alwaysApply. The kinds: Always (alwaysApply: true, in every
+  message's instructions; a .kural/rules file with no header at all counts as Always too), Auto attached (globs: added
+  when a matching file is in your message, @-mentioned, attached or selected), Agent requested (only a description: the
+  AI reads the rule when the description fits) and Manual (a header with none of those filled in: only when you
+  @-mention the rule). "Kural: New Rule" makes one (a Manual rule until you fill in its header) and "Kural: Open Rules Folder" opens the folder. A change reaches a chat that is
+  already running with its next message. Rules work with every AI.
+- Agent Review: the checklist button in Source Control's title bar ("Review Changes (Quick)") has an AI read your
+  uncommitted changes. Quick uses the fastest model; "Review Changes (Deep)" (the "..." menu of Source Control) uses the chat's
+  model and looks harder. It only reads: nothing is changed. Each finding shows as a comment on its line with "Fix in
+  Chat" (adds the finding to your message, then you press Send) and "Dismiss"; "Clear Review Comments" removes them.
+- Debug Mode: a mode in the chat's mode menu beside Agent, Auto, Plan and Ask. For a bug that is hard to see in the
+  code, the AI lists hypotheses, adds temporary logging that sends to a Kural log server on this computer (127.0.0.1,
+  nothing leaves it), asks you to reproduce the bug, reads the logs, fixes the cause and then removes the logging (the
+  lines are marked kural-debug). It asks before commands, like Agent.
 - Source Control panel: the sparkle button in the commit message box writes a short commit message (at most 200
   characters: a subject line, maybe a line or two more) from your staged changes (or all changes), in the style of your
   recent commits, with the chat's model; edit it and commit as usual.
@@ -416,8 +448,8 @@ const GUIDE_LOCAL = `
 About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
 work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
 that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
-Ask; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; the mic beside it (Ctrl+Alt+V) turns what you say into text; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and preferences; hover a message to Edit it, Restore code, or
-Fork from here; the tab line has +, the clock (every chat), the gear (Kural Settings) and …); Ctrl+K asks in a box under the selected code and proposes changes in a read-only diff; the Explorer shows the files the AI reads (blue) and changes (yellow); Tab Completion; plain words in
+Ask, Debug; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; the mic beside it (Ctrl+Alt+V) turns what you say into text; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and preferences; hover a message to Edit it, Restore code, or
+Fork from here; the tab line has +, the clock (every chat), the gear (Kural Settings) and …); Ctrl+K asks in a box under the selected code and proposes changes in a read-only diff; the Explorer shows the files the AI reads (blue) and changes (yellow); the light bulb on an error ("Fix with Kural" adds it to your message); Rules (.kural/rules/*.md); Review in Source Control (checklist button); Debug mode (temporary logging, you reproduce the bug); Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Extensions & Plugins (the chat's AI's plugins and connectors beside VS
 Code's extensions); Kural's browser; devices over SSH; the Model Router (Auto);
 Kural Settings (accounts, usage switching, preferences, updates). Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and

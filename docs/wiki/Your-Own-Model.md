@@ -26,9 +26,12 @@ The model you pick in the chat is used for the chat, **Ask**, **Ctrl+K**, **Appl
 commands in the terminal. [[Tab Completion]] has its own, smaller model (a fill-in-the-middle code model) because it
 needs to be fast.
 
+## What needs a cloud AI
+
+- [[Parallel Agents]] (Claude, ChatGPT or Gemini: every agent on this computer's one GPU would be slower, not faster)
+
 ## What needs Claude
 
-- [[Multiple Agents]]
 - Claude Code's connectors, MCP servers, plugins and skills
 - Linking Jira tickets
 

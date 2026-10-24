@@ -123,7 +123,7 @@ const RUNS_LATER = [
   // Git settings that run programs (filters, diff drivers, submodule commands), editor/container settings that start
   // tasks or install extensions, AI instructions and MCP servers the next session obeys or starts.
   /(^|[\\/])\.git(attributes|modules)$/, /(^|[\\/])\.vscode[\\/]/, /(^|[\\/])\.devcontainer([\\/]|\.json$)/, /\.code-workspace$/,
-  /(^|[\\/])\.mcp\.json$/, /(^|[\\/])(CLAUDE|CLAUDE\.local|AGENTS|GEMINI)\.md$/,
+  /(^|[\\/])\.mcp\.json$/, /(^|[\\/])\.cursor[\\/]rules[\\/]/, /(^|[\\/])(CLAUDE|CLAUDE\.local|AGENTS|GEMINI)\.md$/,
   // Build and test files that run code when you build, install or test: npm/yarn/pnpm, Python, Ruby, Gradle/Maven, Rust,
   // tool version managers.
   /(^|[\\/])\.(npmrc|yarnrc(\.ya?ml)?|pnpmfile\.c?js)$/, /(^|[\\/])(pyproject\.toml|setup\.py|setup\.cfg|conftest\.py|tox\.ini|noxfile\.py)$/,

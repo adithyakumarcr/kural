@@ -393,6 +393,59 @@
         "command": "kural.inlineEdit.cancel",
         "title": "Cancel",
         "icon": "$(close)"
+      },
+      {
+        "command": "kural.fix.problem",
+        "title": "Fix with Kural",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.fix.terminal",
+        "title": "Fix the Last Failed Command",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.chat.addContext",
+        "title": "Add to Chat",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.rules.new",
+        "title": "New Rule",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.rules.openFolder",
+        "title": "Open Rules Folder",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.review.quick",
+        "title": "Review Changes (Quick)",
+        "icon": "$(checklist)",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.review.deep",
+        "title": "Review Changes (Deep)",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.review.clear",
+        "title": "Clear Review Comments",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.review.fix",
+        "title": "Fix in Chat",
+        "icon": "$(wand)",
+        "category": "Kural"
+      },
+      {
+        "command": "kural.review.dismiss",
+        "title": "Dismiss",
+        "icon": "$(close)",
+        "category": "Kural"
       }
     ],
     "viewsContainers": {
@@ -662,6 +715,22 @@
         {
           "command": "kural.inlineEdit.cancel",
           "when": "false"
+        },
+        {
+          "command": "kural.fix.problem",
+          "when": "false"
+        },
+        {
+          "command": "kural.chat.addContext",
+          "when": "false"
+        },
+        {
+          "command": "kural.review.fix",
+          "when": "false"
+        },
+        {
+          "command": "kural.review.dismiss",
+          "when": "false"
         }
       ],
       "webview/context": [
@@ -721,6 +790,16 @@
           "command": "kural.scm.commitMessage",
           "when": "scmProvider == git",
           "group": "navigation"
+        },
+        {
+          "command": "kural.review.quick",
+          "when": "scmProvider == git",
+          "group": "navigation"
+        },
+        {
+          "command": "kural.review.deep",
+          "when": "scmProvider == git",
+          "group": "1_kural"
         }
       ],
       "comments/commentThread/context": [
@@ -740,6 +819,22 @@
           "command": "kural.inlineEdit.cancel",
           "group": "inline@1",
           "when": "commentController == kural.inlineEdit"
+        },
+        {
+          "command": "kural.review.fix",
+          "when": "commentController == kural-review",
+          "group": "inline@1"
+        },
+        {
+          "command": "kural.review.dismiss",
+          "when": "commentController == kural-review",
+          "group": "inline@2"
+        }
+      ],
+      "terminal/context": [
+        {
+          "command": "kural.fix.terminal",
+          "group": "1_kural"
         }
       ]
     },
@@ -950,13 +1045,15 @@
             "agent",
             "auto",
             "plan",
-            "ask"
+            "ask",
+            "debug"
           ],
           "enumDescriptions": [
             "Kural edits files; asks before running commands",
             "Kural edits files and runs commands without asking",
             "Kural writes a plan first; click Build it to carry it out",
-            "Answers only; nothing changes"
+            "Answers only; nothing changes",
+            "Kural finds a bug's cause with temporary logging, then fixes it; asks before running commands"
           ],
           "description": "Mode for your very first chat. After that, new chats use whatever you picked last."
         },

@@ -1,5 +1,5 @@
 // The chat panel (Ctrl+L): tabs, history, modes (Agent / Auto / Plan / Ask),
-// model + intensity, and agent teams. The panel itself is a small web page
+// model + intensity, and parallel agents. The panel itself is a small web page
 // (media/chat.js); this file runs Claude for each tab and keeps the conversations.
 // Each tab = one `claude` process = one conversation.
 
@@ -23,16 +23,17 @@ const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote } = require("./tickets");
-const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt, lessonPrompt } = require("./prompts");
+const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt, lessonPrompt, debugNote } = require("./prompts");
+const { DebugLogs } = require("../debug/server");
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
-const { FRIENDS, TEAM_TOOLS, ROLES, DEVELOPERS, TEAM_STYLES, teamMembers, teamPrompt, teamServer } = require("./team");
 const { profileOf, limitUsed, limitParts } = require("../router/policy");
 const journal = require("../router/journal");
 const handoffStore = require("./handoff-store");
 const { SideChats } = require("./side");
 const slashList = require("./slash");
 const shortcuts = require("./shortcuts");
+const projectRules = require("../rules/core");
 const { Enhancer } = require("../enhance");
 const { Voice } = require("../voice");
 const { Listen } = require("../listen");
@@ -67,12 +68,11 @@ const EFFORTS = [
 ];
 const MODES = [
   { id: "agent", label: "Agent", hint: "edits; asks before commands" },
+  { id: "debug", label: "Debug", hint: "finds the cause with logs" },
   { id: "auto", label: "Auto", hint: "edits and runs commands freely" },
   { id: "plan", label: "Plan", hint: "a plan first, no changes" },
   { id: "ask", label: "Ask", hint: "answers only" },
 ];
-const TEAM_SIZES = [2, 3, 4, 5];
-const TEAM_OFFER_SECONDS = Number(process.env.KURAL_TEAM_OFFER_SECONDS) || 15;   // (env: tests)
 // A model on your own computer (Ollama) is saved as "ollama:<name>", e.g. "ollama:qwen3-coder:30b".
 const isLocal = (model) => /^ollama:./.test(model || "");
 const localName = (model) => String(model).slice("ollama:".length);
@@ -87,6 +87,9 @@ const engineOf = (m) => brain.engineOf(m);
 const deviceOk = (m) => ["claude", "codex"].includes(engineOf(m));
 const isClaude = (m) => engineOf(m) === "claude";
 const whoOf = (m) => brain.providerOf(m).label;   // "Claude", "ChatGPT (Codex)", "Google Gemini", "Your own model"
+// Your default model for parallel agents, per AI: { claude: "haiku", codex: "codex:…" } (an entry that doesn't fit goes).
+const cleanWorkers = (w) => Object.fromEntries(Object.entries(w && typeof w === "object" ? w : {})
+  .filter(([e, m]) => typeof m === "string" && validModel(m) && !isLocal(m) && engineOf(m) === e));
 
 const { decide, gatedMode, grantKey, allowAllNow, allowKind, allowLabel, allowedKinds, autoWarning, READ_TOOLS, EDIT_TOOLS, DEVICE_TOOLS } = require("./permission-policy");
 // Every mode may look things up on the web (docs, versions, current facts), without asking: it changes nothing here.
@@ -94,13 +97,7 @@ const WEB_TOOLS = ["WebSearch", "WebFetch"];
 const AGENT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash", "WebSearch", "WebFetch"];
 const AUTO_WARNED = "kural.auto.warned";   // the first switch to Auto explained what it means
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);   // Claude Code's tool for starting a helper agent
-
-
-// An agent with no sign of life for this long is stopped, so one stuck agent can't hold the answer forever.
 const BUILD_TEXT = "Go ahead and implement the plan above.";
-const TEAMS_ENABLED = false;   // Multiple agents are switched off (Adithya): no team toggle, no "Use 3 agents?" offer
-const MAX_NUDGES = 4;  // how often Kural may wake a paused lead for one question (a project team has phases)
-const STUCK_MS = Number(process.env.KURAL_STUCK_MS) || 6 * 60 * 1000;   // (env: for testing)
 // Memory: a chat's program (Claude Code ~120 MB, Ross measured) stops when that chat isn't on screen and has been idle
 // this long; at most this many such idle ones stay warm. It starts again with the same conversation when needed.
 const IDLE_STOP_MS = 10 * 60 * 1000;
@@ -109,11 +106,13 @@ const MAX_IDLE_WARM = 2;
 const MAX_INLINE = 60000;       // files bigger than this are read by Claude instead of pasted in
 const STORE_BASE = "kural.chat.v4";   // open tabs, per window (a profile that doesn't share has its own: lib/profiles/scope.js)
 const storeKey = () => scope.key(STORE_BASE, "data");
-const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / team, for new tabs
+const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / parallel agents, for new tabs
 
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => require("crypto").randomBytes(8).toString("hex").slice(0, 9);   // (chat and card ids: never guessable)
 const valid = (list, v) => list.some((x) => x.id === v);
+// Modes that edit files and ask before commands: Agent, and Debug (Agent with a way of working: lib/debug).
+const agentLike = (m) => m === "agent" || m === "debug";
 // The kural.chat.mode setting for new chats. Auto (commands run without asking) only from YOUR settings: a project's
 // .vscode/settings.json can't turn it on for you (APP-8).
 function settingMode() {
@@ -154,7 +153,6 @@ class ChatView {
     this.pulls = new Map();        // model downloads in progress: name -> { percent, status }
     this.runtime = new Map();    // tabId -> { proc, turn, perms, procKey, agents }
     this.routingJobs = new Map(); // Cancellation is runtime state, never saved with the chat.
-    this.teamOffers = new Map();  // offer id -> answer it ("team" | "one")
     // Side chat: a quick question about part of an answer, answered under it (side.js). Not part of the conversation.
     this.sideChats = new SideChats({
       makeAgent: (model, opts, local, handlers) => brain.makeAgent(model, opts, local, handlers),
@@ -310,7 +308,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { this.sideChats.stopAll(); this.voice.dispose(); this.listen.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
+      { dispose: () => { this.sideChats.stopAll(); if (this.debugServer) this.debugServer.stop(); this.voice.dispose(); this.listen.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -322,10 +320,8 @@ class ChatView {
       autoRoute: !!last.autoRoute, routingProfile: profileOf(last.routingProfile || cfg().get("modelRouter.profile")),
       effort: valid(EFFORTS, last.effort) ? last.effort : (valid(EFFORTS, cfg().get("chat.intensity")) ? cfg().get("chat.intensity") : "medium"),
       mode: valid(MODES, last.mode) ? last.mode : settingMode(),
-      team: TEAM_SIZES.includes(last.team) ? last.team : 0,
+      split: !!last.split, workers: cleanWorkers(last.workers),
       mood: valid(allMoods(), last.mood) ? last.mood : firstMood(),
-      roles: Array.isArray(last.roles) ? last.roles.filter((r) => valid(ROLES, r)) : [],
-      teamStyle: valid(TEAM_STYLES, last.teamStyle) ? last.teamStyle : "split",
     };
   }
 
@@ -351,9 +347,9 @@ class ChatView {
   remember(tab) {
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     const prev = this.context.globalState.get(LAST_KEY) || {};
-    this.context.globalState.update(LAST_KEY, { ...prev, model: tab.model, effort: tab.effort, mode: tab.mode, team: tab.team || 0,
-      autoRoute: !!tab.autoRoute, routingProfile: tab.routingProfile,
-      mood: tab.mood, roles: tab.roles, teamStyle: tab.teamStyle });
+    const { team, roles, teamStyle, ...kept } = prev;   // (the old agent team's choices go)
+    this.context.globalState.update(LAST_KEY, { ...kept, model: tab.model, effort: tab.effort, mode: tab.mode, split: !!tab.split, workers: tab.workers,
+      autoRoute: !!tab.autoRoute, routingProfile: tab.routingProfile, mood: tab.mood });
   }
 
   // Old saved tabs may lack a field or hold one that no longer exists ("undefined" in the menu).
@@ -371,13 +367,11 @@ class ChatView {
     const lv = cliOf(tab.model) === "agy" && splitLevel(cliModel(tab.model));
     if (lv) { tab.model = `agy:${lv.base}`; tab.effort = { minimal: "low", xhigh: "max" }[lv.level] || lv.level; }
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
-    if (!TEAMS_ENABLED || !TEAM_SIZES.includes(tab.team)) tab.team = 0;
+    tab.split = !!tab.split; tab.workers = cleanWorkers(tab.workers);
+    delete tab.team; delete tab.roles; delete tab.teamStyle; delete tab.noTeamOffer;   // (the old agent team, switched off since 1.1)
     if (tab.mood === "teacher") tab.mood = "learn";   // (the Teacher mood is now Learn)
     // (A mood of yours that you deleted: the first mood in the menu.)
     if (!valid(allMoods(), tab.mood)) tab.mood = /^custom-/.test(tab.mood || "") ? firstMood() : d.mood;
-    if (!Array.isArray(tab.roles)) tab.roles = d.roles;
-    tab.roles = tab.roles.filter((r) => valid(ROLES, r));
-    if (!valid(TEAM_STYLES, tab.teamStyle)) tab.teamStyle = d.teamStyle;
     tab.createdAt = tab.createdAt || Date.now();
     tab.updatedAt = tab.updatedAt || tab.createdAt;
     tab.workspace = tab.workspace || this.here;   // older chats: from this workspace
@@ -394,7 +388,7 @@ class ChatView {
     const d = this.lastChoices();
     const tab = {
       id: shortId(), title: "New chat", renamed: false,
-      model: d.model, effort: d.effort, mode: d.mode, team: d.team, mood: d.mood, roles: d.roles, teamStyle: d.teamStyle,
+      model: d.model, effort: d.effort, mode: d.mode, split: d.split, workers: d.workers, mood: d.mood,
       autoRoute: d.autoRoute, routingProfile: d.routingProfile,
       sessionId: newSessionId(), started: false, workspace: this.here,
       messages: [], status: "idle", unread: false, allowAll: false, modelName: null,
@@ -498,6 +492,7 @@ class ChatView {
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
     this.endDevice(r);
     if (this.browserAi) this.browserAi.end(id);
+    if (this.debugServer) this.debugServer.end(id);
     this.runtime.delete(id);
     this.slashes().delete(id);
     const i = this.tabs.indexOf(tab);
@@ -580,6 +575,7 @@ class ChatView {
     this.archive.remove(id);
     try { fs.rmSync(this.handoffDir({ id }), { recursive: true, force: true }); } catch { /* best effort, like History */ }
     if (this.lessons) this.lessons.forget(id);
+    if (this.debugServer) this.debugServer.end(id);
     this.postHistory();
   }
 
@@ -615,10 +611,11 @@ class ChatView {
       model: t.model, mode: t.mode, workspace: t.workspace || this.here };
   }
 
-  summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode, team: t.team || 0,
+  summary(t) { return { id: t.id, title: t.title, status: t.status, unread: t.unread, model: t.model, effort: t.effort, mode: t.mode,
+    split: !!t.split, workers: this.workersFor(t), splitOn: this.splitOn(t),
     autoRoute: !!t.autoRoute, routingProfile: t.routingProfile, routingState: t.routingState || null, modelName: t.modelName || null,
     tokens: t.tokens || null, context: t.context || null, queued: this.queuedOf(this.runtime.get(t.id)),
-    mood: t.mood, roles: t.roles || [], teamStyle: t.teamStyle, teamSize: this.teamSize(t), ticket: t.ticket || null,
+    mood: t.mood, ticket: t.ticket || null,
     device: t.device && this.devices && this.devices.get(t.device) ? (({ id, name, host, user }) => ({ id, name, host, user }))(this.devices.get(t.device)) : null,
     visiting: t.visiting ? { name: t.workspace.name, canOpen: !!t.workspace.open } : null }; }
   viewTab(t) { return { ...this.summary(t), messages: t.messages, modelName: t.modelName, allowAll: t.allowAll, listenWhy: this.listen.why(t) }; }
@@ -777,7 +774,7 @@ class ChatView {
     webview.html = `<!doctype html><html data-fs="${fontScale()}" data-mermaid="${uri("mermaid/mermaid.min.js")}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: https:;">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("chat.css")}"></head>
-<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("markdown.js")}"></script><script nonce="${nonce}" src="${uri("mermaid-view.js")}"></script><script nonce="${nonce}" src="${uri("timeline.js")}"></script><script nonce="${nonce}" src="${uri("choices.js")}"></script><script nonce="${nonce}" src="${uri("listen.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
+<body><div id="app"><div class="booting">Starting Kural chat…</div></div><script nonce="${nonce}" src="${uri("side.js")}"></script><script nonce="${nonce}" src="${uri("voice.js")}"></script><script nonce="${nonce}" src="${uri("markdown.js")}"></script><script nonce="${nonce}" src="${uri("mermaid-view.js")}"></script><script nonce="${nonce}" src="${uri("timeline.js")}"></script><script nonce="${nonce}" src="${uri("choices.js")}"></script><script nonce="${nonce}" src="${uri("split.js")}"></script><script nonce="${nonce}" src="${uri("listen.js")}"></script><script nonce="${nonce}" src="${uri("chat.js")}"></script><script nonce="${nonce}" src="${uri("chat-columns.js")}"></script></body></html>`;
     // (A message from a column of the side panel (split) says which: that column is a pane of its own.)
     webview.onDidReceiveMessage((m) => {
       const p = m && m.col ? (pane.layout || []).find((q) => q.col === m.col) : pane;
@@ -997,31 +994,39 @@ class ChatView {
     return this.open();
   }
 
-  // ---------- Claude process per tab ----------
-  // How many agents this tab's team has (0 = no team). Splitting work needs a mode that can edit;
-  // a discussion works in every mode. With roles picked, one agent per role.
-  // Shown above a team answer: "Project team: Researcher, Architect, Developers (1–3), Tester · you talk to the PM".
-  teamLabel(tab) {
-    const roles = tab.roles || [];
-    if (!this.teamSize(tab) || !roles.length) return null;
-    const labels = ROLES.filter((r) => roles.includes(r.id)).map((r) => r.id === "developer" && tab.teamStyle !== "discuss" ? `Developers (1–${DEVELOPERS.length})` : r.label);
-    return tab.teamStyle === "discuss" ? `Discussion: ${labels.join(", ")}` : `Project team: ${labels.join(", ")} · led by the PM`;
+  // ---------- parallel agents (lib/split) ----------
+  // Does this chat's next answer split the work? Switched on in the model menu, in a mode that edits, with a cloud AI (a
+  // model on this computer would run every agent on the one GPU: slower, not faster).
+  splitOn(tab) { return !!tab.split && (agentLike(tab.mode) || tab.mode === "auto") && !isLocal(tab.model); }
+  // The models the agents can use: the chat's AI's (the plan card and the model menu offer these).
+  workerModels(tab) {
+    const engine = engineOf(tab.model);
+    if (engine === "claude") return MODELS.map((m) => ({ id: m.id, label: m.label }));
+    const c = brain.cli[engine];
+    return c ? (c.models || []).map((m) => ({ id: `${engine}:${m.id}`, label: m.label || m.id })) : [];
+  }
+  // The agents' model unless you pick another on the plan card: yours from the model menu for this AI, else its lightest.
+  workersFor(tab) {
+    const engine = engineOf(tab.model), mine = (tab.workers || {})[engine], models = this.workerModels(tab);
+    if (mine && models.some((m) => m.id === mine)) return mine;
+    const light = brain.fastestModel(tab.model);
+    return light && engineOf(light) === engine ? light : tab.model;
+  }
+  // The chat's own record of the conversation before the newest message: each answer's lead starts afresh, with it.
+  splitHistory(tab) {
+    const upto = tab.messages.map((m) => m.role).lastIndexOf("user");
+    const earlier = tab.messages.slice(0, Math.max(0, upto));
+    return earlier.length ? `<earlier_conversation>\n${this.conversationRecord(tab, earlier)}\n</earlier_conversation>` : "";
   }
 
-  teamSize(tab) {
-    if (!TEAMS_ENABLED || !(tab.team > 1) || isLocal(tab.model)) return 0;
-    const editing = tab.mode === "agent" || tab.mode === "auto";
-    if (tab.teamStyle !== "discuss" && !editing) return 0;
-    const roles = tab.roles || [];
-    return roles.length ? teamMembers(0, roles, tab.teamStyle).length : tab.team;
-  }
+  // ---------- Claude process per tab ----------
   // When this changes, the tab's Claude restarts (same conversation) before your next message.
   // (Claude Code's setup and its reloads only matter to Claude: other programs don't restart for them.)
   procKey(tab) {
     const claude = isClaude(tab.model);
     // (The mood's text too: editing one of your moods restarts its chats with the new instructions.)
     const mood = `${tab.mood}:${require("crypto").createHash("sha1").update(moodPrompt(tab.mood, customMoods(userMoods()))).digest("hex").slice(0, 8)}`;
-    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.teamSize(tab)}|${mood}|${(tab.roles || []).join(",")}|${tab.teamStyle}|${ws.key()}|${tab.device || ""}` +
+    return `${claude ? "claude" : tab.model}|${tab.mode}|${tab.effort}|${this.splitOn(tab) ? `split:${this.workersFor(tab)}` : ""}|${mood}|${ws.key()}|${tab.device || ""}` +
       `|${this.browserOn(tab) ? "browser" : ""}` + (claude ? `|${fullSetup()}|${this.setupVersion}` : `|${(this.pluginVersion || {})[engineOf(tab.model)] || 0}`);
   }
 
@@ -1050,17 +1055,17 @@ class ChatView {
 
   routerModels() {
     const claude = MODELS.map((m) => ({ ...m, provider: "Claude", providerId: "claude", description: m.hint,
-      ready: isSetUp(), local: false, team: true, device: true, images: true, pdf: true, commands: true, connectors: true }));
+      ready: isSetUp(), local: false, split: true, device: true, images: true, pdf: true, commands: true, connectors: true }));
     const clis = this.cliInfo().flatMap((c) => (c.models.length ? c.models : [{ id: "default", label: `${c.short} default` }]).map((m) => ({
       id: `${c.id}:${m.id}`, label: m.label || m.id, description: m.description || "", provider: c.label, providerId: c.id,
-      ready: c.ready, local: false, team: true, device: c.id === "codex", images: true, pdf: false,
+      ready: c.ready, local: false, split: true, device: c.id === "codex", images: true, pdf: false,
       commands: c.id === "codex", connectors: false,
     })));
     const installed = new Map((this.routerLocalList || []).filter((m) => m.chat && !(m.capabilities || []).includes("cloud") && !/cloud/i.test(m.name)).map((m) => [m.name,m]));
     const fallback = this.localDefault && this.localDefault();
     if (fallback && !/cloud/i.test(fallback) && !(this.localReady.get(fallback) || []).includes("cloud") && !installed.has(localName(fallback))) installed.set(localName(fallback), { name: localName(fallback), capabilities: this.localReady.get(fallback) || [] });
     const local = [...installed.values()].map((m) => ({ id: `ollama:${m.name}`, label: m.name, description: `${m.params || ""} on this computer`,
-      provider: "Ollama", providerId: "ollama", ready: true, local: true, team: false, device: false,
+      provider: "Ollama", providerId: "ollama", ready: true, local: true, split: false, device: false,
       images: (m.capabilities || []).includes("vision"), pdf: false, commands: true, connectors: false }));
     const tabModel = completionModel(cfg().get("tabCompletion.localModel"));
     const tabInstalled = (this.routerLocalList || []).find((m) => m.name === tabModel || m.name === `${tabModel}:latest`);
@@ -1163,8 +1168,8 @@ class ChatView {
   routingRequest(tab, text, attachments = [], contexts = []) {
     return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
       historyChars: ChatView.conversationSize(tab), context: ChatView.routingContext(contexts, attachments),
-      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
-      team: tab.team > 1, device: !!tab.device, connectors: !!tab.ticket,
+      profile: tab.routingProfile, mode: tab.mode, editing: agentLike(tab.mode) || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
+      split: !!tab.split, device: !!tab.device, connectors: !!tab.ticket,
       images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
   }
 
@@ -1351,15 +1356,11 @@ class ChatView {
     this.endDevice(old);
     const full = fullSetup();
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root(), vscode.workspace.isTrusted !== false);
-    const editing = tab.mode === "agent" || tab.mode === "auto";
-    const team = this.teamSize(tab);
-    const nativeTeam = team && isClaude(tab.model);
+    const editing = agentLike(tab.mode) || tab.mode === "auto";
     // steers: messages you sent while it answered, given to the program but not taken in yet (see queueSend);
     // expect: every message given to the program, in order, until its echo says it was taken in (onEcho).
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map(),
       steers: [], expect: [], engine: engineOf(tab.model) };
-    // The board reads who has finished from this file (see team-mcp.js): agents stop waiting for them.
-    r.teamFile = nativeTeam ? path.join(privateTmp("teams"), `${tab.id}-${Date.now()}.json`) : null;
     if (fresh) { tab.sessionId = newSessionId(); tab.started = false; }
     // Every mode can ask you a multiple-choice question (AskUserQuestion), shown as a card.
     // With your full setup, Claude can also use your skills, and ToolSearch: without it in --tools, Claude Code sends every
@@ -1369,7 +1370,7 @@ class ChatView {
     // descriptions, so it's pre-allowed; the connector's own tools still ask (onPermission). An older Claude Code without
     // it ignores the name.
     const fullTools = full ? ["Skill", "ToolSearch"] : [];
-    const tools = [...(editing ? AGENT_TOOLS : [...READ_TOOLS, ...WEB_TOOLS]),...(team ? ["Task"] : []), "AskUserQuestion", ...fullTools];
+    const tools = [...(editing ? AGENT_TOOLS : [...READ_TOOLS, ...WEB_TOOLS]), "AskUserQuestion", ...fullTools];
     // A Claude model: Claude Code. A model on this computer: Kural's own engine, with the same tools and events.
     // A linked device (SSH): its tools for the AI, through Kural (lib/devices). Kural asks you before each command per your
     // mode (approveDevice), so the AI's own program doesn't ask again (the tools are pre-allowed). Not for a model on
@@ -1389,15 +1390,15 @@ class ChatView {
     const proc = brain.makeAgent(tab.model, {
       name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode, commands: full,
       // (A model on this computer gets the short guide: each word of the instructions costs it time before it answers.)
-      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + this.moodText(tab) +
-        (nativeTeam ? teamPrompt(team, tab.roles || [], tab.teamStyle) : "") + ws.promptNote() + instr.text,
-      teamConfig: team && !nativeTeam ? { size: team, roles: tab.roles || [], style: tab.teamStyle } : null,
+      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + this.moodText(tab) + ws.promptNote() + instr.text + this.rulesText(tab),
+      // Parallel agents (lib/split): the lead plans, the agents work at once in git worktrees, Kural merges.
+      split: this.splitOn(tab) ? { workers: this.workersFor(tab), models: this.workerModels(tab), history: () => this.splitHistory(tab),
+        instructions: PROMPTS[tab.mode] + ws.promptNote() + instr.text + this.rulesText(tab), dir: privateTmp("split") } : null,
       addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : []), ...(lessonDir ? [lessonDir] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
-      tools, allowedTools: [...(team ? ["Task", "Agent", ...TEAM_TOOLS] : []), ...fullTools, ...deviceTools, ...browserTools],
-      mcpServers: nativeTeam || dev || brw ? { ...(nativeTeam ? { team: teamServer(teamMembers(team, tab.roles || [], tab.teamStyle).map((m) => m.name), r.teamFile) } : {}),
-        ...(dev ? { device: dev.server } : {}), ...(brw ? { [BROWSER_SERVER]: brw.server } : {}) } : null,
+      tools, allowedTools: [...fullTools, ...deviceTools, ...browserTools],
+      mcpServers: dev || brw ? { ...(dev ? { device: dev.server } : {}), ...(brw ? { [BROWSER_SERVER]: brw.server } : {}) } : null,
       strictMcp: !full,     // full setup: your MCP servers and claude.ai connectors too
       hostPermissions: true, cwd: this.root() || ws.workDir(), persist: true, handoffChars: this.handoffBudget(tab.model),
       resume: tab.started ? tab.sessionId : null, sessionId: tab.started ? null : tab.sessionId,
@@ -1408,6 +1409,7 @@ class ChatView {
       onPermission: (req) => r.stale ? { allow: false, message: "Stopped." } : this.onPermission(tab, r, req),
       onExit: (info) => this.onExit(tab, r, info),
       onCheckpoint: () => this.routingCheckpoint(tab,r),
+      onPlan: (plan) => this.askPlan(tab, r, plan),
     });
     r.proc = proc;
     this.runtime.set(tab.id, r);
@@ -1569,6 +1571,15 @@ class ChatView {
   // ---------- the "/" list ----------
   // tabId -> the skills and commands its Claude has (the "/" list in the box: lib/chat/slash.js).
   slashes() { return this.slash || (this.slash = new Map()); }
+
+  // Debug mode (lib/debug): one log endpoint for every chat, started with the first Debug message. Each message of a chat in
+  // Debug mode says where to send what the instrumentation logs and where to read it (the file is emptied by `clear`).
+  debugLogs() { return this.debugServer || (this.debugServer = new DebugLogs({ log })); }
+  async debugText(tab) {
+    if (tab.mode !== "debug") return "";
+    try { const s = await this.debugLogs().session(tab.id); return debugNote(s.url, s.file); }
+    catch (e) { log(`chat ${tab.id}: debug log endpoint: ${e.message}`); return ""; }
+  }
   // The chat's skills and commands (null: none here, a model that isn't Claude or Claude without your setup), to its page.
   setSlash(tab, list) {
     if (list) this.slashes().set(tab.id, list); else if (!this.slashes().delete(tab.id)) return;   // (none before, none now)
@@ -1592,6 +1603,8 @@ class ChatView {
   // ---------- sending ----------
   async buildPrompt(text, contexts) {
     const parts = [];
+    // What a quote pill from Fix with Kural / Agent Review is called for the AI.
+    const FIX_SOURCES = { problem: "A problem in my code:", terminal: "A command that failed in my terminal:", review: "A finding from Kural's review of my changes:" };
     const seen = new Set();
     for (const c of contexts) {
       // (Two elements of one page are two; so are two quotes.)
@@ -1604,6 +1617,9 @@ class ChatView {
         const where = `${c.slide ? ` (slide ${c.slide}${c.title ? `, "${String(c.title).slice(0, 120)}"` : ""})` : ""}${c.concept ? `, the visual "${String(c.concept).slice(0, 120)}"` : ""}`;
         const said = String(c.text || "").slice(0, 8001).trim();
         parts.push(`From the lesson page${where}, I picked:${said ? `\n${said.split("\n").map((l) => `> ${l}`).join("\n")}` : ""}`);
+      } else if (c.kind === "quote" && FIX_SOURCES[c.source]) {
+        // Fix with Kural (lib/fix) and Agent Review's findings: a problem, a failed command, a review finding.
+        parts.push(`${FIX_SOURCES[c.source]}\n${String(c.text || "").slice(0, 12001).split("\n").map((l) => `> ${l}`).join("\n")}`);
       } else if (c.kind === "quote") {
         // Text you selected in this chat ("Add to chat"); the page keeps it to 8,000 characters.
         parts.push(`Part of this chat I selected:\n${String(c.text || "").slice(0, 8001).split("\n").map((l) => `> ${l}`).join("\n")}`);
@@ -1655,24 +1671,17 @@ class ChatView {
 
   // A new answer, empty for now.
   newReply(tab, routed) {
-    return { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, team: this.teamSize(tab), teamStyle: tab.teamStyle,
-      teamLabel: this.teamLabel(tab), model: tab.model, models: [tab.model], routing: routed, journal: { tools: [] } };
+    return { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, model: tab.model, models: [tab.model], routing: routed, journal: { tools: [] } };
   }
 
-  // The program starts answering `reply`: what the turn tracks (changes, agents, the team's board).
+  // The program starts answering `reply`: what the turn tracks (changes, the agents of parallel agents).
   beginTurn(tab, r, reply, ask, attachments = null) {
     r.userStopped = false;
     delete r.usageHandoff;
     r.turn = { snaps: {}, reply, ask, journal: reply.journal, switches: 0, dispatched: !!attachments, ...(attachments ? { attachments } : {}) };
     r.lastUsed = Date.now();
     r.agents = new Map();   // Task call id -> agent card
-    r.turnStartAt = Date.now(); r.lastNotifyAt = 0; r.betweenTurns = false; r.concluded = 0;
-    r.tasks = new Map();    // Claude's task id -> Task call id (team members' permission requests carry the task id)
-    if (r.teamFile) { r.round = (r.round || 0) + 1; r.finished = []; this.writeTeamFile(r); }
-    clearInterval(r.watchdog);
-    if (reply.team) r.watchdog = setInterval(() => this.watchAgents(tab, r), 30 * 1000);
-    clearInterval(r.busyTimer);
-    if (reply.team && r.teamFile) r.busyTimer = setInterval(() => { if (r.stale || !reply.running) clearInterval(r.busyTimer); else this.writeTeamFile(r); }, 5000);
+    r.tasks = new Map();    // task id -> Task call id (an agent's permission requests carry its task id)
   }
 
   async send(tab, segments, contexts, attachIds = [], requestId = null, editIndex = null, picks = []) {
@@ -1686,9 +1695,6 @@ class ChatView {
     // While it answers: into the queue (not an edit of an earlier message: that waits for the answer to end).
     if (tab.status !== "idle") { if (editIndex === null) await this.queueSend(tab, segments, contexts, attachIds, requestId); return; }
     if (!this.isReady()) { vscode.commands.executeCommand("kural.getStarted"); return; }   // nothing set up yet
-    // A big task in Auto mode: more agents? (Asked before anything changes: an edit's rewind, Auto's model choice, which
-    // then knows whether a team is wanted.)
-    if (text && this.bigTask(tab, text) && (await this.offerTeam(tab, text)) === "stopped") return;
     // An earlier message edited: the chat goes back to just before it (and the code too, if you say so), then this one is
     // sent in its place.
     if (editIndex !== null && !(await this.rewindTo(tab, editIndex))) return;
@@ -1772,6 +1778,11 @@ class ChatView {
     // The same after you switched that AI's account (Codex, Gemini: their conversations may not open for another
     // account; tab.freshSession, accountChanged).
     const engine = engineOf(tab.model);
+    // Parallel agents answered before: their lead starts afresh each answer (with splitHistory), so the program's own
+    // conversation never saw those answers. The next ordinary answer starts a new one that's handed the conversation.
+    const split = this.splitOn(tab);
+    if (!split && tab.splitTurns && tab.started) tab.freshSession = tab.freshSession || "split";
+    if (split) tab.splitTurns = true; else delete tab.splitTurns;
     const changedProvider = (tab.engine && tab.engine !== engine) || (tab.freshSession && tab.started);
     if (changedProvider) {
       if (tab.messages.length > 2) tab.carryOver = tab.freshSession === "account" && tab.engine === engine ? { model: true, account: true } : { model: true };
@@ -1785,7 +1796,8 @@ class ChatView {
     delete tab.freshSession; delete tab.profileFresh;
     // Prepare the complete record before starting the provider, so its read directory is available from launch.
     let carry = "";
-    try { if (tab.carryOver && !tab.started) carry = this.carryText(tab.carryOver, this.handoffRecord(tab, tab.messages.slice(0, -2))); }
+    // (Parallel agents get the conversation through splitHistory: not twice.)
+    try { if (tab.carryOver && !tab.started && !split) carry = this.carryText(tab.carryOver, this.handoffRecord(tab, tab.messages.slice(0, -2))); }
     catch (e) {
       reply.running = false; reply.error = `Kural couldn't preserve the complete conversation: ${e.message}`; tab.status = "idle";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); this.save();
@@ -1819,6 +1831,7 @@ class ChatView {
     this.beginTurn(tab, r, reply, ask);
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
+    const debugText = tab.mode === "debug" ? await this.debugText(tab) : "";   // (no extra wait in other modes)
     let retrieved = "";
     if (this.router && this.router.options().context && vscode.workspace.isTrusted) {
       try {
@@ -1835,7 +1848,7 @@ class ChatView {
     const built = await this.buildPrompt(slash ? slash.rest : text,contexts);
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
     if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    const { content: prompt, meta } = this.attachments.content(lead + carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
+    const { content: prompt, meta } = this.attachments.content(lead + carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + this.rulesMessage(tab, contexts) + debugText + retrieved + built, attachIds, carry ? previousMedia : []);
     user.sentText = lead + journal.textOf(prompt).slice(lead.length + carry.length);
     r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
@@ -1847,67 +1860,58 @@ class ChatView {
     r.turn.dispatched = true;
     this.sendTo(r, prompt, "turn");
     delete tab.carryOver;
-    log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${reply.team ? `, team of ${reply.team}` : ""})`);
+    log(`chat ${tab.id}: sent (${JSON.stringify(prompt).length} chars, ${contexts.length} context items, ${meta.length} attachments, ${tab.model}/${tab.effort}, ${tab.mode}${this.splitOn(tab) ? `, parallel agents on ${this.workersFor(tab)}` : ""})`);
     this.save();
   }
 
-  // Auto mode, one agent, and a big task (the router's reading of the request): Kural offers more agents for 15 s above
-  // the box (Adithya). Yes: the team turns on for this chat. No answer: this message goes on with one agent. "One agent":
-  // not offered again in this chat. Stop while it waits: nothing is sent. Returns "team", "one" or "stopped" (or null:
-  // not offered).
-  // (Checked first without waiting: a send that isn't offered anything goes on in the same step.)
-  bigTask(tab, text) {
-    if (!TEAMS_ENABLED || tab.mode !== "auto" || tab.team || tab.noTeamOffer || isLocal(tab.model) || (!tab.autoRoute && !brain.providerOf(tab.model).ready())) return false;
-    const task = require("../router/policy").classify(text);
-    return task.complexity === "complex" && task.sizeProbs.complex >= 0.8 && ["edit", "other"].includes(task.intent);
-  }
-  async offerTeam(tab, text) {
-    if (!this.bigTask(tab, text)) return null;
-    const n = TEAM_SIZES[1], id = `${tab.id}:${Date.now()}`, seconds = TEAM_OFFER_SECONDS;
-    const ctl = new AbortController(); this.routingJobs.set(tab.id, ctl);
-    tab.status = "running"; tab.routingState = "Waiting for your choice…"; this.postTabs();
-    this.post({ type: "teamOffer", tabId: tab.id, id, agents: n, seconds });
-    log(`chat ${tab.id}: a big task in Auto: offered ${n} agents`);
-    const answer = await new Promise((resolve) => {
-      const done = (v) => { clearTimeout(timer); this.teamOffers.delete(id); resolve(v); };
-      const timer = setTimeout(() => done("timeout"), seconds * 1000);
-      this.teamOffers.set(id, done);
-      ctl.signal.addEventListener("abort", () => done("stopped"));
-    });
-    if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    this.post({ type: "teamOfferDone", tabId: tab.id, id });
-    if (answer === "stopped" || !this.tab(tab.id)) { log(`chat ${tab.id}: stopped while offering agents`); return "stopped"; }
-    delete tab.routingState; tab.status = "idle";
-    if (answer === "team") { tab.team = n; this.afterTeamChange(tab, true); log(`chat ${tab.id}: ${n} agents (you said yes)`); return "team"; }
-    if (answer === "one") tab.noTeamOffer = true;
-    log(`chat ${tab.id}: one agent (${answer === "one" ? "you chose it" : `no answer in ${seconds} s`})`);
-    this.postTabs();
-    return "one";
-  }
-
-  // What the AI is told for this chat's mode, mood and team (the parts of its instructions you can change mid-chat).
-  instructionsOf(tab) {
-    const team = this.teamSize(tab);
-    return { mode: PROMPTS[tab.mode] || "", mood: this.moodText(tab).trim(),
-      team: team ? (isClaude(tab.model) ? teamPrompt(team, tab.roles || [], tab.teamStyle).trim() :
-        `Kural manages ${tab.teamStyle === "discuss" ? "a discussion" : "a project team"} with ${team} agents. Roles: ${(tab.roles || []).join(", ") || "general"}. Follow the phase and assignment given to you.`) : "" };
-  }
+  // What the AI is told for this chat's mode and mood (the parts of its instructions you can change mid-chat).
+  instructionsOf(tab) { return { mode: PROMPTS[tab.mode] || "", mood: this.moodText(tab).trim(), rules: this.rulesText(tab).trim() }; }
   // Claude Code keeps a resumed conversation's first instructions: on --resume it ignores a new --append-system-prompt
-  // (checked with Claude Code 2.1.289). So a mood, mode or team you change after the first message would never reach
-  // it; instead your next message starts with what changed. (The other programs get it the same way: harmless.)
+  // (checked with Claude Code 2.1.289). So a mood or mode you change after the first message would never reach it;
+  // instead your next message starts with what changed. (The other programs get it the same way: harmless.)
   // tab.sessionInstructions: what this conversation was given so far.
   // (Kept as short fingerprints, saved with the chat.)
   instructionsNote(tab) {
     const now = this.instructionsOf(tab), was = tab.sessionInstructions;
     const print = (t) => require("crypto").createHash("sha1").update(t).digest("hex").slice(0, 12);
-    tab.sessionInstructions = { mode: print(now.mode), mood: print(now.mood), team: print(now.team) };
+    tab.sessionInstructions = { mode: print(now.mode), mood: print(now.mood), rules: print(now.rules) };
     if (!tab.started || !was) return "";
     const changed = [];
     if (was.mode !== print(now.mode)) changed.push(now.mode);
     if (was.mood !== print(now.mood)) changed.push(now.mood || "Mood: Default. Drop the earlier mood's instructions and work in your normal, balanced way.");
-    if (was.team !== print(now.team)) changed.push(now.team || "No agent team any more: answer by yourself, without starting agents.");
+    // (A chat saved before rules existed has no fingerprint for them: it was given none.)
+    if ((was.rules === undefined ? print("") : was.rules) !== print(now.rules)) changed.push(now.rules || "The project's rules were removed. Drop the earlier rules' instructions.");
     return changed.length ? "<kural_instructions_update>\nI changed how you should work in this chat. These replace your earlier instructions about the " +
-      "same things (mode, mood, team):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
+      "same things (mode, mood, project rules):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
+  }
+
+  // The project's rules (lib/rules): the always ones and the list of the others, read from disk each time (small files).
+  rulesText(tab) {
+    try {
+      const text = projectRules.systemText(projectRules.loadRules(ws.folders().map((f) => f.path)));
+      return text ? `\n\n${text}` : "";
+    } catch { return ""; }
+  }
+  // The rules this message brings along (a file of it matches their globs, or it mentions the rule file) that the AI wasn't
+  // given yet in this conversation: tab.rulesSent, kept per session (a new session starts the list again). Parallel agents'
+  // lead starts afresh each answer, so it gets them every time.
+  rulesMessage(tab, contexts = []) {
+    try {
+      if (tab.rulesSession !== tab.sessionId) { tab.rulesSent = []; tab.rulesSession = tab.sessionId; }
+      const files = [];
+      for (const c of contexts || []) {
+        if (!["file", "current", "selection"].includes(c && c.kind)) continue;
+        const uri = this.resolvePath(c.path);
+        if (uri && uri.fsPath) files.push(uri.fsPath);
+      }
+      if (!files.length) return "";
+      const all = projectRules.loadRules(ws.folders().map((f) => f.path));
+      const sent = this.splitOn(tab) ? [] : tab.rulesSent || [];
+      const list = projectRules.unsent(all, files, sent);
+      if (!list.length) return "";
+      if (!this.splitOn(tab)) tab.rulesSent = [...sent, ...list.map((x) => x.rel)];
+      return projectRules.messageText(all, files, sent);
+    } catch { return ""; }
   }
 
   // The mood's instructions, and in Learn mood how to make a lesson page (lib/learn) in this chat's own folder.
@@ -1931,6 +1935,10 @@ class ChatView {
   // replaced on the next handoff and deleted with the chat. A failed save stops the handoff instead of losing details.
   handoffRecord(tab, messages, model = tab.model) {
     this.revokeAllowAll(tab);   // (another AI or a new conversation: "Allow all" was given to the old one)
+    return this.conversationRecord(tab, messages, model);
+  }
+  // The record itself (also each parallel-agents lead's, which starts afresh every answer: splitHistory).
+  conversationRecord(tab, messages, model = tab.model) {
     const budget = this.handoffBudget(model), whole = journal.handoff(messages);
     if (whole.length <= budget) {
       // An edit/fork can shorten a previously large chat. Its old record must not expose the discarded future turns.
@@ -1995,7 +2003,7 @@ class ChatView {
     }
   }
 
-  // Completed answers switch before the next request. Running tools and teams finish before a handoff.
+  // Completed answers switch before the next request. Running tools and parallel agents finish before a handoff.
   async switchUsage(tab, text, attached, contexts) {
     if (tab.status !== "idle" || tab.visiting) return;
     if (tab.usageChoosing) { await tab.usageChoosing; return this.switchUsage(tab, text, attached, contexts); }
@@ -2085,7 +2093,7 @@ class ChatView {
     if (!r) { reply.running = false; tab.status = "idle"; reply.error = `${whoOf(tab.model)} didn't start. Check it in Get started.`; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); return false; }
     this.beginTurn(tab, r, reply, ask);
     const carry = this.carryText(usageChoice ? { usage: who } : { retry: who }, record);
-    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket), [], media);
+    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + await this.debugText(tab), [], media);
     r.turn.attachments = media;
     r.pendingSend = content; r.turn.dispatched = true;
     this.sendTo(r, content, "turn");
@@ -2132,7 +2140,7 @@ class ChatView {
   async buildPlan(tab) {
     if (tab.status !== "idle") return;
     const was = tab.mode;
-    tab.mode = tab.mode === "auto" ? "auto" : "agent";
+    tab.mode = tab.mode === "auto" || tab.mode === "debug" ? tab.mode : "agent";
     if (tab.mode !== was) this.revokeAllowAll(tab);
     this.postTabs();
     await this.send(tab, [{ t: "text", v: BUILD_TEXT }], []);
@@ -2189,60 +2197,39 @@ class ChatView {
       }
     }
     if (!reply) return;
-    // Team members: Claude reports each one's start and end as system events, keyed by the Task call.
-    // With Opus they often run in the background: the lead's turn ends ("result") while they keep
-    // working, and Claude starts a new lead turn as each one reports back. So the answer stays open
-    // until every agent is finished.
+    // Parallel agents (lib/split): each agent's start and end as system events, keyed by its Task call. The answer ends
+    // when they all have (the result comes after the last one).
     if (m.type === "system" && /^task_/.test(m.subtype || "")) {
-      const a = m.tool_use_id && r.agents.get(m.tool_use_id);
       if (m.subtype === "task_started" && m.task_id && m.tool_use_id) r.tasks.set(m.task_id, m.tool_use_id);
       const end = m.subtype === "task_notification" ? m.status : m.subtype === "task_updated" && m.patch ? m.patch.status : null;
-      const owner = a || (m.task_id && r.agents.get(r.tasks.get(m.task_id)));
-      // Only an agent's report wakes the lead. (Claude Code reports a long Bash command as a background task too: counted
-      // as an agent, it made Kural send "All the agents you started have reported back…" after an ordinary command.)
-      if (m.subtype === "task_notification" && owner) r.lastNotifyAt = Date.now();
-      if (owner) owner.lastActive = Date.now();
+      const owner = (m.tool_use_id && r.agents.get(m.tool_use_id)) || (m.task_id && r.agents.get(r.tasks.get(m.task_id)));
+      if (!owner) return;
       // What the agent is doing right now ("Running the tests"), shown on its card.
-      if (m.subtype === "task_progress" && owner && owner.state === "running" && m.description) {
+      if (m.subtype === "task_progress" && owner.state === "running" && m.description) {
         owner.activity = String(m.description).replace(/^Running /, "");
         this.post({ type: "agentActivity", tabId: tab.id, agentId: owner.id, activity: owner.activity });
       }
       const END = { completed: "done", failed: "failed", error: "failed", killed: "stopped", stopped: "stopped", cancelled: "stopped", canceled: "stopped" };
-      if (end && !END[end] && end !== "running" && end !== "pending") log(`chat ${tab.id}: agent status "${end}" (still counted as working)`);
-      if (owner && owner.state === "running" && END[end]) {
+      if (owner.state === "running" && END[end]) {
         owner.state = END[end];
-        this.teamFinished(r, owner);
-        if (reply && (reply.waitingFor || []).length) {
-          reply.waitingFor = reply.waitingFor.filter((n) => n !== (owner.name || `Agent ${owner.n}`));
-          this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
-        }
         this.post({ type: "agentState", tabId: tab.id, agentId: owner.id, state: owner.state });
       }
-      // Managed teams have one result at the end; expose Finish now while their members work.
-      if (r.proc && r.proc.finishTeam && reply.running) {
-        const names = [...r.agents.values()].filter((x) => x.state === "running").map((x) => x.name || `Agent ${x.n}`);
-        if (JSON.stringify(names) !== JSON.stringify(reply.waitingFor || [])) {
-          reply.waitingFor = names;
-          this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
-        }
+      // While some still work: who, and "Finish now" (the others' work goes on without them).
+      const names = [...r.agents.values()].filter((x) => x.state === "running").map((x) => x.name);
+      if (reply.running && JSON.stringify(names) !== JSON.stringify(reply.waitingFor || [])) {
+        reply.waitingFor = names;
+        this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
       }
       return;
     }
-    // Messages from a team member carry the id of the Task call that started it.
+    // An agent's messages carry the id of the Task call that started it.
     const parent = m.parent_tool_use_id || null;
-    if (!parent && (m.type === "stream_event" || m.type === "assistant") && r.betweenTurns) {
-      r.betweenTurns = false;               // the lead started another turn
-      r.turnStartAt = Date.now();
-      clearTimeout(r.idleTimer);
-      if ((reply.waitingFor || []).length) { reply.waitingFor = []; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); }
-    }
-    // The lead speaks again after the answer was closed (an agent reported back just as it finished):
+    // The lead speaks again after the answer was closed (a background command reported back just as it finished):
     // reopen the same answer instead of gluing text onto a finished one.
     if (!parent && (m.type === "stream_event" || m.type === "assistant") && !reply.running && tab.status === "idle" && !r.stale) {
       reply.running = true;
       delete reply.error;
       tab.status = "running";
-      r.turnStartAt = Date.now();
       const last = reply.blocks[reply.blocks.length - 1];
       if (last && last.k === "text" && !/\n\n$/.test(last.text)) last.text += "\n\n";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
@@ -2287,9 +2274,8 @@ class ChatView {
         if (name !== tab.modelName) { tab.modelName = name; if (this.shown(tab.id)) this.post({ type: "modelName", tabId: tab.id, name }); }
       }
       const from = parent && r.agents.get(parent);
-      if (from) from.lastActive = Date.now();
       for (const b of m.message.content || []) {
-        // What an agent writes and thinks (needs --forward-subagent-text): into its card.
+        // What an agent writes and thinks: into its card.
         if (from && (b.type === "text" || b.type === "thinking")) {
           const said = (b.type === "text" ? b.text : b.thinking || "").trim();
           if (!said) continue;
@@ -2300,13 +2286,11 @@ class ChatView {
         }
         if (b.type !== "tool_use") continue;
         if (SUBAGENT_TOOLS.has(b.name)) {
-          const n = r.agents.size + 1;
-          const said = /\bYou are (\w+)(?:, the (\w+))?/.exec((b.input && b.input.prompt) || "");
-          const name = said && FRIENDS.includes(said[1]) ? said[1] : FRIENDS[(n - 1) % FRIENDS.length];
-          const role = said && said[2] && ROLES.some((x) => x.label === said[2]) ? said[2] : null;
-          const block = { k: "agent", id: b.id, n, name, role, title: (b.input && b.input.description) || name, steps: [], state: "running", lastActive: Date.now() };
+          // A parallel agent (lib/split): "Agent 2 · Haiku · Docs and changelog", or the lead resolving a merge.
+          const who = (b.input && b.input.kural_agent) || {}, n = r.agents.size + 1;
+          const name = who.n === "Lead" ? "Lead" : `Agent ${who.n || n}`;
+          const block = { k: "agent", id: b.id, n, name, role: who.label || null, title: (b.input && b.input.description) || name, steps: [], state: "running" };
           r.agents.set(b.id, block);
-          this.writeTeamFile(r);   // the board now knows who's on the team for this question
           reply.blocks.push(block);
           this.post({ type: "block", tabId: tab.id, block });
           continue;
@@ -2315,13 +2299,7 @@ class ChatView {
         if (this.explorer) this.explorer.started(tab.id, b.id, b.name, b.input);
         const step = { k: "tool", name: b.name, detail: toolDetail(b.name, b.input, this.root()), id: b.id };
         const owner = parent && r.agents.get(parent);
-        if (owner && b.name === "mcp__team__post") {
-          // The agents' discussion: shown in the answer itself, in order, where you're reading
-          // (inside the cards it ended up above the lead's text, out of sight).
-          step.agent = owner.name; step.role = owner.role;
-          reply.blocks.push(step);
-          this.post({ type: "block", tabId: tab.id, block: step });
-        } else if (owner) {
+        if (owner) {
           owner.steps.push(step);
           this.post({ type: "agentStep", tabId: tab.id, agentId: owner.id, step });
         } else {
@@ -2330,126 +2308,18 @@ class ChatView {
         }
       }
     } else if (m.type === "user" && !parent) {
-      // A Task call that failed to start. (A finished agent is reported by task_notification;
-      // a background agent's Task call returns at once with "Async agent launched".)
-      for (const c of (m.message && Array.isArray(m.message.content) ? m.message.content : [])) {
-        const a = c.type === "tool_result" && c.is_error && r.agents.get(c.tool_use_id);
-        if (a && a.state === "running") { a.state = "failed"; this.teamFinished(r, a); this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state }); }
-      }
       if (isClaude(tab.model)) this.routingCheckpoint(tab,r).catch(() => {});
       this.usageCheckpoint(tab, r).catch(() => {});
     } else if (m.type === "result") {
       r.pendingSend = null;
-      const working = [...r.agents.values()].filter((a) => a.state === "running");
-      // An agent that reported back during this turn wakes the lead once more.
-      const wakeUp = !m.kural_team_complete && r.lastNotifyAt > r.turnStartAt;
-      if (!m.kural_team_complete && (working.length || (wakeUp && !m.is_error))) {
-        // The lead paused while its team keeps working. Hold the answer open — only Stop ends it now —
-        // and Claude wakes the lead as each agent reports back.
-        r.betweenTurns = true;
-        const last = reply.blocks[reply.blocks.length - 1];
-        if (last && last.k === "text" && !/\n\n$/.test(last.text)) { last.text += "\n\n"; this.post({ type: "delta", tabId: tab.id, text: "\n\n" }); }
-        reply.waitingFor = working.map((a) => a.name || `Agent ${a.n}`);
-        this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
-        log(`chat ${tab.id}: lead paused${m.is_error ? " (with an error)" : ""}; ${working.length ? `waiting for ${reply.waitingFor.join(", ")}` : "an agent just reported"}`);
-        clearTimeout(r.idleTimer);
-        if (!working.length) r.idleTimer = setTimeout(() => this.conclude(tab, r, reply, m), 5000);
-        return;
-      }
-      if (!m.kural_team_complete && r.agents.size && !m.is_error && Date.now() - r.lastNotifyAt < 4000) {
-        // The last agents reported while the lead was still talking: Claude wakes it once more for
-        // them in a moment. Hold the answer a few seconds instead of closing and reopening it.
-        r.betweenTurns = true;
-        clearTimeout(r.idleTimer);
-        r.idleTimer = setTimeout(() => { if (r.betweenTurns && reply.running && !r.stale) this.finishReply(tab, r, m); }, 4000);
-        return;
-      }
-      if (!m.kural_team_complete && r.agents.size && r.concluded < MAX_NUDGES && m.is_error) {
-        // The team finished but the lead's last turn failed: ask it for the conclusion.
-        r.idleTimer = setTimeout(() => this.conclude(tab, r, reply, m), 500);
-        return;
-      }
       this.finishReply(tab, r, m);
     }
   }
 
-  // ---------- agents that get stuck ----------
-  // The board (team-mcp.js) reads this file to learn who has finished, so nobody waits for them.
-  // started: the agents the lead actually started; busy: those with a sign of life in the last minute (the board
-  // doesn't count waiting for a busy teammate as "nobody answers").
-  writeTeamFile(r) {
-    if (!r.teamFile) return;
-    const now = Date.now(), all = [...(r.agents || new Map()).values()];
-    const lower = (a) => String(a.name || "").toLowerCase();
-    const state = { round: r.round || 0, finished: r.finished || [], started: all.map(lower).filter(Boolean),
-      busy: all.filter((a) => a.state === "running" && now - (a.lastActive || 0) < 60000).map(lower) };
-    const text = JSON.stringify(state);
-    if (text === r.teamFileText) return;
-    r.teamFileText = text;
-    try { fs.writeFileSync(r.teamFile, text); } catch (e) { log(`team file: ${e.message}`); }
-  }
-  teamFinished(r, agent) {
-    if (!r.teamFile || !agent.name) return;
-    r.finished = r.finished || [];
-    if (!r.finished.includes(agent.name.toLowerCase())) { r.finished.push(agent.name.toLowerCase()); this.writeTeamFile(r); }
-  }
-
-  // Every 30 s while a team works: an agent with no sign of life for STUCK_MS is stuck (usually waiting
-  // for a teammate's message that never comes). Stop it, so the lead can answer with what it has.
-  // (Not while you're being asked something: an agent waiting for your OK isn't stuck.)
-  watchAgents(tab, r) {
-    if (r.stale || !r.turn || !r.turn.reply.running) { clearInterval(r.watchdog); return; }
-    const running = [...r.agents.values()].filter((a) => a.state === "running");
-    if (r.perms.size) { for (const a of running) a.lastActive = Date.now(); return; }
-    for (const a of running) {
-      if (Date.now() - (a.lastActive || 0) > STUCK_MS) this.stopAgent(tab, r, a, `stuck: nothing for ${Math.round(STUCK_MS / 60000)} min`);
-    }
-  }
-
-  // Stop one agent (Claude's stop_task control request) and carry on without it.
-  stopAgent(tab, r, a, why) {
-    if (a.state !== "running") return;
-    const taskId = [...r.tasks].find(([, use]) => use === a.id);
-    if (taskId && r.proc && !r.proc.exited) {
-      r.proc.request({ subtype: "stop_task", task_id: taskId[0] }).then((res) => log(`chat ${tab.id}: stop_task ${taskId[0]} → ${JSON.stringify(res)}`));
-    }
-    log(`chat ${tab.id}: stopping ${a.name || `Agent ${a.n}`} (${why})${taskId ? "" : " — no task id, marked stopped only"}`);
-    a.state = "stopped"; a.why = why;
-    this.teamFinished(r, a);
-    this.post({ type: "agentState", tabId: tab.id, agentId: a.id, state: a.state, why });
-    const reply = r.turn && r.turn.reply;
-    if (!reply) return;
-    reply.waitingFor = (reply.waitingFor || []).filter((n) => n !== (a.name || `Agent ${a.n}`));
-    this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
-    // Nobody left and the lead is paused: ask it for the answer (if Claude doesn't wake it first).
-    if (r.betweenTurns && ![...r.agents.values()].some((x) => x.state === "running")) {
-      clearTimeout(r.idleTimer);
-      r.idleTimer = setTimeout(() => this.conclude(tab, r, reply), 5000);
-    }
-  }
-
-  // "Finish now": stop every agent still working; the lead answers with what it has.
-  finishTeam(tab) {
+  // "Finish now": the parallel agents still working stop; the finished ones' work goes on to the merge.
+  finishAgents(tab) {
     const r = this.runtime.get(tab.id);
-    if (!r || !r.turn || !r.turn.reply.running) return;
-    if (r.proc && r.proc.finishTeam) { r.proc.finishTeam(); return; }
-    for (const a of r.agents.values()) this.stopAgent(tab, r, a, "stopped by you");
-  }
-
-  // Every agent has reported. Claude normally wakes the lead by itself; if it hasn't within a few
-  // seconds, ask the lead for the conclusion, so it always reaches you.
-  conclude(tab, r, reply, m) {
-    if (!r.betweenTurns && !(m && m.is_error) || !r.turn || r.turn.reply !== reply || !reply.running || r.stale) return;
-    if (r.concluded >= MAX_NUDGES || !r.proc || r.proc.exited) { this.finishReply(tab, r, m); return; }
-    r.concluded++;
-    r.betweenTurns = false;
-    r.turnStartAt = Date.now();
-    reply.waitingFor = [];
-    log(`chat ${tab.id}: all agents reported; asking the lead for the conclusion`);
-    // (A project team works in phases: after the planners report, the next phase starts; so don't say "final".)
-    this.sendTo(r, "All the agents you started have reported back. If your instructions have a next phase (the user's OK, " +
-      "building, checking), go on with it now. Otherwise give me the final answer: the result or decision, why, and any " +
-      "disagreement that remains.", "nudge");
+    if (r && r.turn && r.turn.reply.running && r.proc && r.proc.finishAgents) r.proc.finishAgents();
   }
 
   // What Claude loaded from your setup: connectors / MCP servers, plugins, skills. Shown in the
@@ -2457,7 +2327,7 @@ class ChatView {
   noteSetup(tab, r, m) {
     const prev = tab.setup || {};
     this.showSetup(tab, {
-      servers: (m.mcp_servers || []).filter((x) => x.name !== "team").map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status })),
+      servers: (m.mcp_servers || []).map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status })),
       plugins: (m.plugins || []).filter((x) => x.path !== "builtin").map((x) => x.name),
       skills: (m.skills || []).length || prev.skills || 0,
     });
@@ -2468,7 +2338,7 @@ class ChatView {
     if (!res || !Array.isArray(res.mcpServers) || r.stale) return;
     const prev = tab.setup || {};
     this.showSetup(tab, {
-      servers: res.mcpServers.filter((x) => x.name !== "team").map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status, tools: (x.tools || []).length })),
+      servers: res.mcpServers.map((x) => ({ id: x.name, name: prettyServer(x.name), status: x.status, tools: (x.tools || []).length })),
       plugins: prev.plugins || [], skills: prev.skills || 0,
     });
   }
@@ -2477,8 +2347,8 @@ class ChatView {
     setup.full = !!fullSetup();
     // Announce a connector that wasn't there before (not on the very first report).
     const known = tab.knownServers ? new Set(tab.knownServers) : null;
-    // (Kural's own servers, the device's tools and the team's board, aren't news.)
-    const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name) && x.name !== "device" && x.name !== "team").map((x) => x.name) : [];
+    // (Kural's own servers, like the device's tools, aren't news.)
+    const added = known ? setup.servers.filter((x) => x.status === "connected" && !known.has(x.name) && x.name !== "device").map((x) => x.name) : [];
     tab.knownServers = [...new Set([...(tab.knownServers || []), ...setup.servers.filter((x) => x.status === "connected").map((x) => x.name)])];
     setup.jira = atlassianState(setup);   // can "+ → Link ticket" work, and if not, why
     tab.setup = setup;
@@ -2493,9 +2363,6 @@ class ChatView {
     const reply = r.turn.reply;
     if (this.explorer) this.explorer.ended(tab.id);
     reply.waitingFor = [];
-    clearTimeout(r.idleTimer);
-    clearInterval(r.watchdog); clearInterval(r.busyTimer);
-    r.betweenTurns = false;
     reply.running = false;
     reply.ms = Date.now() - reply.t0;
     r.lastUsed = Date.now();
@@ -2571,8 +2438,6 @@ class ChatView {
       r.userStopped = true;
       this.giveBack(tab, r);   // queued messages it hadn't taken in: back into the box
       if (r.checkpointAbort) r.checkpointAbort.abort();
-      clearInterval(r.watchdog); clearInterval(r.busyTimer);
-      if (r.teamFile) fs.rm(r.teamFile, { force: true }, () => {});
       r.stale = true;
       if (r.proc) r.proc.kill();
       r.proc = null;
@@ -2581,7 +2446,6 @@ class ChatView {
       r.perms.clear();
     }
     if (r && r.turn && r.turn.reply.running) {
-      clearTimeout(r.idleTimer);
       this.finishReply(tab, r, { type: "result", subtype: "error_during_execution", is_error: true });   // agents → stopped
       return;
     }
@@ -2597,7 +2461,7 @@ class ChatView {
 
   finishTurn(tab, r) {
     const reply = r.turn.reply;
-    if (reply.mode !== "agent" && reply.mode !== "auto") return;
+    if (!agentLike(reply.mode) && reply.mode !== "auto") return;
     try {
       const roots = this.projectRoots(tab);
       const files = this.changes.summary(r.turn, this.root()).filter((c) => inProject(c.file, roots));
@@ -2607,17 +2471,18 @@ class ChatView {
 
   patchOf(msg) { return { waitingFor: msg.waitingFor, running: msg.running, error: msg.error, errorWho: msg.errorWho, changes: msg.changes, ms: msg.ms, note: msg.note, blocks: msg.blocks, planReady: msg.planReady, planBuilt: msg.planBuilt, model: msg.model, models: msg.models, routing: msg.routing, contextSelection: msg.contextSelection }; }
 
-  // Claude (or a team member) wants to edit a file or run a command.
+  // The AI (or one of its parallel agents) wants to edit a file or run a command.
   async onPermission(tab, r, req) {
     const turn = r.turn;
     const input = req.input || {};
     if (vscode.workspace.isTrusted === false) return { allow: false, message: "Workspace trust is required." };
     // Gemini's approval gate (lib/ai/agy-gate-host.js): only for the answer that's running, and only for the mode agy was
     // started for (a mode change revokes the gate; the next message starts agy with the new mode).
-    // (A team's planner or reviewer runs its agy in Plan or Ask while the chat is in Agent: decided in its own, stricter mode.)
+    // A step of parallel agents brings its own mode (req.mode: the lead plans read only while the chat is in Agent): the
+    // stricter one counts, like for Gemini's gate.
     let mode = tab.mode;
-    if (req.gate) {
-      mode = gatedMode(tab.mode, req.gateMode);
+    if (req.gate || req.mode) {
+      mode = gatedMode(tab.mode, req.gate ? req.gateMode : req.mode);
       if (!mode) return { allow: false, message: "The chat's mode changed; nothing more runs in this answer." };
       if (!turn || !turn.reply.running) return { allow: false, message: "The answer was stopped." };
     }
@@ -2647,7 +2512,7 @@ class ChatView {
     const risky = verdict.risky;
     // Agent mode: running commands asks you first.
     const pid = shortId();
-    const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // a team member asking
+    const owner = req.agent_id && r.agents.get(r.tasks.get(req.agent_id));   // one of its parallel agents asking
     const detail = permDetail(req.tool_name, input) + (risky ? `\n\nAsks first: ${risky.why}` : "");
     // ("Allow all" on this card covers only its kind of call: allowKind. None for a file or a tool Kural can't classify.)
     const block = { k: "perm", pid, tool: req.tool_name, detail, risky: !!risky || undefined, state: "pending", agent: owner ? owner.name || `Agent ${owner.n}` : undefined,
@@ -2741,7 +2606,7 @@ class ChatView {
         if (resolve) { r.perms.delete(b.pid); resolve(true); }
       }
     }
-    const editing = (x) => x === "agent" || x === "auto";
+    const editing = (x) => agentLike(x) || x === "auto";
     // Gemini (Antigravity): its flags are fixed when it starts. Kural's gate stops approving anything for the agy that was
     // started for the old mode (so a late "yes" can't count under the new one); the new mode applies from the next message.
     if (engineOf(tab.model) === "agy") {
@@ -2751,6 +2616,7 @@ class ChatView {
     else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" || tab.mode === "ask" ? "Read-only permissions apply now; tools refresh" : "Editing tools become available"} from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });
+    else if (tab.mode === "debug") this.post({ type: "flash", text: "Debug: Kural asks before the next command" });
   }
 
   // Claude asks you a question with options: show a card, wait for your pick.
@@ -2783,8 +2649,33 @@ class ChatView {
       : { allow: false, message: "The user skipped the question. Continue with your best judgment, and say what you assumed." };
   }
 
-  afterTeamChange(tab, teamChanged = false) {
-    if (teamChanged && !isClaude(tab.model) && !isLocal(tab.model) && tab.started) tab.freshSession = "team";
+  // Parallel agents' plan (lib/split): a card with each agent's task and a model for it (your default picked); Go ahead,
+  // what to change, or Stop. (Auto doesn't ask: it never gets here.) → { go, models } | { change } | { stop }.
+  async askPlan(tab, r, plan) {
+    const pid = shortId(), ids = new Set(plan.models.map((m) => m.id));
+    const block = { k: "split", pid, summary: plan.summary, tasks: plan.tasks, models: plan.models, state: "pending" };
+    if (r.turn) r.turn.reply.blocks.push(block);
+    tab.status = "waiting";
+    this.post({ type: "block", tabId: tab.id, block });
+    this.postTabs();
+    this.notify(tab, "question", { question: `Split the work between ${plan.tasks.length} agents?` });
+    const got = await new Promise((resolve) => r.perms.set(pid, resolve));   // (Stop answers false)
+    this.clearNotice(tab.id);
+    let out;
+    if (got && got.go) {
+      const models = plan.tasks.map((t, i) => ids.has(got.models[i]) ? got.models[i] : t.model);
+      block.tasks = plan.tasks.map((t, i) => ({ ...t, model: models[i] }));
+      block.state = "approved"; out = { go: true, models };
+    } else if (got && got.change) { block.change = String(got.change).trim().slice(0, 2000); block.state = "changed"; out = { change: block.change }; }
+    else { block.state = "stopped"; out = { stop: true }; }
+    if (r.turn && r.turn.reply.running) tab.status = "running";
+    this.post({ type: "splitState", tabId: tab.id, pid, state: block.state, tasks: block.tasks, change: block.change });
+    this.postTabs(); this.save();
+    return out;
+  }
+
+  // A choice in the model menu changed (mood, parallel agents): kept for new chats, applied from the next message.
+  afterChoice(tab) {
     this.remember(tab); this.postTabs(); this.save();
     if (tab.status === "idle") this.warm(tab);
     else this.post({ type: "flash", text: "Applies from your next message" });
@@ -2879,8 +2770,8 @@ class ChatView {
         if (pane.col && !this.tab(pane.activeId)) { this.closeColumn(pane); break; }   // (its chat was closed meanwhile)
         if (!this.tab(pane.activeId)) pane.activeId = (this.tab(this._activeId) || this.tabs[0] || this.newTab(false)).id;
         const w = pane.webview, t = this.tab(pane.activeId);
-        w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES, teamSizes: TEAM_SIZES,
-          moods: allMoods(), shortcuts: userShortcuts(), roles: ROLES, teamStyles: TEAM_STYLES, version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
+        w.postMessage({ type: "config", models: MODELS, efforts: EFFORTS, modes: MODES,
+          moods: allMoods(), shortcuts: userShortcuts(), version: this.version, ready: this.isReady(), claudeReady: isSetUp(), clis: this.cliInfo(), pics: this.filesFor(w) });
         w.postMessage(this.tabsFor(pane));
         w.postMessage({ type: "full", tab: this.viewTab(t) });
         if (t.setup) w.postMessage({ type: "setup", tabId: t.id, setup: { ...t.setup, jira: atlassianState(t.setup) } });
@@ -3008,8 +2899,7 @@ class ChatView {
         await this.buildPlan(tab);
       } break;
       case "savePlan": if (tab) await this.savePlan(tab, m.msgIndex); break;
-      case "finishTeam": if (tab) this.finishTeam(tab); break;
-      case "teamOfferAnswer": { const f = this.teamOffers.get(m.id); if (f) f(m.use ? "team" : "one"); break; }
+      case "finishAgents": if (tab) this.finishAgents(tab); break;
       case "stop": {
         const stopping = this.runtime.get(tab.id); if (stopping) { stopping.userStopped = true; delete stopping.usageHandoff; }
         const routing = this.routingJobs.get(tab.id);
@@ -3092,24 +2982,21 @@ class ChatView {
         if (tab.status !== "idle") this.modeChangedMidAnswer(tab, was);
         this.postTabs(); this.save(); if (tab.status === "idle") this.warm(tab);
       } break;
-      case "setMood": if (valid(allMoods(), m.mood)) { tab.mood = m.mood; this.afterTeamChange(tab); } break;
+      case "setMood": if (valid(allMoods(), m.mood)) { tab.mood = m.mood; this.afterChoice(tab); } break;
       // "Add your own mood…" in the model menu: Kural Settings, at Moods (lib/settings-page.js).
       case "editMoods": vscode.commands.executeCommand("kural.settings.moods"); break;
       case "editShortcuts": vscode.commands.executeCommand("kural.settings.shortcuts"); break;
-      case "toggleRole": if (TEAMS_ENABLED && valid(ROLES, m.role)) {
-        const roles = tab.roles || [];
-        tab.roles = roles.includes(m.role) ? roles.filter((r) => r !== m.role) : [...roles, m.role].slice(0, FRIENDS.length);
-        if (tab.roles.length && !tab.team) tab.team = TEAM_SIZES[1];   // picking a role turns the team on
-        this.afterTeamChange(tab, true);
-      } break;
-      case "setTeamStyle": if (TEAMS_ENABLED && valid(TEAM_STYLES, m.style)) { tab.teamStyle = m.style; if (!tab.team) tab.team = TEAM_SIZES[1]; this.afterTeamChange(tab, true); } break;
       case "reloadSetup": this.setupChanged("reload asked for"); break;
       case "getStarted": vscode.commands.executeCommand("kural.getStarted", m.path); break;
       case "useFullSetup":
         await cfg().update("chat.fullClaudeCodeSetup", !!m.on, vscode.ConfigurationTarget.Global);
         this.setupChanged(m.on ? "switched to your full setup" : "switched to the minimal setup");
         break;
-      case "setTeam": tab.team = TEAMS_ENABLED && TEAM_SIZES.includes(m.team) ? m.team : 0; this.afterTeamChange(tab, true); break;
+      // Parallel agents (model menu): on or off, and the agents' default model for this chat's AI.
+      case "setSplit": tab.split = !!m.on; this.afterChoice(tab); break;
+      case "setWorkers": if (typeof m.model === "string" && this.workerModels(tab).some((x) => x.id === m.model)) {
+        tab.workers = { ...(tab.workers || {}), [engineOf(tab.model)]: m.model }; this.afterChoice(tab);
+      } break;
       case "permission": {
         const r = this.runtime.get(tab.id);
         if (m.always) {
@@ -3134,6 +3021,17 @@ class ChatView {
           r.perms.delete(m.pid);
           res(typeof m.ask === "string" && m.ask.trim() ? { ask: m.ask }
             : m.answers && typeof m.answers === "object" ? { answers: m.answers, note: typeof m.note === "string" ? m.note : "" } : false);
+        }
+        break;
+      }
+      // The parallel agents' plan card: Go ahead (a model per agent), what to change, or Stop.
+      case "splitAnswer": {
+        const r = this.runtime.get(tab.id);
+        const res = r && r.perms.get(m.pid);
+        if (res) {
+          r.perms.delete(m.pid);
+          res(m.go ? { go: true, models: Array.isArray(m.models) ? m.models.map(String) : [] }
+            : typeof m.change === "string" && m.change.trim() ? { change: m.change } : false);
         }
         break;
       }
@@ -3237,6 +3135,19 @@ class ChatView {
       added.push(label);
     }
     if (added.length) vscode.window.setStatusBarMessage(`Kural: added ${added.join(", ")} to the chat`, 3000);
+  }
+
+  // Fix with Kural (lib/fix) and Agent Review's "Fix in Chat" (command kural.chat.addContext): a problem, a failed terminal
+  // command or a review finding becomes a pill in the message you're writing, with a first line ("Fix this."). The chat
+  // comes on screen first. It is never sent by itself: you read it and press Send.
+  async addProblem({ label, text, source, prompt } = {}) {
+    await this.reveal();
+    const pane = this.cur();
+    if (!pane || !String(text || "").trim()) return;
+    const line = String(label || text).replace(/\s+/g, " ").trim();
+    const ctx = { kind: "quote", source: source || "problem", text: String(text), label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line };
+    this.postTo(pane, { type: "insertPill", ctx, text: prompt ? ` ${prompt}` : "" });
+    vscode.window.setStatusBarMessage("Kural: added to the chat. Press Send when you're ready", 3000);
   }
 
   // "Add to chat" on a lesson page (lib/learn): what you selected, or a visual you clicked, becomes a pill in that chat's
@@ -3349,8 +3260,7 @@ function toolDetail(name, input, root) {
     case "WebFetch": return input.url || "";
     case "mcp__device__run_command": return input.command || "";
     case "mcp__device__read_file": case "mcp__device__write_file": case "mcp__device__list_dir": return input.path || "~";
-    case "mcp__team__post": return `${cap(input.from)} → ${input.to === "all" ? "everyone" : cap(input.to)}: ${input.message || ""}`;
-    case "mcp__team__read": return `${cap(input.name)} checks messages${input.wait_seconds ? " and waits for a reply" : ""}`;
+    case "Kural": return input.detail || "";   // (a step of Kural's own: parallel agents merging their work)
     default: return name.startsWith(`mcp__${BROWSER_SERVER}__`) ? browserDetail(name.slice(`mcp__${BROWSER_SERVER}__`.length), input) : "";
   }
 }
@@ -3375,9 +3285,7 @@ function browserDetail(tool, i) {
     default: return "";
   }
 }
-const cap = (s) => { s = String(s || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) : "?"; };
 
-// The team's message board, run by Kural's own executable as plain Node.
 
 function permDetail(tool, input) {
   if (tool === "Bash") return input.command || "";
@@ -3435,4 +3343,4 @@ function elementNote(e) {
   return lines.join("\n");
 }
 
-module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, teamPrompt, FRIENDS, ROLES, MOOD_PROMPTS, toolDetail, settingMode } };
+module.exports = { ChatView, MODELS, EFFORTS, MODES, _test: { PROMPTS, MOOD_PROMPTS, toolDetail, settingMode } };

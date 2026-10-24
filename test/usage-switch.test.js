@@ -16,9 +16,9 @@ brain.providerOf = (m) => ({ ready: () => true, label: m, id: brain.engineOf(m) 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kural-usage-switch-"));
 const opts = { enabled: true, threshold: 70 };
 const models = [
-  { id: "sonnet", providerId: "claude", provider: "Claude", ready: true, team: true, images: true, pdf: true, device: true, connectors: true, commands: true },
-  { id: "codex:gpt-test", providerId: "codex", provider: "ChatGPT (Codex)", ready: true, team: true, images: true, pdf: true, device: true, commands: true },
-  { id: "agy:gemini-pro", providerId: "agy", provider: "Google Gemini", ready: true, team: true, images: true, commands: false },
+  { id: "sonnet", providerId: "claude", provider: "Claude", ready: true, split: true, images: true, pdf: true, device: true, connectors: true, commands: true },
+  { id: "codex:gpt-test", providerId: "codex", provider: "ChatGPT (Codex)", ready: true, split: true, images: true, pdf: true, device: true, commands: true },
+  { id: "agy:gemini-pro", providerId: "agy", provider: "Google Gemini", ready: true, split: true, images: true, commands: false },
 ];
 const rated = () => models.map((m) => ({ ...m, limitUsed: limitUsed(m, usage.current(m.providerId)) }));
 const report = (id, used, reset = Date.now() + 3600000) => usage.report(id, { windows: [{ id: "five_hour", label: "Session", usedPercent: used, resetsAt: reset }] });
@@ -30,11 +30,11 @@ const check = async (name, fn) => {
 };
 function fixture() {
   const tab = { id: "chat", title: "Example", status: "idle", model: "sonnet", mode: "ask", effort: "medium", autoRoute: false,
-    routingProfile: "balance", team: 0, messages: [], engine: "claude", started: true };
+    routingProfile: "balance", messages: [], engine: "claude", started: true };
   const chat = Object.create(ChatView.prototype), sent = [], posted = []; let killed = 0, interrupted = 0;
   Object.assign(chat, { tabs: [tab], panes: [], routingJobs: new Map(), runtime: new Map(), localReady: new Map(), attachments: new Attachments(),
     post: (m) => posted.push(m), postTabs: () => {}, save: () => {}, remember: () => {}, isReady: () => true,
-    teamSize: () => 0, teamLabel: () => null, endDevice: () => {}, finishTurn: () => {}, notify: () => {},
+    splitOn: () => false, endDevice: () => {}, finishTurn: () => {}, notify: () => {},
     buildPrompt: async (text) => "PROJECT INSTRUCTIONS\n" + text, prepareLocal: async () => ({ ok: true }), procKey: (t) => t.model,
     router: { options: () => ({ context: false, checkpoints: true, handoffChars: 120000 }), availableModels: async () => rated(),
       taskDone: () => {}, route: async () => assert.fail("Manual models must not use Auto routing") },
@@ -96,9 +96,9 @@ function fixture() {
     assert.strictEqual(page.state().cards.find((c) => c.id === "agy").state, "off");
     assert.deepStrictEqual(page.state().cards.find((c) => c.id === "agy").windows, []);
   });
-  await check("handoffs retain team, device, attachment and connector capability requirements", () => {
+  await check("handoffs retain parallel-agent, device, attachment and connector capability requirements", () => {
     report("claude", 71);
-    const req = { current: "sonnet", prompt: "explain", mode: "ask", team: true, device: true, images: true, pdf: true };
+    const req = { current: "sonnet", prompt: "explain", mode: "ask", split: true, device: true, images: true, pdf: true };
     assert.strictEqual(guard.choose(rated(), req, opts).model, "codex:gpt-test");
     assert.strictEqual(guard.choose(rated(), { ...req, connectors: true }, opts), null);
     assert.strictEqual(guard.choose([...rated().slice(0, 1), { ...rated()[1], local: true }], req, opts), null);
@@ -176,24 +176,23 @@ function fixture() {
     assert.strictEqual(f.tab.model, "sonnet"); assert.strictEqual(f.killed(), 0);
     f.tab.status = "idle"; r.bg.clear(); await f.chat.switchUsage(f.tab); assert.strictEqual(f.tab.model, "codex:gpt-test");
   });
-  await check("completed agents' visible work and board reports survive a provider handoff", () => {
+  await check("completed agents' visible work survives a provider handoff", () => {
     const journal = require("../extension/lib/router/journal");
     const record = journal.handoff([{ role: "assistant", model: "sonnet", blocks: [
-      { k: "agent", name: "Monica", role: "Developer", state: "done", steps: [{ k: "say", text: "Keep the API" }, { k: "tool", name: "Read", detail: "login.js" }] },
-      { k: "tool", name: "mcp__team__post", agent: "Monica", detail: "Monica → everyone: Finished the login change" },
+      { k: "agent", name: "Agent 1", role: "Haiku", state: "done", steps: [{ k: "say", text: "Keep the API" }, { k: "tool", name: "Read", detail: "login.js" }] },
     ] }]);
-    for (const s of ["Monica", "Keep the API", "login.js", "Finished the login change"]) assert.ok(record.includes(s), s);
+    for (const s of ["Agent 1", "Haiku", "Keep the API", "login.js"]) assert.ok(record.includes(s), s);
   });
-  await check("managed teams expose Finish now and finish without Claude's lead-restart delay", async () => {
-    const f = fixture(); await f.chat.send(f.tab, [{ t: "text", v: "Discuss" }], []);
-    const r = f.chat.runtime.get("chat"); let finishes = 0; r.proc.finishTeam = () => finishes++;
-    const card = { id: "member", name: "Monica", state: "running", steps: [], n: 1 }; r.agents.set(card.id, card); r.turn.reply.blocks.push(card);
+  await check("parallel agents: Finish now while some work, and the answer ends with the result", async () => {
+    const f = fixture(); await f.chat.send(f.tab, [{ t: "text", v: "Build both parts" }], []);
+    const r = f.chat.runtime.get("chat"); let finishes = 0; r.proc.finishAgents = () => finishes++;
+    const card = { id: "member", name: "Agent 1", state: "running", steps: [], n: 1 }; r.agents.set(card.id, card); r.turn.reply.blocks.push(card);
     f.chat.onClaude(f.tab, r, { type: "system", subtype: "task_started", tool_use_id: card.id, task_id: "task" });
-    assert.deepStrictEqual(r.turn.reply.waitingFor, ["Monica"]);
-    f.chat.finishTeam(f.tab); assert.strictEqual(finishes, 1);
+    assert.deepStrictEqual(r.turn.reply.waitingFor, ["Agent 1"]);
+    f.chat.finishAgents(f.tab); assert.strictEqual(finishes, 1);
     f.chat.onClaude(f.tab, r, { type: "system", subtype: "task_notification", tool_use_id: card.id, task_id: "task", status: "completed" });
     assert.deepStrictEqual(r.turn.reply.waitingFor, []);
-    f.chat.onClaude(f.tab, r, { type: "result", kural_team_complete: true, is_error: false, subtype: "success", result: "The team's result." });
+    f.chat.onClaude(f.tab, r, { type: "result", kural_split_complete: true, is_error: false, subtype: "success", result: "Both parts are in." });
     assert.strictEqual(f.tab.status, "idle"); assert.strictEqual(r.turn.reply.running, false);
   });
   await check("Auto cannot return a long chat to the service that reached the user's threshold", async () => {

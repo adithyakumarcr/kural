@@ -10,7 +10,7 @@ const {excludedModel,completionModel}=require('../extension/lib/ai/model-policy'
 const EXAMPLES=require('../extension/lib/router/examples.json').examples;
 let passed=0,failed=0;
 const check=async(name,fn)=>{try{await fn();passed++;console.log('ok  ',name);}catch(e){failed++;console.error('FAIL',name,e.stack);}};
-const claude=(id,label,description)=>({id,label,description,provider:'Claude',providerId:'claude',ready:true,team:true,device:true,images:true,pdf:true,commands:true,connectors:true});
+const claude=(id,label,description)=>({id,label,description,provider:'Claude',providerId:'claude',ready:true,split:true,device:true,images:true,pdf:true,commands:true,connectors:true});
 const models=[
  claude('haiku','Haiku','fastest'),claude('sonnet','Sonnet','fast and smart'),claude('opus','Opus','most capable'),
  {id:'agy:flash',label:'Gemini Flash',provider:'Google Gemini',ready:true,providerId:'agy',images:true},
@@ -121,7 +121,7 @@ const task=(complexity,intent='edit')=>({complexity,intent});
  await check('eligibility excludes unavailable models and incompatible capabilities',()=>{
   assert.deepStrictEqual(eligible(models,{}).map(m=>m.id),['haiku','sonnet','opus','agy:flash']);
   assert.ok(select([],{},{}).error);
-  assert.deepStrictEqual(eligible(models,{images:true,pdf:true,team:true,device:true,connectors:true}).map(m=>m.id),['haiku','sonnet','opus']);
+  assert.deepStrictEqual(eligible(models,{images:true,pdf:true,split:true,device:true,connectors:true}).map(m=>m.id),['haiku','sonnet','opus']);
   assert.ok(!eligible(models,{mode:'agent',editing:true}).some(m=>m.providerId==='agy'));
   assert.deepStrictEqual(eligible(three,{provider:'codex'}).map(m=>m.id).sort(),['codex:gpt-5.6-terra','codex:gpt-6-luna','codex:gpt-6-sol','codex:gpt-6-terra']);
  });

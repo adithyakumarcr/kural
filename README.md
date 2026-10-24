@@ -30,8 +30,10 @@ On top of that, Kural adds:
 - **Tab Completion.** Grey suggestions as you type; **Tab** accepts. Change a name, and Kural offers to change it in
   the other files that use it.
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
-- **Teams of agents.** A project team (Researcher, Architect, Developers, Tester, led by a Project Manager) that
-  plans, gets your OK and builds, or agents that discuss a question and agree on an answer.
+- **Parallel agents.** A big request split between agents that work at the same time, each in its own copy of the
+  project, on a cheaper model you pick; Kural merges their work.
+- **Fix with Kural, Rules, Agent Review, Debug mode.** One click from an error or a failed command to the chat; project
+  rules in `.kural/rules`; a review of your uncommitted changes; a mode that debugs with temporary logging.
 
 Its AI comes from any of these (set up one or all; you switch in the model menu):
 
@@ -215,7 +217,7 @@ Besides Claude's models, Kural can use a model that runs on your own computer th
 private, free, and it works without internet or any account. Kural runs it with its own engine (no Claude Code): it
 reads and edits files, searches your project, and asks before running commands, like with Claude. **Ctrl+K**,
 **Apply** and commit messages use the chat's model too (**Ask** uses the fastest model you have: your own only when
-there's no cloud AI). (Agent teams and Claude Code connectors need a Claude model.)
+there's no cloud AI). (Parallel agents need a cloud AI; Claude Code connectors need a Claude model.)
 
 In the model menu, **On this computer** lists your models; **Find & download models…** searches Ollama's library
 (models that can use tools, which the chat needs), shows how much memory each size needs compared to your computer,
@@ -224,41 +226,51 @@ and downloads with one click.
 Local models are slower and less capable than Claude, and bigger ones need a lot of memory: on a laptop, start with
 something like `qwen3:8b`; `qwen3-coder:30b` or `gpt-oss:20b` need about 20 GB. You need Ollama 0.8 or newer.
 
-### Multiple agents
+### Parallel agents
 
-Turn on **Multiple agents** in the model menu with **Claude, ChatGPT (Codex) or Google Gemini**. The lead agent gets a
-team named after Friends (Rachel, Ross, Monica…), each with a role you pick. Claude agents use a shared board;
-Kural forwards Codex and Gemini agents' reports between phases. The roles:
+Tick **Split big tasks** in the model menu (Agent or Auto mode, in a Git repository, with **Claude, ChatGPT (Codex) or
+Google Gemini**) and big requests get done by several agents at once, like Cursor's parallel agents:
 
-| Role | Does |
-|---|---|
-| **Project Manager** (the lead, always there) | Gets the requirements from you, asks you when something is unclear, runs the team, reports back |
-| **Researcher** (Rachel) | Searches online and in the code, writes a plan and proposes it to the Architect and the PM |
-| **Architect** (Ross) | Studies the current architecture and picks the best solution; splits the work into parts |
-| **Developers** (Monica, Chandler, Joey) | Build the approved plan, each their own part. The PM decides how many (1–3) |
-| **Tester** (Phoebe) | Checks every piece of code that gets written: quality, tests, edge cases |
+1. The model you picked (the lead) reads the code and splits the request into up to four independent tasks. A small
+   request isn't split.
+2. A plan card shows each agent's task, its files and its model: your default from **Agents use** in the menu (say,
+   Haiku), changeable per agent. **Go ahead**, **Stop**, or write what to change. Auto mode doesn't ask.
+3. The agents work at the same time, each in its own git worktree of your files as they are (uncommitted ones too),
+   so they never touch your files while they work.
+4. Kural merges their work (a conflict goes to the lead) and brings it into your project through the usual
+   checkpoint: Files changed, Undo and Restore code work as always.
+5. The lead runs your checks, fixes what doesn't fit together, and gives one answer.
 
-Pick any combination (Researcher + Developer, Researcher + Architect, all four…). Then how they work:
+Faster for work that splits into parts; cheaper when the lead plans with Opus and the agents build with Haiku or
+Sonnet. **Stop** leaves your files as they were; **Finish now** stops the slow agents and keeps the finished work.
+More: [docs/wiki/Parallel-Agents.md](docs/wiki/Parallel-Agents.md).
 
-- **Split the work** (a project). The PM asks you what's unclear; the Researcher and Architect plan; **you OK the
-  plan** (Go ahead / Change the plan / Stop); the Developers build; the Tester reviews until the code is good. With
-  only a Researcher and/or Architect, the plan is the result.
-- **Discuss & decide.** Each forms their own view first. Then they argue it out and agree. The answer shows everyone's
-  final position and any disagreement left.
+### Fix with Kural
 
-You see the discussion live: every message the agents send each other appears in the answer as it's sent. Each
-agent's card shows what it's doing right now, its thinking and its notes.
+Put the cursor on an error or warning and open the light bulb: **Fix with Kural** adds the problem and the code around
+it to your chat message ("Fix this."); with two or more problems in the file there is also **Fix all problems in this
+file with Kural**. When a command fails in the terminal, **Fix with Kural** shows in the status bar for 15 seconds and
+adds the command, its exit code and its last 8,000 characters of output. Nothing is sent until you press Send.
+More: [docs/wiki/Fix-with-Kural.md](docs/wiki/Fix-with-Kural.md).
 
-If agents take too long, **Finish now** (next to "Waiting for …") stops them and the lead answers with what it
-has. An agent that shows no sign of life for 6 minutes is stopped by itself.
+### Rules
 
-<p align="center">
-  <img src="docs/screenshots/agents-setup.gif" width="300" alt="Turning on Multiple agents in the model menu: the roles (Researcher, Architect, Developer, Tester), Split the work or Discuss & decide">
-  &nbsp;&nbsp;
-  <img src="docs/screenshots/agents-discussion.gif" width="300" alt="Two agents discuss and decide (sped up)">
-  <br>
-  <sub>Pick the roles and how they work &nbsp;·&nbsp; Then they discuss and decide (sped up)</sub>
-</p>
+Instructions for the AI, kept in your project as `.kural/rules/*.md` (`.cursor/rules` works too). A header sets the
+kind: **Always** (`alwaysApply: true`), **Auto attached** (`globs`), **Agent requested** (a `description`) or **Manual**
+(@-mention it). **Kural: New Rule** makes one; a change reaches a running chat with its next message.
+More: [docs/wiki/Rules.md](docs/wiki/Rules.md).
+
+### Agent Review
+
+The checklist button in Source Control's title bar has an AI review your uncommitted changes: **Quick** with the fastest
+model, **Deep** (the "..." menu) with the chat's model. Findings show as comments on the lines with **Fix in Chat** and
+**Dismiss**. It only reads. More: [docs/wiki/Agent-Review.md](docs/wiki/Agent-Review.md).
+
+### Debug mode
+
+A mode in the chat's mode menu beside Agent, Auto, Plan and Ask. The AI lists hypotheses, adds temporary logging that
+sends to a log server on your computer (127.0.0.1), asks you to reproduce the bug, reads the logs, fixes the cause and
+removes the logging. It asks before commands, like Agent. More: [docs/wiki/Debug-Mode.md](docs/wiki/Debug-Mode.md).
 
 ### Model Router
 
@@ -500,8 +512,13 @@ extension/            the Kural extension (plain JavaScript, no build step)
                       codex.js (Codex app server), agy.js (Google Gemini: Antigravity, stream-json), clis.js (both described once), install.js,
                       engine.js + tools.js (Kural's own engine for models on your computer), ollama.js, usage.js
   lib/chat/           the chat: index.js (tabs, modes, models, questions, panes), prompts.js (modes, moods),
-                      team.js (agent roles) + team-mcp.js (their message board), guide.js (what Kural can do),
+                      guide.js (what Kural can do),
                       archive.js (History), attachments, tickets, changes
+  lib/split/          parallel agents: agent.js (the lead, the agents, the merge), worktrees.js (git), plan.js (prompts)
+  lib/fix/            Fix with Kural: core.js (the text, no vscode), index.js (light bulb, terminal button)
+  lib/rules/          Rules (.kural/rules): the rule files and what each message gets
+  lib/agent-review/   Agent Review: a read-only agent reviews your uncommitted changes, findings as comments
+  lib/debug/          Debug mode: the log server on 127.0.0.1 and the mode's prompt
   lib/tab/            Tab Completion: completion.js (editor), terminal.js (terminal, plain words), local.js
                       (Ollama), activity.js (what it learns), panel.js (the Tab Completion panel), rename.js +
                       rename-offer.js (change a name in the other files too)
