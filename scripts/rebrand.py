@@ -506,6 +506,191 @@ def add_workspace_color_item(text):
     return text[:start] + item + text[start:]
 
 
+# ---- The Projects bar (extension/lib/projects: the view "kural.projects" in the activity bar container "kural-projects", so
+# its workbench id is workbench.view.extension.kural-projects). Four patches, each found by shape, each a no-op with a
+# ::warning:: when VS Code's code looks different, each applied once (a marker comment). Apply them after hide_debug_views and
+# add_plugins_tab: those two put their code at the start of the views registry's addViews, and one of them finds its place there. ----
+PROJECTS_CONTAINER = "workbench.view.extension.kural-projects"
+PROJECTS_VIEW = "kural.projects"
+
+# 1. No folder open: the Explorer shows "You have not yet opened a folder" with Open Folder / Clone Repository. The Projects bar
+# is where you start from, so that text is dropped: the Explorer's own registrations (`R.registerViewWelcomeContent(<EmptyView>.ID,
+# {...})`, one per case: workspace, remote, no folder, editor open) are switched off with `0&&`, and the viewsWelcome extension point
+# (the Git extension's "Clone Repository" is one of those) no longer maps `view: "explorer"` onto that view. The empty view's own
+# class is found from its id ("workbench.explorer.emptyView"), which is also the view id the extension point's table names.
+EMPTY_ID = "workbench.explorer.emptyView"
+EMPTY_MARK = "/*kural-explorer-empty*/"
+EMPTY_CLASS = re.compile(r'([\w$]+)=class(?: [\w$]+)? extends [\w$.]+\{')
+EMPTY_TABLE = re.compile(r'(\{explorer:)"' + re.escape(EMPTY_ID) + r'"(,debug:"workbench\.debug\.welcome")')
+
+
+def drop_explorer_empty_view(text):
+    if EMPTY_MARK in text:
+        return text
+    at = text.find('static{this.ID="' + EMPTY_ID + '"}')
+    cls = list(EMPTY_CLASS.finditer(text[max(0, at - 2000):at])) if at > 0 else []
+    name = cls[-1].group(1) if cls else None
+    regs = list(re.finditer(r'(?<![\w$.])([\w$]+)\.registerViewWelcomeContent\(' + re.escape(name) + r'\.ID,', text)) if name else []
+    table = list(EMPTY_TABLE.finditer(text))
+    if not regs or len(table) != 1:
+        print("::warning::VS Code's Explorer welcome text not found as expected; the Explorer keeps 'You have not yet opened a folder' "
+              f"(empty view class {bool(name)}, registrations {len(regs)}, extension table {len(table)})")
+        return text
+    for i, m in reversed(list(enumerate(regs))):
+        text = text[:m.start()] + (EMPTY_MARK if i == 0 else "") + "0&&" + text[m.start():]
+    # (An id nothing registers: the table still lists "explorer", so a viewsWelcome contribution for it stays valid, and unused.)
+    return EMPTY_TABLE.sub(lambda m: m.group(1) + '"kural.explorer.noWelcome"' + m.group(2), text, count=1)
+
+
+# 2. The side bar opens the Projects bar at every window start (VS Code's own choice is the Explorer, or the one remembered), and
+# that container comes first in the activity bar. The first: the window's layout state picks the side bar's container from the
+# saved `workbench.sidebar.activeviewletid` just before it stores it as the one to restore (`a?...containerToRestore.sideBar=a:
+# ...SIDEBAR_HIDDEN`: a hidden side bar stays hidden); we set it right there. The second: an extension's view container gets its
+# order from a counter after VS Code's own, so registerCustomViewContainer gives this one -1000 (the activity bar puts a new one
+# in order; one it remembered keeps its place, which is first from the second start on). All or nothing.
+PD_MARK = "/*kural-projects-default*/"
+PD_RESTORE = re.compile(r'([\w$]+)\?this\.state\.initialization\.views\.containerToRestore\.sideBar=\1:this\.stateModel\.setRuntimeValue\([\w$]+\.SIDEBAR_HIDDEN,!0\)')
+PD_ORDER = re.compile(r'registerCustomViewContainer\(([\w$]+),([\w$]+),([\w$]+),([\w$]+),([\w$]+),([\w$]+)\)\{(?=let [\w$]+=this\.viewContainersRegistry\.get\(\1\);)')
+
+
+def projects_default_view(text):
+    if PD_MARK in text:
+        return text
+    restore, order = list(PD_RESTORE.finditer(text)), list(PD_ORDER.finditer(text))
+    key = restore and "workbench.sidebar.activeviewletid" in text[max(0, restore[0].start() - 3000):restore[0].start()] or \
+        restore and ".activeViewletSettingsKey," in text[max(0, restore[0].start() - 3000):restore[0].start()]
+    if len(restore) != 1 or len(order) != 1 or not key:
+        print("::warning::VS Code's side bar start code not found as expected; the side bar opens what it remembers, and the Projects bar "
+              f"isn't first (restore {len(restore)}, view container order {len(order)}, saved choice {bool(key)})")
+        return text
+    a, o = restore[0].group(1), order[0]
+    edits = [(restore[0].start(), restore[0].start(), f'{PD_MARK}{a}="{PROJECTS_CONTAINER}",'),
+             (o.end(), o.end(), f'{PD_MARK}{o.group(1)}==="{PROJECTS_CONTAINER}"&&({o.group(4)}=-1e3);')]
+    for start, stop, new in sorted(edits, key=lambda e: e[0], reverse=True):
+        text = text[:start] + new + text[stop:]
+    return text
+
+
+# 3. The Projects bar stays: no "Hide" for it in the activity bar's right-click menu (neither its own item nor the list of
+# checkable containers; the bar's `unpin` ignores it too, for any other way in), it can't be dragged to another place (the
+# composite bar's `move`, and moving a container to a side bar/panel: viewDescriptorService.moveViewContainerToLocation), and its
+# view has canToggleVisibility and canMoveView false (views registry's addViews, after the code the two patches above put there).
+# All or nothing.
+PA_MARK = "/*kural-projects-fixed*/"
+PA_UNPIN = re.compile(r'(?<![\w$.])unpin\(([\w$]+)\)\{(?=this\.model\.setPinned\(\1,!1\))')
+PA_MOVE = re.compile(r'(?<![\w$.])move\(([\w$]+),([\w$]+),([\w$]+)\)\{(?=if\(\3!==void 0\)\{let [\w$]+=this\.model\.items\.findIndex)')
+PA_LIST = re.compile(r'(getContextMenuActions\([\w$]+\)\{let [\w$]+=this\.model\.visibleItems)(\.map\()')
+PA_ITEM = re.compile(r'([\w$]+)\.push\((this\.toggleCompositePinnedAction),(this\.toggleCompositeBadgeAction)\)')
+PA_LOCATION = re.compile(r'moveViewContainerToLocation\(([\w$]+),([\w$]+),([\w$]+),([\w$]+)\)\{(?=this\.canMoveViews\(\)&&\()')
+
+
+def projects_always_shown(text):
+    if PA_MARK in text:
+        return text
+    unpin, move, lst, item, loc = (list(r.finditer(text)) for r in (PA_UNPIN, PA_MOVE, PA_LIST, PA_ITEM, PA_LOCATION))
+    adds = []
+    for m in PT_ADD_VIEWS.finditer(text):
+        nxt = re.compile(r'let [\w$]+=this\._views\.get\(' + re.escape(m.group(2)) + r'\);').search(text, m.end(), m.end() + 6000)
+        # (only Kural's own marked code may sit between: the other patches' views code)
+        if nxt and (nxt.start() == m.end() or text.startswith("/*kural-", m.end())):
+            adds.append((m, nxt))
+    found = {"unpin": len(unpin) == 1, "move": len(move) == 1, "container list": len(lst) == 1, "container item": len(item) == 1,
+             "move to a location": len(loc) == 1, "addViews": len(adds) == 1}
+    if not all(found.values()):
+        print("::warning::VS Code's activity bar code not found as expected; the Projects bar can be hidden and moved ("
+              + ", ".join(f"{k} {'ok' if v else 'missing'}" for k, v in found.items()) + ")")
+        return text
+    pid = json.dumps(PROJECTS_CONTAINER)
+    views = adds[0][0].group(1)
+    view_code = (f'{PA_MARK}try{{for(const _kv of {views})try{{if(_kv&&_kv.id==={json.dumps(PROJECTS_VIEW)}){{_kv.canToggleVisibility=!1;_kv.canMoveView=!1}}}}catch{{}}}}catch{{}}')
+    edits = [
+        (unpin[0].end(), unpin[0].end(), f'{PA_MARK}if({unpin[0].group(1)}==={pid})return;'),
+        (move[0].end(), move[0].end(), f'{PA_MARK}if({move[0].group(1)}==={pid}||{move[0].group(2)}==={pid})return!1;'),
+        (loc[0].end(), loc[0].end(), f'{PA_MARK}if({loc[0].group(1)}&&{loc[0].group(1)}.id==={pid})return;'),
+        (lst[0].start(2), lst[0].start(2), f'.filter(({{id:_kk}})=>_kk!=={pid})'),
+        (item[0].start(), item[0].end(), f'{item[0].group(1)}.push(...(this.compositeBarActionItem&&this.compositeBarActionItem.id==={pid}?'
+                                          f'[{item[0].group(3)}]:[{item[0].group(2)},{item[0].group(3)}]))'),
+        (adds[0][1].start(), adds[0][1].start(), view_code),
+    ]
+    for start, stop, new in sorted(edits, key=lambda e: e[0], reverse=True):
+        text = text[:start] + new + text[stop:]
+    return text
+
+
+# 4. A small card in the window's bottom right corner, above the status bar (the Projects bar's "finished / needs you" hint when
+# the window has the focus but the chat isn't on screen; the system toast is for when you're away). Two commands, added at the
+# end of the file like _kural.osToast (the command registry and the file's end are found the same way):
+#   executeCommand("_kural.card", {id?, title, body?, button?, color?, letter?, timeout?}) -> {clicked, supported: true}
+#     a rounded square in `color` with `letter`, the bold title, a grey body line, one button, a close cross. Stays `timeout` ms
+#     (12000 by default; paused while the mouse is over it, and at least 1.5 s after it leaves). The button resolves clicked:
+#     true; the cross, the timeout and a clear resolve clicked: false. The same id replaces the card before it. Colours come from
+#     the theme's CSS variables. Only textContent and style properties are set (never innerHTML), so the strings can be anything.
+#   executeCommand("_kural.cardClear", {id?}) removes one card (no id: all) -> how many.
+# A miss -> ::warning::, and the extension falls back to showInformationMessage (the command isn't there).
+CARD_MARK = "/*kural-card*/"
+_CARD_JS = r"""
+(R=>{
+const K=new Map;
+let box=null;
+const mk=(d,tag,css,text)=>{const e=d.createElement(tag);if(css)e.style.cssText=css;if(text!=null)e.textContent=text;return e};
+const area=d=>{if(!box||!box.isConnected){box=mk(d,"div","position:fixed;right:12px;bottom:34px;z-index:2600;display:flex;flex-direction:column-reverse;gap:8px;max-width:calc(100vw - 24px);pointer-events:none");box.className="kural-cards";d.body.appendChild(box)}return box};
+R.registerCommand("_kural.card",(a,o)=>{
+o=o||{};
+const d=globalThis.document;
+if(!d||!d.body)return Promise.resolve({clicked:!1,supported:!1});
+const id=typeof o.id=="string"&&o.id?o.id:"#"+Math.random();
+const old=K.get(id);
+if(old)old(!1);
+return new Promise(res=>{
+const card=mk(d,"div","pointer-events:auto;box-sizing:border-box;width:340px;max-width:100%;display:flex;align-items:center;gap:10px;padding:10px 8px 10px 10px;border-radius:8px;font-family:var(--vscode-font-family,sans-serif);font-size:13px;line-height:1.35;background:var(--vscode-notifications-background,#252526);color:var(--vscode-notifications-foreground,#cccccc);border:1px solid var(--vscode-notifications-border,var(--vscode-widget-border,transparent));box-shadow:0 2px 12px var(--vscode-widget-shadow,rgba(0,0,0,.4))");
+card.setAttribute("role","status");
+const letter=[...String(o.letter==null?"":o.letter).trim()][0]||"";
+const badge=mk(d,"div","flex:none;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--vscode-button-background,#0e639c);color:#ffffff;font-weight:700;font-size:16px;user-select:none",letter.toUpperCase());
+if(o.color)badge.style.background=String(o.color);
+const text=mk(d,"div","flex:1;min-width:0;display:flex;flex-direction:column;gap:2px");
+text.append(mk(d,"div","font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap",String(o.title==null?"Kural":o.title)));
+if(o.body)text.append(mk(d,"div","color:var(--vscode-descriptionForeground,#9d9d9d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap",String(o.body)));
+card.append(badge,text);
+const ms=Number(o.timeout);
+let left=ms>0?ms:12000,t0=0,timer=0,over=!1,ended=!1;
+const done=clicked=>{if(ended)return;ended=!0;clearTimeout(timer);card.remove();if(K.get(id)===done)K.delete(id);res({clicked,supported:!0})};
+const arm=()=>{if(ended||over)return;t0=Date.now();timer=setTimeout(()=>done(!1),Math.max(left,0))};
+if(o.button){
+const b=mk(d,"button","flex:none;border:0;border-radius:4px;padding:5px 12px;cursor:pointer;background:var(--vscode-button-background,#0e639c);color:var(--vscode-button-foreground,#ffffff);font:inherit;font-size:12px",String(o.button));
+b.addEventListener("mouseenter",()=>{b.style.background="var(--vscode-button-hoverBackground,#1177bb)"});
+b.addEventListener("mouseleave",()=>{b.style.background="var(--vscode-button-background,#0e639c)"});
+b.addEventListener("click",()=>done(!0));
+card.append(b);
+}
+const x=mk(d,"button","flex:none;border:0;border-radius:4px;padding:2px 6px;cursor:pointer;background:transparent;color:var(--vscode-icon-foreground,var(--vscode-notifications-foreground,#cccccc));font-size:16px;line-height:1;opacity:.8","×");
+x.setAttribute("aria-label","Close");
+x.addEventListener("click",()=>done(!1));
+card.append(x);
+card.addEventListener("mouseenter",()=>{if(ended||over)return;over=!0;clearTimeout(timer);left-=Date.now()-t0});
+card.addEventListener("mouseleave",()=>{if(ended||!over)return;over=!1;left=Math.max(left,1500);arm()});
+K.set(id,done);
+area(d).appendChild(card);
+arm();
+});
+});
+R.registerCommand("_kural.cardClear",(a,o)=>{const ids=o&&o.id?[o.id]:[...K.keys()];let n=0;for(const i of ids){const f=K.get(i);if(f){f(!1);n++}}return n});
+})
+"""
+# (One line per statement above: joined without newlines, so a line that ends in "{" or ";" needs nothing else.)
+CARD_CODE = CARD_MARK + "".join(line.strip() for line in _CARD_JS.strip().splitlines())
+
+
+def add_in_window_card(text):
+    if CARD_MARK in text:
+        return text
+    commands, end = TOAST_COMMANDS.findall(text), list(TOAST_END.finditer(text))
+    if len(commands) != 1 or len(end) != 1:
+        print("::warning::VS Code's command registry not found as expected; Kural's in-window cards fall back to plain messages "
+              f"(command registry {len(commands)}, end {len(end)})")
+        return text
+    return text[:end[0].start() + 1] + CARD_CODE + f"({commands[0]});" + text[end[0].start() + 1:]
+
+
 # VS Code 1.140's speech-to-text (dictation) service asks for a GitHub login as soon as it's created, at EVERY start
 # (`getSessions("github", [], {silent: true})`: "silent" still wakes the GitHub login extension, which reads its saved
 # login from the keychain: "Kural wants to use ... Kural Safe Storage" on a Mac, again after every update). Kural has no
@@ -689,6 +874,25 @@ def small_edit_box(text):
                      text, count=1)
 
 
+# A build from source (scripts/vscode/build.sh) applies Kural's own patches to VS Code's TypeScript (patches/kural/NNNN-name.patch)
+# and writes product.json "kuralSource": {"commit": ..., "patches": ["0200-drop-explorer-empty-view", ...]}. The Projects bar's four
+# patches below exist in both forms; a name in that list means the source patch is already in the app, so the function is skipped.
+# Without kuralSource (VSCodium's download, as always) nothing is skipped. The order is the order they run in.
+PROJECTS_SOURCE_PATCHES = [
+    ("0200-drop-explorer-empty-view", drop_explorer_empty_view),
+    ("0201-projects-default-view", projects_default_view),
+    ("0202-projects-always-shown", projects_always_shown),
+    ("0203-in-window-card", add_in_window_card),
+]
+
+
+def built_in_patches(product):
+    """The source patches this app was built with (product.json kuralSource.patches), as a set of names."""
+    source = product.get("kuralSource")
+    names = source.get("patches") if isinstance(source, dict) else None
+    return {n for n in names if isinstance(n, str)} if isinstance(names, list) else set()
+
+
 def patch_workbench(app):
     rel = "vs/workbench/workbench.desktop.main.js"
     js_path, pj_path = os.path.join(app, "out", rel), os.path.join(app, "product.json")
@@ -701,6 +905,14 @@ def patch_workbench(app):
         return
     text = data.decode("utf-8")
     new = small_edit_box(terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))))))
+    # (The Projects bar's four: after the views patches above, whose code at the start of addViews one of them looks for.
+    # A build from source has them as patches/kural/*.patch and lists them in product.json's kuralSource: not done twice.)
+    built = built_in_patches(product)
+    for source_patch, fn in PROJECTS_SOURCE_PATCHES:
+        if source_patch in built:
+            print(f"{fn.__name__}: built in ({source_patch}), skipped")
+        else:
+            new = fn(new)
     if new == text:
         return
     data = new.encode("utf-8")

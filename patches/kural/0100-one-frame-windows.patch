@@ -1,0 +1,472 @@
+diff --git a/src/vs/code/electron-main/app.ts b/src/vs/code/electron-main/app.ts
+index 8901db30..8dacf4e7 100644
+--- a/src/vs/code/electron-main/app.ts
++++ b/src/vs/code/electron-main/app.ts
+@@ -560,7 +560,8 @@ export class CodeApplication extends Disposable {
+ 			this.logService.trace('app#activate');
+ 
+ 			// Mac only event: open new window when we get activated
+-			if (!hasVisibleWindows) {
++			// (Kural: unless a window is hidden, then that one is shown)
++			if (!hasVisibleWindows && !this.windowsMainService?.showHiddenWindow()) {
+ 				await this.windowsMainService?.openEmptyWindow({ context: OpenContext.DOCK });
+ 			}
+ 		});
+diff --git a/src/vs/platform/menubar/electron-main/menubar.ts b/src/vs/platform/menubar/electron-main/menubar.ts
+index a3f53de0..2ca4ca10 100644
+--- a/src/vs/platform/menubar/electron-main/menubar.ts
++++ b/src/vs/platform/menubar/electron-main/menubar.ts
+@@ -618,11 +618,22 @@ export class Menubar extends Disposable {
+ 			nativeTabMenuItems.push(this.createRoleMenuItem(nls.localize('mMergeAllWindows', "Merge All Windows"), 'workbench.action.mergeAllWindowTabs', 'mergeAllWindows'));
+ 		}
+ 
++		// Kural: Cmd+` also reaches windows that are hidden in the frame
++		const frameMenuItems: MenuItem[] = [];
++		if (this.windowsMainService.isOneFrame()) {
++			const enabled = this.windowsMainService.getWindowCount() > 1;
++			frameMenuItems.push(
++				new MenuItem({ label: nls.localize('mShowNextWindow', "Show Next Window"), accelerator: 'Command+`', enabled, click: () => this.windowsMainService.showNextWindow(true) }),
++				new MenuItem({ label: nls.localize('mShowPreviousWindow', "Show Previous Window"), accelerator: 'Shift+Command+`', enabled, click: () => this.windowsMainService.showNextWindow(false) })
++			);
++		}
++
+ 		[
+ 			minimize,
+ 			zoom,
+ 			__separator__(),
+ 			switchWindow,
++			...frameMenuItems,
+ 			...nativeTabMenuItems,
+ 			__separator__(),
+ 			bringAllToFront
+diff --git a/src/vs/platform/native/electron-main/nativeHostMainService.ts b/src/vs/platform/native/electron-main/nativeHostMainService.ts
+index 1e7f4b4e..af34bdc6 100644
+--- a/src/vs/platform/native/electron-main/nativeHostMainService.ts
++++ b/src/vs/platform/native/electron-main/nativeHostMainService.ts
+@@ -9,6 +9,7 @@ import { app, BrowserWindow, clipboard, contentTracing, Display, Menu, MessageBo
+ import { arch, cpus, freemem, loadavg, platform, release, totalmem, type } from 'os';
+ import { promisify } from 'util';
+ import { memoize } from '../../../base/common/decorators.js';
++import { timeout } from '../../../base/common/async.js';
+ import { Emitter, Event } from '../../../base/common/event.js';
+ import { Disposable, DisposableMap, DisposableStore, toDisposable } from '../../../base/common/lifecycle.js';
+ import { matchesSomeScheme, Schemas } from '../../../base/common/network.js';
+@@ -582,18 +583,31 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
+ 
+ 	//#region Dialog
+ 
++	// Kural: a dialog for a window that is hidden in the frame would wait where nobody can see it (at quit, a hidden
++	// window with unsaved files asks "Save changes?" and quitting looks stuck). So the window takes the frame first.
++	// A window that never paints must not block the dialog for good: we show it after a few seconds anyway.
++	private async showInFrameForDialog(window: ICodeWindow | IAuxiliaryWindow | undefined): Promise<void> {
++		const codeWindow = window ? this.windowsMainService.getWindowById(window.id) : undefined;
++		if (codeWindow?.isHiddenInFrame) {
++			await Promise.race([this.windowsMainService.showInFrame(codeWindow), timeout(3000)]);
++		}
++	}
++
+ 	async showMessageBox(windowId: number | undefined, options: MessageBoxOptions & INativeHostOptions): Promise<MessageBoxReturnValue> {
+ 		const window = this.windowById(options?.targetWindowId, windowId);
++		await this.showInFrameForDialog(window);
+ 		return this.dialogMainService.showMessageBox(options, window?.win ?? undefined);
+ 	}
+ 
+ 	async showSaveDialog(windowId: number | undefined, options: SaveDialogOptions & INativeHostOptions): Promise<SaveDialogReturnValue> {
+ 		const window = this.windowById(options?.targetWindowId, windowId);
++		await this.showInFrameForDialog(window);
+ 		return this.dialogMainService.showSaveDialog(options, window?.win ?? undefined);
+ 	}
+ 
+ 	async showOpenDialog(windowId: number | undefined, options: OpenDialogOptions & INativeHostOptions): Promise<OpenDialogReturnValue> {
+ 		const window = this.windowById(options?.targetWindowId, windowId);
++		await this.showInFrameForDialog(window);
+ 		return this.dialogMainService.showOpenDialog(options, window?.win ?? undefined);
+ 	}
+ 
+diff --git a/src/vs/platform/window/electron-main/window.ts b/src/vs/platform/window/electron-main/window.ts
+index ccf4b58c..8c065aca 100644
+--- a/src/vs/platform/window/electron-main/window.ts
++++ b/src/vs/platform/window/electron-main/window.ts
+@@ -75,6 +75,19 @@ export interface ICodeWindow extends IBaseWindow {
+ 
+ 	addTabbedWindow(window: ICodeWindow): void;
+ 
++	/**
++	 * Kural: windows can share one frame. Only one window is visible, the others
++	 * are hidden (and keep running). A hidden window is shown by `focus()`.
++	 */
++	readonly isHiddenInFrame: boolean;
++
++	/**
++	 * Shows the window with the bounds and full screen state of `state`, once it
++	 * has painted. Resolves to `false` if it was not hidden anymore by then.
++	 */
++	showInFrame(state?: IWindowState): Promise<boolean>;
++	hideInFrame(): void;
++
+ 	load(config: INativeWindowConfiguration, options?: { isReload?: boolean }): void;
+ 	reload(cli?: NativeParsedArgs): void;
+ 
+diff --git a/src/vs/platform/windows/electron-main/windowImpl.ts b/src/vs/platform/windows/electron-main/windowImpl.ts
+index 4a4172f5..b13687a7 100644
+--- a/src/vs/platform/windows/electron-main/windowImpl.ts
++++ b/src/vs/platform/windows/electron-main/windowImpl.ts
+@@ -54,6 +54,18 @@ export interface IWindowCreationOptions {
+ 	readonly extensionDevelopmentPath?: string[];
+ 	readonly isExtensionTestHost?: boolean;
+ 	readonly isSessionsWindow?: boolean;
++
++	/**
++	 * Kural: the window shares one frame with the other windows. It is hidden, not
++	 * closed, when another window takes its place, so it must not be throttled then.
++	 */
++	readonly sharesFrame?: boolean;
++
++	/**
++	 * Kural: create the window hidden. It is shown later, over the
++	 * visible window, by `IWindowsMainService#showInFrame()`.
++	 */
++	readonly hiddenInFrame?: boolean;
+ }
+ 
+ interface ITouchBarSegment extends electron.SegmentedControlSegment {
+@@ -310,7 +322,7 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
+ 		}));
+ 	}
+ 
+-	protected applyState(state: IWindowState, hasMultipleDisplays = electron.screen.getAllDisplays().length > 0): void {
++	protected applyState(state: IWindowState, hasMultipleDisplays = electron.screen.getAllDisplays().length > 0, show = true): void {
+ 
+ 		// TODO@electron (Electron 4 regression): when running on multiple displays where the target display
+ 		// to open the window has a larger resolution than the primary display, the window will not size
+@@ -349,7 +361,9 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
+ 
+ 			// to reduce flicker from the default window size
+ 			// to maximize or fullscreen, we only show after
+-			this._win?.show();
++			if (show) {
++				this._win?.show();
++			}
+ 		}
+ 	}
+ 
+@@ -785,11 +799,14 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+ 				additionalArguments: [`--vscode-window-config=${this.configObjectUrl.resource.toString()}`],
+ 				v8CacheOptions: this.environmentMainService.useCodeCache ? 'bypassHeatCheck' : 'none'
+ 			};
+-			if (config.isSessionsWindow) {
+-				webPreferences.backgroundThrottling = false; // keep agents window responsive when in background
++			if (config.isSessionsWindow || config.sharesFrame) {
++				webPreferences.backgroundThrottling = false; // keep agents window (and windows hidden in the frame) responsive when in background
+ 			}
+ 
+ 			const options = instantiationService.invokeFunction(defaultBrowserWindowOptions, this.windowState, undefined, webPreferences);
++			if (config.hiddenInFrame) {
++				options.show = false;
++			}
+ 			const iconPath = config.isSessionsWindow && isWindows ? join(this.environmentMainService.appRoot, 'resources/win32/sessions.ico') : undefined;
+ 			if (iconPath) {
+ 				options.icon = iconPath;
+@@ -805,7 +822,11 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+ 			this.setWin(this._win, options);
+ 
+ 			// Apply some state after window creation
+-			this.applyState(this.windowState, hasMultipleDisplays);
++			this.applyState(this.windowState, hasMultipleDisplays, !config.hiddenInFrame);
++
++			// Kural: a window that is shown later waits for its first paint
++			this._hiddenInFrame = !!config.hiddenInFrame;
++			this.whenPainted = Event.toPromise(Event.fromNodeEventEmitter(this._win, 'ready-to-show'));
+ 
+ 			this._lastFocusTime = Date.now(); // since we show directly, we need to set the last focus time too
+ 		}
+@@ -871,6 +892,80 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+ 		return this.readyState === ReadyState.READY;
+ 	}
+ 
++	//#region Kural: one frame
++
++	private _hiddenInFrame: boolean;
++	get isHiddenInFrame(): boolean { return this._hiddenInFrame; }
++
++	private readonly whenPainted: Promise<unknown>;
++
++	override focus(options?: { mode: FocusMode }): void {
++		if (this._hiddenInFrame && options?.mode !== FocusMode.Notify) {
++			this.windowsMainService.showInFrame(this); // takes the place of the visible window, then focuses
++			return;
++		}
++
++		super.focus(options);
++	}
++
++	async showInFrame(state?: IWindowState): Promise<boolean> {
++		if (state) {
++			this.matchFrame(state);
++		}
++
++		await this.whenPainted;
++
++		// Shown by someone else while we waited, or gone
++		if (!this._hiddenInFrame || this._win.isDestroyed()) {
++			return false;
++		}
++
++		this._hiddenInFrame = false;
++		this._win.show();
++
++		return true;
++	}
++
++	// A dialog of a hidden window (a crashed or stuck one) would not be seen: the window takes the frame first.
++	private async showInFrameForDialog(): Promise<void> {
++		if (this._hiddenInFrame) {
++			await Promise.race([this.windowsMainService.showInFrame(this), timeout(3000)]);
++		}
++	}
++
++	hideInFrame(): void {
++		if (!this._win.isDestroyed()) {
++			this._hiddenInFrame = true;
++			this._win.hide();
++		}
++	}
++
++	private matchFrame(state: IWindowState): void {
++		const win = this._win;
++
++		if (state.mode === WindowMode.Fullscreen) {
++			if (!this.isFullScreen) {
++				this.setFullScreen(true, true);
++			}
++			return;
++		}
++
++		if (this.isFullScreen) {
++			this.setFullScreen(false, false);
++		}
++
++		if (state.mode === WindowMode.Maximized) {
++			win.maximize();
++		} else {
++			win.unmaximize();
++			if ([state.width, state.height, state.x, state.y].every(value => typeof value === 'number')) {
++				win.setBounds({ width: state.width!, height: state.height!, x: state.x!, y: state.y! });
++			}
++		}
++	}
++
++	//#endregion
++
+ 	get whenClosedOrLoaded(): Promise<void> {
+ 		return new Promise<void>(resolve => {
+ 
+@@ -1052,6 +1147,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+ 					this.jsCallStackCollectorStopScheduler.schedule();
+ 
+ 					// Show Dialog
++					await this.showInFrameForDialog(); // Kural: a hidden window takes the frame first
+ 					const { response, checkboxChecked } = await this.dialogMainService.showMessageBox({
+ 						type: 'warning',
+ 						buttons: [
+@@ -1082,6 +1178,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+ 					}
+ 
+ 					// Show Dialog
++					await this.showInFrameForDialog(); // Kural: a hidden window takes the frame first
+ 					const { response, checkboxChecked } = await this.dialogMainService.showMessageBox({
+ 						type: 'warning',
+ 						buttons: [
+diff --git a/src/vs/platform/windows/electron-main/windows.ts b/src/vs/platform/windows/electron-main/windows.ts
+index 51f24cce..9e5557af 100644
+--- a/src/vs/platform/windows/electron-main/windows.ts
++++ b/src/vs/platform/windows/electron-main/windows.ts
+@@ -55,6 +55,30 @@ export interface IWindowsMainService {
+ 
+ 	getWindowById(windowId: number): ICodeWindow | undefined;
+ 	getWindowByWebContents(webContents: electron.WebContents): ICodeWindow | undefined;
++
++	/**
++	 * Kural: whether all windows share one frame (setting `kural.window.oneFrame`).
++	 * Then only one window is visible, a window that is opened or brought forward
++	 * takes its place (same bounds and full screen state) and the other one is
++	 * hidden, not closed.
++	 */
++	isOneFrame(): boolean;
++
++	/**
++	 * Kural: shows a window (hidden or still loading) in the frame, once it has painted,
++	 * and hides the window that was visible.
++	 */
++	showInFrame(window: ICodeWindow): Promise<void>;
++
++	/**
++	 * Kural: shows the most recently used hidden window. Returns `false` if there is none.
++	 */
++	showHiddenWindow(): boolean;
++
++	/**
++	 * Kural: shows the next (or previous) window in the frame.
++	 */
++	showNextWindow(forward: boolean): void;
+ }
+ 
+ export interface IWindowsCountChangedEvent {
+diff --git a/src/vs/platform/windows/electron-main/windowsMainService.ts b/src/vs/platform/windows/electron-main/windowsMainService.ts
+index 43e623d5..328e493b 100644
+--- a/src/vs/platform/windows/electron-main/windowsMainService.ts
++++ b/src/vs/platform/windows/electron-main/windowsMainService.ts
+@@ -47,7 +47,7 @@ import { hasWorkspaceFileExtension, IAnyWorkspaceIdentifier, ISingleFolderWorksp
+ import { createEmptyWorkspaceIdentifier, getSingleFolderWorkspaceIdentifier, getWorkspaceIdentifier } from '../../workspaces/node/workspaces.js';
+ import { IWorkspacesHistoryMainService } from '../../workspaces/electron-main/workspacesHistoryMainService.js';
+ import { IWorkspacesManagementMainService } from '../../workspaces/electron-main/workspacesManagementMainService.js';
+-import { ICodeWindow, UnloadReason } from '../../window/electron-main/window.js';
++import { ICodeWindow, IWindowState as ICodeWindowState, UnloadReason } from '../../window/electron-main/window.js';
+ import { IThemeMainService } from '../../theme/electron-main/themeMainService.js';
+ import { IEditorOptions, ITextEditorOptions } from '../../editor/common/editor.js';
+ import { IUserDataProfile } from '../../userDataProfile/common/userDataProfile.js';
+@@ -58,6 +58,7 @@ import { IAuxiliaryWindowsMainService } from '../../auxiliaryWindow/electron-mai
+ import { IAuxiliaryWindow } from '../../auxiliaryWindow/electron-main/auxiliaryWindow.js';
+ import { ICSSDevelopmentService } from '../../cssDev/node/cssDevService.js';
+ import { ResourceSet } from '../../../base/common/map.js';
++import { FocusMode } from '../../native/common/native.js';
+ import { VSBuffer } from '../../../base/common/buffer.js';
+ 
+ //#region Helper Interfaces
+@@ -249,6 +250,9 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 		// Signal a window is ready after having entered a workspace
+ 		this._register(this.workspacesManagementMainService.onDidEnterWorkspace(event => this._onDidSignalReadyWindow.fire(event.window)));
+ 
++		// Kural: when the visible window closes, the one that was visible before takes its place
++		this._register(this.lifecycleMainService.onBeforeCloseWindow(window => this.onBeforeCloseFrameWindow(window)));
++
+ 		// Update valid roots in protocol service for extension dev windows
+ 		this._register(this.onDidSignalReadyWindow(window => {
+ 			if (window.config?.extensionDevelopmentPath || window.config?.extensionTestsPath) {
+@@ -1601,13 +1605,20 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 		if (!window) {
+ 			const state = this.windowsStateHandler.getNewWindowState(configuration);
+ 
++			// Kural: with one frame, the new window takes the place of the visible one (it is
++			// shown below, once painted). When restoring windows at startup, it stays hidden.
++			const sharesFrame = !options.forceNewTabbedWindow && !configuration.extensionDevelopmentPath && !configuration.extensionTestsPath && !configuration.isSessionsWindow && this.isOneFrame();
++			const frame = sharesFrame ? this.getFrameWindow() : undefined;
++
+ 			// Create the window
+ 			mark('code/willCreateCodeWindow');
+ 			const createdWindow = window = this.instantiationService.createInstance(CodeWindow, {
+-				state,
++				state: frame && !options.initialStartup ? this.getFrameState(frame) : state,
+ 				extensionDevelopmentPath: configuration.extensionDevelopmentPath,
+ 				isExtensionTestHost: !!configuration.extensionTestsPath,
+-				isSessionsWindow: configuration.isSessionsWindow
++				isSessionsWindow: configuration.isSessionsWindow,
++				sharesFrame,
++				hiddenInFrame: !!frame
+ 			});
+ 			mark('code/didCreateCodeWindow');
+ 
+@@ -1643,6 +1654,10 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 
+ 			// Lifecycle
+ 			this.lifecycleMainService.registerWindow(createdWindow);
++
++			if (frame && !options.initialStartup) {
++				this.showInFrame(createdWindow);
++			}
+ 		}
+ 
+ 		// Existing window
+@@ -1773,6 +1788,58 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 		this._onDidDestroyWindow.fire(window);
+ 	}
+ 
++	//#region Kural: one frame
++
++	isOneFrame(): boolean {
++		return this.configurationService.getValue<boolean>('kural.window.oneFrame') !== false;
++	}
++
++	private sharesFrame(window: ICodeWindow): boolean {
++		return !window.isExtensionDevelopmentHost && !window.isExtensionTestHost && !window.config?.isSessionsWindow;
++	}
++
++	// The window that is visible in the frame (the last used one, if there are several)
++	private getFrameWindow(except?: ICodeWindow): ICodeWindow | undefined {
++		return getLastFocused(this.getWindows().filter(window => window !== except && this.sharesFrame(window) && !window.isHiddenInFrame));
++	}
++
++	private getFrameState(window: ICodeWindow): ICodeWindowState {
++		return { ...window.serializeWindowState(), zoomLevel: undefined }; // the zoom is the window's own
++	}
++
++	async showInFrame(window: ICodeWindow): Promise<void> {
++		const source = this.getFrameWindow(window);
++		if (await window.showInFrame(source && this.getFrameState(source))) {
++			window.focus({ mode: FocusMode.Force });
++			source?.hideInFrame();
++		}
++	}
++
++	showHiddenWindow(): boolean {
++		const hidden = getLastFocused(this.getWindows().filter(window => this.sharesFrame(window) && window.isHiddenInFrame));
++		hidden?.focus();
++
++		return !!hidden;
++	}
++
++	showNextWindow(forward: boolean): void {
++		const windows = this.getWindows().filter(window => this.sharesFrame(window)).sort((a, b) => a.id - b.id);
++		const current = this.getFrameWindow();
++		if (current && windows.length > 1) {
++			windows[(windows.indexOf(current) + (forward ? 1 : windows.length - 1)) % windows.length].focus();
++		}
++	}
++
++	private onBeforeCloseFrameWindow(closing: ICodeWindow): void {
++		if (this.lifecycleMainService.quitRequested || closing.isHiddenInFrame || !this.sharesFrame(closing) || this.getFrameWindow(closing)) {
++			return; // quitting closes all windows, and another window is visible already
++		}
++
++		getLastFocused(this.getWindows().filter(window => window !== closing && this.sharesFrame(window) && window.isHiddenInFrame))?.focus();
++	}
++
++	//#endregion
++
+ 	getFocusedWindow(): ICodeWindow | undefined {
+ 		const window = BrowserWindow.getFocusedWindow();
+ 		if (window) {
+diff --git a/src/vs/platform/windows/test/electron-main/windowsFinder.test.ts b/src/vs/platform/windows/test/electron-main/windowsFinder.test.ts
+index 476aa933..951b8374 100644
+--- a/src/vs/platform/windows/test/electron-main/windowsFinder.test.ts
++++ b/src/vs/platform/windows/test/electron-main/windowsFinder.test.ts
+@@ -56,10 +56,13 @@ suite('WindowsFinder', () => {
+ 			lastFocusTime = options.lastFocusTime;
+ 			isFullScreen = false;
+ 			isReady = true;
++			isHiddenInFrame = false;
+ 
+ 			ready(): Promise<ICodeWindow> { throw new Error('Method not implemented.'); }
+ 			setReady(): void { throw new Error('Method not implemented.'); }
+ 			addTabbedWindow(window: ICodeWindow): void { throw new Error('Method not implemented.'); }
++			showInFrame(): Promise<boolean> { throw new Error('Method not implemented.'); }
++			hideInFrame(): void { throw new Error('Method not implemented.'); }
+ 			load(config: INativeWindowConfiguration, options: { isReload?: boolean }): void { throw new Error('Method not implemented.'); }
+ 			reload(cli?: NativeParsedArgs): void { throw new Error('Method not implemented.'); }
+ 			focus(options?: { mode: FocusMode }): void { throw new Error('Method not implemented.'); }
+diff --git a/src/vs/workbench/electron-browser/desktop.contribution.ts b/src/vs/workbench/electron-browser/desktop.contribution.ts
+index 41250d7b..c53c591f 100644
+--- a/src/vs/workbench/electron-browser/desktop.contribution.ts
++++ b/src/vs/workbench/electron-browser/desktop.contribution.ts
+@@ -91,6 +91,11 @@ import product from '../../platform/product/common/product.js';
+ 		linux: { primary: KeyMod.CtrlCmd | KeyCode.KeyQ }
+ 	});
+ 
++	// Kural: lets the extension find out that windows can share one frame (the main process reads the same user setting)
++	CommandsRegistry.registerCommand('_kural.oneFrame', accessor => ({
++		enabled: accessor.get(IConfigurationService).inspect<boolean>('kural.window.oneFrame').userValue !== false
++	}));
++
+ 	// Actions: macOS Native Tabs
+ 	if (isMacintosh) {
+ 		for (const command of [

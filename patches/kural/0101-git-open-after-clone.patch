@@ -1,0 +1,75 @@
+diff --git a/extensions/git/src/cloneManager.ts b/extensions/git/src/cloneManager.ts
+index b70fdcd0..13f110f1 100644
+--- a/extensions/git/src/cloneManager.ts
++++ b/extensions/git/src/cloneManager.ts
+@@ -11,6 +11,7 @@ import { l10n, workspace, window, Uri, ProgressLocation, commands } from 'vscode
+ import { RepositoryCache, RepositoryCacheInfo } from './repositoryCache';
+ import TelemetryReporter from '@vscode/extension-telemetry';
+ import { Model } from './model';
++import { isOneFrame } from './util';
+ 
+ type ApiPostCloneAction = 'none';
+ enum PostCloneAction { Open, OpenNewWindow, AddToWorkspace, None }
+@@ -179,7 +180,8 @@ export class CloneManager {
+ 		const uri = Uri.file(target);
+ 
+ 		if (action === PostCloneAction.Open) {
+-			commands.executeCommand('vscode.openFolder', uri, { forceReuseWindow: true });
++			// Kural: with one-frame windows "Open" opens a new window that takes the frame, so this window keeps its chats
++			commands.executeCommand('vscode.openFolder', uri, await isOneFrame() ? { forceNewWindow: true } : { forceReuseWindow: true });
+ 		} else if (action === PostCloneAction.AddToWorkspace) {
+ 			workspace.updateWorkspaceFolders(workspace.workspaceFolders!.length, 0, { uri });
+ 		} else if (action === PostCloneAction.OpenNewWindow) {
+diff --git a/extensions/git/src/commands.ts b/extensions/git/src/commands.ts
+index 9315d440..ee9a683e 100644
+--- a/extensions/git/src/commands.ts
++++ b/extensions/git/src/commands.ts
+@@ -14,7 +14,7 @@ import { Model } from './model';
+ import { GitResourceGroup, Repository, Resource, ResourceGroupType } from './repository';
+ import { DiffEditorSelectionHunkToolbarContext, LineChange, applyLineChanges, getIndexDiffInformation, getModifiedRange, getWorkingTreeDiffInformation, intersectDiffWithRange, invertLineChange, toLineChanges, toLineRanges, compareLineChanges } from './staging';
+ import { fromGitUri, toGitUri, isGitUri, toMergeUris, toMultiFileDiffEditorUris } from './uri';
+-import { coalesce, DiagnosticSeverityConfig, dispose, fromNow, getHistoryItemDisplayName, getStashDescription, grep, isDefined, isDescendant, isLinuxSnap, isRemote, isWindows, pathEquals, relativePath, subject, toDiagnosticSeverity, truncate } from './util';
++import { coalesce, DiagnosticSeverityConfig, dispose, fromNow, getHistoryItemDisplayName, getStashDescription, grep, isDefined, isDescendant, isLinuxSnap, isOneFrame, isRemote, isWindows, pathEquals, relativePath, subject, toDiagnosticSeverity, truncate } from './util';
+ import { GitTimelineItem } from './timelineProvider';
+ import { ApiRepository } from './api/api1';
+ import { getRemoteSourceActions, pickRemoteSource } from './remoteSource';
+@@ -1198,7 +1198,8 @@ export class CommandCenter {
+ 		const uri = Uri.file(repositoryPath);
+ 
+ 		if (result === open) {
+-			commands.executeCommand('vscode.openFolder', uri);
++			// Kural: with one-frame windows "Open" opens a new window that takes the frame, so this window keeps its chats
++			commands.executeCommand('vscode.openFolder', uri, await isOneFrame() ? { forceNewWindow: true } : undefined);
+ 		} else if (result === addToWorkspace) {
+ 			workspace.updateWorkspaceFolders(workspace.workspaceFolders!.length, 0, { uri });
+ 		} else if (result === openNewWindow) {
+diff --git a/extensions/git/src/util.ts b/extensions/git/src/util.ts
+index dfe3c4e0..64173fe7 100644
+--- a/extensions/git/src/util.ts
++++ b/extensions/git/src/util.ts
+@@ -3,7 +3,7 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 
+-import { Event, Disposable, EventEmitter, SourceControlHistoryItemRef, l10n, workspace, Uri, DiagnosticSeverity, env, SourceControlHistoryItem } from 'vscode';
++import { Event, Disposable, EventEmitter, SourceControlHistoryItemRef, l10n, workspace, Uri, DiagnosticSeverity, env, SourceControlHistoryItem, commands } from 'vscode';
+ import { basename, dirname, normalize, sep, relative } from 'path';
+ import { Readable } from 'stream';
+ import { promises as fs, createReadStream } from 'fs';
+@@ -870,3 +870,16 @@ export function getStashDescription(stash: Stash): string | undefined {
+ export function isCopilotWorktreeFolder(path: string): boolean {
+ 	return basename(path).startsWith('copilot-') || basename(path).startsWith('agents-');
+ }
++
++/**
++ * Kural: whether all windows share one frame (the workbench command `_kural.oneFrame`, only in Kural built from source).
++ * Then "Open" must not replace this window's project (its chats would stop): the project opens in a new window that
++ * takes the frame. Anywhere else the command does not exist, and this is `false`.
++ */
++export async function isOneFrame(): Promise<boolean> {
++	try {
++		return (await commands.executeCommand<{ enabled?: boolean } | undefined>('_kural.oneFrame'))?.enabled === true;
++	} catch {
++		return false;
++	}
++}

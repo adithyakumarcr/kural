@@ -1,0 +1,4 @@
+# The VS Code source Kural builds from. To update: set vscodium_tag, then vscode_version and vscode_commit to "tag" and "commit" in https://raw.githubusercontent.com/VSCodium/vscodium/<vscodium_tag>/upstream/stable.json (check with git ls-remote https://github.com/microsoft/vscode refs/tags/<vscode_version>); not the "commit" in an installed app's product.json, that one is only sha1 of the VSCodium version.
+vscode_version=1.140.0
+vscode_commit=07f806f999227108933c2e30515b26eecc1fda74
+vscodium_tag=1.140.06880

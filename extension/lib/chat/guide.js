@@ -199,6 +199,22 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   code, the AI lists hypotheses, adds temporary logging that sends to a Kural log server on this computer (127.0.0.1,
   nothing leaves it), asks you to reproduce the bug, reads the logs, fixes the cause and then removes the logging (the
   lines are marked kural-debug). It asks before commands, like Agent.
+- Projects: the first tab in the left bar lists every project with a Kural window (one window per project), with each
+  of its chats under it: a spinner while a chat works, an orange dot while it waits for you (the question is shown), a
+  purple dot and bold title when it finished and you haven't seen it, "on screen" for the one showing in that window.
+  Sections: Pinned (the pin on a row; kept for every window), Open, and Recent (VS Code's Open Recent, folders on this
+  computer only). The search box finds a project or a chat. Click an open project and its window comes forward;
+  click a Recent (or pinned, not open) one and it opens in this window, like File > Open Recent (if a chat here is
+  working or waiting, Kural asks first: Open Here stops it, or Open in New Window); click a chat and that window shows it. The red cross on an open project closes it after asking (working chats are
+  named and stop; chats stay in History); the red bin on a Recent one removes it from Recent. + has Open folder, Clone Git
+  repository and "New empty project (with Git)", which asks for a name and a place, makes the folder, runs git init and
+  opens it. The icon in the left bar shows a number for finished-and-unseen and waiting chats in other projects, and the
+  status bar says "N projects need a look" while that is so (click it to open Projects). When a chat finishes in a window
+  that isn't the one in front, the window in front shows a small card ("Go to weld-sim") instead of a system notification
+  (the notifications setting still decides whether anything is shown). With a Kural built from VS Code's source, switching
+  projects keeps one window frame: the new project's window appears in the same place and size, no reload, and the chats
+  in the window you left keep running (setting kural.window.oneFrame). Choosing Open after a Git clone opens a
+  new window like that too, and a window you can't see that needs to ask something (Save changes?) comes forward first.
 - Source Control panel: the sparkle button in the commit message box writes a short commit message (at most 200
   characters: a subject line, maybe a line or two more) from your staged changes (or all changes), in the style of your
   recent commits, with the chat's model; edit it and commit as usual.

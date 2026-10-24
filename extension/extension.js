@@ -227,12 +227,13 @@ function activate(context) {
   const getState = () => state;
   const chat = new ChatView(context, (code, uri, ask) => applyCode(editSession, review, getState, code, uri, ask));
   chat.activity = activity;
-  // Fix with Kural, Rules, Agent Review: each its own folder under lib/. A module that isn't there (or fails to start)
+  // Fix with Kural, Rules, Agent Review, Projects: each its own folder under lib/. A module that isn't there (or fails to start)
   // must not stop the rest of Kural.
   for (const [name, start] of [
     ["fix", () => require("./lib/fix").registerFix(context, { chat, log })],
     ["rules", () => require("./lib/rules").registerRules(context, { log })],
     ["agent-review", () => require("./lib/agent-review").registerAgentReview(context, { brain, chat, log })],
+    ["projects", () => require("./lib/projects").registerProjects(context, { chat, log })],
   ]) {
     try { start(); } catch (e) { log(`${name} didn't start: ${e && e.message}`); }
   }
