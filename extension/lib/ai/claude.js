@@ -261,8 +261,8 @@ class ClaudeProcess {
       if (o.replay && f.replayUserMessages) { args.push(...OPTIONAL_FLAGS.replayUserMessages); this.echoes = true; }
     }
     // Safe mode skips your hooks, plugins, skills and MCP servers (faster, predictable), but it
-    // also skips the MCP servers we pass ourselves. So when we need one (the agent team's message
-    // board), turn those things off one by one instead.
+    // also skips the MCP servers we pass ourselves. So when we need one (a linked device, Kural's
+    // browser), turn those things off one by one instead.
     if (o.safeMode && o.mcpServers) args.push("--setting-sources", "", "--disable-slash-commands");
     else if (o.safeMode) args.push("--safe-mode");
     // What this process made on disk (prompt files, its own empty working folder): removed when it ends.

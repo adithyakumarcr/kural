@@ -58,8 +58,8 @@ const FROM_CLAUDE = [
     post: (m) => posted.push(m), postTo: () => {}, postTabs: () => {}, save: () => {}, remember: () => {}, isReady: () => true, devices: null, router: null,
     activity: null, setupVersion: 0, here: { key: proj, name: "proj", open: proj }, changes: { snapshot: () => {}, summary: () => [] },
     context: { globalStorageUri: { fsPath: path.join(tmp, "storage") }, globalState: { get: () => ({}), update: () => {} } } });
-  const tab = { id: "t-slash", title: "New chat", model: "sonnet", engine: "claude", effort: "medium", mode: "agent", mood: "default", team: 0, roles: [],
-    teamStyle: "split", status: "idle", started: false, sessionId: "slash-session", workspace: { key: proj, name: "proj", open: proj }, messages: [] };
+  const tab = { id: "t-slash", title: "New chat", model: "sonnet", engine: "claude", effort: "medium", mode: "agent", mood: "default",
+    status: "idle", started: false, sessionId: "slash-session", workspace: { key: proj, name: "proj", open: proj }, messages: [] };
   chat.tabs.push(tab);
   const waitFor = async (cond, ms = 15000) => { const t0 = Date.now(); while (!cond()) { if (Date.now() - t0 > ms) throw new Error("timed out"); await new Promise((r) => setTimeout(r, 25)); } };
   const listed = () => posted.filter((m) => m.type === "slash" && m.tabId === tab.id).pop();

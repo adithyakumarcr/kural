@@ -15,10 +15,10 @@ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'kural-router-chat-'));
 let passed=0,failed=0;
 const check=async(name,fn)=>{try{await fn();passed++;console.log('ok  ',name);}catch(e){failed++;console.error('FAIL',name,e.stack);}};
 function fixture(model='haiku') {
- const tab={id:'chat',title:'Example',status:'idle',model,mode:'ask',effort:'medium',autoRoute:true,routingProfile:'balanced',team:0,messages:[],engine:brain.engineOf(model),started:true};
+ const tab={id:'chat',title:'Example',status:'idle',model,mode:'ask',effort:'medium',autoRoute:true,routingProfile:'balanced',messages:[],engine:brain.engineOf(model),started:true};
  const chat=Object.create(ChatView.prototype),posted=[],sent=[];let kills=0;
  Object.assign(chat,{tabs:[tab],routingJobs:new Map(),runtime:new Map(),localReady:new Map(),attachments:new Attachments(),
-  post:(m)=>posted.push(m),postTabs:()=>{},save:()=>{},remember:()=>{},isReady:()=>true,teamSize:()=>0,teamLabel:()=>null,endDevice:()=>{},
+  post:(m)=>posted.push(m),postTabs:()=>{},save:()=>{},remember:()=>{},isReady:()=>true,endDevice:()=>{},
   buildPrompt:async(text)=>`PROJECT INSTRUCTIONS\n${text}`,prepareLocal:async()=>({ok:true}),procKey:(t)=>t.model,
   router:{options:()=>({context:false,checkpoints:true,handoffChars:120000}),route:async()=>({model:'codex:test',source:'native',ms:.1})},
   startProc:(t)=>{const r={proc:{send:(s)=>sent.push(s),kill:()=>kills++,setModel:()=>{},request:async()=>({}),opts:{}},procKey:t.model,agents:new Map(),perms:new Map(),tasks:new Map()};chat.runtime.set(t.id,r);return r;},

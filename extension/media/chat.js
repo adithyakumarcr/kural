@@ -7,9 +7,8 @@ window.KURAL_CHAT = function (app, port) {
   const off = new AbortController(), on = { signal: off.signal };
 
   const S = {
-    offers: {},   // tab id -> { id, agents, until }: "Use N agents?" above the box
     tabs: [], activeId: null, tab: null,
-    models: [], efforts: [], modes: [], teamSizes: [2, 3, 4, 5], version: "",
+    models: [], efforts: [], modes: [], version: "",
     attachments: [], setups: {},
     shortcuts: [],   // your shortcuts [{ name, text }] (Kural Settings → Shortcuts; lib/chat/shortcuts.js)
     slash: {},    // tab id -> { items: [{ name, description, hint, aliases, builtin }], why? }: the "/" list (lib/chat/slash.js)
@@ -51,8 +50,6 @@ window.KURAL_CHAT = function (app, port) {
     return (S.models.find((m) => m.id === id) || { label: id || "?" }).label;
   };
   const gb = (bytes) => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(bytes >= 1e10 ? 0 : 1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
-  const FRIENDS = ["Rachel", "Ross", "Monica", "Chandler", "Joey", "Phoebe"];
-  const roleLabel = (id) => (S.roles.find((r) => r.id === id) || { label: id }).label;
   const moodLabel = (id) => (S.moods.find((m) => m.id === id) || { label: "" }).label;
   const effortLabel = (id) => (S.efforts.find((e) => e.id === id) || { label: "Medium" }).label;
   const modeLabel = (id) => (S.modes.find((m) => m.id === id) || { label: "Agent" }).label;
@@ -150,6 +147,8 @@ window.KURAL_CHAT = function (app, port) {
   // Questions: pick, then Send; Ask about this question (media/choices.js).
   const choices = window.KURAL_CHOICES({ el, icon, post, tab: () => S.tab, markdown: (t, f) => md.markdown(t, f), onChange: () => renderPending(),
     sendText: (t, picks) => sendText(t, picks) });
+  // Parallel agents: the model menu's section and the plan card (media/split.js).
+  const split = window.KURAL_SPLIT({ el, icon, post, tab: () => S.tab, markdown: (t, f) => md.markdown(t, f), claudeModels: () => S.models, clis: () => S.clis });
 
   // ---------- code colors ----------
   // A small, any-language highlighter for code in answers: comments, strings, numbers, keywords, function names, types,
@@ -282,14 +281,13 @@ window.KURAL_CHAT = function (app, port) {
   const popupEl = el("div", { class: "popup hidden" });
   const menuEl = el("div", { class: "menu hidden" });
   const modeBtn = el("button", { class: "pick mode-pick", title: "Mode", onclick: (e) => openMenu("mode", e.currentTarget) });
-  const modelBtn = el("button", { class: "pick", title: "Model, intensity and agent team", onclick: (e) => openMenu("model", e.currentTarget) });
+  const modelBtn = el("button", { class: "pick", title: "Model, intensity and parallel agents", onclick: (e) => openMenu("model", e.currentTarget) });
   const sendBtn = el("button", { class: "send", onclick: () => sendOrStop() });
   // While an answer runs and you've typed something: send it to the queue (the button beside it is Stop).
   const queueBtn = el("button", { class: "send queue-send hidden", title: "Send (Enter): Kural adds it to the answer at its next step, or answers it next",
     onclick: () => sendMessage() }, icon("arrow-up"));
   // Messages you sent while it answered that it hasn't taken in yet.
   const queueEl = el("div", { class: "queue hidden" });
-  const offerEl = el("div", { class: "offer hidden", role: "status" });
   // How full this chat's context window is (a ring + "38k"), and on hover this chat's tokens (read, from cache, written).
   const ctxEl = el("button", { class: "ctx-meter hidden", "aria-label": "Open AI Usage", onclick: () => post({ type: "showUsage" }) });
   const attachBtn = el("button", { class: "attach", title: "Add files, pick an element from your app in a browser, link a Jira ticket or a device (SSH). You can also paste a screenshot.", onclick: () => openMenu("add", attachBtn) }, icon("plus"));
@@ -305,7 +303,7 @@ window.KURAL_CHAT = function (app, port) {
     media: { getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c), MediaRecorder: window.MediaRecorder,
       AudioContext: window.AudioContext, OfflineAudioContext: window.OfflineAudioContext } });
   const pendingEl = el("div", { class: "answer-slot" });   // "Your answer: … (press Send)" while something is picked (renderPending)
-  const composer = el("div", { class: "composer" }, popupEl, offerEl, queueEl, editBar, enhanceBar, voice.bar, pendingEl, chipsEl, input,
+  const composer = el("div", { class: "composer" }, popupEl, queueEl, editBar, enhanceBar, voice.bar, pendingEl, chipsEl, input,
     el("div", { class: "foot" }, attachBtn, modeBtn, modelBtn, el("span", { class: "spacer" }), ctxEl,
       voice.button, enhanceBtn, queueBtn, sendBtn));   // (type @ to mention a project file; + attaches anything)
   // A chat from another workspace: read it here; to go on, open its folder or continue it here.
@@ -330,7 +328,7 @@ window.KURAL_CHAT = function (app, port) {
         }
         return el("div", {
           class: `tab ${t.id === S.activeId ? "active" : ""} ${t.status} ${t.unread ? "unread" : ""}`,
-          title: `${t.title}\n${modelLabel(t.model)} · ${effortLabel(t.effort)} · ${modeLabel(t.mode)}${t.team ? ` · ${t.team} agents` : ""}\nDouble-click to rename`,
+          title: `${t.title}\n${modelLabel(t.model)} · ${effortLabel(t.effort)} · ${modeLabel(t.mode)}${t.splitOn ? " · parallel agents" : ""}\nDouble-click to rename`,
           // Two clicks on the same tab within 450 ms = rename. (Detected by hand: switching tabs
           // redraws the tab strip, so the browser's own double-click event never arrives.)
           onclick: () => {
@@ -501,6 +499,7 @@ window.KURAL_CHAT = function (app, port) {
     else if (b.k === "perm") w.append(permNode(b));
     else if (b.k === "agent") w.append(agentNode(b));
     else if (b.k === "question") w.append(choices.card(b, S.tab.messages.indexOf(m), b._prior));
+    else if (b.k === "split") w.append(split.card(b));
     else if (b.k === "think") w.append(el("div", { class: "think-plain" }, b.text));   // (thoughts are drawn in the timeline)
     else if (b.k === "image") w.append(imageNode(b));
     else if (b.k === "steer") w.append(steerNode(b));
@@ -529,13 +528,13 @@ window.KURAL_CHAT = function (app, port) {
     // (A permission or question card also changes the line under the answer ("Waiting for your OK above"): redraw.)
     if (pending === i) return;   // a redraw of this answer is coming anyway
     // (An answer with steps is laid out again: a new step pulls the text before it into the dropdown.)
-    if (!out || (k > 0 && !prev) || pending !== null || msg.blocks[k].k === "perm" || msg.blocks[k].k === "question" || msg.blocks[k].k === "steer" ||
+    if (!out || (k > 0 && !prev) || pending !== null || ["perm", "question", "split", "steer"].includes(msg.blocks[k].k) ||
       parts(msg).some((p) => p.group.length)) return rerender(i);
     // A previous live thinking box is finished once something comes after it.
     if (prev && msg.blocks[k - 1].k === "think") prev.replaceWith(blockNode(msg, msg.blocks[k - 1], k - 1));
     const node = blockNode(msg, msg.blocks[k], k);
-    // (The first block goes after the lines on top: which model answers, the team's note.)
-    const after = k === 0 ? (out.querySelector(".team-note") || out.querySelector(".model-attribution") || null) : out.querySelector(`[data-b="${k - 1}"]`);
+    // (The first block goes after the line on top: which model answers.)
+    const after = k === 0 ? (out.querySelector(".model-attribution") || null) : out.querySelector(`[data-b="${k - 1}"]`);
     if (after) after.after(node); else out.prepend(node);
     follow();
   }
@@ -710,20 +709,19 @@ window.KURAL_CHAT = function (app, port) {
     // Hover: why Auto chose it (profile, task, intensity, limits, staying on the model, what it learned).
     if (m.models && m.models.length) out.append(el("div", { class: "model-attribution", ...(m.routing && m.routing.reason ? { title: m.routing.reason } : {}) },m.models.map(modelLabel).join(" → ") +
       (m.routing ? ` · ${m.routing.source || "native"} · ${Number(m.routing.ms).toFixed(1)} ms routing` : "")));
-    if (m.team) out.append(el("div", { class: "team-note" }, m.teamLabel || (m.teamStyle === "discuss" ? `Discussion between ${m.team} agents` : `Team of ${m.team} agents`)));
     const P = parts(m), folded = askedInto(m);
     P.forEach((p, n) => {
       if (p.group.length) out.append(stepsNode(m, p.group, n, n === P.length - 1));
       p.outside.forEach((k) => { if (!folded.has(k)) out.append(blockNode(m, m.blocks[k], k)); });
       if (p.steer !== null) out.append(blockNode(m, m.blocks[p.steer], p.steer));   // what you added while it worked
     });
-    const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question") && b.state === "pending");
-    const asking = (m.blocks || []).some((b) => b.k === "question" && b.state === "pending");
+    const waiting = (m.blocks || []).some((b) => (b.k === "perm" || b.k === "question" || b.k === "split") && b.state === "pending");
+    const asking = (m.blocks || []).some((b) => (b.k === "question" || b.k === "split") && b.state === "pending");
     if (m.running && waiting) out.append(el("div", { class: "working" }, el("span", { class: "wait-dot" }), asking ? "Waiting for your answer above" : "Waiting for your OK above"));
     else if (m.running && (m.waitingFor || []).length) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
-      el("span", {}, `Waiting for ${listNames(m.waitingFor)} to finish — the answer comes when everyone has reported`),
-      // Agents that take too long (or got stuck): stop them and get the answer from what's there.
-      el("button", { class: "cb", title: "Stop the agents still working and have the lead answer with what it has", onclick: () => post({ type: "finishTeam", tabId: S.tab.id }) }, "Finish now")));
+      el("span", {}, `Waiting for ${listNames(m.waitingFor)} to finish; then Kural merges their work`),
+      // Agents that take too long: stop them; the finished ones' work is merged and checked.
+      el("button", { class: "cb", title: "Stop the agents still working; the finished ones' work is merged and checked", onclick: () => post({ type: "finishAgents", tabId: S.tab.id }) }, "Finish now")));
     // (While a timeline is live, its header says it works: no second "Thinking…" line under the answer.)
     else if (m.running && !layout(m).group.length) out.append(el("div", { class: "working" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")),
       el("span", { class: "elapsed", "data-t0": m.t0 }, workingText(m.t0))));
@@ -758,10 +756,10 @@ window.KURAL_CHAT = function (app, port) {
   // ONE dropdown per answer for how it worked: thoughts, tool steps (reads, searches, commands, edits…), permission cards
   // you've answered, and the short notes the model writes between them, so the chat shows the answer, not a stack of
   // "Thought for…" boxes and commands (Adithya). What stays outside: the text after the last step (the answer), anything
-  // waiting for you (a permission or a question), agents' cards, the team's messages and pictures.
+  // waiting for you (a permission or a question), agents' cards and pictures.
   // A message you added while it worked ("steer") splits the answer in parts, each with its own dropdown: what it did
   // after reading your message shows after it, not above it.
-  const isStep = (b) => b.k === "think" || (b.k === "tool" && b.name !== "mcp__team__post") || (b.k === "perm" && b.state !== "pending");
+  const isStep = (b) => b.k === "think" || b.k === "tool" || (b.k === "perm" && b.state !== "pending");
   function layoutOf(m, ks) {
     let last = -1;
     ks.forEach((k) => { if (isStep(m.blocks[k])) last = k; });
@@ -833,7 +831,7 @@ window.KURAL_CHAT = function (app, port) {
   }
 
   const TOOL_VERB = { Read: "Read", Grep: "Searched", Glob: "Listed", Edit: "Edited", Write: "Wrote", NotebookEdit: "Edited", Bash: "Command", WebSearch: "Searched web", WebFetch: "Web page",
-    ToolSearch: "Loaded tools" };
+    ToolSearch: "Loaded tools", Kural: "Kural" };
   // A linked device's tools.
   const DEVICE_VERB = { run_command: "Device command", read_file: "Read on device", write_file: "Wrote on device", list_dir: "Listed on device" };
   const deviceVerb = (name) => { const m = /^mcp__device__(run_command|read_file|write_file|list_dir)$/.exec(name || ""); return m ? DEVICE_VERB[m[1]] : null; };
@@ -847,12 +845,6 @@ window.KURAL_CHAT = function (app, port) {
     return m ? `${m[1].replace(/^claude[._ ]ai[_ ]/i, "").replace(/_/g, " ")} · ${m[2]}` : name;
   }
   function toolNode(b) {
-    // Team messages: "Ross → Rachel: what's the number?" as a small chat bubble.
-    if (b.name === "mcp__team__post") {
-      const [who, ...rest] = b.detail.split(": ");
-      return el("div", { class: "team-msg" }, el("span", { class: "team-who" }, who), " ", rest.join(": "));
-    }
-    if (b.name === "mcp__team__read") return el("div", { class: "tool team-wait" }, b.detail);
     const file = ["Read", "Edit", "Write", "NotebookEdit"].includes(b.name) ? b.detail.split("  (")[0] : null;
     const pic = file && b.name === "Read" && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file) ? fileSrc(file) : null;
     return el("div", { class: `tool ${b.name}` },
@@ -884,9 +876,8 @@ window.KURAL_CHAT = function (app, port) {
       b.steps.length ? el("div", { class: "agent-steps" }, ...agentSteps(b)) : null);
   }
   // What the agent wrote (always), and its last 5 other steps: thinking and tools.
-  // (Messages between agents are shown in the answer itself; older chats kept them in the cards.)
   function agentSteps(b) {
-    const keep = (s) => s.k === "say" || s.name === "mcp__team__post";
+    const keep = (s) => s.k === "say";
     const recent = new Set(b.steps.filter((s) => !keep(s)).slice(-5));
     const shown = b.steps.filter((s) => keep(s) || recent.has(s));
     const hidden = b.steps.length - shown.length;
@@ -1007,37 +998,20 @@ window.KURAL_CHAT = function (app, port) {
         el("button", { class: "cb primary", title: "Start a new chat here that knows this conversation", onclick: () => { S.focusNext = true; post({ type: "continueHere", id: t.id }); } }, "Continue here")));
     const running = t.status !== "idle";
     modeBtn.replaceChildren(modeLabel(t.mode), icon("chevron-down", "chev"));
-    const team = t.teamSize ? ` · ${t.teamStyle === "discuss" ? "discussion" : `${t.teamSize} agents`}` : "";
+    const split = t.splitOn ? " · Parallel" : "";
     const mood = t.mood && t.mood !== "default" ? ` · ${moodLabel(t.mood)}` : "";
     const routing = t.autoRoute ? `Auto · ${cap(profileName(t.routingProfile))} · ` : "";
-    modelBtn.replaceChildren(`${routing}${t.routingState || t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${team}`, icon("chevron-down", "chev"));
+    modelBtn.replaceChildren(`${routing}${t.routingState || t.modelName || modelLabel(t.model)} · ${t.effort === "medium" ? "Med" : effortLabel(t.effort)}${mood}${split}`, icon("chevron-down", "chev"));
     renderContext(t);
     sendBtn.replaceChildren(icon(running ? "debug-stop" : "arrow-up"));
     sendBtn.title = running ? "Stop (Esc)" : "Send (Enter)";
     sendBtn.classList.toggle("stop", running);
     renderQueueBtn();
     renderQueue();
-    renderOffer();
     // (While it answers, Enter doesn't stop it: what you send is added to the answer at its next step, or answered next.)
     // Short (Adithya: "Ask Kural something", nothing more); the mode shows on its own button.
     input.dataset.placeholder = running ? "Add to this answer…" : "Ask Kural something";
     renderPending();   // (picks waiting for Send change the hint)
-  }
-  function renderOffer() {
-    clearTimeout(S.offerTimer);
-    const o = S.tab && S.offers[S.tab.id];
-    offerEl.classList.toggle("hidden", !o);
-    if (!o) { offerEl.replaceChildren(); return; }
-    const left = Math.max(0, Math.ceil((o.until - Date.now()) / 1000)), tabId = S.tab.id;
-    const answer = (use) => { post({ type: "teamOfferAnswer", tabId, id: o.id, use }); delete S.offers[tabId]; renderOffer(); };
-    // Two rows: the question; then the countdown on the left and the two buttons together on the right.
-    offerEl.replaceChildren(
-      el("div", { class: "offer-top" }, icon("organization"), el("span", { class: "offer-text" }, `This looks like a big task. Use ${o.agents} agents?`)),
-      el("div", { class: "offer-bottom" }, el("span", { class: "muted offer-left" }, `One agent in ${left} s`),
-        el("span", { class: "offer-btns" },
-          el("button", { class: "cb primary", onclick: () => answer(true) }, `Use ${o.agents} agents`),
-          el("button", { class: "cb", onclick: () => answer(false) }, "One agent"))));
-    if (left > 0) S.offerTimer = setTimeout(renderOffer, 1000);
   }
   const hasDraft = () => !isEmptyInput() || S.attachments.length > 0;
   function renderQueueBtn() { queueBtn.classList.toggle("hidden", !(S.tab && S.tab.status !== "idle" && !S.tab.visiting && (hasDraft() || choices.anyPicked()))); }
@@ -1468,7 +1442,6 @@ window.KURAL_CHAT = function (app, port) {
           onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
           el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
     } else {
-      const teamOn = !!t.team;
       const editing = t.mode === "agent" || t.mode === "auto";
       const local = /^ollama:/.test(t.model || "");
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
@@ -1488,6 +1461,7 @@ window.KURAL_CHAT = function (app, port) {
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
         levelNote(t),
+        ...split.menuItems(t),
         // Preferences (moods in the code): the four built-in ones, then yours (Kural Settings → Preferences), then a way to add one.
         el("div", { class: "mh" }, "Preference"),
         el("div", { class: "moods" }, S.moods.map((md) => el("button", { class: `mood-chip${t.mood === md.id ? " on" : ""}`, title: md.hint || "",
@@ -1636,32 +1610,6 @@ window.KURAL_CHAT = function (app, port) {
       }
     }
     localEl.replaceChildren(...kids.filter(Boolean));
-  }
-
-  // "Rachel (Developer) and Ross (Critic) talk it through and agree on a decision."
-  function teamHint(t) {
-    const roles = t.roles || [];
-    const editing = t.mode === "agent" || t.mode === "auto";
-    const and = (names) => names.length > 2 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names.join(" and ");
-    const picked = S.roles.filter((r) => roles.includes(r.id));
-    if (!picked.length) {
-      const names = FRIENDS.slice(0, t.team);
-      if (t.teamStyle === "discuss") return `${and(names)} talk it through and agree on a decision (any mode)`;
-      return `${and(names)} split the work, run at the same time and message each other${editing ? "" : " (Agent and Auto modes)"}`;
-    }
-    if (t.teamStyle === "discuss") {
-      const names = picked.map((r) => `${r.name} (${r.label})`);
-      if (names.length < 2) names.push(FRIENDS.find((f) => !picked.some((r) => r.name === f)));
-      return `${and(names)} talk it through and agree on a decision (any mode)`;
-    }
-    // The project team: you talk to the PM (the lead); it works in phases.
-    const plan = picked.filter((r) => r.id === "researcher" || r.id === "architect");
-    const dev = picked.some((r) => r.id === "developer"), tester = picked.find((r) => r.id === "tester");
-    const parts = ["You talk to the Project Manager"];
-    if (plan.length) parts.push(`${and(plan.map((r) => `${r.name} (${r.label})`))} plan${dev ? ", you OK the plan" : ""}`);
-    if (dev) parts.push("1–3 Developers build (the PM decides)");
-    if (tester) parts.push(`${tester.name} (Tester) checks the code`);
-    return parts.join("; ") + (editing ? "" : " (Agent and Auto modes)");
   }
 
   // "+ → Link device": your saved devices (SSH), link one to this chat, or add one. The password goes to Kural once, to
@@ -1833,8 +1781,8 @@ ${d.system}` : ""}`,
     const mine = S.tab && m.tabId === S.tab.id;
     switch (m.type) {
       case "config":
-        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.teamSizes = m.teamSizes || S.teamSizes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false; S.clis = m.clis || [];
-        S.moods = m.moods || []; S.shortcuts = m.shortcuts || []; S.roles = m.roles || []; S.teamStyles = m.teamStyles || []; S.pics = m.pics || S.pics;
+        S.models = m.models; S.efforts = m.efforts; S.modes = m.modes; S.version = m.version || ""; S.notReady = m.ready === false; S.claudeReady = m.claudeReady !== false; S.clis = m.clis || [];
+        S.moods = m.moods || []; S.shortcuts = m.shortcuts || []; S.pics = m.pics || S.pics;
         renderFoot(); if (S.tab && !S.tab.messages.length) renderAll(); break;
       case "shortcuts": S.shortcuts = m.shortcuts || []; if (S.popup && S.popup.kind === "slash") renderPopup(); break;
       case "moods": S.moods = m.moods || S.moods; renderFoot(); if (S.menu === "model") openMenu.refresh(); break;
@@ -1845,8 +1793,8 @@ ${d.system}` : ""}`,
         // side panel (split): its title above it.
         tabBar.classList.toggle("hidden", !!m.single);
         colHead.classList.toggle("hidden", !m.column);
-        if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title, team: s.team,
-          mood: s.mood, roles: s.roles, teamStyle: s.teamStyle, teamSize: s.teamSize, ticket: s.ticket, device: s.device, queued: s.queued,
+        if (S.tab) { const s = m.tabs.find((x) => x.id === S.tab.id); if (s) Object.assign(S.tab, { status: s.status, model: s.model, effort: s.effort, mode: s.mode, title: s.title,
+          split: s.split, workers: s.workers, splitOn: s.splitOn, mood: s.mood, ticket: s.ticket, device: s.device, queued: s.queued,
           autoRoute: s.autoRoute,routingProfile: s.routingProfile,routingState: s.routingState,modelName: s.modelName,tokens: s.tokens,context: s.context }); }
         renderTabs(); renderFoot(); renderChips(); if (S.menu) openMenu.refresh();
         if (S.tab) { const i = lastAssistant(); if (i >= 0 && (S.tab.messages[i].planReady || S.tab.status !== wasStatus)) rerender(i); }
@@ -1857,8 +1805,6 @@ ${d.system}` : ""}`,
       case "full": listen.onFull(m.tab && m.tab.id); S.tab = m.tab; renderAll(); renderEditBar(); renderEnhance(); voice.tabChanged(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "openLocal": closeMenu(); openLocal(); break;
       // Auto mode, a big task: "Use 3 agents?" for 15 s above the box; no answer = one agent.
-      case "teamOffer": S.offers[m.tabId] = { id: m.id, agents: m.agents, until: Date.now() + m.seconds * 1000 }; renderOffer(); break;
-      case "teamOfferDone": if (S.offers[m.tabId] && S.offers[m.tabId].id === m.id) delete S.offers[m.tabId]; renderOffer(); break;
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;
       case "localModels": S.local = m; renderLocal(); if (S.menu === "model") openMenu.refresh(); break;
       case "localSearch": S.localSearch = m; S.localSearching = false; renderLocal(); break;
@@ -1924,6 +1870,7 @@ ${d.system}` : ""}`,
       case "agentStep": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.steps.push(m.step); scheduleRerender(i); } } break;
       case "agentState": if (mine) { const [i, a] = findAgent(m.agentId); if (a) { a.state = m.state; if (m.why) a.why = m.why; scheduleRerender(i); } } break;
       case "questionState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) { b.state = m.state; b.answers = m.answers; if (m.ask) b.ask = m.ask; } scheduleRerender(i); } } break;
+      case "splitState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) Object.assign(b, { state: m.state, tasks: m.tasks || b.tasks, change: m.change }); scheduleRerender(i); } } break;
       case "permState": if (mine) { const i = lastAssistant(); if (i >= 0) { for (const b of S.tab.messages[i].blocks) if (b.pid === m.pid) b.state = m.state; scheduleRerender(i); } } break;
       case "patch": if (mine) { const i = m.index != null ? m.index : lastAssistant(); if (i >= 0) { Object.assign(S.tab.messages[i], m.msg); rerender(i); } renderFoot(); } break;
       case "sideDelta": if (mine) side.delta(m); break;

@@ -43,7 +43,7 @@ PROMPTS.auto = PROMPTS.agent +
   "End every answer with a short list titled \"What I did\": each command you ran (also ones that read, install, delete or " +
   "change things outside the project) and each file you changed or created. Name anything hard to undo.";
 
-// Moods: how the chat (or the team's lead) works with you.
+// Moods: how the chat works with you.
 const MOODS = [
   { id: "default", label: "Default", hint: "balanced" },
   { id: "explorer", label: "Explorer", hint: "looks around, compares options" },
@@ -121,7 +121,7 @@ function shownMoods(hidden, custom = []) {
   const built = MOODS.filter((m) => !out.has(m.id));
   return built.length || (custom || []).length ? built : MOODS.filter((m) => m.id === "default");
 }
-// What the chat (or the team's lead) is told for a mood: a built-in one's text, or yours like them.
+// What the chat is told for a mood: a built-in one's text, or yours like them.
 function moodPrompt(id, custom = []) {
   if (MOOD_PROMPTS[id]) return MOOD_PROMPTS[id];
   const m = (custom || []).find((x) => x.id === id);

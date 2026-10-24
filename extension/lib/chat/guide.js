@@ -103,10 +103,21 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Settings → Preferences: a name, a one-line hint and instructions for the AI, with tips and examples; edit or delete
   them there; built-in ones you don't use (Default too) can be removed there with their ×, and Restore brings one back;
   the menu keeps at least one, and a new chat starts with the first one left; a changed preference or mode applies from
-  the next message); Multiple agents are switched off for now (one agent per chat). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
+  the next message). Parallel agents (like Cursor's): the model menu's "Split big tasks" (Agent and Auto, in a Git
+  repository, not with a model on this computer): the chat's model plans the request read only and splits it into up to
+  four independent tasks; a small request isn't split (it answers by itself). A plan card shows each agent's task, the
+  files it plans to change and its model: your default from the menu's "Agents use" row (the chat's AI's models: Opus,
+  Sonnet, Haiku for Claude; ChatGPT's or Gemini's for those), changeable per agent; Go ahead, Stop, or write what to
+  change (it plans again). Auto doesn't ask. The agents work at the same time, each in its own git worktree of your files
+  as they are (uncommitted ones too), shown as cards; they never touch your files. Kural merges their work (a conflict
+  goes to the lead) and brings the result into the project through the usual checkpoint (Files changed, Undo, Restore
+  code; a file you changed meanwhile is merged with yours); then the lead runs the project's checks and gives one
+  answer. Stop leaves your files as they were; Finish now stops the agents still working and goes on with the finished
+  ones. Faster for work that splits; cheaper when the agents use a lighter model. Your branch, index and history aren't
+  touched (no branch is made). The mode can be changed while an answer runs (Agent to Auto: waiting commands run at once). Sending while
   an answer runs (Enter, or the arrow beside Stop) doesn't stop it: the message is queued (shown above the box) and the
   AI takes it in at its next step (after the command or edit it's doing) into the same answer, shown there as "You added
-  this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and Kural-managed teams always do
+  this while it worked"; if the answer ends first, it's answered right after as your next message (Gemini and parallel agents always do
   that). Stop (the square button, or Esc) stops the answer and puts queued messages back into the box. Each change
   can be reviewed, kept or undone ("Files changed" lists only the project's files: not notes in the temp folder or
   Claude Code's own plans and memory). How the AI worked is ONE timeline per answer: its thoughts in readable text between
@@ -132,7 +143,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Notifications: when an answer is done or needs you (a command or file to allow, a question, a plan to build, an
   error, a login), a system notification names the chat ("Fix the login is done"); click it to go there. By default only
   while you're not looking (Kural's window not in front, or that chat not on screen); setting kural.notifications:
-  whenAway, always, off. A team's answer notifies once, at the end; Stop doesn't. On a Mac the notification comes from
+  whenAway, always, off. Parallel agents' answer notifies once, at the end (and for the plan card); Stop doesn't. On a Mac the notification comes from
   the system's own notification command and shows as Script Editor; if none shows: System Settings > Notifications,
   allow Script Editor and Kural, and turn Focus / Do Not Disturb off. "Kural: Test Notification" sends one now and says
   how it was sent; Kural's log says why each notification was or wasn't sent. On Ubuntu: notify-send (libnotify-bin). While any chat works, the Mac

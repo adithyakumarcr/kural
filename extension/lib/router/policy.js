@@ -31,7 +31,7 @@ function needTier(profile, task) {
 function eligible(models, request) {
   return models.filter((m) => m.ready && !m.completionOnly && !m.local && !excludedModel(m.id) &&
     (!request.provider || m.providerId === request.provider) &&
-    (!request.team || m.team) && (!request.device || m.device) &&
+    (!request.split || m.split) && (!request.device || m.device) &&
     (!request.images || m.images) && (!request.pdf || m.pdf) &&
     (!request.connectors || m.connectors) &&
     (!(request.mode === "agent" && request.editing) || m.commands));

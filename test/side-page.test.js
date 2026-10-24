@@ -210,11 +210,6 @@ const type = (n, text) => { n.value = text; n.on.input({ target: n }); };
     assert.ok(host.indexOf('uri("side.js")') > 0 && host.indexOf('uri("side.js")') < host.indexOf('uri("chat.js")'));
     assert.match(css, /^\.side \{[^}]*border-left: 2px solid var\(--accent\)/m);
   });
-  await check("the offer card: two rows, the countdown at the left and both buttons together at the right", () => {
-    assert.match(chatJs, /class: "offer-top"/); assert.match(chatJs, /class: "offer-bottom"/); assert.match(chatJs, /class: "offer-btns"/);
-    assert.match(css, /^\.offer \{[^}]*flex-direction: column/m);
-    assert.match(css, /^\.offer-btns \{[^}]*margin-left: auto/m);
-  });
 
   // The host's message switch hands sideAsk / sideStop to the side chats and doesn't touch the chat's own state.
   const load = Module._load;

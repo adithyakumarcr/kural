@@ -55,7 +55,7 @@ check("AGENT-4: the Auto warning says what's true for each AI", () => {
   for (const e of ["claude", "codex", "ollama"]) assert.doesNotMatch(autoWarning(e), /settings|Gemini/);
 });
 
-check("AGENT-11: a team member's stricter mode decides its gated calls; a looser one is refused", () => {
+check("AGENT-11: a parallel agent's stricter mode decides its gated calls; a looser one is refused", () => {
   const { gatedMode } = require("../extension/lib/chat/permission-policy");
   assert.strictEqual(gatedMode("agent", "agent"), "agent");
   assert.strictEqual(gatedMode("agent", undefined), "agent");
@@ -126,7 +126,7 @@ const npmTest = { tool_name: "Bash", input: { command: "npm test" } };
     chat.runtime.delete(web.id); chat.tabs = [];
     console.log("ok   Allow all covers only its card's kind (commands, web, one connector), never files outside the project");
 
-    // AGENT-11: a team planner's agy (Plan) while the chat is in Agent: reads run, changes are refused; a looser mode is refused.
+    // AGENT-11: a parallel-agents lead's agy (Plan) while the chat is in Agent: reads run, changes are refused; a looser mode is refused.
     const gated = { id: "g", model: "agy:gemini-3", mode: "agent", sessionId: "s" };
     const inside = path.join(project, "a.js");
     assert.strictEqual(await verdict(gated, { tool_name: "Read", input: { file_path: inside }, gate: true, gateMode: "plan", agent_id: "task-1" }), "allow");
@@ -134,7 +134,14 @@ const npmTest = { tool_name: "Bash", input: { command: "npm test" } };
     assert.strictEqual(await verdict(gated, { tool_name: "Write", input: { file_path: inside }, gate: true, gateMode: "agent" }), "allow");
     assert.strictEqual(await verdict(gated, { tool_name: "Read", input: { file_path: inside }, gate: true, gateMode: "auto" }), "deny");
     assert.strictEqual(await verdict({ ...gated, mode: "plan" }, { tool_name: "Write", input: { file_path: inside }, gate: true, gateMode: "agent" }), "deny");
-    console.log("ok   AGENT-11: Gemini team members are decided in their own stricter mode");
+    console.log("ok   AGENT-11: Gemini's parallel agents are decided in their own stricter mode");
+    // The same for any AI's parallel-agents step (req.mode, not the gate): the lead's plan is read only in Agent.
+    const lead = { id: "l", model: "sonnet", mode: "agent", sessionId: "s" };
+    assert.strictEqual(await verdict(lead, { tool_name: "Read", input: { file_path: inside }, mode: "plan" }), "allow");
+    assert.strictEqual(await verdict(lead, { tool_name: "Write", input: { file_path: inside }, mode: "plan" }), "deny");
+    assert.strictEqual(await verdict(lead, { tool_name: "Bash", input: { command: "rm -rf build" }, mode: "plan" }), "deny");
+    assert.strictEqual(await verdict(lead, { tool_name: "Write", input: { file_path: inside }, mode: "agent" }), "allow");
+    console.log("ok   parallel agents: a step's own stricter mode decides (the plan is read only)");
 
     // AGENT-8: Build it uses Agent, whatever another chat last used; Auto only when this chat is in Auto.
     const sent = [];

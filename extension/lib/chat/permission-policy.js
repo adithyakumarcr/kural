@@ -171,7 +171,7 @@ function privateWhy(tool, input, cwd, ok) {
 }
 
 // The mode a call through Gemini's gate is decided in. startedFor: the mode that agy was started for. The same as the
-// chat's: that mode. A stricter one (a team's planners and reviewers run in Plan or Ask while the chat is in Agent, or
+// chat's: that mode. A stricter one (parallel agents' lead plans in Plan while the chat is in Agent, or
 // the chat was switched to a looser mode mid-answer): the stricter one, which can only refuse more. A looser one (the chat
 // was switched to a stricter mode mid-answer): null, refuse (nothing more runs in that answer).
 const STRICTNESS = { ask: 0, plan: 1, agent: 2, auto: 3 };

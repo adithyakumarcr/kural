@@ -16,7 +16,7 @@ function forkConversation(source, index, { id, sessionId, now = Date.now() }) {
     }
   }
   const choices = {};
-  for (const key of ["model", "effort", "effortPinned", "mode", "prevMode", "mood", "team", "roles", "teamStyle", "autoRoute", "routingProfile", "ticket", "device", "workspace"]) {
+  for (const key of ["model", "effort", "effortPinned", "mode", "prevMode", "mood", "split", "workers", "autoRoute", "routingProfile", "ticket", "device", "workspace"]) {
     if (source[key] !== undefined) choices[key] = JSON.parse(JSON.stringify(source[key]));
   }
   return {

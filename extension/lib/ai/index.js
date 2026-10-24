@@ -92,8 +92,6 @@ function cliAgent(id, model, opts, handlers) {
   const options = { name: opts.name, bin: c.bin, model: cliModel(model), models: c.models, effort: opts.effort, mode: opts.mode || (opts.jsonSchema ? "ask" : "agent"),
     cwd: opts.cwd || ws.workDir(), addDirs: opts.addDirs, appendSystemPrompt: (opts.appendSystemPrompt || "") + json,
     mcpServers: opts.mcpServers, lockTools: opts.lockTools, handoffChars: opts.handoffChars, sessionId: opts.sessionId, resume: opts.resume, store: cliStores[id] || cliStore || path.join(os.tmpdir(), "kural-cli-chats") };
-  if (opts.teamConfig) return new (require("../chat/team-agent").TeamAgent)({ ...options, teamConfig: opts.teamConfig }, handlers,
-    (o, h) => new CLIS[id].Agent(o, h));
   return new CLIS[id].Agent(options, handlers);
 }
 async function askCli(id, model, system, prompt, token) {
@@ -124,7 +122,11 @@ const PROVIDERS = [
 const providerOf = (model) => PROVIDERS.find((p) => p.owns(model));
 
 // A conversation process for `model`, from its provider. All take the same handlers and send the same events.
-function makeAgent(model, opts, local, handlers) { return providerOf(model).agent(model, opts, local || {}, handlers); }
+// opts.split: parallel agents (lib/split): the same events, from several of this provider's agents at once.
+function makeAgent(model, opts, local, handlers) {
+  if (opts.split) return new (require("../split/agent").SplitAgent)({ ...opts, model }, handlers, (m, o, h) => providerOf(m).agent(m, o, local || {}, h));
+  return providerOf(model).agent(model, opts, local || {}, handlers);
+}
 
 // One question, one answer, no tools (Ctrl+K, Apply, commit messages): a local model gets one /api/chat request.
 // quiet: no popup when it fails (commit suggestions in the terminal come often; the log has it).

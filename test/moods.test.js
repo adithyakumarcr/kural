@@ -72,7 +72,7 @@ const check = async (name, fn) => { try { await fn(); console.log("ok  ", name);
 
   await check("a mood (or mode) changed mid-chat goes with the next message (Claude Code keeps a resumed chat's first instructions)", () => {
     settings.user = [{ id: "custom-pair", name: "Pair programmer", instructions: "Work like a pair programmer." }];
-    const tab = { id: "n", model: "sonnet", mode: "agent", mood: "default", team: 0, messages: [], started: false };
+    const tab = { id: "n", model: "sonnet", mode: "agent", mood: "default", messages: [], started: false };
     assert.strictEqual(chat.instructionsNote(tab), "");            // a new conversation starts with them anyway
     tab.started = true;
     assert.strictEqual(chat.instructionsNote(tab), "");            // nothing changed

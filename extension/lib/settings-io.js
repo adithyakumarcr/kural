@@ -166,7 +166,7 @@ function mergeKeybindings(mine, theirs) {
 }
 
 // Chat defaults from a file: only the fields Kural keeps, and never Auto (it runs commands without asking).
-const CHAT_FIELDS = ["model", "effort", "mode", "team", "autoRoute", "routingProfile", "mood", "roles", "teamStyle", "buildMode"];
+const CHAT_FIELDS = ["model", "effort", "mode", "split", "workers", "autoRoute", "routingProfile", "mood", "buildMode"];
 function safeChat(chat) {
   const out = {};
   for (const k of CHAT_FIELDS) if (own(chat, k) && chat[k] !== "auto") out[k] = chat[k];

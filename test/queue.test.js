@@ -18,12 +18,12 @@ const check = async (name, fn) => { try { await fn(); passed++; console.log("ok 
 const words = (v) => [{ t: "text", v }];
 
 function fixture({ echoes = true } = {}) {
-  const tab = { id: "chat", title: "Example", status: "idle", model: "sonnet", mode: "agent", effort: "medium", team: 0, messages: [], engine: "claude", started: true };
+  const tab = { id: "chat", title: "Example", status: "idle", model: "sonnet", mode: "agent", effort: "medium", messages: [], engine: "claude", started: true };
   const chat = Object.create(ChatView.prototype), posted = [], sent = [];
   let kills = 0;
   Object.assign(chat, { tabs: [tab], routingJobs: new Map(), runtime: new Map(), localReady: new Map(), attachments: new Attachments(),
     post: (m) => posted.push(m), postTo: (_, m) => posted.push(m), postTabs: () => {}, save: () => {}, remember: () => {}, isReady: () => true,
-    teamSize: () => 0, teamLabel: () => null, endDevice: () => {}, finishTurn: () => {}, shown: () => true, warm: () => {},
+    endDevice: () => {}, finishTurn: () => {}, shown: () => true, warm: () => {},
     buildPrompt: async (text) => text, prepareLocal: async () => ({ ok: true }), procKey: (t) => t.model,
     startProc: (t) => {
       const r = { proc: { echoes, exited: false, send: (c) => sent.push(c), kill: () => { kills++; }, setModel: () => {}, interrupt: () => {}, request: async () => ({}) },

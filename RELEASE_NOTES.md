@@ -1,3 +1,16 @@
+## Not released yet
+
+- **Parallel agents, like Cursor's.** Turn on "Split big tasks" in the model menu (Agent or Auto mode, in a Git
+  repository) and the model you picked plans the request and splits it into up to four independent tasks. You see the
+  plan with a model for each agent (your default from the menu, for example Haiku), change any of them, and press Go
+  ahead. The agents work at the same time, each in its own copy of the project (a git worktree), so they never edit
+  your files directly. Kural merges their work, a conflict goes to the lead, and the result comes into your project
+  through the normal checkpoint (Undo, Files changed, Restore code all work). The lead then runs your checks and gives
+  one answer. A small request isn't split. Works with Claude, ChatGPT (Codex) and Gemini. Auto mode doesn't ask about
+  the plan; Stop leaves your files as they were; Finish now stops the slow agents and goes on with the finished ones.
+- **The old agent team is gone.** Roles, the message board and the "Use 3 agents?" offer (switched off since 1.1) were
+  replaced by parallel agents.
+
 ## What's new in 1.2.1-beta.3
 
 - **Shorter commit messages.** The sparkle button in Source Control writes at most 200 characters: a subject line, and a

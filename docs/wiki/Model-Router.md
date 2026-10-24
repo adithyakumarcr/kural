@@ -20,7 +20,7 @@ What each profile asks for, by task size (1 light, 2 balanced, 3 most capable):
 
 Auto then takes the **lightest model that has that level**. Levels come from the model's name and the description its program gives: Claude Haiku, Gemini Flash and Codex's "fast and affordable" models are light; Sonnet and most models balanced; Opus, Gemini Pro and models described as "most capable", "frontier" or "flagship" the most capable. Models described as "legacy" or "older" lose close calls. Adjust a level with `kural.modelRouter.modelPreferences`. When no model of the needed level is set up, Auto uses the most capable one there is and says so.
 
-Older settings and chats saying Balanced, Speed or Quality keep working (they mean Balance, Cost and Intelligence). Capability checks come first: models that aren't set up, and ones that can't take the request's images or PDFs, a team, a device, connectors or (in Agent mode) commands, are left out.
+Older settings and chats saying Balanced, Speed or Quality keep working (they mean Balance, Cost and Intelligence). Capability checks come first: models that aren't set up, and ones that can't take the request's images or PDFs, parallel agents, a device, connectors or (in Agent mode) commands, are left out.
 
 **Build it** on an agreed plan goes to a light model such as Haiku in Balance and Cost (not in Intelligence). The plan is settled by then, so the build needs less. A step that keeps failing moves to a stronger model again.
 
@@ -68,7 +68,7 @@ sets its own points: "Move the chat to another AI when the Session limit is [70]
 used" (1 to 99 %, 70 % by default; Gemini has Weekly only). When it's on, Auto excludes models over their AI's points
 while a suitable model is available below them. A chat with a model you picked yourself moves to another available
 service when that AI's Session or Weekly limit reaches its points. A running request can continue after a pause between
-tools; active commands, approvals, background tasks and teams finish before switching. The visible conversation,
+tools; active commands, approvals, background tasks and parallel agents finish before switching. The visible conversation,
 completed work and attachments go along. See [[Account and Updates]] for usage-report timing and when no service can
 take over.
 
