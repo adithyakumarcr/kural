@@ -26,7 +26,7 @@ const lines = (file) => fs.readFileSync(file, "utf8").split("\n").filter(Boolean
     const s = await logs.session("chat-a");
     assert.match(s.url, /^http:\/\/127\.0\.0\.1:\d+\/[0-9a-f]{64}\/log$/);
     assert.ok(s.url.includes(s.token));
-    assert.strictEqual(fs.statSync(s.file).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.strictEqual(fs.statSync(s.file).mode & 0o777, 0o600);   // (Windows has no Unix modes)
     assert.strictEqual((await logs.session("chat-a")).url, s.url, "the same chat keeps its address");
     assert.strictEqual(logs.server.address().address, "127.0.0.1");
   });
@@ -123,7 +123,7 @@ const lines = (file) => fs.readFileSync(file, "utf8").split("\n").filter(Boolean
     const a = await logs.session("chat-a");
     logs.stop();
     assert.ok(!fs.existsSync(a.file));
-    await assert.rejects(() => request(a.url, { body: "{}" }), /ECONNREFUSED|ECONNRESET/);
+    await assert.rejects(() => request(a.url, { body: "{}" }), /ECONNREFUSED|ECONNRESET|socket hang up/);   // (which one depends on the system and the timing)
     const again = await logs.session("chat-c");   // (it starts again when needed)
     assert.strictEqual((await request(again.url, { body: "{}" })).status, 204);
     logs.stop();

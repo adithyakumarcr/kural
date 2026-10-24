@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds dist/Kural-<ver>-macos-arm64.zip (Apple Silicon: M1–M5) from VSCodium, plus a .dmg when run on a Mac.
 # Runs on Linux or macOS. Needs: curl, unzip, zip, python3 (+ Pillow on Linux; a Mac uses its own sips and iconutil),
-# rcodesign (or macOS codesign).
+# rcodesign (or macOS codesign). With KURAL_SOURCE=1 it builds VS Code from source instead (see scripts/vscode/).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -12,13 +12,22 @@ OUT="dist/Kural-$VER-macos-arm64.zip"
 WORK="build/mac"
 
 mkdir -p downloads dist
-if [ ! -f "$SRC" ]; then
-  echo "Downloading VSCodium $CODIUM_VER for macOS (Apple Silicon) ..."
-  curl -fL -o "$SRC" "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/VSCodium-darwin-arm64-$CODIUM_VER.zip"
-fi
-./scripts/check-codium.sh "$(basename "$SRC")" "$SRC" || exit 1   # (also a file left from an earlier run)
 rm -rf "$WORK" && mkdir -p "$WORK"
-unzip -q "$SRC" -d "$WORK"      # keeps the app's internal links (symlinks) intact
+if [ "${KURAL_SOURCE:-0}" = 1 ]; then
+  # Our own build of VS Code from its source plus Kural's patches (scripts/vscode/), not VSCodium's download.
+  # (--download-node: VS Code wants one exact Node version; a private copy is kept in build/.)
+  echo "Building VS Code from source (scripts/vscode/fetch.sh + build.sh) ..."
+  ./scripts/vscode/fetch.sh
+  ./scripts/vscode/build.sh --download-node darwin-arm64
+  ditto "build/vscode-out/darwin-arm64/VSCodium.app" "$WORK/VSCodium.app"   # (ditto keeps the app's links, like unzip)
+else
+  if [ ! -f "$SRC" ]; then
+    echo "Downloading VSCodium $CODIUM_VER for macOS (Apple Silicon) ..."
+    curl -fL -o "$SRC" "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/VSCodium-darwin-arm64-$CODIUM_VER.zip"
+  fi
+  ./scripts/check-codium.sh "$(basename "$SRC")" "$SRC" || exit 1   # (also a file left from an earlier run)
+  unzip -q "$SRC" -d "$WORK"      # keeps the app's internal links (symlinks) intact
+fi
 mv "$WORK/VSCodium.app" "$WORK/Kural.app"
 APP="$WORK/Kural.app"
 python3 scripts/electron_runtime.py "$APP" darwin-arm64

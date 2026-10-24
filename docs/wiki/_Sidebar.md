@@ -2,6 +2,7 @@
 
 - [[Getting Started]]
 - [[Chat]]
+- [[Projects]]
 - [[Parallel Agents]]
 - [[Fix with Kural]]
 - [[Rules]]
@@ -20,5 +21,6 @@
 - [[Settings and Shortcuts]]
 - [[Troubleshooting]]
 - [[Uninstall]]
+- [[Building from Source]]
 
 [Ask for a feature](https://github.com/adithyakumarcr/kural/issues/new?template=feature_request.yml)

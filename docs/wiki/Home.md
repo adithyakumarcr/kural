@@ -18,6 +18,7 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 |---|---|
 | [[Getting Started]] | Install Kural, then pick Claude, Google Gemini, ChatGPT (Codex) or your own model |
 | [[Chat]] | The chat: modes, models, moods, files and pictures, history, two chats at once |
+| [[Projects]] | Every project and its chats in one list: what each is doing, one click to its window |
 | [[Parallel Agents]] | Split a big request between agents that work at once, each in its own copy; Kural merges |
 | [[Fix with Kural]] | Add an error or a failed terminal command to the chat with one click |
 | [[Rules]] | Instructions for the AI kept in your project (.kural/rules) |
@@ -35,6 +36,7 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 | [[Account and Updates]] | The usage meter; who's logged in, switch account, log out; updates |
 | [[Settings and Shortcuts]] | Every Kural setting and keyboard shortcut |
 | [[Troubleshooting]] | When something doesn't work |
+| [[Building from Source]] | Build Kural from VS Code's source (Mac for now), and what one-frame project windows need |
 
 ## Missing something?
 

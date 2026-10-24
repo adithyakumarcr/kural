@@ -1,0 +1,29 @@
+diff --git a/src/vs/workbench/api/browser/viewsExtensionPoint.ts b/src/vs/workbench/api/browser/viewsExtensionPoint.ts
+index 83378707..f0b30233 100644
+--- a/src/vs/workbench/api/browser/viewsExtensionPoint.ts
++++ b/src/vs/workbench/api/browser/viewsExtensionPoint.ts
+@@ -401,6 +401,10 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
+ 	}
+ 
+ 	private registerCustomViewContainer(id: string, title: string, icon: URI | ThemeIcon, order: number, extensionId: ExtensionIdentifier | undefined, location: ViewContainerLocation): ViewContainer {
++		if (id === 'workbench.view.extension.kural-projects') {
++			order = -1000; // Kural: the Projects bar comes first in the activity bar
++		}
++
+ 		let viewContainer = this.viewContainersRegistry.get(id);
+ 
+ 		if (!viewContainer) {
+diff --git a/src/vs/workbench/browser/layout.ts b/src/vs/workbench/browser/layout.ts
+index 75f9238f..9180d498 100644
+--- a/src/vs/workbench/browser/layout.ts
++++ b/src/vs/workbench/browser/layout.ts
+@@ -819,6 +819,9 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 				viewContainerToRestore = this.viewDescriptorService.getDefaultViewContainer(ViewContainerLocation.Sidebar)?.id;
+ 			}
+ 
++			// Kural: the side bar opens the Projects bar at every start
++			viewContainerToRestore = 'workbench.view.extension.kural-projects';
++
+ 			if (viewContainerToRestore) {
+ 				this.state.initialization.views.containerToRestore.sideBar = viewContainerToRestore;
+ 			} else {

@@ -5,14 +5,17 @@
 // screen); "always"; "off". Each chat has one notification at a time (a new one replaces it), and it's taken away when
 // you answer in Kural or open that chat. Clicking it brings Kural to the front and shows the chat. (Not on a Mac, where
 // the osascript notification goes first: it can't be clicked through to Kural, replaced or taken away, and doesn't
-// bounce the Dock icon. The price of one that actually shows; see Notifier.routes.)
+// bounce the Dock icon. The price of one that actually shows; see Notifier.routes.) First of all, on every system: when
+// another Kural window is in front (a project you switched to), the card route asks that window to show a card
+// (the Projects bar, lib/projects: "weld-sim: Tune the arc model is done", Go to weld-sim) instead of a system notification.
 //
 // How: VS Code shows a real system notification as Kural on every OS (its hostService.showToast, an Electron
 // Notification). Extensions can't reach it, so rebrand.py registers a command for it (Ross: _kural.osToast
 // { title, body, id, attention } → { clicked, supported }, and _kural.osToastClear { id }). On a build without that
 // command, or a system without notifications (Linux with no notification service): the OS's own way (macOS osascript,
 // shown as Script Editor; Windows a PowerShell toast; Linux notify-send), else Kural's notification inside the window.
-// On a Mac the OS's own way goes first (see Notifier.routes). No vscode here: the editor's parts come in (see Notifier).
+// On a Mac the OS's own way goes first (see Notifier.routes), and the card in another window before both. No vscode here: the
+// editor's parts come in (see Notifier).
 
 const SETTINGS = ["whenAway", "always", "off"];
 
@@ -99,6 +102,8 @@ function fallbackCommand(platform, title, body) {
 //   clearToast(id)  → withdraws one (_kural.osToastClear)
 //   run(cmd, args, env) → Promise<boolean>   (the OS's own notification: true when it went out)
 //   inApp(title, body) → Promise<boolean>     (Kural's notification inside the window: true = "Show" clicked)
+//   elsewhere({ id, title, body, attention, tabId }) → Promise<boolean>   (optional: a card shown in another Kural window that's
+//     in front; true = shown there, nothing else is sent. Missing, false or a throw: the ways below)
 //   log(text), platform }
 class Notifier {
   constructor(editor) { this.e = editor; this.native = null; /* null: not known yet */ this.toastWaitMs = 800; }
@@ -111,15 +116,24 @@ class Notifier {
   // The order to try. On a Mac the OS's own way (osascript) comes first: Electron's notification from an ad-hoc-signed app
   // (every install is re-signed, so macOS sees a new app) is dropped silently while the call still says "supported",
   // so no fallback would ever run. osascript always shows (as Script Editor). Elsewhere Kural's own toast comes first.
-  routes() { return this.e.platform === "darwin" ? ["os", "toast", "app"] : ["toast", "os", "app"]; }
+  // A card in another Kural window (when the editor parts can ask for one) goes before all of them, on every system.
+  routes() {
+    const ways = this.e.platform === "darwin" ? ["os", "toast", "app"] : ["toast", "os", "app"];
+    return typeof this.e.elsewhere === "function" ? ["card", ...ways] : ways;
+  }
 
   // Shows it; onClick() when you click it (only the toast and in-window routes can tell). Never throws, never waits for
-  // you. Resolves with the route used: "toast" | "os" | "app" | "none" (so the log and "Test Notification" can say).
-  async show({ id, title, body, attention = true }, onClick) {
+  // you. Resolves with the route used: "card" | "toast" | "os" | "app" | "none" (so the log and "Test Notification" can say).
+  // tabId: the chat's tab, for the card (the other window's "Go to" brings that chat up).
+  async show({ id, title, body, attention = true, tabId }, onClick) {
     const log = (t) => { try { this.e.log(t); } catch { /* the log is optional */ } };
     try {
       for (const route of this.routes()) {
-        if (route === "toast") {
+        if (route === "card") {
+          let shown = false;
+          try { shown = !!(await this.e.elsewhere({ id, title, body, attention, tabId })); } catch (e) { log(`notify: card in another window failed: ${e.message}`); }
+          if (shown) { log("notify: shown as a card in another Kural window"); return "card"; }
+        } else if (route === "toast") {
           if (!(await this.ready())) { log("notify: no _kural.osToast in this build"); continue; }
           if (await this.tryToast({ id, title, body, attention }, onClick, log)) { log("notify: sent by Kural's own toast"); return "toast"; }
         } else if (route === "os") {

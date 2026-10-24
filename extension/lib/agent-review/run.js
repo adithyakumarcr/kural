@@ -15,7 +15,8 @@ const short = (s, n = 60) => { s = String(s || "").replace(/\s+/g, " ").trim(); 
 // What it's doing, in plain words, from a tool call.
 function describe(name, input, root) {
   const i = input && typeof input === "object" ? input : {};
-  const file = (p) => { const s = String(p || ""); return short(path.isAbsolute(s) && root ? path.relative(root, s) || "." : s, 70); };
+  // (Names are shown with "/" on every system, like the findings'.)
+  const file = (p) => { const s = String(p || ""); return short(path.isAbsolute(s) && root ? path.relative(root, s).split(path.sep).join("/") || "." : s, 70); };
   if (name === "Read") return `Reading ${file(i.file_path)}`;
   if (name === "Grep") return i.pattern ? `Searching the code for "${short(i.pattern, 40)}"` : "Searching the code";
   if (name === "Glob") return i.pattern ? `Looking for files like ${short(i.pattern, 40)}` : "Looking through the project";

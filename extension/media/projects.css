@@ -1,0 +1,79 @@
+/* The Projects tab (media/projects.js): the look agreed in the mockup. VS Code's theme colors, Kural's purple for the
+   accents, the working / waiting / finished marks on each chat, and red only for the ones that close or remove.
+   Font sizes follow the editor (--fs, lib/ui.js). */
+:root { --accent: #8b6cef; --accent-soft: rgba(139,108,239,.16); --chat-cur: rgba(139,108,239,.10); --finished: #b9a8f5;
+  --muted: var(--vscode-descriptionForeground); --faint: var(--vscode-disabledForeground, rgba(128,128,128,.8));
+  --warn: var(--vscode-editorWarning-foreground, #d7a24a); --red: var(--vscode-errorForeground, #f14c4c);
+  --hover: var(--vscode-list-hoverBackground, rgba(128,128,128,.12)); --border: var(--vscode-widget-border, rgba(128,128,128,.22)); }
+body.vscode-light { --accent: #6447d6; --accent-soft: rgba(100,71,214,.12); --chat-cur: rgba(100,71,214,.07); --finished: #6447d6; --red: #c9302c; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); background: var(--vscode-sideBar-background); }
+#app { display: flex; flex-direction: column; height: 100vh; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.codicon { font-size: calc(16px * var(--fs, 1)); }
+
+/* ---------- search ---------- */
+.find { padding: 4px 12px 6px; flex: none; }
+.box { display: flex; align-items: center; gap: 6px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 4px; padding: 0 8px; }
+.box:focus-within { border-color: var(--vscode-focusBorder); }
+.box .codicon { color: var(--muted); font-size: calc(14px * var(--fs, 1)); }
+.q { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--vscode-input-foreground); font: inherit; padding: 4px 0; height: calc(26px * var(--fs, 1)); }
+.q::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted)); }
+
+/* ---------- the list ---------- */
+.plist { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 10px; }
+.sec { font-size: calc(11px * var(--fs, 1)); font-weight: 600; letter-spacing: .04em; color: var(--muted); padding: 10px 12px 4px 20px; text-transform: uppercase; }
+.sec .n { color: var(--faint); font-weight: 400; }
+.empty { color: var(--muted); padding: 14px 20px; line-height: 1.5; }
+
+.row { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; cursor: pointer; position: relative; outline: 0; }
+.row:hover { background: var(--hover); }
+.row:focus-visible, .chat-row:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.row.cur { background: var(--accent-soft); }
+.row.cur::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+.chev { width: calc(14px * var(--fs, 1)); padding: 0; border: 0; background: none; color: var(--muted); flex: none; display: grid; place-items: center; }
+.chev .codicon { font-size: calc(14px * var(--fs, 1)); }
+.chev.none { visibility: hidden; }
+.sw { width: calc(26px * var(--fs, 1)); height: calc(26px * var(--fs, 1)); border-radius: 6px; display: grid; place-items: center; font-weight: 600; font-size: calc(12px * var(--fs, 1));
+  flex: none; background: var(--accent); color: #fff; }
+.row.recent .sw { opacity: .7; }
+.txt { flex: 1; min-width: 0; }
+.nm { display: flex; align-items: center; gap: 6px; }
+.nmt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--vscode-foreground); }
+.here { font-size: calc(10px * var(--fs, 1)); color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 0 4px; white-space: nowrap; flex: none; }
+.sub { color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.end { display: flex; align-items: center; gap: 4px; flex: none; }
+.badge { min-width: calc(16px * var(--fs, 1)); height: calc(16px * var(--fs, 1)); padding: 0 4px; border-radius: 8px; background: var(--accent); color: #fff;
+  font-size: calc(10px * var(--fs, 1)); font-weight: 600; display: inline-grid; place-items: center; line-height: 1; }
+
+.tbtn { width: calc(22px * var(--fs, 1)); height: calc(22px * var(--fs, 1)); padding: 0; border: 0; border-radius: 5px; background: none; color: var(--vscode-foreground);
+  display: grid; place-items: center; flex: none; }
+.tbtn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.25)); }
+.tbtn .codicon { font-size: calc(14px * var(--fs, 1)); }
+.tbtn:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+/* (The pin, the cross and the bin show when you point at the row, or when a key reaches them.) */
+.pin, .close-p, .bin-p { opacity: 0; }
+.pin { color: var(--muted); }
+.row:hover .pin, .row:hover .close-p, .row:hover .bin-p, .row:focus-within .pin, .row:focus-within .close-p, .row:focus-within .bin-p, .pin.on { opacity: 1; }
+/* red: only what closes a project or removes it from Recent */
+.tbtn.red { color: var(--red); }
+.tbtn.red:hover { background: rgba(241,76,76,.2); color: var(--red); }
+
+/* ---------- chats under a project ---------- */
+.chat-row { display: flex; align-items: center; gap: 8px; padding: 3px 10px 3px 62px; cursor: pointer; height: calc(24px * var(--fs, 1)); outline: 0; }
+.chat-row:hover { background: var(--hover); }
+.chat-row.cur-chat { background: var(--chat-cur); }
+.chat-row .st { width: calc(16px * var(--fs, 1)); display: grid; place-items: center; flex: none; color: var(--faint); }
+.chat-row .st .codicon { font-size: calc(14px * var(--fs, 1)); }
+.chat-row .ct { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-row .cs { color: var(--faint); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+.chat-row.done .ct { color: var(--vscode-foreground); font-weight: 600; }
+.chat-row.done .cs { color: var(--finished); }
+.chat-row.ask .cs { color: var(--warn); }
+.chat-row.run .cs { color: var(--accent); }
+.dot-done, .needs { width: calc(8px * var(--fs, 1)); height: calc(8px * var(--fs, 1)); border-radius: 50%; display: inline-block; }
+.dot-done { background: var(--accent); }
+.needs { background: var(--warn); }
+.spin { animation: spin 1.2s linear infinite; color: var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
