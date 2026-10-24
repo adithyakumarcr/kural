@@ -6,16 +6,21 @@
 #   5. product.json "kuralSource", 6. a stamp: an unchanged lock + patches + script do nothing the next time.
 # --dry-run prints the steps and touches nothing. --pristine only does step 1 (default build/vscode-pristine):
 # the tree to make a new patch in (see patches/kural/README.md).
+# Also runs under Git Bash on Windows (the Windows build, KURAL_SOURCE=1 ./build-win.sh): both checkouts are made with LF line
+# ends (core.autocrlf false, core.eol lf: VS Code's .gitattributes has `* text=auto`, which would give CRLF there and no patch
+# would apply) and long paths on.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . scripts/vscode/lock.sh
+# python3 on Windows is python (actions/setup-python has no python3; the Microsoft Store's python3 is a stub that fails)
+python3 -c '' >/dev/null 2>&1 || python3() { python "$@"; }
 
 DRY=0 PRISTINE=0 DEST=""
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY=1 ;;
     --pristine) PRISTINE=1 ;;
-    -h|--help) sed -n 2,9p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,11p "$0"; exit 0 ;;
     -*) echo "Unknown option: $a (try --help)" >&2; exit 1 ;;
     *) DEST="$a" ;;
   esac
@@ -47,7 +52,10 @@ want_stamp() {
 
 # A folder we may reset/clean must be its own git repository, never a folder inside Kural's.
 own_repo() {   # own_repo <dir>: true when <dir> is the top of its own git repository
-  [ -d "$1/.git" ] && [ "$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" = "$(cd "$1" && pwd -P)" ]
+  local top; top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  # Git for Windows says C:/a/b, Git Bash's pwd says /c/a/b: compare the same spelling
+  if command -v cygpath >/dev/null 2>&1; then top="$(cygpath -u "$top")"; fi
+  [ -d "$1/.git" ] && [ "$top" = "$(cd "$1" && pwd -P)" ]
 }
 
 step1() {
@@ -59,6 +67,10 @@ step1() {
     git init -q "$DEST"
     git -C "$DEST" remote add origin https://github.com/microsoft/vscode.git
   fi
+  # Same text as upstream on Windows too: no CRLF conversion (autocrlf is on in Git for Windows' default), and paths over 260 characters.
+  git -C "$DEST" config core.autocrlf false
+  git -C "$DEST" config core.eol lf
+  git -C "$DEST" config core.longpaths true
   # The source has no LFS files; a global git-lfs filter without the program installed would break the checkout.
   git -C "$DEST" config filter.lfs.required false
   git -C "$DEST" config filter.lfs.process ""
@@ -85,7 +97,8 @@ step2() {
     rm -rf "$VSCODIUM_DIR"
   fi
   mkdir -p "$(dirname "$VSCODIUM_DIR")"
-  git -c advice.detachedHead=false clone -q --depth 1 --branch "$TAG" https://github.com/VSCodium/vscodium "$VSCODIUM_DIR"
+  git -c advice.detachedHead=false -c core.autocrlf=false -c core.eol=lf -c core.longpaths=true \
+    clone -q --depth 1 --branch "$TAG" https://github.com/VSCodium/vscodium "$VSCODIUM_DIR"
 }
 
 step3() {
@@ -93,6 +106,10 @@ step3() {
   for p in ${kural_patches[@]+"${kural_patches[@]}"}; do
     say "   kural patch: $(basename "$p" .patch)"
     [ "$DRY" = 1 ] && continue
+    # a checkout of Kural's own repository with autocrlf (Git for Windows' default) has CRLF here: git apply would refuse every hunk
+    if LC_ALL=C grep -q $'\r' "$p"; then
+      die "$(basename "$p") has CRLF line ends: check Kural out with core.autocrlf false (git config --global core.autocrlf false), then again"
+    fi
     git -C "$DEST" apply --whitespace=nowarn "$PWD/$p" 2>&1 \
       || die "Kural patch $(basename "$p") does not apply to VS Code $COMMIT"
   done
@@ -105,7 +122,9 @@ subst() {   # subst <patch> <out>
       -e "s|!!ORG_NAME!!|VSCodium|g" -e "s|!!RELEASE_VERSION!!|$TAG|g" -e "s|!!TUNNEL_APP_NAME!!|codium-tunnel|g" "$1" > "$2"
 }
 
-# prepare_vscode.sh, the stable build, without the parts for deb/rpm/Windows installers (those still use VSCodium's download).
+# prepare_vscode.sh, the stable build, without the parts for installers (deb/rpm, Windows' Inno Setup and MSI: Kural makes its own
+# .deb and NSIS installer; so no build/win32/code.iss edits and no LICENSE.rtf either, they only feed those installers).
+# The Windows product.json values (win32AppUserModelId, win32DirName, ... the app and mutex ids) are among the setpath lines.
 # The product.json lines are read from its text at this tag (its `setpath` calls, not the "insider" branches), so they follow the tag.
 vscodium_product() {   # vscodium_product <vscode dir> <vscodium dir>
   python3 -I - "$1" "$2" <<'PYEOF'

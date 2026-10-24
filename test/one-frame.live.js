@@ -1,4 +1,4 @@
-// Live check of one-frame windows (macOS; needs an app built from source with patches/kural/0100-one-frame-windows.patch).
+// Live check of one-frame windows (macOS and Linux; needs an app built from source with patches/kural/0100-one-frame-windows.patch).
 // Starts a throwaway copy of the built app (own user data, no Kural of yours is touched), opens two project folders, and
 // drives the windows over the Chrome DevTools protocol: exactly one window visible, the others hidden but alive, same
 // bounds, a visible window that closes hands the frame to the last hidden one. Prints what it saw, plus a screenshot
@@ -6,10 +6,15 @@
 // Which windows are visible is asked of the app's MAIN process (Electron's BrowserWindow.isVisible/getBounds, through a
 // Node inspector the test app is started with: --inspect). The page's document.visibilityState can't tell: the patch gives
 // frame windows backgroundThrottling:false, so a hidden window's page still says "visible". macOS's own window list
-// (CGWindowListCopyWindowInfo, a tiny Swift helper compiled with swiftc; optional) is shown beside it for comparison.
+// (CGWindowListCopyWindowInfo, a tiny Swift helper compiled with swiftc; optional) is shown beside it for comparison; on Linux
+// the X server's own list (xdotool search --onlyvisible, when xdotool is there) is, and it is exact: an unmapped window is gone from it.
 // The test app gets its own HOME (a temp folder): VS Code keeps the "recently opened" list in ~/.kural-shared, which the
 // test folders would otherwise end up in.
-// Run: node test/one-frame.live.js            (KURAL_APP=/path/to/Kural.app to use another build)
+// Run: node test/one-frame.live.js
+//   Mac:   KURAL_APP=/path/to/Kural.app (default build/mac/Kural.app of this checkout)
+//   Linux: KURAL_APP=/path/to/the/kural/program (default /usr/share/kural/kural, the .deb's); needs a display: DISPLAY (Xvfb), ideally
+//          with a window manager running (openbox: windows hide and show like on a desktop). KURAL_APP_FLAGS="--no-sandbox ..." adds
+//          flags (a container needs --no-sandbox). scripts/linux-container/run.sh live does all of it in Docker.
 // Not named *.test.js: `npm test` does not run it. Never uses AppleScript. Quits only the processes it started.
 const fs = require("fs");
 const os = require("os");
@@ -18,13 +23,17 @@ const http = require("http");
 const net = require("net");
 const { spawn, spawnSync } = require("child_process");
 
-const APP = process.env.KURAL_APP || "/Users/adithyakumar/Projects/kural/build/mac/Kural.app";
-const BIN = path.join(APP, "Contents/MacOS/Kural");
-const CLI = path.join(APP, "Contents/Resources/app/bin/kural");
-if (process.platform !== "darwin" || !fs.existsSync(BIN) || !fs.existsSync(CLI)) {
-  console.log(`SKIP: no Kural app built from source at ${APP} (or not a Mac). Set KURAL_APP to try another build.`);
+const MACOS = process.platform === "darwin", LINUX = process.platform === "linux";
+const APP = process.env.KURAL_APP || (MACOS ? path.join(__dirname, "..", "build/mac/Kural.app") : "/usr/share/kural/kural");
+// Mac: Kural.app/Contents/MacOS/Kural and its bin/kural; Linux: the program and bin/kural beside it (the .deb's /usr/share/kural).
+const BIN = MACOS ? path.join(APP, "Contents/MacOS/Kural") : APP;
+const CLI = MACOS ? path.join(APP, "Contents/Resources/app/bin/kural") : path.join(path.dirname(APP), "bin/kural");
+const APP_FLAGS = (process.env.KURAL_APP_FLAGS || "").split(/\s+/).filter(Boolean);
+if (!(MACOS || LINUX) || !fs.existsSync(BIN) || !fs.existsSync(CLI)) {
+  console.log(`SKIP: no Kural app built from source at ${APP} (or not a Mac or Linux computer). Set KURAL_APP to try another build.`);
   process.exit(0);
 }
+if (LINUX && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) { console.log("SKIP: no display (start Xvfb and set DISPLAY, or run scripts/linux-container/run.sh live)."); process.exit(0); }
 if (typeof WebSocket === "undefined") { console.log("SKIP: needs Node 22+ (global WebSocket)."); process.exit(0); }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -54,7 +63,13 @@ for w in list where (w[kCGWindowOwnerPID as String] as? Int32) == pid && (w[kCGW
 print(String(data: try! JSONSerialization.data(withJSONObject: out), encoding: .utf8)!)
 `;
 let nativeBin = null;
+const NATIVE = MACOS ? "macOS" : "X11";   // whose window list is shown beside Electron's
 function buildNative() {
+  if (!MACOS) {   // Linux: xdotool, when it is there
+    if (spawnSync("xdotool", ["version"], { encoding: "utf8" }).status === 0) nativeBin = "xdotool";
+    else info("no xdotool, so no comparison with the X server's own window list");
+    return;
+  }
   const src = path.join(tmp, "windows.swift"), bin = path.join(tmp, "windows");
   fs.writeFileSync(src, SWIFT);
   const r = spawnSync("swiftc", ["-O", src, "-o", bin], { encoding: "utf8", timeout: 120000 });
@@ -64,6 +79,16 @@ function buildNative() {
 // The main process's windows as macOS sees them: [{id, on, x, y, w, h}] (hidden ones are on: false), or null.
 function nativeWindows() {
   if (!nativeBin || !main || main.gone) return null;
+  if (!MACOS) { // X11: the windows of the main process the server has mapped (a hidden/unmapped one is not listed)
+    const ids = spawnSync("xdotool", ["search", "--onlyvisible", "--pid", String(main.pid)], { encoding: "utf8", timeout: 5000 }).stdout.split(/\s+/).filter(Boolean);
+    const out = [];
+    for (const id of ids) {
+      const g = spawnSync("xdotool", ["getwindowgeometry", "--shell", id], { encoding: "utf8", timeout: 5000 }).stdout;
+      const v = Object.fromEntries(g.split("\n").map((l) => l.split("=")).filter((p) => p.length === 2).map(([k, x]) => [k, Number(x)]));
+      if (v.WIDTH > 200 && v.HEIGHT > 200) out.push({ id: Number(id), on: true, x: v.X, y: v.Y, w: v.WIDTH, h: v.HEIGHT });
+    }
+    return out;
+  }
   const r = spawnSync(nativeBin, [String(main.pid)], { encoding: "utf8", timeout: 5000 });
   try { return JSON.parse(r.stdout).filter((w) => w.w > 200 && w.h > 200); } catch { return null; }
 }
@@ -114,19 +139,25 @@ class Cdp {
 }
 
 const STATE = `({ vis: document.visibilityState, focus: document.hasFocus(), x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight, title: document.title })`;
-const mine = (env) => ["env", "-i", `HOME=${dirs.home}`, "PATH=/usr/bin:/bin", ...env];
-const common = [`--user-data-dir=${dirs.user}`, `--extensions-dir=${dirs.ext}`, "--disable-workspace-trust"];
+// The test app's own environment, nothing of yours. Linux also needs the display and the session bus to open a window.
+const keep = LINUX ? ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE", "DBUS_SESSION_BUS_ADDRESS", "XAUTHORITY"].filter((k) => process.env[k]).map((k) => `${k}=${process.env[k]}`) : [];
+const mine = (env) => ["env", "-i", `HOME=${dirs.home}`, `PATH=${LINUX ? "/usr/local/bin:/usr/bin:/bin" : "/usr/bin:/bin"}`, ...keep, ...env];
+const common = [`--user-data-dir=${dirs.user}`, `--extensions-dir=${dirs.ext}`, "--disable-workspace-trust", ...APP_FLAGS];
+const CMD = MACOS ? 4 : 2;   // CDP modifiers: Alt 1, Ctrl 2, Meta (Cmd) 4, Shift 8
 
 const started = []; // pids this script started
 let port;
 let screenshot;
 
 function cleanup() {
-  for (const pid of started) { try { process.kill(pid, "SIGTERM"); } catch {} }
+  // Linux: the app was started detached, so it leads its own process group: that group is the app and its helpers, and
+  // nothing else (a pattern on the folder could hit a Kural you installed in the same place).
+  const stop = (sig) => { for (const pid of started) { try { process.kill(LINUX ? -pid : pid, sig); } catch {} } };
+  stop("SIGTERM");
   spawnSync("sleep", ["2"]);
-  for (const pid of started) { try { process.kill(pid, "SIGKILL"); } catch {} }
-  // Helpers of that build only: the pattern is the test app's own folder, never /Applications/Kural.app
-  spawnSync("pkill", ["-f", path.join(APP, "Contents").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "/"]);
+  stop("SIGKILL");
+  // Mac, helpers of that build only: the pattern is the test app's own folder, never /Applications/Kural.app
+  if (MACOS) spawnSync("pkill", ["-f", path.join(APP, "Contents").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "/"]);
 }
 
 // The workbench pages (one per window) with a live connection each, keyed by the folder in their title.
@@ -143,7 +174,7 @@ async function workbenches() {
   return out;
 }
 const nameOf = (t) => /proj-a/.test(t) ? "A" : /proj-b/.test(t) ? "B" : "?";
-const MAC = Symbol("macOS"), MAIN = Symbol("main process");
+const MAC = Symbol(NATIVE), MAIN = Symbol("main process");
 let inspector; // Cdp to the main process
 async function mainWindows() {
   const r = await inspector.eval(`(() => { const { BrowserWindow } = process.mainModule.require("electron"); return BrowserWindow.getAllWindows().map((w) => ({ id: w.id, title: w.getTitle(), visible: w.isVisible(), min: w.isMinimized(), fs: w.isFullScreen(), x: w.getBounds().x, y: w.getBounds().y, w: w.getBounds().width, h: w.getBounds().height })); })()`);
@@ -159,7 +190,7 @@ async function snapshot() {
   }
   const wins = await mainWindows();
   out[MAIN] = wins;
-  out[MAC] = nativeWindows();
+  out[MAC] = nativeWindows(); // (the native window list: macOS's or X11's)
   for (const w of wins) { const o = out[nameOf(w.title)]; if (o) o.win = w; } // the main process's window of that page
   return out;
 }
@@ -169,7 +200,7 @@ const shown = (s) => wins(s).filter((w) => w.visible).length;
 const total = (s) => wins(s).length;
 const front = (s) => { const v = wins(s).filter((w) => w.visible); return v.length === 1 ? nameOf(v[0].title) : null; };
 const macOn = (s) => s[MAC] ? s[MAC].filter((w) => w.on).length : null;
-const show = (s) => `${wins(s).map((w) => `${nameOf(w.title)}: ${w.visible ? "VISIBLE" : "hidden"}${w.min ? " minimized" : ""}${w.fs ? " fullscreen" : ""} ${w.w}x${w.h}@${w.x},${w.y}`).join("  |  ")}${s[MAC] ? `  ||  macOS list: ${s[MAC].length} window(s), ${macOn(s)} on screen` : ""}${Object.entries(s).filter(([, v]) => v.error).map(([k, v]) => `  ||  page ${k}: ${v.error}`).join("")}`;
+const show = (s) => `${wins(s).map((w) => `${nameOf(w.title)}: ${w.visible ? "VISIBLE" : "hidden"}${w.min ? " minimized" : ""}${w.fs ? " fullscreen" : ""} ${w.w}x${w.h}@${w.x},${w.y}`).join("  |  ")}${s[MAC] ? `  ||  ${NATIVE} list: ${s[MAC].length} window(s), ${macOn(s)} on screen` : ""}${Object.entries(s).filter(([, v]) => v.error).map(([k, v]) => `  ||  page ${k}: ${v.error}`).join("")}`;
 const settled = (who) => (s) => !!(s.A && s.B) && shown(s) === 1 && total(s) === 2 && front(s) === who;
 
 // Polls both windows (pages and the main process) every ~100 ms until `done(snapshot)` is true.
@@ -221,15 +252,15 @@ async function key(c, k) { // a keyboard shortcut as the workbench sees it (the 
   await c.send("Input.dispatchKeyEvent", { type: "keyUp", ...base });
 }
 async function closeWindowOf(c) {
-  // 1. the keybinding of "Close Window" (Cmd+Shift+W); 2. the Command Palette
+  // 1. the keybinding of "Close Window" (Cmd+Shift+W; Ctrl+Shift+W on Linux, Alt+F4's second key); 2. the Command Palette
   await c.send("Page.bringToFront").catch(() => {});
   await c.eval("document.body.focus(); true").catch(() => {});
-  await key(c, { key: "W", code: "KeyW", vk: 87, mod: 4 | 8 }).catch(() => {});
-  return "Cmd+Shift+W";
+  await key(c, { key: "W", code: "KeyW", vk: 87, mod: CMD | 8 }).catch(() => {});
+  return MACOS ? "Cmd+Shift+W" : "Ctrl+Shift+W";
 }
 async function closeWindowViaPalette(c) {
   await c.send("Page.bringToFront").catch(() => {});
-  await key(c, { key: "P", code: "KeyP", vk: 80, mod: 4 | 8 });
+  await key(c, { key: "P", code: "KeyP", vk: 80, mod: CMD | 8 });
   await sleep(700);
   await c.send("Input.insertText", { text: "Close Window" });
   await sleep(700);
@@ -293,7 +324,8 @@ async function main_() {
     check("opening B: neither window is minimized or full screen", !s1.A.win.min && !s1.B.win.min && !s1.A.win.fs && !s1.B.win.fs);
     if (s1.A.vis === "visible") info(`note: the hidden window's page still says document.visibilityState = "visible" (backgroundThrottling:false), so that can't tell hidden from shown`);
   }
-  if (s1[MAC] && macOn(s1) !== shown(s1)) finding(`macOS's own window list (CGWindowList) says ${macOn(s1)} window(s) of the app are on screen (alpha ${s1[MAC].length ? "1" : "-"}), while Electron says ${shown(s1)} is visible (A.isVisible() false after hide()): either the list keeps ordered-out windows or the hidden window is still on screen. Look at the real screen to decide.`);
+  if (s1[MAC] && !MACOS && macOn(s1) !== shown(s1)) finding(`the X server maps ${macOn(s1)} window(s) of the app, while Electron says ${shown(s1)} is visible: a hidden window may still be on screen. Look at the real screen (the window manager's list) to decide.`);
+  if (s1[MAC] && MACOS && macOn(s1) !== shown(s1)) finding(`macOS's own window list (CGWindowList) says ${macOn(s1)} window(s) of the app are on screen (alpha ${s1[MAC].length ? "1" : "-"}), while Electron says ${shown(s1)} is visible (A.isVisible() false after hide()): either the list keeps ordered-out windows or the hidden window is still on screen. Look at the real screen to decide.`);
   flash("opening B", r, s1);
   if (!r.ok) finding(`after the CLI opened B, the frame did not settle on "B in front, one window on screen, two windows" within 40 s: ${show(s1)}`);
 
@@ -357,7 +389,8 @@ async function main_() {
     check("A shows with the bounds B had", !!s5.A.win && bounds(s5.A.win, before.B.win), s5.A.win ? `B had ${before.B.win.w}x${before.B.win.h}@${before.B.win.x},${before.B.win.y}; A has ${s5.A.win.w}x${s5.A.win.h}@${s5.A.win.x},${s5.A.win.y}` : "no window for A");
   }
   flash("closing B", r, before);
-  if (s5[MAC] && s5[MAC].length !== total(s5)) finding(`after B closed, macOS's window list still has ${s5[MAC].length} window(s) of the app while Electron has ${total(s5)}: that list keeps closed windows too, so it cannot show a hidden one is gone from the screen`);
+  if (s5[MAC] && !MACOS && s5[MAC].length !== shown(s5)) finding(`after B closed, the X server maps ${s5[MAC].length} window(s) of the app while Electron has ${shown(s5)} visible`);
+  if (s5[MAC] && MACOS && s5[MAC].length !== total(s5)) finding(`after B closed, macOS's window list still has ${s5[MAC].length} window(s) of the app while Electron has ${total(s5)}: that list keeps closed windows too, so it cannot show a hidden one is gone from the screen`);
   check("the app is still running", !main.gone);
 }
 

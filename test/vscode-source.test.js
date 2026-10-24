@@ -1,8 +1,11 @@
 // The build from VS Code's source (scripts/vscode/, vscode.lock, patches/kural/). No network: fetch.sh only runs with --dry-run.
 //   1. vscode.lock: its keys, a 40-character commit, and the same VSCodium version as codium.lock and the build scripts.
 //   2. fetch.sh --dry-run: the steps in order, Kural's patches before VSCodium's, nothing created (also in a copy with two patches).
-//   3. build-mac.sh and make-deb.sh without KURAL_SOURCE still download VSCodium; install.sh has --source (Mac and Ubuntu); the
-//      workflow is by hand only, with a Mac and an Ubuntu job.
+//   3. build-mac.sh, make-deb.sh and build-win.sh without KURAL_SOURCE still download VSCodium; install.sh has --source (Mac and
+//      Ubuntu); the workflow is by hand only, with a Mac, an Ubuntu and a Windows job.
+//   4. Windows: build-win.sh runs fetch.sh with KURAL_OS=windows and build.sh win32-x64 only under KURAL_SOURCE (and only on
+//      Windows), fetch.sh checks out with LF line ends and long paths, build.sh refuses a cross build and knows the Windows
+//      Node zip, the workflow has the windows job. (Nothing here runs a Windows build: that needs a Windows computer.)
 const assert = require("assert");
 const fs = require("fs"), os = require("os"), path = require("path");
 const { spawnSync } = require("child_process");
@@ -142,7 +145,8 @@ check("the workflow has an Ubuntu job beside the Mac one: source build, .deb, in
   const jobs = w.slice(w.indexOf("\njobs:"));
   const at = jobs.indexOf("\n  linux:");
   assert(at > 0 && jobs.indexOf("\n  macos:") > 0, "a linux and a macos job");
-  const linux = jobs.slice(at);
+  const next = jobs.indexOf("\n  windows:", at);
+  const linux = jobs.slice(at, next > 0 ? next : undefined);   // (up to the Windows job, which comes after it)
   assert(/runs-on: ubuntu-\d+\.\d+/.test(linux), "an Ubuntu runner");
   for (const l of ["libx11-dev", "libxkbfile-dev", "libsecret-1-dev", "libkrb5-dev", "build-essential", "scripts/vscode/fetch.sh", "scripts/vscode/build.sh --download-node linux-x64", "KURAL_SOURCE=1 ./make-deb.sh", "apt-get install -y ./dist/kural_*_amd64.deb", "Xvfb", "kuralSource", '"ready":'])
     assert(linux.includes(l), l);
@@ -158,7 +162,7 @@ check("the workflow has an Ubuntu job beside the Mac one: source build, .deb, in
 
 check("the scripts have valid bash syntax; build.sh doesn't need shasum on Linux", () => {
   if (!bash) return;
-  for (const f of ["make-deb.sh", "install.sh", "build-mac.sh", "scripts/vscode/build.sh", "scripts/vscode/fetch.sh"]) {
+  for (const f of ["make-deb.sh", "install.sh", "build-mac.sh", "build-win.sh", "scripts/vscode/build.sh", "scripts/vscode/fetch.sh"]) {
     const r = spawnSync("bash", ["-n", path.join(root, f)], { encoding: "utf8" });
     assert.strictEqual(r.status, 0, `${f}: ${r.stderr}`);
   }
@@ -178,6 +182,102 @@ check("build.sh: platforms, the Node check and the gulp tasks", () => {
   for (const p of ["darwin-arm64", "linux-x64", "win32-x64"]) assert(s.includes(p), p);
   assert(s.includes(".nvmrc") && s.includes('"vscode-$PLATFORM-min-packing"') && s.includes("vscode-min-prepack"));
   assert(s.includes("build/vscode-out"), "output folder");
+});
+
+// ---- Windows (built under Git Bash on a Windows computer; here only read, and refused where it can't run)
+
+check("build-win.sh: without KURAL_SOURCE it downloads and checks VSCodium as before; with it, fetch.sh (windows) then build.sh win32-x64", () => {
+  const s = read("build-win.sh");
+  const gate = s.indexOf('"${KURAL_SOURCE:-0}" = 1');
+  const els = s.indexOf("\nelse\n", gate);
+  const fi = s.indexOf("\nfi\n", els);
+  assert(gate > 0 && els > gate && fi > els, "a KURAL_SOURCE test with an else branch");
+  const dl = s.indexOf("releases/download/$CODIUM_VER/VSCodium-win32-x64-$CODIUM_VER.zip");
+  assert(dl > els && dl < fi, "the download is in the else branch");
+  assert(s.indexOf("scripts/check-codium.sh", els) > els && s.indexOf('rm -rf "$WORK" && mkdir -p "$APP"', els) > els && s.indexOf('unzip -q "$SRC" -d "$APP"', els) > els && s.indexOf('unzip -q "$SRC" -d "$APP"') < fi, "the checksum and unzip of the download too, in that order");
+  assert(!s.slice(0, els).includes("check-codium.sh") && !s.slice(0, els).includes("unzip -q"), "nothing of the download before the else");
+  const fetch = s.indexOf("KURAL_OS=windows ./scripts/vscode/fetch.sh"), build = s.indexOf("./scripts/vscode/build.sh --download-node win32-x64");
+  assert(fetch > gate && fetch < build && build < els, "the source build is the KURAL_SOURCE branch: fetch (KURAL_OS=windows), then build.sh win32-x64");
+  assert(s.indexOf("scripts/vscode/fetch.sh", els) < 0 && s.indexOf("scripts/vscode/build.sh", els) < 0, "fetch.sh and build.sh are not used outside it");
+  assert(s.includes("build/vscode-out/win32-x64") && s.indexOf("build/vscode-out/win32-x64") < els, "it takes build.sh's output folder as the app folder");
+  // everything after the app folder is there stays the same for both ways
+  for (const l of ["electron_runtime.py", "scripts/rebrand.py", "scripts/sbom.py", "scripts/win-exe.js", "scripts/sign-win.sh", "installer/kural.nsi"]) assert(s.indexOf(l) > fi, l);
+  assert(s.indexOf("makensis", fi) > fi && s.indexOf("zip -qr", fi) > fi, "the installer and the zip");
+  assert(/WINDOWS_HOST" = 1 \]\s*\|\|[^\n]*Windows/.test(s.slice(gate, build)), "refuses a source build on another system before fetching");
+});
+
+if (bash) check("build-win.sh: KURAL_SOURCE=1 is refused off Windows, before anything is made", () => {
+  if (process.platform === "win32") return;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-win-source-"));
+  try {
+    fs.mkdirSync(path.join(tmp, "extension"));
+    fs.copyFileSync(path.join(root, "build-win.sh"), path.join(tmp, "build-win.sh"));
+    fs.copyFileSync(path.join(root, "extension/package.json"), path.join(tmp, "extension/package.json"));
+    const r = spawnSync("bash", [path.join(tmp, "build-win.sh")], { cwd: tmp, encoding: "utf8", env: { ...process.env, KURAL_SOURCE: "1" } });
+    assert.notStrictEqual(r.status, 0);
+    assert(/runs on Windows, in Git Bash/.test(r.stderr), r.stderr);
+    assert(!fs.existsSync(path.join(tmp, "build")), "it started building");
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+if (bash) check("build.sh win32-x64: refused off Windows with a clear message; unknown platforms still refused", () => {
+  if (process.platform === "win32") return;
+  const r = spawnSync("bash", [path.join(root, "scripts/vscode/build.sh"), "win32-x64"], { cwd: root, encoding: "utf8" });
+  assert.notStrictEqual(r.status, 0);
+  assert(/win32-x64 can only be built on Windows/.test(r.stderr) && /Git Bash/.test(r.stderr), r.stderr);
+  assert.notStrictEqual(spawnSync("bash", [path.join(root, "scripts/vscode/build.sh"), "win32-arm64"], { cwd: root, encoding: "utf8" }).status, 0);
+});
+
+check("build.sh: Windows gets nodejs.org's zip (read with Python, Git Bash has no unzip), node.exe, npm.cmd and the Windows steps", () => {
+  const s = read("scripts/vscode/build.sh");
+  assert(s.includes("win32-x64) NODE_PLAT=win-x64"), "Node's name for it");
+  assert(s.includes('file="node-v$NEED-$NODE_PLAT.zip"') && s.includes("zipfile.ZipFile"), "the zip, checked against SHASUMS256.txt like the tarballs");
+  assert(s.indexOf('got="$(hash < "$tmp/$file")"') > 0 && s.indexOf('got="$(hash < "$tmp/$file")"') < s.indexOf("zipfile.ZipFile"), "checked before it is opened");
+  assert(s.includes("node.exe") && s.includes("npm.cmd"), "node.exe and npm.cmd");
+  assert(s.includes("python3 -c '' >/dev/null 2>&1 || python3() { python"), "python for python3");
+  assert(/if \[ "\$PLATFORM" != win32-x64 \]; then[^\n]*\n\s*rm -f \.build\/extensions\/ms-vscode\.js-debug\/src\/win32-app-container-tokens/.test(s), "the Windows file is kept on Windows");
+  assert(s.includes("rg.exe") && s.includes("--path-separator /"), "the telemetry sweep finds ripgrep's .exe");
+  assert(s.includes("POLICY=win32") && s.includes("npm_config_arch=x64"), "the policy files and npm's arch");
+  assert(s.includes("$BUILT/VSCodium.exe"), "the output is checked");
+  // Mac and Linux are as they were
+  assert(s.includes('tar -xzf "$tmp/$file" -C "$LOCAL_NODE" --strip-components=1') && s.includes('NODE_DIR="$LOCAL_NODE/bin"'), "tarballs and bin/");
+  assert(s.includes('CXX=clang++ npm ci'), "the Mac's compiler");
+});
+
+check("fetch.sh: LF line ends and long paths in both checkouts (Git Bash on Windows), CRLF patches refused, Windows paths compared", () => {
+  const s = read("scripts/vscode/fetch.sh");
+  for (const l of ['config core.autocrlf false', 'config core.eol lf', 'config core.longpaths true']) assert(s.includes(`git -C "$DEST" ${l}`), l);
+  assert(s.indexOf('config core.autocrlf false') < s.indexOf("checkout -q --force FETCH_HEAD"), "set before the checkout, not after");
+  assert(/clone -q --depth 1 --branch "\$TAG" https:\/\/github\.com\/VSCodium\/vscodium/.test(s) && /-c core\.autocrlf=false -c core\.eol=lf -c core\.longpaths=true/.test(s), "VSCodium's checkout too");
+  assert(s.includes("has CRLF line ends"), "a patch with CRLF is refused with a reason");
+  assert(s.includes("cygpath -u"), "git's C:/x and Git Bash's /c/x are the same folder");
+  assert(s.includes("python3 -c '' >/dev/null 2>&1 || python3() { python"), "python for python3");
+});
+
+if (bash) check("fetch.sh --dry-run with KURAL_OS=windows names VSCodium's windows patch folder and runs on any system", () => {
+  const r = spawnSync("bash", [path.join(root, "scripts/vscode/fetch.sh"), "--dry-run"], { cwd: root, encoding: "utf8", env: { ...process.env, KURAL_OS: "windows" } });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert(r.stdout.includes("(windows)") && r.stdout.includes("patches/windows/*.patch"), r.stdout);
+});
+
+check("the workflow has a Windows job after the Ubuntu one: Git LF, Python, Node at .nvmrc, fetch, build, build-win.sh, start, artifact", () => {
+  const w = read(".github/workflows/build-from-source.yml");
+  assert(/^name: Build from source \(Mac, Ubuntu and Windows\)/m.test(w) && !/Windows still uses the download/.test(w), "title and comment name all three");
+  const jobs = w.slice(w.indexOf("\njobs:"));
+  const at = jobs.indexOf("\n  windows:");
+  assert(at > jobs.indexOf("\n  linux:") && at > jobs.indexOf("\n  macos:"), "the windows job comes after the others");
+  const win = jobs.slice(at);
+  assert(/runs-on: windows-2022/.test(win) && /defaults:\n\s+run:\n\s+shell: bash/.test(win), "windows-2022, bash by default");
+  const step = (t) => { const i = win.indexOf(t); assert(i > 0, t); return i; };
+  assert(step("core.autocrlf false") < step("actions/checkout@"), "Git keeps LF before the checkout");
+  for (const l of ["actions/setup-python@", "KURAL_OS=windows scripts/vscode/fetch.sh", "node-version-file: build/vscode-src/.nvmrc", "scripts/vscode/build.sh --download-node win32-x64", "KURAL_SOURCE=1 ./build-win.sh", "kuralSource", "setup.exe", "windows-x64.zip", "makensis", "pillow", "kural.cmd", '"ready":', "kuralRuntime", "actions/upload-artifact@"]) step(l);
+  assert(step("actions/setup-python@") < step("scripts/vscode/fetch.sh") && step("scripts/vscode/fetch.sh") < step("actions/setup-node@") && step("actions/setup-node@") < step("scripts/vscode/build.sh") && step("scripts/vscode/build.sh") < step("KURAL_SOURCE=1 ./build-win.sh") && step("KURAL_SOURCE=1 ./build-win.sh") < step("Install silently") && step("Install silently") < step("actions/upload-artifact@"), "steps in order (Node after the fetch: .nvmrc comes from the source)");
+  assert(/^permissions:\n  contents: read/m.test(w) && !/contents: write/.test(w), "read-only");
+  assert(!/KURAL_SIGN_|secrets\./.test(win), "no signing secrets");
+  const all = [".github/workflows/build.yml", ".github/workflows/build-from-source.yml"].map(read).join("\n");
+  const uses = win.split("\n").filter((l) => /uses:/.test(l));
+  assert(uses.length >= 4 && uses.every((l) => /@[0-9a-f]{40}\s+#/.test(l)), "each action pinned to a commit");
+  for (const l of uses) assert(all.includes(l.trim().replace(/^- /, "")), `${l.trim()} is a version the other jobs use too`);
 });
 
 process.exit(fail ? 1 : 0);

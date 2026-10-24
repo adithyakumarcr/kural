@@ -6,10 +6,46 @@ const path = require("path");
 const WORKSPACE_EXT = /\.code-workspace$/i;
 const ORDER = { ask: 0, done: 1, run: 2, idle: 3 };
 
+// The path rules of a system. `platform` is injectable so Windows can be tested on a Mac; the running system's own
+// `path` is used when it is the one asked for (as before), the others come from path.win32 / path.posix.
+function pathApi(platform = process.platform) {
+  if (platform === process.platform) return path;
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
+// What identifies a folder. On Windows the file system ignores case, VS Code gives "c:\Code\App" for a folder a dialog
+// calls "C:\code\app\", and "/" and "\" mean the same: all of those are one key (lower case, "\", no trailing "\").
+// Mac and Linux keep case: two folders that differ in case are two folders there. (A key is only an identity: the
+// original spelling of the path is what the page shows.)
+function pathKey(p, platform = process.platform) {
+  if (typeof p !== "string" || !p) return null;
+  return platform === "win32" ? winTidy(p).toLowerCase() : pathApi(platform).resolve(p);
+}
+
+// A Windows path with "\\" for separators, "." and ".." worked out, no trailing separator (except on a root), spelling kept.
+function winTidy(p) {
+  let n = path.win32.normalize(p);
+  const root = path.win32.parse(n).root;
+  while (n.length > root.length && /[\\/]$/.test(n)) n = n.slice(0, -1);
+  return n;
+}
+
+// The same place? (Windows: compared by key; elsewhere: the paths, resolved, exactly.)
+function samePath(a, b, platform = process.platform) {
+  const x = pathKey(a, platform);
+  return x !== null && x === pathKey(b, platform);
+}
+
+// Two keys (from status files) for the same project? A key written by an older Kural may not be normalised yet.
+function sameKey(a, b, platform = process.platform) {
+  if (!a || !b) return false;
+  return platform === "win32" ? pathKey(a, platform) === pathKey(b, platform) : a === b;
+}
+
 // One project is one folder, or one .code-workspace file; a window with neither has no project.
-function keyOf({ folders, workspaceFile } = {}) {
-  if (workspaceFile) return path.resolve(workspaceFile);
-  if (folders && folders[0]) return path.resolve(folders[0]);
+function keyOf({ folders, workspaceFile } = {}, { platform = process.platform } = {}) {
+  if (workspaceFile) return pathKey(workspaceFile, platform);
+  if (folders && folders[0]) return pathKey(folders[0], platform);
   return null;
 }
 
@@ -31,15 +67,22 @@ function ago(at, now = Date.now()) {
   return `${Math.floor(h / 24)} days ago`;
 }
 
-function nameOf(p, fallback) {
-  const base = path.basename(p.workspaceFile || p.path || "").replace(WORKSPACE_EXT, "");
+function nameOf(p, fallback, platform) {
+  const base = pathApi(platform).basename(p.workspaceFile || p.path || "").replace(WORKSPACE_EXT, "");
   return base || fallback || p.path || "";
 }
 
-function shorten(p, home) {
+// "/home/ada/proj" → "~/proj". On Windows the home is "C:\Users\ada", written with either separator and any case
+// of the drive letter and the names; the rest keeps the spelling it came with.
+function shorten(p, home, platform = process.platform) {
   if (!p || !home) return p || "";
+  if (platform === "win32") {
+    const h = winTidy(home), n = winTidy(p), lh = h.toLowerCase(), ln = n.toLowerCase();
+    if (ln === lh) return "~";
+    return ln.startsWith(lh.endsWith("\\") ? lh : lh + "\\") ? "~" + (h.endsWith("\\") ? "\\" : "") + n.slice(h.length) : p;
+  }
   if (p === home) return "~";
-  return p.startsWith(home + path.sep) ? "~" + p.slice(home.length) : p;
+  return p.startsWith(home + "/") ? "~" + p.slice(home.length) : p;
 }
 
 function labelOf(chat, now) {
@@ -65,10 +108,12 @@ function better(a, b, here) {
   return (Number(a.seen) || 0) > (Number(b.seen) || 0);
 }
 
-function buildModel({ windows = [], pins = [], recent = [], here = null, query = "", home = os.homedir(), now = Date.now() } = {}) {
+function buildModel({ windows = [], pins = [], recent = [], here = null, query = "", home = os.homedir(), now = Date.now(), platform = process.platform } = {}) {
+  const api = pathApi(platform);
   const byKey = new Map();
   for (const w of windows) {
-    const key = w.key || keyOf(w);
+    // (a status file's key was made by another window: on Windows it is normalised again, an old one may not be)
+    const key = w.key ? (platform === "win32" ? pathKey(w.key, platform) : w.key) : keyOf(w, { platform });
     if (!key) continue; // no folder open: nothing to list
     if (better(w, byKey.get(key), here)) byKey.set(key, w);
   }
@@ -78,12 +123,12 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
     // A closed or crashed window only keeps what is unseen and finished.
     const chats = chatsOf(w && w.chats, now).filter((c) => open || c.state === "done");
     const folder = w && w.folders && w.folders[0];
-    const p = folder || base.path || (base.workspaceFile ? path.dirname(base.workspaceFile) : "");
+    const p = folder || base.path || (base.workspaceFile ? api.dirname(base.workspaceFile) : "");
     const workspaceFile = (w ? w.workspaceFile : base.workspaceFile) || null;
-    const name = (w && w.name) || nameOf({ path: p, workspaceFile }, base.label);
+    const name = (w && w.name) || nameOf({ path: p, workspaceFile }, base.label, platform);
     return {
       key, name, letter: (name.trim()[0] || "?").toUpperCase(), color: (w && w.color) || null,
-      path: p, workspaceFile, shortPath: shorten(p, home), branch: (w && w.branch) || null,
+      path: p, workspaceFile, shortPath: shorten(p, home, platform), branch: (w && w.branch) || null,
       open, here: open && w.windowId === here, windowId: open ? w.windowId : null, pinned: false,
       unseen: chats.filter((c) => c.state === "done").length,
       attention: chats.some((c) => c.state === "ask") ? "ask" : chats.some((c) => c.state === "run") ? "run" : null,
@@ -93,7 +138,7 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
 
   const used = new Set();
   const take = (entry) => {
-    const key = keyOf({ folders: [entry.path], workspaceFile: entry.workspaceFile });
+    const key = keyOf({ folders: [entry.path], workspaceFile: entry.workspaceFile }, { platform });
     if (!key || used.has(key)) return null;
     used.add(key);
     return make(key, entry, byKey.get(key));
@@ -137,4 +182,4 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
   return { sections, badge, needLook };
 }
 
-module.exports = { keyOf, chatOrder, buildModel, ago };
+module.exports = { keyOf, pathKey, samePath, sameKey, shorten, chatOrder, buildModel, ago };

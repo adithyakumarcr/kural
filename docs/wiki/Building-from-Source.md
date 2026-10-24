@@ -6,7 +6,9 @@ it, and what is still missing.
 
 > [!NOTE]
 > This is for people who build Kural themselves. If you only use Kural, nothing changes: the releases are still built
-> from the VSCodium download. A Mac with Apple Silicon and Ubuntu (x64) can build from source; Windows can't yet.
+> from the VSCodium download. The source build and the Projects bar are meant for Windows, Linux and the Mac. A Mac with
+> Apple Silicon and Ubuntu (x64) build from source on their own computer; Windows builds from source on a Windows CI
+> runner; Linux can also be tried from a Mac in a container (see below).
 
 ## Why
 
@@ -87,6 +89,55 @@ that it is the same as the normal build: the Electron runtime, `rebrand.py`, ren
 The manual workflow `Build from source (Mac and Ubuntu)` on GitHub does the same on an Ubuntu 22.04 runner (fetch, build,
 `make-deb.sh`, install the .deb, open it on a virtual screen) and uploads the .deb as `linux-from-source`.
 
+### On Windows (x64)
+
+Windows builds from source on a Windows computer (in Git Bash) or the `windows` job of the **Build from source**
+workflow, never on a Mac or Linux computer:
+
+```bash
+KURAL_SOURCE=1 ./build-win.sh    # in Git Bash on Windows
+```
+
+You need the Visual Studio 2022 C++ tools, the Windows SDK, Python with Pillow, Node at the version in
+`build/vscode-src/.nvmrc` and NSIS. It does the same steps (fetch, `build.sh win32-x64`, then the Electron runtime,
+`rebrand.py` and the installer). A build from source isn't signed. If you check Kural out on Windows, use
+`git config core.autocrlf false` first: patches with Windows line ends don't apply. It has not been run yet, and the
+releases keep using the VSCodium download until it has.
+
+### Linux from a Mac, in a container
+
+You don't need a Linux computer to try Kural on Linux. With Docker Desktop on the Mac:
+
+```bash
+scripts/linux-container/run.sh test                          # npm test in Ubuntu 22.04
+scripts/linux-container/run.sh --platform linux/amd64 build  # the .deb from source (slow: emulation)
+scripts/linux-container/run.sh --platform linux/amd64 live   # install it, open it on a virtual screen, run the one-frame check
+scripts/linux-container/run.sh shell                         # a shell inside
+```
+
+| Mode | What it does |
+|---|---|
+| `test` | Runs `npm test` on a scratch copy of the repository inside the container. Your checkout is mounted read-only, so nothing is written to it |
+| `build` | `KURAL_SOURCE=1 ./make-deb.sh` on a copy kept in the Docker volume `kural-linux-work-<arch>`, so the source, `node_modules` and the .deb never land in your checkout |
+| `live` | Installs that .deb in a fresh container, starts a virtual screen with a small window manager (Xvfb and openbox), checks that the app opens a window and Kural's extension finishes starting, then runs `node test/one-frame.live.js` |
+| `shell` | A shell in the container (the repository at `/repo`, read-only) |
+| `build-image`, `clean` | Build the Docker image again; remove the volume |
+
+The container runs with `--rm`, without `--privileged` and without the host network; only the repository (read-only) and
+the named volume are mounted. Electron runs with `--no-sandbox` there (a container has no user namespaces).
+
+> [!NOTE]
+> The default is the container's own architecture, `linux/arm64` on a Mac with Apple Silicon. VS Code can be built for
+> arm64, but `make-deb.sh` and `scripts/vscode/build.sh` only know x64 today, so `test` works on both and `build` needs
+> `--platform linux/amd64`, which Docker runs by emulation: with Rosetta (Docker Desktop's default on Apple Silicon) a build
+> took about five minutes after the downloads on a Mac with 8 GB given to Docker, with QEMU expect hours, and give Docker 8 GB
+> or more of memory and about 40 GB of disk. A program under emulation can fail once (the esbuild step with "write EPIPE"):
+> run the same command again. `live` installs the x64 .deb that `build` made. A real arm64 build would need an arm64 platform in `build.sh`,
+> the package architecture and dependency list in `make-deb.sh`, `electron_runtime.py` and `sbom.py`.
+
+The container shows X11 behaviour only; Wayland isn't tried there. On the Mac's `test` run with arm64 one file,
+`listen-host.test.js`, fails (the Listen voice is shipped for x64 on Linux only); with `--platform linux/amd64` it passes.
+
 ## The patches
 
 | Files | What |
@@ -103,7 +154,8 @@ With the one-frame patch, every project still has its own window, so its chats k
 visible. Opening or switching to a project puts its window exactly over the current one (same place, same size,
 same full-screen), shows it once it has painted, and hides the old one instead of closing it. Nothing reloads and nothing
 flashes. When you close the visible window the last hidden one comes back; a click on the Dock icon shows the last one;
-Cmd+` switches.
+**Show Next Window** and **Show Previous Window** switch on every system (Mac: Cmd+` and Shift+Cmd+`; Windows and Linux: **Show Next
+Window in Frame**, Ctrl+Alt+. and **Show Previous Window in Frame**, Ctrl+Alt+, also in the Command Palette).
 
 A window that is hidden can't show a question. So when a hidden window needs a dialog (for example "Save changes?" when you
 quit, or its "not responding" message), it takes the frame first and the dialog opens in it. Git's **Open** after a clone
@@ -111,6 +163,9 @@ quit, or its "not responding" message), it takes the frame first and the dialog 
 
 Known gap: with native full screen on a Mac, each full-screen window has its own Space, so switching shows a Space change.
 Setting `window.nativeFullScreen` to off gives a full screen without Spaces.
+
+On Linux with Wayland a program can't set where a window is, so there the new window keeps the size and the state (full
+screen, maximized) of the old one and the desktop places it. On X11, Windows and the Mac the place is the same too.
 
 The setting `kural.window.oneFrame` (on by default) turns it off. In a Kural built from the VSCodium download, projects
 open as before ([[Projects]]).
@@ -120,10 +175,11 @@ open as before ([[Projects]]).
 - In a running app: a hidden window's dialogs, Git's Open after a clone, native full screen, Show Next/Previous Window.
   (Switching and closing were checked in the Mac build on 24 Oct 2026 with `node test/one-frame.live.js`: one window
   shown at a time, same place and size, no flash, closing the shown one shows the last hidden one.)
-- The manual CI workflow (`build-from-source.yml`), both jobs.
-- The Ubuntu build itself. Its scripts and the patch set were checked (VSCodium's linux patches apply after Kural's), but
-  no full Linux build has been run yet.
-- Windows: it still uses the VSCodium download. It needs a Windows build runner, so it comes last.
+- The manual CI workflow (`build-from-source.yml`), all jobs.
+- The Ubuntu build on a real runner. In the container above (24 Oct 2026, x64 under Rosetta) the .deb built, the app
+  opened a window with Kural's extension running, and `node test/one-frame.live.js` passed 18/18 on X11 with a window manager.
+  Not tried: a real Linux desktop (GNOME, KDE), Wayland.
+- Windows: the build from source and the one-frame windows have not been run on Windows. Wayland has not been tried.
 
 The design, the options that were rejected and the risks (build time, the monthly VS Code update, disk space) are in
 `docs/superpowers/specs/2026-10-24-vscode-source-build-design.md`.

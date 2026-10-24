@@ -8,15 +8,22 @@
   default) turns it off. A window you can't see that needs to ask something (for example "Save changes?" when you quit,
   or "not responding") now comes to the front first, so quitting no longer looks stuck. Choosing **Open** after a Git
   clone (or after `git init`) opens a new window instead of replacing the project in this one. With native full screen
-  on a Mac, switching still shows a Space change (turn off `window.nativeFullScreen` to avoid it). Not in the releases
-  yet: they are still built from the VSCodium download. Switching and closing were checked in a Mac build; the dialogs
-  and Git's Open weren't tried in a running app yet.
+  on a Mac, switching still shows a Space change (turn off `window.nativeFullScreen` to avoid it). It is meant for
+  Windows, Linux and the Mac: Show Next Window and Show Previous Window work on every system (Cmd+` on the Mac; on
+  Windows and Linux Ctrl+Alt+. and Ctrl+Alt+,), and on Linux with Wayland, where a program can't set a window's
+  place, the new window keeps the old one's size and state. Not in the releases yet: they are still built from the
+  VSCodium download. Switching and closing were checked in a Mac build; the dialogs and Git's Open weren't tried in a
+  running app yet.
+- **Projects bar on Windows.** A folder is one project whatever the spelling (`C:\Code\App` and `c:\code\app`), and
+  New empty project refuses names Windows can't use (`CON`, `a.`, `x:y`) on every system.
 - **Kural can be built from VS Code's source.** On a Mac or Ubuntu (x64), `./install.sh --source` (or
   `KURAL_SOURCE=1 ./build-mac.sh` / `KURAL_SOURCE=1 ./make-deb.sh`)
   fetches the VS Code version VSCodium is built from, applies Kural's own patch files (`patches/kural/`), then
   VSCodium's, and compiles it (30 to 60 minutes). Readable patches instead of edits to packed code mean a VS Code update
-  can't quietly switch a feature off. Windows still uses the VSCodium download for now, and the Ubuntu build hasn't
-  been run in full yet. See the wiki page
+  can't quietly switch a feature off. It is meant for Windows, Linux and the Mac: Windows builds from source on a Windows
+  CI runner (`KURAL_SOURCE=1 ./build-win.sh`; the releases still use the VSCodium download until that has run). To try
+  Linux from a Mac without a Linux computer, `scripts/linux-container/run.sh test|build|live|shell` runs the tests, the
+  .deb build and a start check with the one-frame windows in an Ubuntu 22.04 Docker container. See the wiki page
   "Building from Source".
 - **Projects.** A new first tab in the left bar lists every project with a Kural window (Pinned, Open, Recent) and each
   open chat under it: a spinner while it works, an orange dot while it waits for you, a purple dot when it finished and
@@ -24,7 +31,8 @@
   a project after asking, + opens a folder, clones a repository or makes a new empty project with Git. The icon and the
   status bar ("2 projects need a look") count finished and waiting chats in your other projects, and a chat finishing in
   another window shows a card in the window you're in. The Explorer with no folder open is empty now; Projects opens
-  first in every window.
+  first in every window. Like the source build it is meant for Windows, Linux and the Mac; on Windows a project's
+  path is the same project whatever its capitals.
 - **Parallel agents, like Cursor's.** Turn on "Split big tasks" in the model menu (Agent or Auto mode, in a Git
   repository) and the model you picked plans the request and splits it into up to four independent tasks. You see the
   plan with a model for each agent (your default from the menu, for example Haiku), change any of them, and press Go

@@ -66,14 +66,24 @@ In a Kural built from VS Code's source ([[Building from Source]]) every project 
 visible. Opening or switching to a project puts its window exactly over the one you're in (same place, size and
 full-screen), shows it once it has painted, and hides the old one. Nothing reloads, nothing flashes, and the chats in the
 window you left keep running. Closing the visible window shows the last hidden one; the Dock icon shows the last one;
-Cmd+` switches. Recent, pinned and new projects open this way too, without the "Open Here?" question. Cloning a
+**Show Next Window** and **Show Previous Window** switch (Mac: Cmd+` and Shift+Cmd+`; Windows and Linux: Ctrl+Alt+. and
+Ctrl+Alt+, or "Show Next/Previous Window in Frame" in the Command Palette). Recent, pinned and new projects open this way too, without the "Open Here?" question. Cloning a
 repository and choosing **Open** (also after `git init`) opens it in a new window the same way, so the chats in the window
 you cloned from keep running. If a window you can't see needs to ask something (for example "Save changes?" when you quit),
-it comes to the front first. The setting `kural.window.oneFrame` (on by default) turns it off.
+it comes to the front first. The setting `kural.window.oneFrame` (on by default) turns it off. On Linux with Wayland a
+window's place can't be set, so the new window keeps the old one's size and state (full screen, maximized) and the desktop
+places it.
 
 In a Kural built from the VSCodium download (the releases so far) none of this exists: windows come forward, and a project
-that isn't open opens in this window as described above. Switching and closing were checked in a Mac build from source;
-the dialogs and Git's Open weren't tried in a running app yet.
+that isn't open opens in this window as described above. Switching and closing were checked in a Mac build from source
+(and Linux in a container, see [[Building from Source]]); the dialogs and Git's Open weren't tried in a running app yet.
+
+## On Windows, Linux and the Mac
+
+The Projects bar and the source build are meant for all three systems. A project is the same project however its path
+is written: on Windows paths compare without regard to capitals (`C:\Work\App` and `c:\work\app` are one project), on
+the Mac and Linux they are different. Windows builds from source on a Windows CI runner; Linux can be tried from a Mac in
+a Docker container (`scripts/linux-container/run.sh`, [[Building from Source]]). Not tried yet on a real Windows computer.
 
 ## Good to know
 

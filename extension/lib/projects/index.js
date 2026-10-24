@@ -18,11 +18,14 @@ const scope = require("../profiles/scope");
 const { isProtected } = require("../paths");
 const { findGit } = require("../git");
 const { fontScale, watchFontScale } = require("../ui");
+const { samePath } = require("./model");
 
 const CARD_MS = 12000;
 const FOLDED_KEY = "kural.projects.folded.v1";
 const PARENT_KEY = "kural.projects.lastParent.v1";
-const BAD_NAME = /[\\/:]/;
+// What no folder can be called on Windows, checked on every system: a project made on a Mac may be shared with Windows.
+const BAD_CHARS = /[<>:"/\\|?*\u0000-\u001f\u007f]/;
+const RESERVED = /^(con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])[ ]*(\..*)?$/i;
 
 const isFile = (u) => !!u && u.scheme === "file";
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -47,6 +50,7 @@ class Projects {
     this.branch = "";
     this.timers = {};
     this.item = null;
+    this.platform = deps.platform || process.platform;
     this.oneFrame = false;           // true when Kural's own build puts every project in one window frame (see detectOneFrame)
   }
 
@@ -100,7 +104,8 @@ class Projects {
   readBranch(api) {
     const first = this.folders()[0];
     const repos = api.repositories || [];
-    const repo = repos.find((r) => r.rootUri && r.rootUri.fsPath === first) || repos[0];
+    // (the git extension's fsPath and VS Code's folder can differ in a drive letter's case on Windows)
+    const repo = repos.find((r) => r.rootUri && first && samePath(r.rootUri.fsPath, first, this.platform)) || repos[0];
     const head = repo && repo.state && repo.state.HEAD;
     const name = (head && head.name) || "";
     if (name !== this.branch) { this.branch = name; this.publish(); }
@@ -314,15 +319,17 @@ class Projects {
   // ---------- a new project ----------
   parentFolder() {
     const last = this.context.globalState.get(PARENT_KEY);
-    const ok = (d) => { try { return fs.statSync(d).isDirectory() && !isProtected(d); } catch { return false; } };
+    const ok = (d) => { try { return typeof d === "string" && path.isAbsolute(d) && fs.statSync(d).isDirectory() && !isProtected(d); } catch { return false; } };
     return last && ok(last) ? last : os.homedir();
   }
   // null when the name is fine, else what's wrong with it
   nameProblem(name, parent) {
     const n = String(name || "").trim();
     if (!n) return "Give the project a name.";
-    if (BAD_NAME.test(n)) return "The name can't contain / \\ or :.";
+    if (BAD_CHARS.test(n)) return "The name can't contain / \\ : * ? \" < > | or control characters.";
     if (n === "." || n === "..") return "Pick a name for a new folder.";
+    if (n.endsWith(".")) return "The name can't end with a dot (Windows doesn't allow it).";
+    if (RESERVED.test(n)) return `${n} is a name Windows keeps for itself (CON, PRN, AUX, NUL, COM1-9, LPT1-9). Pick another.`;
     if (parent && fs.existsSync(path.join(parent, n))) return `A folder named ${n} already exists in ${parent}.`;
     return null;
   }
@@ -347,7 +354,7 @@ class Projects {
     const git = await (this.d.findGit || findGit)();
     if (!git) { vscode.window.showInformationMessage("Kural: made the folder, but there's no Git on this computer, so it isn't set up with Git."); return false; }
     const run = this.d.execFile || execFile;
-    const err = await new Promise((resolve) => run(git, ["init"], { cwd: dir, timeout: 20000 }, (e) => resolve(e)));
+    const err = await new Promise((resolve) => run(git, ["init"], { cwd: dir, timeout: 20000, windowsHide: true }, (e) => resolve(e)));
     if (err) { vscode.window.showWarningMessage(`Kural: made the folder, but git init failed: ${err.message}`); return false; }
     return true;
   }

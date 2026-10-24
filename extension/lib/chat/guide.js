@@ -215,6 +215,9 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   projects keeps one window frame: the new project's window appears in the same place and size, no reload, and the chats
   in the window you left keep running (setting kural.window.oneFrame). Choosing Open after a Git clone opens a
   new window like that too, and a window you can't see that needs to ask something (Save changes?) comes forward first.
+  Show Next Window and Show Previous Window switch between them on every system (Mac: Cmd+\` and Shift+Cmd+\`; Windows
+  and Linux: Ctrl+Alt+. and Ctrl+Alt+, also "Show Next/Previous Window in Frame" in the Command Palette). On Linux with Wayland a window's place can't be set, so the new one keeps only
+  the old one's size and state. Projects and this source build are meant for Windows, Linux and the Mac.
 - Source Control panel: the sparkle button in the commit message box writes a short commit message (at most 200
   characters: a subject line, maybe a line or two more) from your staged changes (or all changes), in the style of your
   recent commits, with the chat's model; edit it and commit as usual.

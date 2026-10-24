@@ -66,8 +66,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - `patches/kural/` — Kural's own patches to VS Code's source (`NNNN-name.patch`, made against pristine VS Code; 0100-0199
   window management, 0200-0299 the Projects bar's ports from `rebrand.py`). `vscode.lock` pins the VS Code commit.
   `scripts/vscode/` — `fetch.sh` (source + patches) and `build.sh` (compile). Used only by the source build.
+- `scripts/linux-container/` — Kural on Linux from a Mac, in Docker: `Dockerfile` (Ubuntu 22.04), `run.sh <test|build|live|shell>`
+  (what you run), `inside.sh` (what runs in the container). See "Building from source".
 - `.github/workflows/build.yml` — tests + all three builds; a `v*` tag publishes a Release.
-  `build-from-source.yml` — manual, macOS: tries the source build.
+  `build-from-source.yml` — manual: tries the source build (macOS, Ubuntu, and Windows once its job is in).
 
 ## Things that are easy to break
 - **Keychain prompts on the Mac** ("Kural wants to use … Safe Storage"): anything that reads VS Code's secret storage
@@ -399,7 +401,15 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   model; the last check uses the real `status.js`/`model.js`), `projects-status`, `projects-model`, `projects-chat`, `projects-notify`,
   `rebrand-projects`. NOT checked live: one-frame windows (the command, a hidden window still publishing its status file), the view in a built app (page layout, the + submenu, the badge, the status bar item), two
   real windows (focus detection, `openFolder` finding the other window, the close request), the card patch, New empty project with a
-  real dialog, Windows paths.
+  real dialog, real Windows (`process.kill(pid, 0)`, the rename retries against a reader, `fs.watch`, `findGit` without Git on PATH:
+  `lib/git.js` looks only on PATH) and Linux (the container's `live` only runs the app and one-frame, not the bar). **On Windows** project paths
+  compare case-insensitively (`model.pathKey`: normalised and lower-cased; `samePath`/`sameKey` for pins, Recent, `adopt` and the repo
+  lookup; `buildModel` and `ProjectStatus` take an injectable `platform`; the page keeps the original spelling, `shorten` gives `~\…`):
+  `C:\Work\App` and `c:\work\app` are one project; on Mac and Linux they are case-sensitive (`path.resolve`). `status.js`: a pid
+  that isn't a positive integer is dead (`kill(0, 0)` signals the group), EPERM = alive; writes retry a busy rename (EPERM/EACCES/EBUSY,
+  ~155 ms) then write in place, reads retry twice before a file counts as missing. `nameProblem` refuses Windows-invalid names on
+  every OS (`<>:"/\|?*`, control characters, a trailing dot, CON/PRN/AUX/NUL/COM1-9/LPT1-9). Test: `test/projects-windows.test.js`
+  (Windows simulated with `path.win32` on any OS). The bar is meant for all three systems like the source build.
 - **Debug mode** (`lib/debug/`: `server.js` the log server; mode id `debug`). A chat mode beside Agent, Auto, Plan, Ask that maps to
   `agent` for providers and permissions (`decide()`, gate, Codex sandbox: it asks before commands like Agent), with its own prompt:
   hypotheses → temporary logging that posts to the log server (127.0.0.1 only, a token) → you reproduce → read the logs → fix the cause
@@ -929,18 +939,58 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   from `electron_runtime.py` on, is shared with the download path. `build-from-source.yml` (manual) has a `macos` and a `linux`
   job; the linux one runs on `ubuntu-22.04` (native modules need the build machine's glibc, like `build.yml`'s .deb). The Linux
   scripts, VSCodium's linux patches after Kural's and the YAML are checked; a full Linux build, its `.deb` and the workflow
-  have NOT been run. Windows still downloads VSCodium and will need a Windows CI runner; `build.yml` is unchanged. A source build takes 30-60 minutes and needs Node at VS Code's `.nvmrc` version, Python and Xcode command line
+  have NOT been run on a CI runner. **The source build and the Projects bar are meant for all three systems** (Adithya, 24 Oct 2026): the Mac,
+  Ubuntu and Windows. Windows builds from source on a Windows CI runner (`KURAL_SOURCE=1 ./build-win.sh`; the releases' `build.yml` is unchanged
+  until it has run), not on this Mac: only on Windows under Git Bash (`build.sh win32-x64` and `KURAL_SOURCE=1 ./build-win.sh` refuse
+  elsewhere), or the `windows` job of `build-from-source.yml` (`windows-2022`). Needs VS 2022 C++ tools, the Windows SDK, Python with
+  Pillow, Node at `.nvmrc` and NSIS (`makensis` found under Program Files (x86), `cygpath -w` paths). `fetch.sh` sets `core.autocrlf
+  false`, `core.eol lf` and `core.longpaths true` before the checkout (VS Code's `.gitattributes` has `* text=auto`, which gives CRLF on
+  Windows even with autocrlf off, and then Kural's patches don't apply; a Kural patch with CRLF is refused); an old CRLF checkout must be
+  deleted once. A source build is unsigned (`build-win.sh` refuses to sign there: `sign-win.sh` needs Linux or macOS). `--download-node`
+  checks the Windows zip's SHA-256 and unpacks it with Python (Git Bash has no `unzip`). Checked on the Mac only: `KURAL_OS=windows`
+  `fetch.sh` applies the 6 Kural patches and VSCodium's 6 Windows ones; a real Windows build and the CI job have NOT run. Linux can be tried from a Mac in a container (next paragraph). A source build takes 30-60 minutes and needs Node at VS Code's `.nvmrc` version, Python and Xcode command line
   tools (measured 24 Oct 2026 on this Mac with npm's cache warm: about 6 minutes for `KURAL_SOURCE=1 ./build-mac.sh`).
   Checked on a Mac, 24 Oct 2026: all six patches and VSCodium's 42 apply, the type check adds no errors to VS Code's own,
   the build compiles them in, rebrand.py skips 0200-0203 without warnings, and the app starts with Kural loaded.
-  **Live check** `node test/one-frame.live.js` (Mac; needs `build/mac/Kural.app` from a source build): a throwaway copy with its
+  **Linux in a container** (`scripts/linux-container/`, Adithya, 24 Oct 2026: Docker Desktop on the Mac, no Linux machine needed;
+  wiki `Building-from-Source`). `run.sh <mode>`: `test` = `npm test` in Ubuntu 22.04 on a scratch COPY of the repository (mounted
+  read-only; nothing is written to your checkout); `build` = `KURAL_SOURCE=1 ./make-deb.sh` on a copy in the Docker volume
+  `kural-linux-work-<arch>` (source, `node_modules` and the .deb stay there, not in the repo); `live` = installs that .deb in a fresh
+  container, starts Xvfb + openbox + a session bus, checks the app opens a window and Kural's extension writes its "ready" marker, then runs
+  `test/one-frame.live.js`; `shell`; `build-image`; `clean`. `docker run --rm --init`, no `--privileged`, no host network, only the repo
+  (`:ro`) and the volume mounted; Electron runs with `--no-sandbox --disable-gpu --disable-dev-shm-usage` (no user namespaces), as the
+  user `kural`. `--platform linux/amd64` for the x64 .deb under emulation (Rosetta or QEMU: slow: about 5 minutes for `build` under Rosetta, hours under QEMU; Electron may
+  be unstable); the default is the container's own architecture (arm64 on Apple Silicon). **`make-deb.sh` and `build.sh` are x64 only**
+  (`make-deb.sh`: "the source build on Linux is for x64"; `build.sh` knows darwin-arm64, linux-x64, win32-x64), so `build` on arm64 stops
+  with that explanation; a linux-arm64 build would need an arm64 platform in `build.sh`, the package architecture and `dep-lists.ts`
+  list in `make-deb.sh`, `electron_runtime.py` and `sbom.py`. `test` runs on either. Tests: `test/linux-container.test.js` (static: ubuntu:22.04,
+  `:ro`, no `--privileged`, the modes). Wayland can't be tried there (Xvfb is X11).
+  **Live check** `node test/one-frame.live.js` (Mac: needs `build/mac/Kural.app` from a source build, or `KURAL_APP`; Linux: `KURAL_APP`, default
+  `/usr/share/kural/kural`, a `DISPLAY`, `KURAL_APP_FLAGS` for extra flags; the Linux run closes the app's whole process group, never a pattern):
+  a throwaway copy with its
   own HOME (VS Code keeps Recent in `~/.kural-shared`) and two projects, driven over CDP and the main process's `--inspect`
   (`BrowserWindow.isVisible()`/`getBounds()`; a hidden frame window's page still says `visibilityState` "visible" because of
   `backgroundThrottling: false`), sampled every 10 ms while switching: never two windows shown, never none, same bounds,
-  closing the shown one shows the last hidden one; saves a Projects bar screenshot. Passed 18/18, three runs, 24 Oct 2026
+  closing the shown one shows the last hidden one; saves a Projects bar screenshot. Passed 18/18 on the Mac, three runs, 24 Oct 2026
   (before the dialog patch). macOS's CGWindowList still lists hidden windows (and closed ones): not trusted, printed as a
-  FINDING. NOT checked live: native full screen, Show Next/Previous Window, clicking a project in the bar, the CI workflow,
-  Windows and Linux.
+  FINDING; on Linux `xdotool search --onlyvisible` is the beside-list and is exact (an unmapped window is gone), so a mismatch is a
+  FINDING worth reading. **Systems:** Show Next/Previous Window works on every OS (Mac: Cmd+` / Shift+Cmd+`; Windows and Linux: the actions
+  "Show Next Window in Frame" / "Show Previous Window in Frame", Ctrl+Alt+. / Ctrl+Alt+, (`showNextWindowInFrame` on the native
+  host; Ctrl+Alt+[ ] would take AltGr characters, Ctrl+Alt+PageUp/Down the terminal's scrolling). Windows/Linux in 0100: maximize,
+  unmaximize and full screen SHOW a hidden window in Electron, so a new hidden window gets them only after it painted, just before it
+  shows (bounds = the source's `getNormalBounds`); full screen there is F11's, never Spaces; starting Kural again without a folder
+  focuses the last window (a hidden one takes the frame) unless `--new-window`/`window.openWithoutArgumentsInNewWindow`. On Linux Wayland an app can't set a window's position, so
+  one-frame keeps size and state (full screen, maximized) and the compositor places the window; X11 keeps the exact bounds.
+  **Checked on Linux, 24 Oct 2026** (Docker Desktop on an Apple Silicon Mac, 8 GB, `--platform linux/amd64` under Rosetta): `fetch.sh`
+  applies the 6 patches and VSCodium's linux ones; `KURAL_SOURCE=1 ./make-deb.sh` built `kural_1.2.1-beta.3+1.140.06880_amd64.deb` in about
+  4 minutes (npm ci included) on the second try (the first died in the esbuild step, "The service is no longer running: write EPIPE":
+  esbuild's Go program under emulation; run again); `live`: the app opened a window, the extension wrote "ready", and `one-frame.live.js`
+  passed 18/18 on X11 with openbox (no flash, the shown window and the X server's list agree, Ctrl+Shift+W closes the shown one and the
+  last hidden one comes back; this ran with 0100 BEFORE its Windows/Linux changes above: run `build` and `live` again). `run.sh test`: arm64 all files pass except `listen-host.test.js` (Listen's voice ships for linux-x64 only,
+  `assets.js`; the tests assume a platform with a voice); amd64 all pass except one 10 s timeout in `codex.test.js` under emulation. The
+  image needs `openssh-client` (the devices tests). NOT checked live: native full screen, Show Next/Previous Window, clicking a project in
+  the bar, the CI workflow, Windows, Wayland, a real Linux desktop (GNOME/KDE: the taskbar, window managers that place windows themselves),
+  and the Mac run of the changed `one-frame.live.js` (its Mac code is unchanged; no Mac build here).
 - **Keeping VSCodium and Electron current** (`.github/workflows/upstream-check.yml`, weekly + on demand):
   `scripts/update-codium.sh <ver>` (codium.lock + `CODIUM_VER` in the three build scripts; each archive checked against
   VSCodium's `.sha256`) and `scripts/update-electron.py` (the newest Electron of VSCodium's major: hashes from Electron's
@@ -1220,6 +1270,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 
 ## Test
 - `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, parallel agents, what Tab learns, Tab panel page script, Get started checks).
+- `scripts/linux-container/run.sh test` — `npm test` in Ubuntu 22.04 in Docker (from a Mac; the checkout is mounted read-only);
+  `run.sh --platform linux/amd64 build` then `run.sh --platform linux/amd64 live` = the .deb built from source, started under Xvfb,
+  and `test/one-frame.live.js` ("Building from source").
+- `node test/one-frame.live.js` — one-frame windows in a built app (Mac, or Linux under a display); not part of `npm test`.
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
 - `node test/personal.live.js` — Tab and commit messages with vs without what you've been doing (real Haiku).
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts

@@ -435,6 +435,57 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     t.p.stop();
   });
 
+  await check("a name that Windows refuses is refused on every system: <>:\"|?* and control characters, a trailing dot, CON & co.", () => {
+    const t = make();
+    const dir = fs.mkdtempSync(path.join(tmp, "pw-"));
+    for (const bad of ["x:y", "a<b", "a>b", "a\"b", "a|b", "a?b", "a*b", "a\u0001b", "a\tb"]) assert.match(t.p.nameProblem(bad, dir), /can't contain/, JSON.stringify(bad));
+    for (const bad of ["a.", "name..."]) assert.match(t.p.nameProblem(bad, dir), /can't end with a dot/, bad);
+    for (const bad of ["CON", "con", "Prn", "AUX", "nul", "COM1", "com9", "LPT1", "lpt9", "CON.txt", "nul.tar.gz", "aux ."]) assert.match(t.p.nameProblem(bad, dir), /Windows keeps for itself|can't end/, bad);
+    for (const fine of ["console", "com", "com0", "com10", "lpt", "my.project", "a b", ".hidden", "nullable", "CON-sole", "v1.2"]) assert.strictEqual(t.p.nameProblem(fine, dir), null, fine);
+    t.p.stop();
+  });
+
+  await check("the last place for new projects is used only when it is an absolute, existing, unprotected folder", () => {
+    const t = make();
+    const dir = fs.mkdtempSync(path.join(tmp, "last-"));
+    t.store.set("kural.projects.lastParent.v1", dir);
+    assert.strictEqual(t.p.parentFolder(), dir);
+    for (const bad of ["relative/folder", "C:\\nowhere\\at\\all", path.join(dir, "missing"), 42, ""]) {
+      t.store.set("kural.projects.lastParent.v1", bad);
+      assert.strictEqual(t.p.parentFolder(), os.homedir(), String(bad));
+    }
+    t.store.set("kural.projects.lastParent.v1", os.homedir());
+    assert.strictEqual(t.p.parentFolder(), os.homedir());
+    t.p.stop();
+  });
+
+  await check("git init uses the git program found (git.exe on Windows) with no console window", async () => {
+    const gits = [];
+    const t = make({ findGit: async () => "C:\\Program Files\\Git\\cmd\\git.exe", execFile: (bin, args, o, cb) => { gits.push([bin, args, o]); cb(null); } });
+    assert.strictEqual(await t.p.gitInit("C:\\Code\\new"), true);
+    assert.strictEqual(gits[0][0], "C:\\Program Files\\Git\\cmd\\git.exe");
+    assert.deepStrictEqual(gits[0][1], ["init"]);
+    assert.strictEqual(gits[0][2].cwd, "C:\\Code\\new");
+    assert.strictEqual(gits[0][2].windowsHide, true);
+    t.p.stop();
+  });
+
+  await check("the branch comes from the repository that is this window's folder, on Windows whatever the drive letter's case", () => {
+    const repo = (root, name) => ({ rootUri: { fsPath: root }, state: { HEAD: { name } } });
+    const api = { repositories: [repo("C:\\Code\\Other", "other"), repo("C:\\Code\\App", "feature")] };
+    const win = make({ platform: "win32" });
+    folders = ["c:\\code\\app"];
+    win.p.readBranch(api);
+    assert.strictEqual(win.p.branch, "feature");
+    win.p.stop();
+    // on Linux the same two spellings are two folders: no match, so the first repository is taken
+    const lin = make({ platform: "linux" });
+    folders = ["c:\\code\\app"];
+    lin.p.readBranch(api);
+    assert.strictEqual(lin.p.branch, "other");
+    lin.p.stop();
+  });
+
   await check("New empty project: name, a folder to put it in, mkdir, git init, a new window; the place is remembered", async () => {
     const gits = [];
     const t = make({ findGit: async () => "/usr/bin/gitx", execFile: (bin, args, o, cb) => { gits.push([bin, args, o.cwd]); cb(null); } });

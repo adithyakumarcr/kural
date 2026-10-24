@@ -3,7 +3,8 @@
 // What is checked:
 //   * always: each file is a well-formed unified diff (`git apply --numstat` reads every hunk and its line counts), touches only
 //     files under src/vs/ (0101: extensions/git/src/), and carries the pieces the extension and the build rely on (the setting's
-//     name, the workbench command `_kural.oneFrame`, dialogs of a hidden window, the clone's Open); package.json has the setting
+//     name, the workbench command `_kural.oneFrame`, dialogs of a hidden window, the clone's Open, Windows and Linux: Show Next/
+//     Previous Window in Frame with their keys, a second start, Wayland, maximized/full screen); package.json has the setting
 //     `kural.window.oneFrame` (boolean, default true, application);
 //   * with KURAL_VSCODE_SRC pointing at a PRISTINE checkout of that commit: `git apply --check` says it applies as it is;
 //   * without it: that last check is skipped, with a note. (A checkout that already has the patch fails it, on purpose.)
@@ -63,14 +64,14 @@ check("0100: windows share a frame by the setting kural.window.oneFrame, and the
   assert.match(text, /kural\.window\.oneFrame/);
   assert.match(text, /registerCommand\('_kural\.oneFrame'/);
   assert.match(text, /\+\s+enabled: .*!== false/, "on unless the setting is false");
-  for (const piece of ["windowsMainService.ts", "windowImpl.ts", "app.ts", "menubar.ts", "desktop.contribution.ts"]) assert.ok(text.includes(piece), `${piece} is touched`);
+  for (const piece of ["windowsMainService.ts", "windowImpl.ts", "app.ts", "menubar.ts", "desktop.contribution.ts", "launchMainService.ts", "windowActions.ts", "nativeHostMainService.ts"]) assert.ok(text.includes(piece), `${piece} is touched`);
 });
 
 // The patch text of each hunk's added lines only (the part of the file a check should look at)
 const added = (text, file) => {
   const part = text.split(/^diff --git /m).find((p) => p.startsWith(`a/${file} `));
   assert.ok(part, `${file} is not in the patch`);
-  return part.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).join("\n");
+  return part.split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++")).map((l) => l.slice(1)).join("\n");
 };
 
 check("0100: a dialog for a hidden window brings the window into the frame first (message box, save and open dialog)", () => {
@@ -81,6 +82,84 @@ check("0100: a dialog for a hidden window brings the window into the frame first
   assert.strictEqual((host.match(/await this\.showInFrameForDialog\(window\);/g) || []).length, 3, "message box, save dialog and open dialog each show the window first");
   const win = added(text, "src/vs/platform/windows/electron-main/windowImpl.ts");
   assert.strictEqual((win.match(/await this\.showInFrameForDialog\(\);/g) || []).length, 2, "the window's own crash and not-responding dialogs");
+});
+
+check("0100: Show Next / Previous Window in Frame work on every system (Command Palette; Ctrl+Alt+Period / Ctrl+Alt+Comma on Windows and Linux; macOS keeps its menu's Cmd+`)", () => {
+  const text = fs.readFileSync(path.join(dir, "0100-one-frame-windows.patch"), "utf8");
+  const actions = added(text, "src/vs/workbench/electron-browser/actions/windowActions.ts");
+  for (const [id, forward, key] of [["showNextWindowInFrame", "true", "Period"], ["showPreviousWindowInFrame", "false", "Comma"]]) {
+    assert.match(actions, new RegExp(`id: 'workbench\\.action\\.${id}'`), `${id} is an action`);
+    assert.match(actions, new RegExp(`showNextWindowInFrame\\(${forward}\\)`), `${id} asks the main process (forward=${forward})`);
+    for (const os of ["win", "linux"]) assert.match(actions, new RegExp(`${os}: \\{ primary: KeyMod\\.CtrlCmd \\| KeyMod\\.Alt \\| KeyCode\\.${key} \\}`), `${id}: ${os} key`);
+  }
+  assert.strictEqual((actions.match(/f1: true/g) || []).length, 2, "both are in the Command Palette");
+  assert.ok(!/\bmac:|primary: KeyMod\.CtrlCmd \| KeyMod\.Alt \| KeyCode\.(Period|Comma),/.test(actions), "no key on macOS: the Window menu's accelerator is there (a second one would run twice)");
+  // keys VS Code uses itself would be taken over: not the terminal's Ctrl+Alt+PageDown, not AltGr characters, not the fold keys
+  assert.ok(!/KeyCode\.(PageUp|PageDown|BracketLeft|BracketRight|Backquote)/.test(actions), "no key that VS Code or the keyboard layouts already use");
+  const desktop = added(text, "src/vs/workbench/electron-browser/desktop.contribution.ts");
+  assert.match(desktop, /registerAction2\(ShowNextWindowInFrameAction\)/);
+  assert.match(desktop, /registerAction2\(ShowPreviousWindowInFrameAction\)/);
+  assert.match(desktop, /ShowNextWindowInFrameAction, ShowPreviousWindowInFrameAction \} from/, "imported");
+  // the way to the main process: the native host service (interface, main side, test stand-in), then the one-frame logic
+  assert.match(added(text, "src/vs/platform/native/common/native.ts"), /showNextWindowInFrame\(forward: boolean\): Promise<void>/);
+  assert.match(added(text, "src/vs/platform/native/electron-main/nativeHostMainService.ts"), /showNextWindowInFrame\(windowId: number \| undefined, forward: boolean\)[\s\S]*this\.windowsMainService\.showNextWindow\(forward\)/);
+  assert.match(added(text, "src/vs/workbench/test/electron-browser/workbenchTestServices.ts"), /showNextWindowInFrame\(forward: boolean\)/);
+  // macOS menu stays
+  const menu = added(text, "src/vs/platform/menubar/electron-main/menubar.ts");
+  assert.match(menu, /accelerator: 'Command\+`'/);
+  assert.match(menu, /accelerator: 'Shift\+Command\+`'/);
+});
+
+check("0100: starting Kural again brings the running window forward (a hidden one comes into the frame) instead of opening an empty window, on Windows and Linux too", () => {
+  const text = fs.readFileSync(path.join(dir, "0100-one-frame-windows.patch"), "utf8");
+  const launch = added(text, "src/vs/platform/launch/electron-main/launchMainService.ts");
+  assert.match(launch, /openNewWindow = !isMacintosh && !this\.windowsMainService\.isOneFrame\(\)/, "the default is the Mac's (focus the last window) when windows share a frame");
+  assert.ok(!/forceNewWindow|'new-window'|openWithoutArgumentsInNewWindow/.test(launch), "--new-window and the setting still win (they are not touched)");
+  // what that focus() does for a hidden window
+  assert.match(added(text, "src/vs/platform/windows/electron-main/windowImpl.ts"), /override focus\([\s\S]*_hiddenInFrame[\s\S]*showInFrame\(this\)/);
+  assert.match(added(text, "src/vs/code/electron-main/app.ts"), /showHiddenWindow\(\)/, "the Dock click (macOS) too");
+});
+
+check("0100: closing the visible window shows the last hidden one; nothing quits while windows are hidden (window-all-closed needs every window closed), quit still closes all", () => {
+  const text = fs.readFileSync(path.join(dir, "0100-one-frame-windows.patch"), "utf8");
+  const service = added(text, "src/vs/platform/windows/electron-main/windowsMainService.ts");
+  assert.match(service, /onBeforeCloseWindow\(window => this\.onBeforeCloseFrameWindow\(window\)\)/);
+  assert.match(service, /quitRequested \|\| closing\.isHiddenInFrame/, "quit closes everything, a hidden window closing changes nothing");
+  assert.match(service, /!window\.win\?\.isDestroyed\(\)/, "a window that is gone is never the frame's source (quit with a hidden window's dialog)");
+  assert.ok(!/window-all-closed|app\.quit|isMacintosh|isWindows|isLinux/.test(added(text, "src/vs/platform/windows/electron-main/windowsMainService.ts")), "no per-system branches or quit handling there: Electron's window-all-closed fires only when every window, hidden ones included, is closed");
+});
+
+check("0100: Windows and Linux: a hidden window is never shown early (maximize, unmaximize, full screen show it), the mode is applied after it has painted, nothing from macOS runs", () => {
+  const text = fs.readFileSync(path.join(dir, "0100-one-frame-windows.patch"), "utf8");
+  const win = added(text, "src/vs/platform/windows/electron-main/windowImpl.ts");
+  assert.match(win, /if \(!show && !isMacintosh\) \{\s*return;\s*\}/, "applyState: no maximize()/setFullScreen() on a window that waits hidden (not on macOS, where it was tested)");
+  const show = win.slice(win.indexOf("async showInFrame("), win.indexOf("hideInFrame()"));
+  assert.ok(show.indexOf("matchFrameBounds(state)") >= 0 && show.indexOf("matchFrameBounds(state)") < show.indexOf("await this.whenPainted"), "the size is set before the paint");
+  assert.ok(show.indexOf("matchFrameMode(state)") > show.indexOf("await this.whenPainted") && show.indexOf("matchFrameMode(state)") < show.indexOf("this._win.show()"), "maximize and full screen: after the paint, right before show()");
+  assert.match(show, /if \(isMacintosh\) \{\s*this\.matchFrame\(state\);/, "macOS keeps its order");
+  const mode = win.slice(win.indexOf("private matchFrameMode("), win.indexOf("private hasNormalBounds("));
+  assert.match(mode, /setFullScreen\(true, true\)/, "full screen (F11's, not macOS Spaces)");
+  assert.match(mode, /win\.maximize\(\)/);
+  assert.ok(!/isMacintosh|SimpleFullScreen|transientIsNativeFullScreen/.test(win.slice(win.indexOf("private canPositionWindow") - 200, win.indexOf("private matchFrame(state")) + mode), "nothing macOS-only on the way");
+  assert.match(win, /getNormalBounds\(\)/, "a maximized window's restore bounds are compared and set (and serializeWindowState hands them over)");
+  assert.match(mode, /moveToDisplay\(state\.display\)/, "full screen on the display the frame was on");
+});
+
+check("0100: Wayland: only the size is set (positions are the compositor's), detected from the ozone platform or the session, X11 and XWayland keep positions", () => {
+  const text = fs.readFileSync(path.join(dir, "0100-one-frame-windows.patch"), "utf8");
+  const win = added(text, "src/vs/platform/windows/electron-main/windowImpl.ts");
+  assert.match(win, /getSwitchValue\('ozone-platform'\)/);
+  assert.match(win, /getSwitchValue\('ozone-platform-hint'\)/);
+  assert.match(win, /ozone === 'wayland'\) \{\s*return false;/, "ozone wayland: no position");
+  assert.match(win, /ozone === 'x11'\) \{\s*return true;/, "ozone x11 (also on a Wayland session = XWayland): position");
+  assert.match(win, /process\.env\['XDG_SESSION_TYPE'\]/);
+  assert.match(win, /WAYLAND_DISPLAY/);
+  assert.match(win, /if \(!isLinux\) \{\s*return true;/, "other systems: always positioned");
+  assert.match(win, /this\._win\.setSize\(state\.width, state\.height\)/, "Wayland: size only");
+  assert.match(win, /this\._win\.setBounds\(\{ width: state\.width, height: state\.height, x: state\.x, y: state\.y \}\)/, "else the whole rectangle");
+  // the whole rectangle is set in two places only, both ask canPositionWindow first (setFrameBounds, moveToDisplay)
+  assert.match(win, /private moveToDisplay[\s\S]*canPositionWindow/);
+  assert.ok(!/\bwin\.setBounds\(/.test(win.replace(/private moveToDisplay[\s\S]*$/, "")), "no other place sets a position through a local `win`");
 });
 
 check("0101: the git extension's Open after a clone (and after git init) opens a new window when windows share a frame", () => {
