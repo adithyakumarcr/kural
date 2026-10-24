@@ -1442,7 +1442,7 @@ window.KURAL_CHAT = function (app, port) {
           onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
           el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
     } else {
-      const editing = t.mode === "agent" || t.mode === "auto";
+      const editing = t.mode === "agent" || t.mode === "debug" || t.mode === "auto";
       const local = /^ollama:/.test(t.model || "");
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
       items = [mhead("Auto · Model Router", "", "router"),

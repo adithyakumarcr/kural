@@ -8,6 +8,19 @@
   through the normal checkpoint (Undo, Files changed, Restore code all work). The lead then runs your checks and gives
   one answer. A small request isn't split. Works with Claude, ChatGPT (Codex) and Gemini. Auto mode doesn't ask about
   the plan; Stop leaves your files as they were; Finish now stops the slow agents and goes on with the finished ones.
+- **Fix with Kural.** The light bulb on an error or warning offers "Fix with Kural" (and "Fix all problems in this file
+  with Kural" with two or more). After a command fails in the terminal, "Fix with Kural" shows in the status bar for 15
+  seconds (also "Kural: Fix the Last Failed Command" and the terminal's right-click menu). The problem, with the code
+  around it or the command with its last 8,000 characters of output, is added to your message; you press Send.
+- **Rules.** Keep instructions for the AI in your project as `.kural/rules/*.md` (Kural also reads `.cursor/rules`):
+  Always, Auto attached (by file patterns), Agent requested (by description) or Manual (@-mention). "Kural: New Rule"
+  makes one; a change reaches a running chat with its next message.
+- **Agent Review.** The checklist button in Source Control reviews your uncommitted changes: Quick with the fastest
+  model, Deep (in the "..." menu) with the chat's model. Findings show as comments on the lines, with Fix in Chat and
+  Dismiss. It only reads.
+- **Debug mode.** A new mode in the chat's mode menu. The AI lists hypotheses, adds temporary logging that sends to a
+  log server on your computer (127.0.0.1), asks you to reproduce the bug, reads the logs, fixes the cause and removes
+  the logging. It asks before commands, like Agent.
 - **The old agent team is gone.** Roles, the message board and the "Use 3 agents?" offer (switched off since 1.1) were
   replaced by parallel agents.
 

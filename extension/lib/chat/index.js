@@ -22,7 +22,8 @@ const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote } = require("./tickets");
-const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt, lessonPrompt } = require("./prompts");
+const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt, lessonPrompt, debugNote } = require("./prompts");
+const { DebugLogs } = require("../debug/server");
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { profileOf, limitUsed, limitParts } = require("../router/policy");
@@ -31,6 +32,7 @@ const handoffStore = require("./handoff-store");
 const { SideChats } = require("./side");
 const slashList = require("./slash");
 const shortcuts = require("./shortcuts");
+const projectRules = require("../rules/core");
 const { Enhancer } = require("../enhance");
 const { Voice } = require("../voice");
 const { Listen } = require("../listen");
@@ -65,6 +67,7 @@ const EFFORTS = [
 ];
 const MODES = [
   { id: "agent", label: "Agent", hint: "edits; asks before commands" },
+  { id: "debug", label: "Debug", hint: "finds the cause with logs" },
   { id: "auto", label: "Auto", hint: "edits and runs commands freely" },
   { id: "plan", label: "Plan", hint: "a plan first, no changes" },
   { id: "ask", label: "Ask", hint: "answers only" },
@@ -107,6 +110,8 @@ const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / pa
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => require("crypto").randomBytes(8).toString("hex").slice(0, 9);   // (chat and card ids: never guessable)
 const valid = (list, v) => list.some((x) => x.id === v);
+// Modes that edit files and ask before commands: Agent, and Debug (Agent with a way of working: lib/debug).
+const agentLike = (m) => m === "agent" || m === "debug";
 // The kural.chat.mode setting for new chats. Auto (commands run without asking) only from YOUR settings: a project's
 // .vscode/settings.json can't turn it on for you (APP-8).
 function settingMode() {
@@ -301,7 +306,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { this.sideChats.stopAll(); this.voice.dispose(); this.listen.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
+      { dispose: () => { this.sideChats.stopAll(); if (this.debugServer) this.debugServer.stop(); this.voice.dispose(); this.listen.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -485,6 +490,7 @@ class ChatView {
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
     this.endDevice(r);
     if (this.browserAi) this.browserAi.end(id);
+    if (this.debugServer) this.debugServer.end(id);
     this.runtime.delete(id);
     this.slashes().delete(id);
     const i = this.tabs.indexOf(tab);
@@ -567,6 +573,7 @@ class ChatView {
     this.archive.remove(id);
     try { fs.rmSync(this.handoffDir({ id }), { recursive: true, force: true }); } catch { /* best effort, like History */ }
     if (this.lessons) this.lessons.forget(id);
+    if (this.debugServer) this.debugServer.end(id);
     this.postHistory();
   }
 
@@ -987,7 +994,7 @@ class ChatView {
   // ---------- parallel agents (lib/split) ----------
   // Does this chat's next answer split the work? Switched on in the model menu, in a mode that edits, with a cloud AI (a
   // model on this computer would run every agent on the one GPU: slower, not faster).
-  splitOn(tab) { return !!tab.split && (tab.mode === "agent" || tab.mode === "auto") && !isLocal(tab.model); }
+  splitOn(tab) { return !!tab.split && (agentLike(tab.mode) || tab.mode === "auto") && !isLocal(tab.model); }
   // The models the agents can use: the chat's AI's (the plan card and the model menu offer these).
   workerModels(tab) {
     const engine = engineOf(tab.model);
@@ -1158,7 +1165,7 @@ class ChatView {
   routingRequest(tab, text, attachments = [], contexts = []) {
     return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
       historyChars: ChatView.conversationSize(tab), context: ChatView.routingContext(contexts, attachments),
-      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
+      profile: tab.routingProfile, mode: tab.mode, editing: agentLike(tab.mode) || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
       split: !!tab.split, device: !!tab.device, connectors: !!tab.ticket,
       images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
   }
@@ -1346,7 +1353,7 @@ class ChatView {
     this.endDevice(old);
     const full = fullSetup();
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root(), vscode.workspace.isTrusted !== false);
-    const editing = tab.mode === "agent" || tab.mode === "auto";
+    const editing = agentLike(tab.mode) || tab.mode === "auto";
     // steers: messages you sent while it answered, given to the program but not taken in yet (see queueSend);
     // expect: every message given to the program, in order, until its echo says it was taken in (onEcho).
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map(),
@@ -1380,10 +1387,10 @@ class ChatView {
     const proc = brain.makeAgent(tab.model, {
       name: `chat ${tab.id}`, effort: tab.effort, partial: true, showThinking: true, replay: true, mode: tab.mode, commands: full,
       // (A model on this computer gets the short guide: each word of the instructions costs it time before it answers.)
-      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + this.moodText(tab) + ws.promptNote() + instr.text,
+      safeMode: !full, appendSystemPrompt: PROMPTS[tab.mode] + (isLocal(tab.model) ? GUIDE_LOCAL : GUIDE) + this.moodText(tab) + ws.promptNote() + instr.text + this.rulesText(tab),
       // Parallel agents (lib/split): the lead plans, the agents work at once in git worktrees, Kural merges.
       split: this.splitOn(tab) ? { workers: this.workersFor(tab), models: this.workerModels(tab), history: () => this.splitHistory(tab),
-        instructions: PROMPTS[tab.mode] + ws.promptNote() + instr.text, dir: privateTmp("split") } : null,
+        instructions: PROMPTS[tab.mode] + ws.promptNote() + instr.text + this.rulesText(tab), dir: privateTmp("split") } : null,
       addDirs: [...ws.extraDirs(), ...(fs.existsSync(this.handoffDir(tab)) ? [this.handoffDir(tab)] : []), ...(lessonDir ? [lessonDir] : [])],
       // (Read, Grep, Glob aren't pre-allowed: Claude Code reads inside the project by itself and asks Kural for anywhere
       // else, onPermission.)
@@ -1561,6 +1568,15 @@ class ChatView {
   // ---------- the "/" list ----------
   // tabId -> the skills and commands its Claude has (the "/" list in the box: lib/chat/slash.js).
   slashes() { return this.slash || (this.slash = new Map()); }
+
+  // Debug mode (lib/debug): one log endpoint for every chat, started with the first Debug message. Each message of a chat in
+  // Debug mode says where to send what the instrumentation logs and where to read it (the file is emptied by `clear`).
+  debugLogs() { return this.debugServer || (this.debugServer = new DebugLogs({ log })); }
+  async debugText(tab) {
+    if (tab.mode !== "debug") return "";
+    try { const s = await this.debugLogs().session(tab.id); return debugNote(s.url, s.file); }
+    catch (e) { log(`chat ${tab.id}: debug log endpoint: ${e.message}`); return ""; }
+  }
   // The chat's skills and commands (null: none here, a model that isn't Claude or Claude without your setup), to its page.
   setSlash(tab, list) {
     if (list) this.slashes().set(tab.id, list); else if (!this.slashes().delete(tab.id)) return;   // (none before, none now)
@@ -1584,6 +1600,8 @@ class ChatView {
   // ---------- sending ----------
   async buildPrompt(text, contexts) {
     const parts = [];
+    // What a quote pill from Fix with Kural / Agent Review is called for the AI.
+    const FIX_SOURCES = { problem: "A problem in my code:", terminal: "A command that failed in my terminal:", review: "A finding from Kural's review of my changes:" };
     const seen = new Set();
     for (const c of contexts) {
       // (Two elements of one page are two; so are two quotes.)
@@ -1596,6 +1614,9 @@ class ChatView {
         const where = `${c.slide ? ` (slide ${c.slide}${c.title ? `, "${String(c.title).slice(0, 120)}"` : ""})` : ""}${c.concept ? `, the visual "${String(c.concept).slice(0, 120)}"` : ""}`;
         const said = String(c.text || "").slice(0, 8001).trim();
         parts.push(`From the lesson page${where}, I picked:${said ? `\n${said.split("\n").map((l) => `> ${l}`).join("\n")}` : ""}`);
+      } else if (c.kind === "quote" && FIX_SOURCES[c.source]) {
+        // Fix with Kural (lib/fix) and Agent Review's findings: a problem, a failed command, a review finding.
+        parts.push(`${FIX_SOURCES[c.source]}\n${String(c.text || "").slice(0, 12001).split("\n").map((l) => `> ${l}`).join("\n")}`);
       } else if (c.kind === "quote") {
         // Text you selected in this chat ("Add to chat"); the page keeps it to 8,000 characters.
         parts.push(`Part of this chat I selected:\n${String(c.text || "").slice(0, 8001).split("\n").map((l) => `> ${l}`).join("\n")}`);
@@ -1807,6 +1828,7 @@ class ChatView {
     this.beginTurn(tab, r, reply, ask);
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
+    const debugText = tab.mode === "debug" ? await this.debugText(tab) : "";   // (no extra wait in other modes)
     let retrieved = "";
     if (this.router && this.router.options().context && vscode.workspace.isTrusted) {
       try {
@@ -1823,7 +1845,7 @@ class ChatView {
     const built = await this.buildPrompt(slash ? slash.rest : text,contexts);
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
     if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    const { content: prompt, meta } = this.attachments.content(lead + carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + retrieved + built, attachIds, carry ? previousMedia : []);
+    const { content: prompt, meta } = this.attachments.content(lead + carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + this.rulesMessage(tab, contexts) + debugText + retrieved + built, attachIds, carry ? previousMedia : []);
     user.sentText = lead + journal.textOf(prompt).slice(lead.length + carry.length);
     r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
@@ -1840,7 +1862,7 @@ class ChatView {
   }
 
   // What the AI is told for this chat's mode and mood (the parts of its instructions you can change mid-chat).
-  instructionsOf(tab) { return { mode: PROMPTS[tab.mode] || "", mood: this.moodText(tab).trim() }; }
+  instructionsOf(tab) { return { mode: PROMPTS[tab.mode] || "", mood: this.moodText(tab).trim(), rules: this.rulesText(tab).trim() }; }
   // Claude Code keeps a resumed conversation's first instructions: on --resume it ignores a new --append-system-prompt
   // (checked with Claude Code 2.1.289). So a mood or mode you change after the first message would never reach it;
   // instead your next message starts with what changed. (The other programs get it the same way: harmless.)
@@ -1849,13 +1871,44 @@ class ChatView {
   instructionsNote(tab) {
     const now = this.instructionsOf(tab), was = tab.sessionInstructions;
     const print = (t) => require("crypto").createHash("sha1").update(t).digest("hex").slice(0, 12);
-    tab.sessionInstructions = { mode: print(now.mode), mood: print(now.mood) };
+    tab.sessionInstructions = { mode: print(now.mode), mood: print(now.mood), rules: print(now.rules) };
     if (!tab.started || !was) return "";
     const changed = [];
     if (was.mode !== print(now.mode)) changed.push(now.mode);
     if (was.mood !== print(now.mood)) changed.push(now.mood || "Mood: Default. Drop the earlier mood's instructions and work in your normal, balanced way.");
+    // (A chat saved before rules existed has no fingerprint for them: it was given none.)
+    if ((was.rules === undefined ? print("") : was.rules) !== print(now.rules)) changed.push(now.rules || "The project's rules were removed. Drop the earlier rules' instructions.");
     return changed.length ? "<kural_instructions_update>\nI changed how you should work in this chat. These replace your earlier instructions about the " +
-      "same things (mode, mood):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
+      "same things (mode, mood, project rules):\n" + changed.join("\n\n") + "\n</kural_instructions_update>\n\n" : "";
+  }
+
+  // The project's rules (lib/rules): the always ones and the list of the others, read from disk each time (small files).
+  rulesText(tab) {
+    try {
+      const text = projectRules.systemText(projectRules.loadRules(ws.folders().map((f) => f.path)));
+      return text ? `\n\n${text}` : "";
+    } catch { return ""; }
+  }
+  // The rules this message brings along (a file of it matches their globs, or it mentions the rule file) that the AI wasn't
+  // given yet in this conversation: tab.rulesSent, kept per session (a new session starts the list again). Parallel agents'
+  // lead starts afresh each answer, so it gets them every time.
+  rulesMessage(tab, contexts = []) {
+    try {
+      if (tab.rulesSession !== tab.sessionId) { tab.rulesSent = []; tab.rulesSession = tab.sessionId; }
+      const files = [];
+      for (const c of contexts || []) {
+        if (!["file", "current", "selection"].includes(c && c.kind)) continue;
+        const uri = this.resolvePath(c.path);
+        if (uri && uri.fsPath) files.push(uri.fsPath);
+      }
+      if (!files.length) return "";
+      const all = projectRules.loadRules(ws.folders().map((f) => f.path));
+      const sent = this.splitOn(tab) ? [] : tab.rulesSent || [];
+      const list = projectRules.unsent(all, files, sent);
+      if (!list.length) return "";
+      if (!this.splitOn(tab)) tab.rulesSent = [...sent, ...list.map((x) => x.rel)];
+      return projectRules.messageText(all, files, sent);
+    } catch { return ""; }
   }
 
   // The mood's instructions, and in Learn mood how to make a lesson page (lib/learn) in this chat's own folder.
@@ -2037,7 +2090,7 @@ class ChatView {
     if (!r) { reply.running = false; tab.status = "idle"; reply.error = `${whoOf(tab.model)} didn't start. Check it in Get started.`; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); return false; }
     this.beginTurn(tab, r, reply, ask);
     const carry = this.carryText(usageChoice ? { usage: who } : { retry: who }, record);
-    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket), [], media);
+    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + await this.debugText(tab), [], media);
     r.turn.attachments = media;
     r.pendingSend = content; r.turn.dispatched = true;
     this.sendTo(r, content, "turn");
@@ -2084,7 +2137,7 @@ class ChatView {
   async buildPlan(tab) {
     if (tab.status !== "idle") return;
     const was = tab.mode;
-    tab.mode = tab.mode === "auto" ? "auto" : "agent";
+    tab.mode = tab.mode === "auto" || tab.mode === "debug" ? tab.mode : "agent";
     if (tab.mode !== was) this.revokeAllowAll(tab);
     this.postTabs();
     await this.send(tab, [{ t: "text", v: BUILD_TEXT }], []);
@@ -2405,7 +2458,7 @@ class ChatView {
 
   finishTurn(tab, r) {
     const reply = r.turn.reply;
-    if (reply.mode !== "agent" && reply.mode !== "auto") return;
+    if (!agentLike(reply.mode) && reply.mode !== "auto") return;
     try {
       const roots = this.projectRoots(tab);
       const files = this.changes.summary(r.turn, this.root()).filter((c) => inProject(c.file, roots));
@@ -2550,7 +2603,7 @@ class ChatView {
         if (resolve) { r.perms.delete(b.pid); resolve(true); }
       }
     }
-    const editing = (x) => x === "agent" || x === "auto";
+    const editing = (x) => agentLike(x) || x === "auto";
     // Gemini (Antigravity): its flags are fixed when it starts. Kural's gate stops approving anything for the agy that was
     // started for the old mode (so a late "yes" can't count under the new one); the new mode applies from the next message.
     if (engineOf(tab.model) === "agy") {
@@ -2560,6 +2613,7 @@ class ChatView {
     else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" || tab.mode === "ask" ? "Read-only permissions apply now; tools refresh" : "Editing tools become available"} from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });
+    else if (tab.mode === "debug") this.post({ type: "flash", text: "Debug: Kural asks before the next command" });
   }
 
   // Claude asks you a question with options: show a card, wait for your pick.
@@ -3078,6 +3132,19 @@ class ChatView {
       added.push(label);
     }
     if (added.length) vscode.window.setStatusBarMessage(`Kural: added ${added.join(", ")} to the chat`, 3000);
+  }
+
+  // Fix with Kural (lib/fix) and Agent Review's "Fix in Chat" (command kural.chat.addContext): a problem, a failed terminal
+  // command or a review finding becomes a pill in the message you're writing, with a first line ("Fix this."). The chat
+  // comes on screen first. It is never sent by itself: you read it and press Send.
+  async addProblem({ label, text, source, prompt } = {}) {
+    await this.reveal();
+    const pane = this.cur();
+    if (!pane || !String(text || "").trim()) return;
+    const line = String(label || text).replace(/\s+/g, " ").trim();
+    const ctx = { kind: "quote", source: source || "problem", text: String(text), label: line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line };
+    this.postTo(pane, { type: "insertPill", ctx, text: prompt ? ` ${prompt}` : "" });
+    vscode.window.setStatusBarMessage("Kural: added to the chat. Press Send when you're ready", 3000);
   }
 
   // "Add to chat" on a lesson page (lib/learn): what you selected, or a visual you clicked, becomes a pill in that chat's

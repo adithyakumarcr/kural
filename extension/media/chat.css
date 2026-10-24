@@ -420,6 +420,7 @@ kbd { font-family: var(--vscode-editor-font-family); font-size: calc(11px * var(
 .mode-tag.plan { background: color-mix(in srgb, var(--green) 20%, transparent); color: var(--green); }
 .mode-tag.ask { background: color-mix(in srgb, var(--blue) 20%, transparent); color: var(--blue); }
 .mode-tag.auto { background: color-mix(in srgb, var(--yellow) 20%, transparent); color: var(--yellow); }
+.mode-tag.debug { background: color-mix(in srgb, var(--red) 20%, transparent); color: var(--red); }
 .plan-bar { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; padding: 8px 10px; border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--green) 45%, transparent); background: color-mix(in srgb, var(--green) 8%, transparent); }
 .plan-q { font-size: calc(12px * var(--fs, 1)); }
@@ -606,6 +607,7 @@ body.vscode-light .code pre code { color: var(--vscode-editor-foreground); }
 body.vscode-light .tk-c { color: #008000; } body.vscode-light .tk-s { color: #a31515; } body.vscode-light .tk-n { color: #098658; }
 body.vscode-light .tk-k, body.vscode-light .tk-l { color: #0000ff; } body.vscode-light .tk-tag { color: #800000; }
 body.vscode-light .tk-x { color: #af00db; } body.vscode-light .tk-f { color: #795e26; } body.vscode-light .tk-t { color: #267f99; }
+body.vscode-light .mode-tag.debug { background: color-mix(in srgb, var(--red) 14%, transparent); }
 body.vscode-light .popup { box-shadow: 0 6px 24px rgba(36,35,43,.14); }
 body.vscode-light .menu { box-shadow: 0 8px 28px rgba(36,35,43,.16); }
 

@@ -19,6 +19,10 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 | [[Getting Started]] | Install Kural, then pick Claude, Google Gemini, ChatGPT (Codex) or your own model |
 | [[Chat]] | The chat: modes, models, moods, files and pictures, history, two chats at once |
 | [[Parallel Agents]] | Split a big request between agents that work at once, each in its own copy; Kural merges |
+| [[Fix with Kural]] | Add an error or a failed terminal command to the chat with one click |
+| [[Rules]] | Instructions for the AI kept in your project (.kural/rules) |
+| [[Agent Review]] | An AI reads your uncommitted changes and comments on the lines |
+| [[Debug Mode]] | The AI adds temporary logging, you reproduce the bug, it fixes the cause |
 | [[Google Gemini and ChatGPT]] | Using your Google account (Gemini) or ChatGPT plan (Codex) in Kural |
 | [[Your Own Model]] | Models on your computer: finding, downloading, what they can and can't do |
 | [[Tab Completion]] | Grey suggestions as you type; the Tab Completion panel; changing a name in other files too; what it learns |

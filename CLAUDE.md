@@ -44,6 +44,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
     `media/timeline.js`, questions (pick, then Send) `media/choices.js`.
   - `lib/split/` — parallel agents: `agent.js` (SplitAgent: plan, agents in git worktrees, merge, apply, check),
     `worktrees.js` (the git work), `plan.js` (prompts); the plan card and menu section in `media/split.js`. `lib/git.js` finds git.
+  - `lib/fix/` — Fix with Kural: `core.js` (no vscode: `problemText`, `terminalText`, ANSI, the 8,000-character tail), `index.js` (`registerFix`: light bulb, terminal status bar button).
+  - `lib/rules/` — Rules: `.kural/rules/*.md` (and `.cursor/rules`), what each message gets (`registerRules`).
+  - `lib/agent-review/` — Agent Review: a read-only agent reviews the uncommitted changes, findings as comments (`registerAgentReview`).
+  - `lib/debug/` — Debug mode: `server.js` the log server on 127.0.0.1, the mode's prompt.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
@@ -314,6 +318,53 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `test/split-chat.test.js` (the chat's half and the page on a tiny DOM), `test/audit-f1.test.js` (a step's mode);
   live: `node test/split.live.js` (real Claude, Haiku leads and builds: 2 agents, ~17 s, checked 24 Oct 2026).
   NOT checked live: Codex and Gemini with real accounts, the plan card clicked in Kural itself, Windows.
+- **Fix with Kural** (`lib/fix/`: `core.js` no vscode, `index.js` `registerFix(context, {chat, log})`; like
+  Cursor's "Fix in Chat"). A CodeActionProvider (`{scheme:"file"}` + untitled, QuickFix) offers "Fix with Kural" per Error/Warning
+  in range and "Fix all problems in this file with Kural" when the file has 2+ (`kural.fix.problem` {uri, diagnostics}; up to 25
+  problems, each with its lines ±3 numbered, `problemsText`). Terminal: `onDidStartTerminalShellExecution` starts reading
+  `execution.read()` (buffer capped at 64 KB), `onDidEndTerminalShellExecution` with a non-zero exit code keeps {command, cwd, exit code,
+  output} per terminal and shows a StatusBarItem "$(wand) Fix with Kural" for 15 s (never a notification) running
+  `kural.fix.terminal`, which sends the active terminal's last failed command or says there is none (needs shell integration).
+  **It never sends by itself**: `chat.addProblem({label, text, source, prompt})` (right after `addBrowserItems`) reveals the chat and
+  posts `insertPill` {kind "quote", source, text, label} + " Fix this."; you press Send. `buildPrompt` writes the quote sources
+  `problem` ("A problem in my code:"), `terminal` ("A command that failed in my terminal:") and `review` ("A finding from Kural's
+  review of my changes:") before the generic "Part of this chat I selected" (text cut at 12,000 characters). **`kural.chat.addContext`
+  {label, text, source, prompt}** (registered by `registerFix`, hidden from the palette) is the shared way in: Agent Review's "Fix in
+  Chat" runs it with `source: "review"`. Terminal text drops ANSI/OSC escapes (`stripAnsi`) and keeps the LAST 8,000 characters. Tests:
+  `test/fix.test.js` (core, buildPrompt, addProblem, the provider and terminal hooks on a stand-in vscode). NOT checked live in the app.
+- **Rules** (`lib/rules/`: core no vscode, `index.js` `registerRules(context, {log})`; commands `kural.rules.new`, `kural.rules.openFolder`).
+  `.kural/rules/*.md`, also `.cursor/rules`; header `description` / `globs` / `alwaysApply`; kinds Always, Auto attached (globs),
+  Agent requested (description only), Manual (a header with none filled in: only when the rule file is @-mentioned; New Rule's
+  template). A `.kural/rules/*.md` WITHOUT a header = Always (`kindOf`). `rulesText` (`core.systemText`: Always rules + a list of
+  the requested ones' descriptions and paths) is part of the chat's instructions (the `instructionsOf` fingerprint `rules`, so a
+  rule change reaches a running chat with its next message as `instructionsNote`; an old chat without that fingerprint counts as
+  having none). `rulesMessage` (`messageText`) adds Auto attached rules whose globs match a file/current/selection context, and
+  Manual ones, per message; `tab.rulesSent` is tied to the session id (`tab.rulesSession`), so any new session starts it again.
+  Caps: 20,000 characters a rule, 60,000 in all (a note says what was cut); never follows a link out of the project; a body
+  can't close `<kural_rules>`. `.cursor/rules/` is in `RUNS_LATER` (like `.kural/`): the AI writing a rule asks in Agent.
+- **Agent Review** (`lib/agent-review/`, `registerAgentReview(context, {brain, chat, log})`; commands `kural.review.quick|deep|clear|fix|dismiss`;
+  Source Control's title bar: the checklist button = Quick, "..." = Deep, `when scmProvider == git`). A short-lived agent through
+  `brain.makeAgent` in mode `ask` (read only: it can't change files or run commands), Quick = `brain.fastestModel()`, Deep = the chat's
+  model, JSON findings, shown as comments by the comment controller `kural-review` (the thread title's Fix in Chat = `kural.review.fix`
+  → `kural.chat.addContext` with `source: "review"`, Dismiss = `kural.review.dismiss`; `comments/commentThread/title` `when commentController == kural-review`).
+  `core.js` (no vscode): `collectDiff(root, git)` = staged + unstaged + untracked text changes against HEAD (the empty tree
+  without a commit), at the repository's top level; binaries, files over 200 KB and symlinks skipped (listed); git runs with
+  `--no-ext-diff --no-textconv` and `core.fsmonitor=false`, so the repository's config can't start a program. `packDiff` fits
+  whole-file diffs under 120,000 characters, smallest first, naming the rest for the reviewer to Read. `parseFindings` (unknown
+  severity → medium; findings on deleted files dropped). `run.js` `Reviewer`: tools Read/Grep/Glob, effort medium (Quick) /
+  high (Deep), 3 / 10 minutes; `onPermission` refuses anything but a read inside the repository (links out too); Gemini in
+  `plan` mode. Test: `test/agent-review.test.js` (real temp repos). NOT checked live: a real AI review, the comment threads.
+- **Debug mode** (`lib/debug/`: `server.js` the log server; mode id `debug`). A chat mode beside Agent, Auto, Plan, Ask that maps to
+  `agent` for providers and permissions (`decide()`, gate, Codex sandbox: it asks before commands like Agent), with its own prompt:
+  hypotheses → temporary logging that posts to the log server (127.0.0.1 only, a token) → you reproduce → read the logs → fix the cause
+  → remove the logging. Every line it adds is marked `kural-debug`, so a left-over is found by searching for it.
+  `agentLike(mode)` in the chat; `makeAgent` maps debug → agent once (before the split branch), `decide()`/`gatedMode()` treat
+  it as agent (else agy's gate, started in agent, would refuse). `DebugLogs` (lazy, one per ChatView, stopped on dispose): one
+  HTTP server on 127.0.0.1, random port, Host checked; per chat `/<32-byte hex token>/log` (sha256 lookup + timingSafeEqual);
+  POST ≤ 16 KB (413), JSON or text → an NDJSON line in a 0600 file from `privateTmp("debug")`, capped at 5 MB (oldest half
+  dropped); CORS preflight for POST only. `debugNote(url, file)` (`<kural_debug>`: endpoint, log file, one-liners) goes with
+  every Debug message (`send()`, `retryElsewhere`); the chat's log ends on close/delete. The log file is in the temp roots,
+  so reading it needs no card. Test: `test/debug-mode.test.js`. NOT checked live: a real Debug session in the app.
 - **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
   and `--forward-subagent-text`. Old Claude Code refuses unknown flags, so `supportedFlags()` probes once
   (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. The answer is saved in

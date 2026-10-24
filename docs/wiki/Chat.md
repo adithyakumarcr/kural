@@ -12,6 +12,7 @@ it to your message instead (also while the chat is open).
 | **Auto** | edits files and runs commands without asking |
 | **Plan** | writes a plan and changes nothing; **Build it** carries the plan out (**Ctrl+P** switches Plan on/off) |
 | **Ask** | only answers |
+| **Debug** | like Agent, for bugs: adds temporary logging, asks you to reproduce, reads the logs, fixes the cause and removes the logging (see [[Debug Mode]]) |
 
 Every file change shows under the answer: open the before/after, **keep** it or **undo** it. Only your project's files
 are listed: a note the AI writes in the temp folder, or Claude Code's own plans and memory (`~/.claude`), aren't.

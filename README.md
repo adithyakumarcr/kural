@@ -32,6 +32,8 @@ On top of that, Kural adds:
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
 - **Parallel agents.** A big request split between agents that work at the same time, each in its own copy of the
   project, on a cheaper model you pick; Kural merges their work.
+- **Fix with Kural, Rules, Agent Review, Debug mode.** One click from an error or a failed command to the chat; project
+  rules in `.kural/rules`; a review of your uncommitted changes; a mode that debugs with temporary logging.
 
 Its AI comes from any of these (set up one or all; you switch in the model menu):
 
@@ -242,6 +244,33 @@ Google Gemini**) and big requests get done by several agents at once, like Curso
 Faster for work that splits into parts; cheaper when the lead plans with Opus and the agents build with Haiku or
 Sonnet. **Stop** leaves your files as they were; **Finish now** stops the slow agents and keeps the finished work.
 More: [docs/wiki/Parallel-Agents.md](docs/wiki/Parallel-Agents.md).
+
+### Fix with Kural
+
+Put the cursor on an error or warning and open the light bulb: **Fix with Kural** adds the problem and the code around
+it to your chat message ("Fix this."); with two or more problems in the file there is also **Fix all problems in this
+file with Kural**. When a command fails in the terminal, **Fix with Kural** shows in the status bar for 15 seconds and
+adds the command, its exit code and its last 8,000 characters of output. Nothing is sent until you press Send.
+More: [docs/wiki/Fix-with-Kural.md](docs/wiki/Fix-with-Kural.md).
+
+### Rules
+
+Instructions for the AI, kept in your project as `.kural/rules/*.md` (`.cursor/rules` works too). A header sets the
+kind: **Always** (`alwaysApply: true`), **Auto attached** (`globs`), **Agent requested** (a `description`) or **Manual**
+(@-mention it). **Kural: New Rule** makes one; a change reaches a running chat with its next message.
+More: [docs/wiki/Rules.md](docs/wiki/Rules.md).
+
+### Agent Review
+
+The checklist button in Source Control's title bar has an AI review your uncommitted changes: **Quick** with the fastest
+model, **Deep** (the "..." menu) with the chat's model. Findings show as comments on the lines with **Fix in Chat** and
+**Dismiss**. It only reads. More: [docs/wiki/Agent-Review.md](docs/wiki/Agent-Review.md).
+
+### Debug mode
+
+A mode in the chat's mode menu beside Agent, Auto, Plan and Ask. The AI lists hypotheses, adds temporary logging that
+sends to a log server on your computer (127.0.0.1), asks you to reproduce the bug, reads the logs, fixes the cause and
+removes the logging. It asks before commands, like Agent. More: [docs/wiki/Debug-Mode.md](docs/wiki/Debug-Mode.md).
 
 ### Model Router
 
@@ -486,6 +515,10 @@ extension/            the Kural extension (plain JavaScript, no build step)
                       guide.js (what Kural can do),
                       archive.js (History), attachments, tickets, changes
   lib/split/          parallel agents: agent.js (the lead, the agents, the merge), worktrees.js (git), plan.js (prompts)
+  lib/fix/            Fix with Kural: core.js (the text, no vscode), index.js (light bulb, terminal button)
+  lib/rules/          Rules (.kural/rules): the rule files and what each message gets
+  lib/agent-review/   Agent Review: a read-only agent reviews your uncommitted changes, findings as comments
+  lib/debug/          Debug mode: the log server on 127.0.0.1 and the mode's prompt
   lib/tab/            Tab Completion: completion.js (editor), terminal.js (terminal, plain words), local.js
                       (Ollama), activity.js (what it learns), panel.js (the Tab Completion panel), rename.js +
                       rename-offer.js (change a name in the other files too)
