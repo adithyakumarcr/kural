@@ -159,15 +159,17 @@ async function askLocal(model, system, prompt, token, quiet = false) {
 
 // Like ClaudeSession (ask / start / stop), but answered by the chat's model: Claude, or a local model.
 // claudeModel(): the Claude model to use when the chat's model is local or not a Claude one (e.g. the edit model).
+// opts.pick(): another model than the chat's (Ctrl+K's Quick Question: the fastest one); null → the chat's.
 class Session {
   constructor(opts, onState = () => {}) {
     this.opts = opts;
-    this.claude = new ClaudeSession({ ...opts, model: () => { const m = currentModel(); return engineOf(m) === "claude" ? m : opts.fallbackModel(); } }, onState);
+    this.model = () => (opts.pick && opts.pick()) || currentModel();
+    this.claude = new ClaudeSession({ ...opts, model: () => { const m = this.model(); return engineOf(m) === "claude" ? m : opts.fallbackModel(); } }, onState);
   }
-  start() { if (engineOf(currentModel()) === "claude") return this.claude.start(); return true; }
+  start() { if (engineOf(this.model()) === "claude") return this.claude.start(); return true; }
   stop() { this.claude.stop(); }
   ask(prompt, token) {
-    const m = currentModel();
+    const m = this.model();
     const p = providerOf(m);
     if (p.ask) return p.ask(m, this.opts.systemPrompt, prompt, token, !!this.opts.quiet);
     if (this.started && this.started !== m) this.claude.stop();   // you picked another Claude model: start fresh with it

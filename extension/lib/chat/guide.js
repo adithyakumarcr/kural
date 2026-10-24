@@ -279,11 +279,16 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   can't use ones that need a key header or the older SSE kind. Claude's also has "Use my Claude Code setup (plugins,
   skills)" and Reload.
 - Inline edit (Ctrl+K, Cmd+K on a Mac): select code (or put the cursor on a line to write new code there) and a box
-  opens right under it, in the code: say what to change (Enter sends, Shift+Enter is a new line, Esc or Cancel closes
-  it), then review a read-only red/green diff, Accept or Reject. The original file changes only on Accept.
-- With code selected in the editor, two buttons pop up at the cursor a moment after you stop selecting: Add to Chat
-  (the selection goes into your chat message; Ctrl/Cmd+L) and Edit Selection (inline edit; Ctrl/Cmd+K; not in read-only
-  files). They don't take the keyboard: keep typing or selecting; they go when the cursor moves, you type or press Esc,
+  opens right under it, in the code, like Cursor's: say what to change and press Enter (Edit; Shift+Enter is a new
+  line, Esc or Cancel closes it), then review a read-only red/green diff, Accept or Reject. The original file changes
+  only on Accept. Or, in the same box: Quick Question (Alt+Enter, or its button): the fastest model you have (Haiku, or
+  Gemini's / Codex's lightest) answers about that code right in the box, without tools; ask again, or press Enter to
+  turn it into an edit (the edit knows what was asked: "do what you suggested" works). Send to Chat (Ctrl/Cmd+L there,
+  or its button): the selected code (nothing selected: the file) and what you typed go into the chat's message box; you
+  press Send.
+- With code selected in the editor, two buttons pop up at the cursor a moment after you stop selecting: "Add to Chat
+  ⌘L" (the selection goes into your chat message; Ctrl+L on Windows and Linux) and "Quick Edit ⌘K" (the Ctrl+K box;
+  not in read-only files). They don't take the keyboard: keep typing or selecting; they go when the cursor moves, you type or press Esc,
   and pointing at the selected code brings them back. Another extension's hover for that spot can show in the same box.
   Setting kural.editor.selectionButtons turns them off. The Ctrl+K box starts two lines tall and grows as you type.
 - The Explorer shows what the AI is working on as it works, in every chat: a file it reads turns blue for a moment, a

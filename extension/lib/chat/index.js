@@ -985,6 +985,16 @@ class ChatView {
     this.post({ type: "focus" });
   }
 
+  // Ctrl+K's "Send to Chat": the selected code (nothing selected: the file) and what you typed in the box go into your
+  // message, like Ctrl+L. Never sent by itself.
+  async addFromEditor(doc, range, text = "") {
+    await this.reveal();
+    const pane = this.cur();
+    if (!pane || doc.isClosed) return;
+    const ctx = range && !range.isEmpty ? this.selectionCtx(doc, range) : { kind: "file", path: vscode.workspace.asRelativePath(doc.uri) };
+    this.postTo(pane, { type: "insertPill", ctx, text: text ? ` ${text}` : "" });
+  }
+
   // Ctrl+L as a switch: the side panel's chat on screen → hide it; otherwise open it. Code selected in the editor you're
   // typing in still goes into your message (open()), even while the chat is on screen.
   toggle() {

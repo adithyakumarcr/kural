@@ -11,6 +11,7 @@ const { initLog, log, findClaude, ClaudeSession } = require("./lib/ai/claude");
 const { showLog } = require("./lib/log");
 const { SPEEDS, COMPLETION_SYSTEM_PROMPT, completionProvider, triggerOnCursor } = require("./lib/tab/completion");
 const { EDIT_SYSTEM_PROMPT, inlineEdit, applyCode } = require("./lib/edit/inline");
+const quickQuestion = require("./lib/edit/quick-question");
 const { InlineAsk } = require("./lib/edit/inline-ask");
 const { registerSelectionBar } = require("./lib/edit/selection-bar");
 const { Updater } = require("./lib/updates");
@@ -160,6 +161,11 @@ function activate(context) {
     name: "edit", fallbackModel: () => "sonnet", effort: "medium", systemPrompt: EDIT_SYSTEM_PROMPT,
     restartAfter: 10, timeoutMs: 180000, clearEach: true, idleStopMs: 10 * MIN,
   }, (s) => { if (s === "login" || s === "missing") setState(s); });
+  // Ctrl+K's Quick Question (Alt+Enter in its box): the fastest model you have, no tools (lib/edit/quick-question.js).
+  const questionSession = new brain.Session({
+    name: "question", quiet: true, pick: () => brain.fastestModel(), fallbackModel: () => "haiku", effort: "low", noThinking: true,
+    systemPrompt: quickQuestion.SYSTEM_PROMPT, restartAfter: 20, timeoutMs: 90000, clearEach: true, idleStopMs: 5 * MIN,
+  }, () => {});
   // The Source Control panel's commit message (sparkle button): the chat's model, one plain message (lib/scm/commit.js).
   const scmSession = new brain.Session({
     name: "scm-commit", quiet: true, fallbackModel: () => cfg().get("tabCompletion.model"), effort: "low", noThinking: true,
@@ -355,7 +361,7 @@ function activate(context) {
 
   context.subscriptions.push(
     status,
-    { dispose: () => { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); } },
+    { dispose: () => { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); questionSession.stop(); } },
     vscode.languages.registerInlineCompletionItemProvider({ pattern: "**" }, completionProvider(tabSession, review, (ms, engine) => tabPanel.timing(ms, engine), local, activity,router)),
     vscode.commands.registerCommand("kural.tab.accepted", (a) => { if (a) activity.tabAccepted(a.file, a.lang, a.before, a.text); }),
     vscode.commands.registerCommand("kural.showCrashReports", () => crashLog.show()),
@@ -374,7 +380,10 @@ function activate(context) {
       account.page.push();
       if (!(o && o.quiet)) vscode.window.showInformationMessage("Tab Completion forgot what it learned in this workspace.");
     }),
-    vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState, inlineAsk) : getStarted.open()),
+    vscode.commands.registerCommand("kural.inlineEdit", () => brain.usable().ok ? inlineEdit(editSession, review, getState, inlineAsk, {
+      question: async (prompt, token) => quickQuestion.tidy(await questionSession.ask(prompt, token)),
+      toChat: (doc, range, text) => chat.addFromEditor(doc, range, text),
+    }) : getStarted.open()),
     // The label right after a selection in the editor (lib/edit/selection-bar.js) and its hover's buttons: what Ctrl/Cmd+L
     // and Ctrl/Cmd+K do there.
     vscode.commands.registerCommand("kural.selection.addToChat", () => vscode.commands.executeCommand("kural.chat.open")),
@@ -454,7 +463,7 @@ function activate(context) {
   getStarted.onChange((ready) => {
     state = "ready"; refresh();
     warmTab();
-    if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); wordsSession.stop(); }
+    if (!getStarted.claudeReady) { tabSession.stop(); terminalSession.stop(); editSession.stop(); commitSession.stop(); scmSession.stop(); wordsSession.stop(); questionSession.stop(); }
     chat.readyChanged(ready);
   });
   getStarted.start();

@@ -1,10 +1,10 @@
 // Select code in the editor and, a moment after the selection stops changing, two buttons show right at the cursor:
-// "Add to Chat · Edit Selection" (Adithya, 23 Oct 2026: show that design directly, not a plain label you have to point
-// at). Extensions can't put clickable things inside the code, so it's the editor's hover, opened by Kural without taking
+// "Add to Chat ⌘L · Quick Edit ⌘K" (Adithya, 23 Oct 2026: show that design directly, not a plain label you have to point
+// at; 24 Oct: with the keys, like Cursor's). Extensions can't put clickable things inside the code, so it's the editor's hover, opened by Kural without taking
 // the keyboard (editor.action.showHover, focus "noAutoFocus"): you keep typing or extending the selection, and it goes
 // when the cursor moves, you type, or press Esc. Another extension's hover for that spot (a type, a blame line) can show
 // in the same box. Pointing at the selected code brings it back. Without that command (an older editor), the plain label
-// after the line's end comes instead ("Add to Chat ⌘L · Edit ⌘K"; it never moves the code). Setting
+// after the line's end comes instead ("Add to Chat ⌘L · Quick Edit ⌘K"; it never moves the code). Setting
 // kural.editor.selectionButtons turns both off.
 const vscode = require("vscode");
 
@@ -17,7 +17,7 @@ function registerSelectionBar(context, { busy = () => false } = {}) {
   const on = () => vscode.workspace.getConfiguration("kural").get("editor.selectionButtons") !== false;
   const look = (editable) => vscode.window.createTextEditorDecorationType({
     after: {
-      contentText: editable ? `Add to Chat ${key("L")}  ·  Edit ${key("K")}` : `Add to Chat ${key("L")}`,
+      contentText: editable ? `Add to Chat ${key("L")}  ·  Quick Edit ${key("K")}` : `Add to Chat ${key("L")}`,
       color: new vscode.ThemeColor("editorCodeLens.foreground"),
       backgroundColor: new vscode.ThemeColor("editorWidget.background"),
       border: "1px solid", borderColor: new vscode.ThemeColor("editorWidget.border"),
@@ -67,8 +67,8 @@ function registerSelectionBar(context, { busy = () => false } = {}) {
       const atLabel = pos.line === shown.line && pos.character >= doc.lineAt(pos.line).range.end.character;
       if (!atLabel && !ed.selection.contains(pos)) return undefined;
       const md = new vscode.MarkdownString(
-        `[$(comment-discussion) Add to Chat](command:kural.selection.addToChat "Add the selected code to your chat message (${key("L")})")` +
-        (shown.editable ? `&nbsp;&nbsp;&nbsp;[$(sparkle) Edit Selection](command:kural.selection.edit "Tell Kural how to change it (${key("K")})")` : ""), true);
+        `[$(comment-discussion) Add to Chat](command:kural.selection.addToChat "Add the selected code to your chat message") ${key("L")}` +
+        (shown.editable ? `&nbsp;&nbsp;&nbsp;&nbsp;[$(sparkle) Quick Edit](command:kural.selection.edit "Change it, or ask a quick question about it") ${key("K")}` : ""), true);
       md.isTrusted = { enabledCommands: ["kural.selection.addToChat", "kural.selection.edit"] };
       return new vscode.Hover(md);
     },

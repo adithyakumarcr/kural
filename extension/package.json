@@ -387,7 +387,15 @@
       },
       {
         "command": "kural.inlineEdit.submit",
-        "title": "Send"
+        "title": "Edit"
+      },
+      {
+        "command": "kural.inlineEdit.question",
+        "title": "Quick Question"
+      },
+      {
+        "command": "kural.inlineEdit.toChat",
+        "title": "Send to Chat"
       },
       {
         "command": "kural.inlineEdit.cancel",
@@ -713,6 +721,14 @@
           "when": "false"
         },
         {
+          "command": "kural.inlineEdit.question",
+          "when": "false"
+        },
+        {
+          "command": "kural.inlineEdit.toChat",
+          "when": "false"
+        },
+        {
           "command": "kural.inlineEdit.cancel",
           "when": "false"
         },
@@ -809,8 +825,18 @@
           "when": "commentController == kural.inlineEdit"
         },
         {
-          "command": "kural.inlineEdit.cancel",
+          "command": "kural.inlineEdit.question",
           "group": "inline@2",
+          "when": "commentController == kural.inlineEdit"
+        },
+        {
+          "command": "kural.inlineEdit.toChat",
+          "group": "inline@3",
+          "when": "commentController == kural.inlineEdit"
+        },
+        {
+          "command": "kural.inlineEdit.cancel",
+          "group": "inline@4",
           "when": "commentController == kural.inlineEdit"
         }
       ],
@@ -971,6 +997,17 @@
       {
         "command": "kural.inlineEdit.cancel",
         "key": "escape",
+        "when": "commentEditorFocused && commentThread == kural-edit"
+      },
+      {
+        "command": "kural.inlineEdit.question",
+        "key": "alt+enter",
+        "when": "commentEditorFocused && commentThread == kural-edit && !suggestWidgetVisible"
+      },
+      {
+        "command": "kural.inlineEdit.toChat",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
         "when": "commentEditorFocused && commentThread == kural-edit"
       }
     ],
@@ -1423,7 +1460,7 @@
         "kural.editor.selectionButtons": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "With code selected in the editor, **Add to Chat** (Ctrl/Cmd+L) and **Edit Selection** (Ctrl/Cmd+K) pop up at the cursor a moment after you stop selecting."
+          "markdownDescription": "With code selected in the editor, **Add to Chat** (Ctrl/Cmd+L) and **Quick Edit** (Ctrl/Cmd+K) pop up at the cursor a moment after you stop selecting."
         }
       }
     },
@@ -1507,6 +1544,7 @@
       "github.branchProtection": false,
       "github.showAvatar": false,
       "github.gitAuthentication": false,
+      "comments.openView": "never",
       "workbench.preferredDarkColorTheme": "Kural Dark",
       "workbench.preferredLightColorTheme": "Kural Light",
       "workbench.secondarySideBar.defaultVisibility": "visible",
