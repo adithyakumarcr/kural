@@ -1,6 +1,10 @@
 // Projects bar: sections, rows, chat order, labels and numbers (lib/projects/model.js). Pure functions; no vscode.
-const assert = require("assert"), path = require("path");
-const { keyOf, chatOrder, buildModel, ago, colorFor, PALETTE } = require("../extension/lib/projects/model");
+// Mac and Linux path rules (Windows' are in projects-windows.test.js), so this runs the same on every system.
+const assert = require("assert"), path = require("path").posix;
+const model = require("../extension/lib/projects/model");
+const { chatOrder, ago, colorFor, PALETTE } = model;
+const keyOf = (w) => model.keyOf(w, { platform: "linux" });
+const buildModel = (o) => model.buildModel({ platform: "linux", ...o });
 
 let failed = 0;
 function check(name, fn) { try { fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } }

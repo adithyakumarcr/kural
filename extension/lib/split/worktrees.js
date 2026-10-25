@@ -61,8 +61,9 @@ class Worktrees {
     const dir = path.join(this.dir, name);
     await this.must(["worktree", "add", "--detach", "--force", dir, base]);
     this.trees.push(dir);
-    // (git gives the repository's real path: /private/var/… on a Mac where you opened /var/…)
-    return { dir, cwd: path.join(dir, path.relative(fs.realpathSync(this.root), fs.realpathSync(cwd))) };
+    // (git gives the repository's real path: /private/var/… on a Mac where you opened /var/…, and on Windows the long
+    // name where you opened a short one, C:\Users\RUNNER~1\…: only the native realpath expands those)
+    return { dir, cwd: path.join(dir, path.relative(fs.realpathSync.native(this.root), fs.realpathSync.native(cwd))) };
   }
 
   // Everything the agent changed in its worktree as one commit; null when it changed nothing.
