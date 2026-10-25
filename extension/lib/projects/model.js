@@ -5,6 +5,14 @@ const path = require("path");
 
 const WORKSPACE_EXT = /\.code-workspace$/i;
 const ORDER = { ask: 0, done: 1, run: 2, idle: 3 };
+// A project's letter tile when it has no Workspace Color: calm, distinct colors, none of them Kural's purple (Adithya,
+// 25 Oct 2026, from the design mockup). The same project always gets the same one.
+const PALETTE = ["#4f7fb0", "#b0715a", "#4f8a6b", "#5f6b7a", "#8a6b3f", "#3f7a8a", "#9a5f6b", "#6f7a45"];
+function colorFor(key) {
+  let h = 0;
+  for (const ch of String(key || "")) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
 
 // The path rules of a system. `platform` is injectable so Windows can be tested on a Mac; the running system's own
 // `path` is used when it is the one asked for (as before), the others come from path.win32 / path.posix.
@@ -89,11 +97,22 @@ function labelOf(chat, now) {
   if (chat.state === "run") return "Working";
   if (chat.state === "ask") return chat.ask || "Needs you";
   if (chat.state === "done") return typeof chat.doneAt === "number" ? `Done · ${ago(chat.doneAt, now)}` : "Done";
-  return chat.onScreen ? "on screen" : "";
+  return "";
 }
 
+// A project's second line, only when there's news (no path or branch: those are in the tooltip).
+function newsOf(chats, here) {
+  const ask = chats.find((c) => c.state === "ask"), run = chats.find((c) => c.state === "run");
+  const unseen = chats.filter((c) => c.state === "done").length;
+  if (ask) return { kind: "ask", text: `Waiting for you: ${ask.ask || "a question"}` };
+  if (run) return { kind: "run", text: `Working · ${run.title}` };
+  if (unseen && !here) return { kind: "done", text: unseen === 1 ? "1 new answer" : `${unseen} new answers` };
+  return null;
+}
+
+// A chat with nothing in it yet ("New chat", nothing sent) isn't listed unless it's working or waiting.
 function chatsOf(list, now) {
-  return chatOrder((list || []).map((c) => ({
+  return chatOrder((list || []).filter((c) => !(c && c.empty && !(c.state in { run: 1, ask: 1 }))).map((c) => ({
     id: c.id, title: typeof c.title === "string" ? c.title : "", state: c.state in ORDER ? c.state : "idle",
     ask: typeof c.ask === "string" ? c.ask : "", doneAt: typeof c.doneAt === "number" ? c.doneAt : null, onScreen: !!c.onScreen,
   }))).map((c) => ({ ...c, label: labelOf(c, now) }));
@@ -126,13 +145,14 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
     const p = folder || base.path || (base.workspaceFile ? api.dirname(base.workspaceFile) : "");
     const workspaceFile = (w ? w.workspaceFile : base.workspaceFile) || null;
     const name = (w && w.name) || nameOf({ path: p, workspaceFile }, base.label, platform);
+    const isHere = open && w.windowId === here;
     return {
-      key, name, letter: (name.trim()[0] || "?").toUpperCase(), color: (w && w.color) || null,
+      key, name, letter: (name.trim()[0] || "?").toUpperCase(), color: (w && w.color) || colorFor(key),
       path: p, workspaceFile, shortPath: shorten(p, home, platform), branch: (w && w.branch) || null,
-      open, here: open && w.windowId === here, windowId: open ? w.windowId : null, pinned: false,
+      open, here: isHere, windowId: open ? w.windowId : null, pinned: false,
       unseen: chats.filter((c) => c.state === "done").length,
       attention: chats.some((c) => c.state === "ask") ? "ask" : chats.some((c) => c.state === "run") ? "run" : null,
-      chats,
+      news: newsOf(chats, isHere), chats,
     };
   };
 
@@ -149,8 +169,9 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
 
   const live = [...byKey.entries()].filter(([key, w]) => w.alive && !used.has(key));
   const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.key.localeCompare(b.key);
-  const open = live.map(([key, w]) => { used.add(key); return make(key, {}, w); })
-    .sort((a, b) => (b.here - a.here) || byName(a, b));
+  // By name only: the project you switch to stays where it is (Adithya, 25 Oct 2026: like a chat list in Teams; it
+  // jumped to the top before), and its tinted card shows which one is here.
+  const open = live.map(([key, w]) => { used.add(key); return make(key, {}, w); }).sort(byName);
 
   const recents = [];
   for (const entry of recent) { const p = take(entry); if (p) recents.push(p); }
@@ -182,4 +203,4 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
   return { sections, badge, needLook };
 }
 
-module.exports = { keyOf, pathKey, samePath, sameKey, shorten, chatOrder, buildModel, ago };
+module.exports = { keyOf, pathKey, samePath, sameKey, shorten, chatOrder, buildModel, ago, colorFor, PALETTE };

@@ -1,5 +1,15 @@
 ## Not released yet
 
+- **A calmer Projects bar.** Like ChatGPT's project list: each project is a folder with its chats under it, under the
+  headings Pinned, Open and Recent, with no cards or letter tiles. At a chat's end a spinner (working), an orange dot
+  (waiting for you) or a blue dot (new answer); a folded project shows them on its own row. Each project shows five
+  chats, then "Show N more", and the search box opens from the title bar's search button.
+- **Rename, delete and move chats in the Projects bar.** Right-click a chat for Rename (or F2: the title becomes a box),
+  Move to... and Delete, instead of Cut, Copy and Paste. Drag a chat onto another open project to move it there: it
+  keeps its messages and its place in History, and its next message goes on in a new conversation that's given the
+  whole chat. Right-clicking a project offers Pin, Close and Remove from Recent. The project in
+  this window is bold, and projects stay in name order: the one you switch to keeps its place instead of jumping to the
+  top. Empty "New chat" chats aren't listed, and the left bar's icon is Codicons' folder library.
 - **Switching projects in one frame.** In a Kural built from VS Code's source, opening or switching to a project puts its
   window exactly over the current one (same place, same size, same full-screen), shows it once it has painted and hides
   the old one instead of closing it. Nothing reloads and nothing flashes, and the chats in the window you left keep

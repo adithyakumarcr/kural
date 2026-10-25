@@ -559,6 +559,35 @@ class ChatView {
     this.save();
   }
 
+  // The Projects bar moves a chat to another project (lib/projects): it leaves this window but stays in History, and that
+  // project's window takes it in (adopt). Only a chat of this project with something in it that isn't working or waiting
+  // for you. false: it can't go now.
+  moveOut(id) {
+    const tab = this.tab(id);
+    if (!tab || tab.visiting || !tab.messages.length) return false;
+    const state = (this.projectChats().find((c) => c.id === id) || {}).state;
+    if (state === "run" || state === "ask") return false;
+    this.closeTab(id, true);
+    return true;
+  }
+  // A chat moved here from another project: like Continue here, a new conversation in this folder that's given the old
+  // one (Claude keeps conversations per folder), but with the same id, so History, its lesson and handoff notes follow it.
+  adopt(id, from) {
+    if (this.tab(id)) { this.activate(id); return true; }
+    const old = this.archive.read(id);
+    if (!old) return false;
+    this.clean(old);
+    const tab = { ...old, sessionId: newSessionId(), started: false, visiting: false, workspace: this.here, updatedAt: Date.now(),
+      carryOver: { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
+    const blank = this.tabs.find((t) => !t.messages.length && t.status === "idle" && !this.panes.some((p) => p !== this.cur() && p.activeId === t.id));
+    if (blank) this.tabs.splice(this.tabs.indexOf(blank), 1, tab); else this.tabs.push(tab);
+    this.archive.save(tab, this.card(tab));
+    this.activate(tab.id);
+    this.postHistory();
+    this.save();
+    return true;
+  }
+
   // Open the folder a visiting chat came from, in a new window.
   openWorkspaceOf(id) {
     const t = this.tab(id);
@@ -655,7 +684,8 @@ class ChatView {
       const ask = this.askOf(t);
       const last = t.messages[t.messages.length - 1];
       const state = ask ? "ask" : t.status !== "idle" || (last && last.role === "assistant" && last.running) ? "run" : t.unseen ? "done" : "idle";
-      return { id: t.id, title: t.title, state, ask: state === "ask" ? ask : null, doneAt: t.unseen ? t.doneAt || null : null, onScreen: this.onScreen(t.id) };
+      return { id: t.id, title: t.title, state, ask: state === "ask" ? ask : null, doneAt: t.unseen ? t.doneAt || null : null, onScreen: this.onScreen(t.id),
+        empty: !t.messages.length };   // nothing sent yet: the Projects bar leaves it out
     });
   }
   // The tab is in front of you (activated, its pane became visible, a click on its notification): nothing unseen about it.

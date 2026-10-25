@@ -14,6 +14,7 @@ const ran = [], shown = [], items = [], handlers = {}, commands = {}, views = []
 let folders = [], workspaceFile = undefined, windowState = { focused: true }, config = {}, commandList = ["_kural.card"];
 let frameAnswer = { enabled: true }, commandsAsked = [];
 let warn = async () => undefined, info = async () => undefined, openDialog = async () => undefined, input = async () => undefined, recent = { workspaces: [] };
+let pick = async () => undefined;
 const Uri = { file: (f) => ({ scheme: "file", fsPath: f, path: f }), joinPath: (u, ...p) => ({ scheme: "file", fsPath: path.join(u.fsPath || "", ...p) }) };
 const vscode = {
   workspace: {
@@ -32,6 +33,7 @@ const vscode = {
     showInformationMessage: (...a) => { shown.push(["info", ...a]); return info(...a); },
     showErrorMessage: (...a) => { shown.push(["error", ...a]); return Promise.resolve(); },
     showInputBox: (o) => { shown.push(["input", o]); return input(o); },
+    showQuickPick: (list, o) => { shown.push(["pick", list, o]); return pick(list, o); },
     showOpenDialog: (o) => { shown.push(["dialog", o]); return openDialog(o); },
   },
   commands: {
@@ -75,10 +77,12 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "kural-projects-view-"));
 function make(extra = {}, stand = {}) {
   handlers.configs = [];
   ran.length = 0; shown.length = 0; items.length = 0; folders = ["/p/kural"]; workspaceFile = undefined; windowState = { focused: true }; config = {};
-  warn = async () => undefined; info = async () => undefined; openDialog = async () => undefined; input = async () => undefined; recent = { workspaces: [] }; commandList = stand.commands || ["_kural.card"]; frameAnswer = stand.frame || { enabled: true }; commandsAsked = [];
+  warn = async () => undefined; info = async () => undefined; openDialog = async () => undefined; input = async () => undefined; pick = async () => undefined; recent = { workspaces: [] }; commandList = stand.commands || ["_kural.card"]; frameAnswer = stand.frame || { enabled: true }; commandsAsked = [];
   fakeModel.built = { sections: [], badge: 0, needLook: 0 };
   const status = new FakeStatus(), store = new Map();
-  const ch = { chatsNow: [chat("1", "Refactor notify")], showed: [], projectChats() { return this.chatsNow; }, async showChat(id) { this.showed.push(id); } };
+  const ch = { chatsNow: [chat("1", "Refactor notify")], showed: [], did: [], movable: true, projectChats() { return this.chatsNow; }, async showChat(id) { this.showed.push(id); },
+    rename(id, title) { this.did.push(["rename", id, title]); }, deleteChat(id) { this.did.push(["delete", id]); }, save() { this.did.push(["save"]); },
+    moveOut(id) { this.did.push(["moveOut", id]); return this.movable; }, adopt(id, from) { this.did.push(["adopt", id, from]); return true; } };
   const ctx = { subscriptions: [], globalState: { get: (k) => store.get(k), update: (k, v) => { store.set(k, v); return Promise.resolve(); } },
     extensionUri: Uri.file("/ext"), globalStorageUri: Uri.file(tmp), store };
   const p = new Projects(ctx, { chat: ch, log: () => {}, deps: { statusStore: status, model: fakeModel, ...extra } });
@@ -117,7 +121,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert.strictEqual(typeof ch.onChatsChanged, "function");
     assert.strictEqual(typeof ch.cardElsewhere, "function");
     assert.strictEqual(handlers.provider.id, "kural.projects");
-    for (const c of ["kural.projects.show", "kural.projects.open", "kural.projects.newProject", "kural.projects.clone", "kural.projects.collapseAll"]) assert.strictEqual(typeof commands[c], "function", c);
+    for (const c of ["kural.projects.show", "kural.projects.open", "kural.projects.newProject", "kural.projects.clone", "kural.projects.collapseAll", "kural.projects.find"]) assert.strictEqual(typeof commands[c], "function", c);
     status.calls.length = 0;
     ch.onChatsChanged();
     assert.ok(status.calls.includes("publish"), "a chat changed: this window's file is written again");
@@ -350,6 +354,122 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     assert.deepStrictEqual(t.store.get("kural.projects.folded.v1"), []);
     await commands["kural.projects.collapseAll"]();
     assert.deepStrictEqual(t.store.get("kural.projects.folded.v1").sort(), ["k", "w"]);
+    t.p.stop();
+  });
+
+  await check("the title bar's search shows the Projects view and opens the page's search box (also once the page is ready)", async () => {
+    const t = make();
+    await commands["kural.projects.find"]();
+    assert.ok(ran.some((a) => a[0] === "workbench.view.extension.kural-projects"));
+    const view = { webview: { options: {}, posted: [], postMessage(m) { this.posted.push(m); }, onDidReceiveMessage() {}, asWebviewUri: (u) => u, cspSource: "csp" }, onDidChangeVisibility() {}, onDidDispose() {}, visible: true };
+    t.p.resolve(view);
+    await t.p.onMessage({ type: "ready", q: "" });
+    assert.ok(view.webview.posted.some((m) => m.type === "find"), "the page wasn't there yet: it gets it when ready");
+    view.webview.posted.length = 0;
+    await commands["kural.projects.find"]();
+    assert.deepStrictEqual(view.webview.posted.filter((m) => m.type === "find"), [{ type: "find" }]);
+    await t.p.onMessage({ type: "ready", q: "" });
+    assert.strictEqual(view.webview.posted.filter((m) => m.type === "find").length, 1, "only once");
+    t.p.stop();
+  });
+
+  // ---- a chat's right-click menu and dragging (rename, delete, move) ----
+  const CHATS = () => [{ id: "open", title: "Open", projects: [
+    proj("f:/p/kural", "kural", { here: true, windowId: "w-me", chats: [chat("1", "Refactor notify"), chat("2", "Tune the arc", "run")] }),
+    proj("w", "weld-sim", { chats: [chat("5", "Fix the login", "done")] }),
+    proj("x", "mesh", { chats: [] })] },
+  { id: "recent", title: "Recent", projects: [proj("d", "dotfiles", { open: false, windowId: null, chats: [chat("9", "Old one", "done")] })] }];
+
+  await check("rename: a chat here is renamed by this window's chat; one in another window by a request to it; empty names and closed projects do nothing", async () => {
+    const t = make(); setModel(t, CHATS());
+    await t.p.onMessage({ type: "renameChat", key: "f:/p/kural", chatId: "1", title: "Notify refactor" });
+    assert.deepStrictEqual(t.ch.did, [["rename", "1", "Notify refactor"]]);
+    await t.p.onMessage({ type: "renameChat", key: "w", chatId: "5", title: "Login fix" });
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "renameChat", chatId: "5", title: "Login fix" }]]);
+    await t.p.onMessage({ type: "renameChat", key: "w", chatId: "5", title: "   " });
+    await t.p.onMessage({ type: "renameChat", key: "d", chatId: "9", title: "x" });
+    await t.p.onMessage({ type: "renameChat", key: "w", chatId: "nope", title: "x" });
+    assert.strictEqual(t.status.sent.length, 1);
+    assert.strictEqual(t.ch.did.length, 1);
+    t.p.stop();
+  });
+
+  await check("the menu's Rename asks the page to edit the title in place", async () => {
+    const t = make(); setModel(t, CHATS());
+    const view = { webview: { options: {}, posted: [], postMessage(m) { this.posted.push(m); }, onDidReceiveMessage() {}, asWebviewUri: (u) => u, cspSource: "csp" }, onDidChangeVisibility() {}, onDidDispose() {}, visible: true };
+    t.p.resolve(view);
+    await commands["kural.projects.renameChat"]({ webviewSection: "chat", key: "w", chatId: "5" });
+    assert.deepStrictEqual(view.webview.posted.filter((m) => m.type === "rename"), [{ type: "rename", key: "w", chatId: "5" }]);
+    t.p.stop();
+  });
+
+  await check("delete: asks first (a working chat is named as stopping); Delete removes it here or asks its window; cancel does nothing", async () => {
+    const t = make(); setModel(t, CHATS());
+    await commands["kural.projects.deleteChat"]({ webviewSection: "chat", key: "f:/p/kural", chatId: "2" });
+    const q = shown.find((x) => x[0] === "warn");
+    assert.match(q[1], /Delete "Tune the arc"\?/);
+    assert.ok(q[2].modal && /History/.test(q[2].detail) && /working/i.test(q[2].detail));
+    assert.deepStrictEqual(t.ch.did, [], "cancelled");
+    warn = async () => "Delete";
+    await commands["kural.projects.deleteChat"]({ webviewSection: "chat", key: "f:/p/kural", chatId: "1" });
+    assert.deepStrictEqual(t.ch.did, [["delete", "1"], ["save"]]);
+    await commands["kural.projects.deleteChat"]({ webviewSection: "chat", key: "w", chatId: "5" });
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "deleteChat", chatId: "5" }]]);
+    t.p.stop();
+  });
+
+  await check("move by dragging: from this window the chat goes out and the other window is asked to take it in; from another window, that window is asked", async () => {
+    const t = make(); setModel(t, CHATS());
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "w" });
+    assert.deepStrictEqual(t.ch.did, [["moveOut", "1"]]);
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "adoptChat", chatId: "1", from: "kural" }]]);
+    t.status.sent.length = 0;
+    await t.p.onMessage({ type: "moveChat", key: "w", chatId: "5", to: "x" });
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "moveChat", chatId: "5", toWindow: "w-mesh", from: "weld-sim" }]]);
+    t.p.stop();
+  });
+
+  await check("move: not to a project without a window, not to its own project, not a working chat; a chat that can't go says so", async () => {
+    const t = make(); setModel(t, CHATS());
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "d" });
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "f:/p/kural" });
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "2", to: "w" });
+    assert.deepStrictEqual(t.ch.did, []);
+    assert.deepStrictEqual(t.status.sent, []);
+    t.ch.movable = false;
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "w" });
+    assert.deepStrictEqual(t.status.sent, [], "the chat refused: nothing is sent");
+    assert.ok(shown.some((x) => x[0] === "info" && /can't be moved/.test(x[1])));
+    t.p.stop();
+  });
+
+  await check("Move to...: a list of the other open projects; the pick moves the chat", async () => {
+    const t = make(); setModel(t, CHATS());
+    pick = async (list) => list.find((i) => i.label === "mesh");
+    await commands["kural.projects.moveChat"]({ webviewSection: "chat", key: "f:/p/kural", chatId: "1" });
+    const [, list] = shown.find((x) => x[0] === "pick");
+    assert.deepStrictEqual(list.map((i) => i.label), ["weld-sim", "mesh"], "open projects only, not its own");
+    assert.deepStrictEqual(t.status.sent, [["w-mesh", { type: "adoptChat", chatId: "1", from: "kural" }]]);
+    t.p.stop();
+  });
+
+  await check("requests from other windows: rename, delete, move out (then the target is asked), adopt", async () => {
+    const t = make(); setModel(t, CHATS());
+    await t.p.onRequest({ type: "renameChat", chatId: "1", title: "New name" });
+    await t.p.onRequest({ type: "deleteChat", chatId: "1" });
+    await t.p.onRequest({ type: "moveChat", chatId: "1", toWindow: "w-mesh", from: "kural" });
+    await t.p.onRequest({ type: "adoptChat", chatId: "7", from: "weld-sim" });
+    assert.deepStrictEqual(t.ch.did, [["rename", "1", "New name"], ["delete", "1"], ["save"], ["moveOut", "1"], ["adopt", "7", "weld-sim"]]);
+    assert.deepStrictEqual(t.status.sent, [["w-mesh", { type: "adoptChat", chatId: "1", from: "kural" }]]);
+    t.p.stop();
+  });
+
+  await check("project menu: Pin, Unpin, Close and Remove from Recent do what the row's buttons do", async () => {
+    const t = make(); setModel(t, CHATS());
+    await commands["kural.projects.pin"]({ webviewSection: "project", key: "w" });
+    await commands["kural.projects.unpin"]({ webviewSection: "project", key: "w" });
+    assert.strictEqual(t.status.calls.filter((c) => c[0] === "pin").length, 2);
+    for (const c of ["kural.projects.close", "kural.projects.removeRecent"]) assert.strictEqual(typeof commands[c], "function", c);
     t.p.stop();
   });
 

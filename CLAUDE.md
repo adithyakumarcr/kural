@@ -363,7 +363,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   high (Deep), 3 / 10 minutes; `onPermission` refuses anything but a read inside the repository (links out too); Gemini in
   `plan` mode. Test: `test/agent-review.test.js` (real temp repos). NOT checked live: a real AI review, the comment threads.
 - **Projects bar** (`lib/projects/`: `status.js` and `model.js` no vscode, `index.js` `registerProjects(context, {chat, log})`;
-  `media/projects.js` + `projects.css` the page, `media/projects-icon.svg`; commands `kural.projects.show|open|newProject|clone|collapseAll`,
+  `media/projects.js` + `projects.css` the page, `media/projects-icon.svg`; commands `kural.projects.show|open|newProject|clone|collapseAll|find`,
   the + is the submenu `kural.projects.add` in the view's title bar; design: `docs/superpowers/specs/2026-10-24-projects-bar-design.md`,
   Adithya, 24 Oct 2026, agreed from a mockup). One window per project (VS Code's): the tab lists every project and its chats and
   brings windows forward; switching a window to another folder in place was rejected (it restarts the window and stops its chats).
@@ -373,8 +373,33 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   [{path, workspaceFile}]. Interfaces between the parts: `new ProjectStatus({dir})` (`windowId`, start, publish, flush, dispose({closed}),
   readAll, adopt(key), prune, send(windowId, request), onRequest, onChange, readPins, setPinned); `model.keyOf({folders,
   workspaceFile})` and `buildModel({windows, pins, recent, here, query})` → `{sections: [{id, title, projects: [{key, name, letter,
-  color, path, workspaceFile, shortPath, branch, open, here, windowId, pinned, unseen, attention, chats: [{id, title, state: run|ask|
-  done|idle, ask, doneAt, onScreen, label}]}]}], badge, needLook}`; the chat gives `chat.projectChats()`, `chat.onChatsChanged`,
+  color, path, workspaceFile, shortPath, branch, open, here, windowId, pinned, unseen, attention, news: {kind: run|ask|done, text}|null,
+  chats: [{id, title, state: run|ask|done|idle, ask, doneAt, onScreen, label}]}]}], badge, needLook}` (`color` = the Workspace Color, else
+  `colorFor(key)` from `PALETTE`, never Kural's purple; a chat the chat reports as `empty`, nothing sent, isn't listed unless it runs or asks).
+  **The look** (Adithya, 25 Oct 2026, design A "Folders" of `docs/mockups/projects-bar/projects-bar-v3a.html`, like ChatGPT's
+  project list; the earlier "Cards" look was dropped; the Pinned / Open / Recent headings were kept, Adithya: without them
+  you couldn't tell the groups apart): the model's sections in order, each under its heading (`.sec`), with no cards,
+  letter tiles, second lines or project colors (the model still sends `color`, `letter`, `news`: the page
+  uses `news` only in a row's tooltip); a folder per project (`.fic`, the fold button when it has chats), its chats
+  indented under it with a mark at the end (spinner, orange `.needs`, blue `.dot-new`), five then "Show N more" (`S.more`,
+  page only); no "New chat" row (tried and dropped: the chat has its own +); **rename, delete, move** (Adithya, 25 Oct
+  2026: instead of VS Code's Cut/Copy/Paste; moving by drag and drop): rows carry `data-vscode-context` (`webviewSection`
+  chat|project, `key`, `chatId`, `projectOpen`, `projectPinned`; the body `preventDefaultContextMenuItems`) for package.json
+  `webview/context` (`kural.projects.renameChat|moveChat|deleteChat|pin|unpin|close|removeRecent`, hidden from the
+  palette); Rename posts `rename` to the page, which edits in place (`S.renaming`, F2 too; Enter/blur save, Esc cancels)
+  and posts `renameChat`; a chat of an open project that isn't `run`/`ask` is `draggable`, another open project's row takes
+  the drop (`.drop`, VS Code's `list.dropBackground`) → `moveChat {key, chatId, to}`; while renaming or dragging the host's
+  models wait (`S.later`). The host (`chatOf`: only chats of open projects) does it in this window (`chat.rename`,
+  `chat.deleteChat` + `save`, `moveOut`) or sends the owner window `renameChat`/`deleteChat`/`moveChat {toWindow, from}`;
+  the owner's `chat.moveOut(id)` (idle, not visiting, not empty: `closeTab(id, true)`, so it stays in History) then sends
+  the target `adoptChat {chatId, from}` → `chat.adopt(id, from)`: the archive record with the SAME id, `workspace: here`, a
+  new `sessionId`, `started: false` and `carryOver {from, text: transcript}` (like Continue here; History, lessons and
+  handoff notes follow the id). Moved chats' checkpoints keep the old project's paths (`inProject` hides them there).
+  Tests: projects-page, projects-view, projects-chat. NOT checked live: a real right-click menu, a real drag, two windows;
+  the search box is hidden until the title bar's
+  `kural.projects.find` (posts `find`; `findPending` until the page is ready) or a query; no purple in the list,
+  the activity bar icon is Codicons' folder-library made by
+  `scripts/make-projects-icon.js` (`test/projects-icon.test.js`); the chat gives `chat.projectChats()`, `chat.onChatsChanged`,
   `chat.showChat(id)` and takes `chat.cardElsewhere({tabId, title, body})` (set by `index.js`: true when another live window has
   `focused`, after sending it a `card`). `index.js` publishes this window (key from `model.keyOf`, no folder → key null; color from
   the `kural.workspaceColor` setting; branch from the git extension; republished on chat changes, focus, branch, color and folder

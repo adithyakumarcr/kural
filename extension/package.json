@@ -395,6 +395,39 @@
         "icon": "$(collapse-all)"
       },
       {
+        "command": "kural.projects.find",
+        "title": "Find a Project or Chat",
+        "icon": "$(search)"
+      },
+      {
+        "command": "kural.projects.renameChat",
+        "title": "Rename"
+      },
+      {
+        "command": "kural.projects.deleteChat",
+        "title": "Delete"
+      },
+      {
+        "command": "kural.projects.moveChat",
+        "title": "Move to..."
+      },
+      {
+        "command": "kural.projects.pin",
+        "title": "Pin"
+      },
+      {
+        "command": "kural.projects.unpin",
+        "title": "Unpin"
+      },
+      {
+        "command": "kural.projects.close",
+        "title": "Close Project"
+      },
+      {
+        "command": "kural.projects.removeRecent",
+        "title": "Remove from Recent"
+      },
+      {
         "command": "kural.connectors.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
@@ -624,6 +657,11 @@
       ],
       "view/title": [
         {
+          "command": "kural.projects.find",
+          "when": "view == kural.projects",
+          "group": "navigation@0"
+        },
+        {
           "submenu": "kural.projects.add",
           "when": "view == kural.projects",
           "group": "navigation@1"
@@ -709,6 +747,38 @@
       "commandPalette": [
         {
           "command": "kural.projects.collapseAll",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.find",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.renameChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.deleteChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.moveChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.pin",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.unpin",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.close",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.removeRecent",
           "when": "false"
         },
         {
@@ -825,6 +895,41 @@
         }
       ],
       "webview/context": [
+        {
+          "command": "kural.projects.renameChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "1_chat@1"
+        },
+        {
+          "command": "kural.projects.moveChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "1_chat@2"
+        },
+        {
+          "command": "kural.projects.deleteChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "2_delete@1"
+        },
+        {
+          "command": "kural.projects.pin",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && !projectPinned",
+          "group": "1_project@1"
+        },
+        {
+          "command": "kural.projects.unpin",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && projectPinned",
+          "group": "1_project@1"
+        },
+        {
+          "command": "kural.projects.close",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && projectOpen",
+          "group": "2_remove@1"
+        },
+        {
+          "command": "kural.projects.removeRecent",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && !projectOpen && !projectPinned",
+          "group": "2_remove@1"
+        },
         {
           "command": "kural.search.copy",
           "when": "webviewId == 'kural.search' && webviewSection == 'match'",

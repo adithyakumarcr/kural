@@ -5,28 +5,32 @@ project and every chat in them in one list, so you see what each chat is doing a
 
 ## The list
 
-A search box (**Find a project or chat**) and three sections:
+One list, like ChatGPT's project list: each project is a folder with its chats under it, in three sections, each with
+its heading:
 
 | Section | What's in it |
 |---|---|
-| **Pinned** | Your pins, open or not. Pins are kept for every window at once. |
-| **Open** | Projects with a Kural window right now that aren't pinned. |
-| **Recent** | VS Code's own Open Recent list, without the open and pinned ones. Folders and `.code-workspace` files on this computer only. |
+| **Pinned** | Your pins, open or not (a faint pin at the end of the row). Pins are kept for every window at once. |
+| **Open** | Projects with a Kural window right now that aren't pinned, by name. The one in this window is bold and keeps its place. |
+| **Recent** | VS Code's own Open Recent list, without the open and pinned ones, in grey with a closed folder. Folders and `.code-workspace` files on this computer only. |
 
-A project row has a square in the project's **Workspace Color** with its first letter, its name ("this window" on the
-one you're in), a second line with the Git branch and the folder, and on the right a purple number (finished answers you
-haven't seen), the pin, and when you point at it a red **×** (open projects: close) or a red bin (Recent: remove from
-Recent). The arrow folds a project; a folded project shows the spinner or the orange dot on its own row when a chat in
-it is working or waiting. **Collapse all** is in the title bar.
+The search button in the title bar opens a box (**Find a project or chat**) that finds projects and chats and marks what matched; Esc or its **×** clears and closes it.
 
-Under an open project is each of its open chats:
+A project shows its first five chats, then **Show N more** (a chat you're looking at stays in view). The folder is in
+the tooltip. When you point at a row: the pin, and a red **×** (open projects: close) or a red bin (Recent: remove from
+Recent). Click the folder icon (an arrow under the pointer) to fold a project's chats; a folded project shows its chats'
+marks on its own row. **Collapse all** is in the title bar.
+
+At the end of each chat:
 
 | Mark | Meaning |
 |---|---|
-| Spinner, "Working" | An answer is running |
-| Orange dot, the question | The chat waits for you (a permission, a question, a plan) |
-| Purple dot, bold title, "Done · 5 min ago" | It finished and you haven't seen it yet |
-| Speech bubble | Open, nothing new ("on screen" for the one showing in that window) |
+| Spinner | An answer is running |
+| Orange dot, bold title | The chat waits for you (a permission, a question, a plan); the question is in the tooltip |
+| Blue dot, bold title | It finished and you haven't seen it yet |
+| Nothing | Nothing new (the one showing in this window is highlighted) |
+
+A chat with nothing sent yet ("New chat") isn't listed.
 
 Waiting chats come first, then finished, then working, then the rest in tab order. A closed project keeps only its
 finished chats you haven't seen.
@@ -40,6 +44,21 @@ finished chats you haven't seen.
 | The pin | Pins or unpins the project. |
 | The red × | Asks "Close weld-sim?" and names the chats that are working or waiting ("Closing stops them"); your chats stay in History. **Close project** closes the window (VS Code asks about unsaved files first). |
 | The red bin | Removes the project from Recent. |
+
+## Rename, delete and move a chat
+
+Right-click a chat (in a project with a window) for **Rename**, **Move to...** and **Delete** (Kural's own menu, not Cut,
+Copy and Paste); right-click a project for **Pin** / **Unpin** and **Close Project** or **Remove from Recent**.
+
+- **Rename** (or F2 on a chat) turns its title into a box: Enter or clicking away saves, Esc cancels.
+- **Delete** asks first, then removes the chat from its project and from History (a working chat stops).
+- **Move**: drag a chat onto another project that has a window (the row lights up), or use **Move to...** for a list of
+  them. The chat keeps its title, messages and place in History and shows up in that project's window. Claude keeps a
+  conversation per folder, so its next message there starts a new conversation that's given the whole chat so far, like
+  **Continue here** in History. A chat that's working or waiting for you can't be moved (its tooltip says so), and a
+  project without a window doesn't take one. "Files changed" in a moved chat still means the old project's files.
+
+A chat in another project's window is renamed, deleted or moved by that window: the bar sends it the request.
 
 ## The + menu
 

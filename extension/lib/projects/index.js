@@ -183,6 +183,15 @@ class Projects {
       vscode.commands.registerCommand("kural.projects.newProject", () => this.newProject()),
       vscode.commands.registerCommand("kural.projects.clone", () => vscode.commands.executeCommand("git.clone")),
       vscode.commands.registerCommand("kural.projects.collapseAll", () => this.collapseAll()),
+      vscode.commands.registerCommand("kural.projects.find", () => this.openFind()),
+      // The right-click menu (package.json "webview/context"): the row's data-vscode-context comes as the argument.
+      vscode.commands.registerCommand("kural.projects.renameChat", (c) => c && this.post({ type: "rename", key: c.key, chatId: c.chatId })),
+      vscode.commands.registerCommand("kural.projects.deleteChat", (c) => c && this.deleteChat(c.key, c.chatId)),
+      vscode.commands.registerCommand("kural.projects.moveChat", (c) => c && this.moveChatTo(c.key, c.chatId)),
+      vscode.commands.registerCommand("kural.projects.pin", (c) => c && this.onMessage({ type: "pin", key: c.key })),
+      vscode.commands.registerCommand("kural.projects.unpin", (c) => c && this.onMessage({ type: "pin", key: c.key })),
+      vscode.commands.registerCommand("kural.projects.close", (c) => c && this.onMessage({ type: "close", key: c.key })),
+      vscode.commands.registerCommand("kural.projects.removeRecent", (c) => c && this.onMessage({ type: "removeRecent", key: c.key })),
       vscode.window.onDidChangeWindowState(() => { this.publish(); if (vscode.window.state.focused) this.loadRecent(); }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.publish()),
       vscode.workspace.onDidChangeConfiguration((e) => {
@@ -228,14 +237,17 @@ class Projects {
     return `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("projects.css")}"></head>
-<body><div id="app"></div><script nonce="${nonce}" src="${uri("projects.js")}"></script></body></html>`;
+<body data-vscode-context='{"preventDefaultContextMenuItems": true}'><div id="app"></div><script nonce="${nonce}" src="${uri("projects.js")}"></script></body></html>`;
   }
 
   // The page sends only keys and ids; what to open comes from the model the host built.
   async onMessage(m) {
     const p = m.key ? this.find(m.key) : null;
     switch (m.type) {
-      case "ready": this.query = String(m.q || ""); this.rebuild(); this.loadRecent(); break;
+      case "ready":
+        this.query = String(m.q || ""); this.rebuild(); this.loadRecent();
+        if (this.findPending) { this.findPending = false; for (const v of this.views) v.webview.postMessage({ type: "find" }); }
+        break;
       case "search": this.query = String(m.q || ""); this.rebuild(); break;
       case "fold": if (m.key) { if (m.folded) this.folded.add(m.key); else this.folded.delete(m.key); this.saveFolded(); } break;
       case "open": if (p) await this.openProject(p); break;
@@ -243,8 +255,69 @@ class Projects {
       case "pin": if (p) { this.status.setPinned({ path: p.path, workspaceFile: p.workspaceFile || null }, !p.pinned); this.refresh(); } break;
       case "close": if (p) await this.closeProject(p); break;
       case "removeRecent": if (p) await this.removeRecent(p); break;
+      case "renameChat": this.renameChat(m.key, m.chatId, m.title); break;
+      case "moveChat": this.moveChat(m.key, m.chatId, m.to); break;
       case "log": this.log(`projects page: ${m.message}`); break;
     }
+  }
+  post(m) { for (const v of this.views) v.webview.postMessage(m); }
+
+  // ---------- a chat's rename, delete and move ----------
+  // A chat lives in its project's window: this window's chat does it, another window gets a request. Only chats of
+  // projects with a window (a closed project's finished chats are only a way to open it).
+  chatOf(key, chatId) {
+    const p = this.find(key);
+    const c = p && p.open && (p.chats || []).find((x) => x.id === chatId);
+    return c ? { p, c } : null;
+  }
+  renameChat(key, chatId, title) {
+    const found = this.chatOf(key, chatId), clean = String(title || "").replace(/\s+/g, " ").trim();
+    if (!found || !clean) return;
+    if (found.p.here) this.chat.rename(chatId, clean);
+    else this.status.send(found.p.windowId, { type: "renameChat", chatId, title: clean });
+  }
+  async deleteChat(key, chatId) {
+    const found = this.chatOf(key, chatId);
+    if (!found) return;
+    const busy = found.c.state === "run" || found.c.state === "ask";
+    const detail = `It's removed from ${found.p.name} and from History. This can't be undone.${busy ? " It's working now: it stops." : ""}`;
+    const ok = await vscode.window.showWarningMessage(`Delete "${found.c.title}"?`, { modal: true, detail }, "Delete");
+    if (ok !== "Delete") return;
+    if (found.p.here) { this.chat.deleteChat(chatId); this.chat.save(); }
+    else this.status.send(found.p.windowId, { type: "deleteChat", chatId });
+  }
+  // Move: only to another project with a window, and not while the chat works or waits for you. The chat's own window
+  // lets it go, then asks the target window to take it in (lib/chat: moveOut, adopt).
+  moveChat(key, chatId, to) {
+    const found = this.chatOf(key, chatId), target = this.find(to);
+    if (!found || !target || !target.open || target.key === found.p.key) return;
+    if (found.c.state === "run" || found.c.state === "ask") return;
+    if (found.p.here) this.moveOut(chatId, target.windowId, found.p.name);
+    else this.status.send(found.p.windowId, { type: "moveChat", chatId, toWindow: target.windowId, from: found.p.name });
+  }
+  moveOut(chatId, toWindow, from) {
+    if (!this.chat.moveOut(chatId)) {
+      vscode.window.showInformationMessage("Kural: this chat can't be moved while it's working or waiting for you.");
+      return;
+    }
+    this.status.send(toWindow, { type: "adoptChat", chatId, from });
+  }
+  // Move to... (the menu): the other projects with a window.
+  async moveChatTo(key, chatId) {
+    const found = this.chatOf(key, chatId);
+    if (!found) return;
+    const list = this.built.sections.flatMap((s) => s.projects).filter((p) => p.open && p.key !== found.p.key)
+      .map((p) => ({ label: p.name, description: p.shortPath || "", key: p.key }));
+    if (!list.length) { vscode.window.showInformationMessage("Kural: there's no other open project to move this chat to."); return; }
+    const pick = await vscode.window.showQuickPick(list, { placeHolder: `Move "${found.c.title}" to…` });
+    if (pick) this.moveChat(key, chatId, pick.key);
+  }
+
+  // The title bar's search button: the page's search box opens (when the page isn't there yet, once it is ready).
+  async openFind() {
+    await vscode.commands.executeCommand("workbench.view.extension.kural-projects");
+    if (!this.views.size) { this.findPending = true; return; }
+    this.post({ type: "find" });
   }
   saveFolded() { this.context.globalState.update(FOLDED_KEY, [...this.folded]); }
   collapseAll() {
@@ -366,6 +439,10 @@ class Projects {
     if (r.type === "showChat") await this.chat.showChat(r.chatId);
     else if (r.type === "close") await vscode.commands.executeCommand("workbench.action.closeWindow");
     else if (r.type === "card") await this.card(r);
+    else if (r.type === "renameChat") this.chat.rename(r.chatId, r.title);
+    else if (r.type === "deleteChat") { this.chat.deleteChat(r.chatId); this.chat.save(); }
+    else if (r.type === "moveChat") this.moveOut(r.chatId, r.toWindow, r.from);
+    else if (r.type === "adoptChat") this.chat.adopt(r.chatId, r.from);
   }
   // A chat finished (or needs you) in a window that isn't in front: the window that is, shows a card.
   async cardElsewhere({ tabId, title, body }) {

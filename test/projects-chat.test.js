@@ -132,7 +132,9 @@ const stopped = { type: "result", subtype: "error_during_execution", is_error: t
     const c = chat.newTab(false); c.title = "Gamma"; c.visiting = true;
     const d = chat.newTab(false); d.title = "Delta";
     assert.deepStrictEqual(chat.projectChats().map((x) => [x.title, x.state]), [["Alpha", "run"], ["Beta", "idle"], ["Delta", "idle"]]);
-    assert.deepStrictEqual(Object.keys(chat.projectChats()[0]).sort(), ["ask", "doneAt", "id", "onScreen", "state", "title"]);
+    assert.deepStrictEqual(Object.keys(chat.projectChats()[0]).sort(), ["ask", "doneAt", "empty", "id", "onScreen", "state", "title"]);
+    assert.strictEqual(d.messages.length, 0);
+    assert.strictEqual(chat.projectChats().find((x) => x.title === "Delta").empty, true, "nothing sent yet: empty (the bar leaves it out)");
     assert.strictEqual(chat.projectChats()[0].ask, null);
   });
   await check("projectChats: ask while a command waits for you, with a short text; run again once answered; events on both", async () => {
@@ -178,6 +180,44 @@ const stopped = { type: "result", subtype: "error_during_execution", is_error: t
     assert.strictEqual(chat.projectChats()[1].state, "idle");
   });
 
+  await check("moveOut: an idle chat leaves this window and stays in History; a working, waiting, empty or visiting one doesn't", () => {
+    const { chat, a, b } = fixture();
+    b.messages.push({ role: "user", segments: [{ t: "text", v: "make the mesh finer" }] }, { role: "assistant", blocks: [{ k: "text", text: "Done." }] });
+    const r = running(a); chat.runtime.set(a.id, r);
+    assert.strictEqual(chat.moveOut(a.id), false, "working");
+    const empty = chat.newTab(false);
+    assert.strictEqual(chat.moveOut(empty.id), false, "nothing sent yet");
+    b.visiting = true;
+    assert.strictEqual(chat.moveOut(b.id), false, "a chat from another project, here to read");
+    b.visiting = false;
+    const askOf = chat.askOf;
+    chat.askOf = (t) => (t === b ? "Allow make?" : askOf.call(chat, t));
+    assert.strictEqual(chat.moveOut(b.id), false, "waiting for you");
+    chat.askOf = askOf;
+    assert.strictEqual(chat.moveOut(b.id), true);
+    assert.ok(!chat.tab(b.id), "gone from this window");
+    assert.strictEqual(chat.archive.read(b.id).title, "Beta", "kept in History");
+  });
+  await check("adopt: a moved chat opens here with the same id, this project as its workspace, a fresh conversation and the old one carried over", () => {
+    const one = fixture(), two = fixture();
+    const { b } = one;
+    b.messages.push({ role: "user", segments: [{ t: "text", v: "make the mesh finer" }] }, { role: "assistant", blocks: [{ k: "text", text: "Done." }] });
+    b.workspace = { key: "f:/p/weld", name: "weld", open: "/p/weld" }; b.started = true;
+    const oldSession = b.sessionId;
+    assert.ok(one.chat.moveOut(b.id));
+    two.chat.here = { key: "f:/p/kural", name: "kural", open: "/p/kural" };
+    assert.strictEqual(two.chat.adopt(b.id, "weld"), true);
+    const t = two.chat.tab(b.id);
+    assert.ok(t && t.title === "Beta" && t.messages.length === 2);
+    assert.deepStrictEqual(t.workspace, two.chat.here);
+    assert.ok(t.sessionId !== oldSession && t.started === false && !t.visiting);
+    assert.strictEqual(t.carryOver.from, "weld");
+    assert.match(t.carryOver.text, /make the mesh finer/);
+    assert.deepStrictEqual(two.chat.archive.read(b.id).workspace, two.chat.here, "History shows it under its new project");
+    assert.strictEqual(two.chat.adopt("nope", "weld"), false, "not in History: nothing");
+    assert.strictEqual(two.chat.adopt(b.id, "weld"), true, "already here: shown again");
+    assert.strictEqual(two.chat.tabs.filter((x) => x.id === b.id).length, 1);
+  });
   await check("onChatsChanged: tab added, renamed, closed; a throwing callback breaks nothing", () => {
     const { chat, a, events } = fixture();
     const c = chat.newTab(false); assert.ok(events.length >= 1); events.length = 0;

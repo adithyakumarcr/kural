@@ -199,14 +199,21 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   code, the AI lists hypotheses, adds temporary logging that sends to a Kural log server on this computer (127.0.0.1,
   nothing leaves it), asks you to reproduce the bug, reads the logs, fixes the cause and then removes the logging (the
   lines are marked kural-debug). It asks before commands, like Agent.
-- Projects: the first tab in the left bar lists every project with a Kural window (one window per project), with each
-  of its chats under it: a spinner while a chat works, an orange dot while it waits for you (the question is shown), a
-  purple dot and bold title when it finished and you haven't seen it, "on screen" for the one showing in that window.
-  Sections: Pinned (the pin on a row; kept for every window), Open, and Recent (VS Code's Open Recent, folders on this
-  computer only). The search box finds a project or a chat. Click an open project and its window comes forward;
+- Projects: the first tab in the left bar (a folder-library icon) lists every project with a Kural window (one window
+  per project), like ChatGPT's project list: a folder per project with its chats under it (five, then
+  "Show N more"); the project in this window is bold, the folder is in the tooltip. At a chat's end: a spinner while it
+  works, an orange dot while it waits for you (the question in the tooltip), a blue dot and bold title when it finished
+  and you haven't seen it; a chat with nothing sent yet ("New chat") isn't listed. Click a project's folder icon to fold
+  its chats (a folded one shows its chats' marks on its own row). Three headings: Pinned (the pin on a row; kept for
+  every window), Open, and Recent (VS Code's Open Recent, folders on this computer only). The search button in its title bar opens a box that finds a project or a
+  chat (Esc closes it). Click an open project and its window comes forward;
   click a Recent (or pinned, not open) one and it opens in this window, like File > Open Recent (if a chat here is
   working or waiting, Kural asks first: Open Here stops it, or Open in New Window); click a chat and that window shows it. The red cross on an open project closes it after asking (working chats are
-  named and stop; chats stay in History); the red bin on a Recent one removes it from Recent. + has Open folder, Clone Git
+  named and stop; chats stay in History); the red bin on a Recent one removes it from Recent. Right-click a chat: Rename
+  (also F2: the title becomes a box), Move to... and Delete (asks first; also removes it from History); right-click a
+  project: Pin/Unpin, Close Project or Remove from Recent. Drag a chat onto another project with a window to move it
+  there: it keeps its messages and History, and its next message starts a new conversation in that folder that's given
+  the whole chat (like Continue here); a working or waiting chat can't be moved. + has Open folder, Clone Git
   repository and "New empty project (with Git)", which asks for a name and a place, makes the folder, runs git init and
   opens it. The icon in the left bar shows a number for finished-and-unseen and waiting chats in other projects, and the
   status bar says "N projects need a look" while that is so (click it to open Projects). When a chat finishes in a window

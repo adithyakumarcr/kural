@@ -1,6 +1,6 @@
 // Projects bar: sections, rows, chat order, labels and numbers (lib/projects/model.js). Pure functions; no vscode.
 const assert = require("assert"), path = require("path");
-const { keyOf, chatOrder, buildModel, ago } = require("../extension/lib/projects/model");
+const { keyOf, chatOrder, buildModel, ago, colorFor, PALETTE } = require("../extension/lib/projects/model");
 
 let failed = 0;
 function check(name, fn) { try { fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } }
@@ -52,14 +52,14 @@ check("sections, their order and an open project's row", () => {
     ],
   });
   assert.deepStrictEqual(m.sections.map((s) => [s.id, s.title]), [["open", "Open"]]);
-  assert.deepStrictEqual(ids(section(m, "open")), ["alpha", "beta", "zeta"], "this window first, then by name");
+  assert.deepStrictEqual(ids(section(m, "open")), ["alpha", "beta", "zeta"], "by name");
   const alpha = section(m, "open").projects[0];
   assert.strictEqual(alpha.key, path.resolve("/home/ada/proj/alpha"));
   assert.strictEqual(alpha.letter, "A");
   assert.strictEqual(alpha.shortPath, "~/proj/alpha".split("/").join(path.sep));
   assert.strictEqual(alpha.path, path.resolve("/home/ada/proj/alpha"));
   assert.strictEqual(alpha.branch, "main");
-  assert.strictEqual(alpha.color, null);
+  assert.strictEqual(alpha.color, colorFor(alpha.key), "no Workspace Color: a color of the palette, the same for the same project");
   assert.deepStrictEqual([alpha.open, alpha.here, alpha.windowId, alpha.pinned, alpha.unseen, alpha.attention], [true, true, "me", false, 0, null]);
   const zeta = section(m, "open").projects[2];
   assert.deepStrictEqual([zeta.color, zeta.branch, zeta.here, zeta.windowId], ["#aa00aa", "dev", false, "w2"]);
@@ -104,7 +104,7 @@ check("a window without a folder is left out, and a window's key is used as give
   assert.deepStrictEqual(ids(section(m, "open")), ["a"]);
 });
 
-check("labels: Working, the question, Done with its age, on screen, nothing", () => {
+check("labels: Working, the question, Done with its age, nothing (no \"on screen\")", () => {
   const m = build({
     windows: [win("me", "/p/a", { chats: [
       chat("1", "run"), chat("2", "ask", { ask: "Allow npm run build?" }), chat("3", "ask"),
@@ -113,7 +113,7 @@ check("labels: Working, the question, Done with its age, on screen, nothing", ()
   });
   const labels = Object.fromEntries(section(m, "open").projects[0].chats.map((c) => [c.id, c.label]));
   assert.deepStrictEqual(labels, {
-    1: "Working", 2: "Allow npm run build?", 3: "Needs you", 4: "Done · 5 min ago", 5: "on screen", 6: "", 7: "Done · 2 days ago",
+    1: "Working", 2: "Allow npm run build?", 3: "Needs you", 4: "Done · 5 min ago", 5: "", 6: "", 7: "Done · 2 days ago",
   });
   const p = section(m, "open").projects[0];
   assert.deepStrictEqual(p.chats.map((c) => c.id), ["2", "3", "4", "7", "1", "5", "6"], "an open project lists every chat, in order");
@@ -184,8 +184,8 @@ check("query: by project name or path, or by chat title (then only matching chat
   assert.strictEqual(section(m, "open").projects[0].chats.length, 2, "a project matching by name keeps all its chats");
   assert.deepStrictEqual(ids(section(m, "recent")), ["weldon"]);
   m = build({ windows, recent, query: "ARC" });
-  assert.deepStrictEqual(ids(section(m, "open")), ["Weld-Sim", "other"]);
-  assert.deepStrictEqual(section(m, "open").projects.map((p) => p.chats.map((c) => c.id)), [["1"], ["3"]]);
+  assert.deepStrictEqual(ids(section(m, "open")), ["other", "Weld-Sim"], "by name, this window too");
+  assert.deepStrictEqual(section(m, "open").projects.map((p) => p.chats.map((c) => c.id)), [["3"], ["1"]]);
   assert.strictEqual(section(m, "recent"), undefined, "empty sections are not returned");
   m = build({ windows, recent, query: "  /q/  " });
   assert.deepStrictEqual(ids(section(m, "open")), ["docs-site"], "by path, spaces around ignored");
@@ -217,6 +217,41 @@ check("badge and needLook count closed projects' unseen chats, and a search does
   assert.deepStrictEqual([all.badge, all.needLook], [3, 2]);
   assert.deepStrictEqual([some.badge, some.needLook], [3, 2]);
   assert.deepStrictEqual(build({}).sections, []);
+});
+
+check("the project in this window keeps its place (by name, not moved to the top)", () => {
+  const order = (here) => ids(section(build({ here, windows: [win("a", "/p/alpha"), win("m", "/p/mid"), win("z", "/p/zeta")] }), "open"));
+  assert.deepStrictEqual(order("z"), ["alpha", "mid", "zeta"]);
+  assert.deepStrictEqual(order("m"), ["alpha", "mid", "zeta"]);
+});
+
+check("tile colors: the palette has none of Kural's purple, and a project keeps its color", () => {
+  const hue = (hex) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mx === mn) return null; const d = mx - mn; const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
+  for (const c of PALETTE) { const h = hue(c); assert.ok(h === null || h < 240 || h > 300, `${c} is purple`); }
+  assert.strictEqual(colorFor("/p/a"), colorFor("/p/a"));
+  assert.ok(new Set(["/p/a", "/p/b", "/p/c", "/p/d", "/p/e"].map(colorFor)).size > 1, "different projects get different colors");
+  const m = build({ windows: [win("me", "/p/a", { color: "#aa00aa" })] });
+  assert.strictEqual(section(m, "open").projects[0].color, "#aa00aa", "a Workspace Color wins");
+});
+
+check("an empty chat (nothing sent) isn't listed unless it's working or waiting", () => {
+  const m = build({ windows: [win("me", "/p/a", { chats: [
+    chat("1", "idle", { empty: true, title: "New chat" }), chat("2", "idle"), chat("3", "run", { empty: true }), chat("4", "ask", { empty: true, ask: "?" }),
+  ] })] });
+  assert.deepStrictEqual(section(m, "open").projects[0].chats.map((c) => c.id), ["4", "3", "2"]);
+  const none = build({ windows: [win("me", "/p/a", { chats: [chat("1", "idle", { empty: true })] })] });
+  assert.deepStrictEqual(section(none, "open").projects[0].chats, [], "only an empty chat: the project has none");
+});
+
+check("a project's news line: waiting first, then working, then new answers (not in this window)", () => {
+  const news = (chats, id = "me") => section(build({ windows: [win(id, "/p/a", { chats })] }), "open").projects[0].news;
+  assert.strictEqual(news([chat("1", "idle")]), null, "nothing new: no second line");
+  assert.deepStrictEqual(news([chat("1", "run"), chat("2", "ask", { ask: "Allow npm run build?" })]), { kind: "ask", text: "Waiting for you: Allow npm run build?" });
+  assert.deepStrictEqual(news([chat("1", "run", { title: "Fix the login" })]), { kind: "run", text: "Working · Fix the login" });
+  assert.deepStrictEqual(news([chat("1", "done"), chat("2", "done")], "w2"), { kind: "done", text: "2 new answers" });
+  assert.deepStrictEqual(news([chat("1", "done")], "w2"), { kind: "done", text: "1 new answer" });
+  assert.strictEqual(news([chat("1", "done")]), null, "this window's finished chats aren't news here");
 });
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
