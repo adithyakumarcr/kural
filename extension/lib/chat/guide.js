@@ -276,7 +276,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Claude model, ChatGPT's for Codex, Gemini's for Gemini; a model on this computer has none); "Plugins for" shows another
   AI's without changing the chat. Search filters them. Claude: Installed, Available (Anthropic's plugin directory, a few
   thousand, and the marketplaces you add), Marketplaces (Add a Marketplace…: owner/repo such as
-  obra/superpowers-marketplace, an https Git address, or a folder); Install, Turn Off / On, Remove. Claude's Install asks
+  obra/superpowers-marketplace, an https Git address, an SSH one like git@host:org/repo (cloned with your own SSH keys:
+  Azure DevOps, a company GitLab), or a folder); Install, Turn Off / On, Remove. Claude's Install asks
   where, when a project is open: All My Projects, This Project (Shared: in the project's .claude/settings.json, which
   goes into Git, so teammates get it too) or This Project, Only Me (.claude/settings.local.json); such a plugin's row
   says "This project" / "This project, only me" and its Turn Off and Remove act there; click a plugin for

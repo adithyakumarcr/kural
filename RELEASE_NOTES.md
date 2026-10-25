@@ -10,6 +10,9 @@
   whole chat. Right-clicking a project offers Pin, Close and Remove from Recent. The project in
   this window is bold, and projects stay in name order: the one you switch to keeps its place instead of jumping to the
   top. Empty "New chat" chats aren't listed, and the left bar's icon is Codicons' folder library.
+- **SSH addresses for plugin marketplaces.** Add a Marketplace (Claude and ChatGPT) takes an SSH Git address too, like
+  `git@ssh.dev.azure.com:v3/org/project/repo`, for Azure DevOps or a company GitLab. It's cloned with your own SSH keys;
+  if SSH refuses, Kural says so and names the command to try in a terminal.
 - **Switching projects in one frame.** In a Kural built from VS Code's source, opening or switching to a project puts its
   window exactly over the current one (same place, same size, same full-screen), shows it once it has painted and hides
   the old one instead of closing it. Nothing reloads and nothing flashes, and the chats in the window you left keep

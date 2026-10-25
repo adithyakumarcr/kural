@@ -723,7 +723,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   --json | install <folder> | uninstall|enable|disable <name> | validate <folder> --json`, no catalog: a folder, or an https
   Git address cloned with `protocol.allow=never` + https + `core.symlinks=false` (Git from PATH/Homebrew; on a Mac
   /usr/bin/git only when `xcode-select -p` works, else Apple's install window opens); enable/disable print nothing and
-  uninstall exits 0 either way, so the list decides. Ids and marketplace sources are checked (`validId`, `marketSource`)
+  uninstall exits 0 either way, so the list decides. Ids and marketplace sources are checked (`validId`, `marketSource`: owner/repo,
+  https, SSH `git@host:path` / `ssh://` via `sshAddress` (Claude Code and Codex clone it with the user's own keys; checked with
+  Claude Code 2.1.296 on 25 Oct 2026; no part may start with "-"), a folder; a failed SSH clone gets `sshHint`; Gemini's
+  "Add a plugin" stays https only, `gitUrl`, since Kural clones that itself)
   and passed after `--`. Checked live on 18 Oct 2026 (Claude Code 2.1.296, codex 0.160.0, agy 1.4.2) in throwaway
   CLAUDE_CONFIG_DIR / CODEX_HOME / HOME folders. The page follows `chat.onChoice` → `brain.engineOf(currentModel())`;
   Install always asks first (source, "runs code as you"). Chats pick changes up: Claude's by `watchSetup`
