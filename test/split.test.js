@@ -37,7 +37,7 @@ function repo() {
     assert.strictEqual(parsePlan(`Here it is: ${JSON.stringify({ summary: "s", tasks: tasks.slice(0, 2) })} done`, "req").tasks.length, 2);
     assert.deepStrictEqual(parsePlan("no plan", "the request").tasks, [{ title: "The request", task: "the request", files: [] }]);
     assert.deepStrictEqual(parsePlan(JSON.stringify({ tasks: [{ title: "", task: "x" }, { title: "ok", task: "" }] }), "r").tasks.length, 1);
-    assert.deepStrictEqual(shownFiles(["src/a.js", "../outside.js", "/etc/passwd", "./b.js"], "/p"), ["src/a.js", "b.js"]);
+    assert.deepStrictEqual(shownFiles(["src/a.js", "../outside.js", "/etc/passwd", "./b.js"], "/p"), [path.join("src", "a.js"), "b.js"]);
   });
 
   if (!GIT) { console.log("skip  git tests: no git here"); process.exit(failed ? 1 : 0); }
@@ -275,6 +275,6 @@ function repo() {
     assert.strictEqual(git(dir, "worktree", "list").split("\n").length, 1);
   });
 
-  fs.rmSync(tmp, { recursive: true, force: true });
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* (Windows: a git that just ended can still hold a folder) */ }
   process.exit(failed ? 1 : 0);
 })();

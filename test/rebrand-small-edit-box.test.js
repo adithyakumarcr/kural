@@ -56,8 +56,9 @@ check("applying it twice changes nothing", () => {
 });
 check("a VS Code without that shape: a warning, the file unchanged", () => {
   const r = patch("var x=1;");   // (rebrand.py prints its warnings on stdout, before the file)
-  assert.ok(/^::warning::.*Ctrl\+K's box stays 5 lines tall\n/.test(r.stdout), r.stdout);
-  assert.strictEqual(r.stdout.replace(/^::warning::.*\n/gm, ""), "var x=1;");
+  const stdout = r.stdout.replace(/\r\n/g, "\n");   // (Python's print writes \r\n on Windows)
+  assert.ok(/^::warning::.*Ctrl\+K's box stays 5 lines tall\n/.test(stdout), stdout);
+  assert.strictEqual(stdout.replace(/^::warning::.*\n/gm, ""), "var x=1;");
 });
 
 const src = require("./workbench").findWorkbench();
