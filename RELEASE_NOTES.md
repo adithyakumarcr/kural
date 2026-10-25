@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.2.1-beta.4
 
 - **A calmer Projects bar.** Like ChatGPT's project list: each project is a folder with its chats under it, under the
   headings Pinned, Open and Recent, with no cards or letter tiles. At a chat's end a spinner (working), an orange dot
