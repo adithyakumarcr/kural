@@ -50,7 +50,9 @@ for** at the top shows another AI's plugins without changing the chat's model.
 - **Available** (Claude, Codex): what you can install. The search box filters everything (all your words must match;
   names that match come first).
 - **Marketplaces** (Claude, Codex): where the plugins come from. **Add a Marketplace…** takes `owner/repo` (a GitHub
-  repository, such as `obra/superpowers-marketplace`), an `https://` Git address, or a folder. Anthropic's directory is
+  repository, such as `obra/superpowers-marketplace`), an `https://` Git address, an SSH one (`git@host:org/repo` or
+  `ssh://git@host/org/repo`, for Azure DevOps or a company GitLab: it's cloned with your own SSH keys, so `ssh -T
+  git@host` must work in a terminal first; when it doesn't, Kural says so and names that command), or a folder. Anthropic's directory is
   built in and can't be removed.
 - **Add a plugin** (Gemini): **From a Folder…** or **From a Git Address…** (Kural downloads it, then Antigravity checks
   it before anything is added).

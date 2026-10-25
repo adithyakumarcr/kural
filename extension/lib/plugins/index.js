@@ -273,7 +273,7 @@ class Plugins {
 
   async addMarket(ai) {
     const v = await vscode.window.showInputBox({ title: `Add a plugin marketplace to ${SHORT[ai]}`, ignoreFocusOut: true,
-      prompt: "owner/repo (a GitHub repository), an https:// Git address, or the full path of a folder", placeHolder: "obra/superpowers-marketplace",
+      prompt: "owner/repo (a GitHub repository), a Git address (https://… or SSH, like git@host:org/repo), or the full path of a folder", placeHolder: "obra/superpowers-marketplace",
       validateInput: (s) => s.trim() ? core.marketSource(s).error || null : null });
     if (!v || !v.trim()) return;
     this.setBusy(ai, "market:+", "Adding…");

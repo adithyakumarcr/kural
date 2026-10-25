@@ -4,6 +4,8 @@
 #   ./install.sh            build everything and install it (on a Mac it then opens Kural)
 #   ./install.sh --ext      only put your changes in extension/ into the installed Kural (a few seconds)
 #   ./install.sh --no-open  don't open Kural afterwards (Mac)
+#   ./install.sh --source   Mac or Ubuntu (x64): build VS Code from its source with Kural's patches (scripts/vscode/, ~30 min
+#                           the first time) instead of using VSCodium's download
 #   ./install.sh --fresh    install like on a new computer: your Kural settings, chats and extensions are moved to a
 #                           backup folder first (Claude Code and Ollama are separate programs: not touched)
 #   ./install.sh --from-scratch-install
@@ -21,9 +23,10 @@ for a in "$@"; do
   case "$a" in
     --ext) MODE=ext ;;
     --no-open) OPEN=0 ;;
+    --source) export KURAL_SOURCE=1 ;;
     --fresh) FRESH=1 ;;
     --from-scratch-install|--from-scratch) SCRATCH=1 ;;
-    -h|--help) sed -n 2,14p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,17p "$0"; exit 0 ;;
     *) echo "Unknown option: $a (try --help)"; exit 1 ;;
   esac
 done
@@ -164,6 +167,16 @@ linux() {
   local need=()
   for p in curl python3 unzip; do command -v "$p" >/dev/null || need+=("$p"); done
   python3 -c "import PIL" 2>/dev/null || need+=(python3-pil)
+  if [ "${KURAL_SOURCE:-0}" = 1 ]; then
+    [ "$(uname -m)" = x86_64 ] || die "--source on Ubuntu is for x64 computers (this one: $(uname -m))."
+    # VS Code's own build: a compiler and the libraries its native modules are built against (apt's names)
+    command -v git >/dev/null || need+=(git)
+    { command -v make >/dev/null && command -v g++ >/dev/null; } || need+=(build-essential)
+    command -v pkg-config >/dev/null || need+=(pkg-config)
+    for p in libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev; do
+      dpkg -s "$p" >/dev/null 2>&1 || need+=("$p")
+    done
+  fi
   if [ ${#need[@]} -gt 0 ]; then
     echo "Installing build tools: ${need[*]}"
     sudo apt-get update -qq && sudo apt-get install -y "${need[@]}"
@@ -195,5 +208,5 @@ linux() {
 case "$(uname -s)" in
   Darwin) mac ;;
   Linux) linux ;;
-  *) die "this script is for a Mac or Ubuntu. For Windows, build on Linux with ./build-win.sh" ;;
+  *) die "this script is for a Mac or Ubuntu (also with --source). For Windows, build on Linux with ./build-win.sh" ;;
 esac

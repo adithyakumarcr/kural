@@ -193,11 +193,28 @@ const claude = prog("claude"), codex = prog("codex"), agy = prog("agy");
   await check("odd plugin names are refused without running the program", async () => {
     for (const id of ["--help", "a b", "x@y@z", "", "../up@mp", "-y@mp"]) assert.ok((await core.act("claude", claude, "install", { id })).error, id);
   });
-  await check("marketplace sources: owner/repo, https, or an existing folder", () => {
+  await check("marketplace sources: owner/repo, https, SSH (git@host:path, ssh://), or an existing folder", () => {
     assert.strictEqual(core.marketSource("obra/superpowers-marketplace").source, "obra/superpowers-marketplace");
     assert.strictEqual(core.marketSource("https://github.com/obra/superpowers-marketplace.git").source, "https://github.com/obra/superpowers-marketplace.git");
     assert.strictEqual(core.marketSource(tmp).source, tmp);
-    for (const bad of ["--evil", "obra/", "ssh://x/y", "git@github.com:a/b", "/no/such/folder/here", "a/b/c"]) assert.ok(core.marketSource(bad).error, bad);
+    // (Claude Code and Codex clone these with your own SSH keys: checked with Claude Code 2.1.296 on 25 Oct 2026.)
+    for (const ok of ["git@github.com:obra/superpowers-marketplace.git", "git@ssh.dev.azure.com:v3/binzel-robotics/iBOTone/team-skills",
+      "ssh://git@github.com/obra/superpowers-marketplace.git", "ssh://git@git.example.com:2222/team/skills", "ssh://git.example.com/team/skills"]) {
+      assert.strictEqual(core.marketSource(ok).source, ok, ok);
+    }
+    for (const bad of ["--evil", "obra/", "/no/such/folder/here", "a/b/c", "git@github.com:", "git@-oProxyCommand=x:a/b", "-oProxyCommand=x@h:a/b",
+      "git@host:-upload-pack=x", "ssh://-oProxyCommand=x/y", "ssh://git@host", "git@host:a b", "git@host:a;rm", "ext::sh -c x", "file:///etc/passwd",
+      "git@host:a/b'c", "ssh://git@host:99999999/a"]) assert.ok(core.marketSource(bad).error, bad);
+    assert.match(core.marketSource("nonsense").error, /git@host:org\/repo/, "the message names the SSH form");
+  });
+  await check("an SSH clone that fails says it uses your SSH setup", () => {
+    const hint = core.sshHint("git@ssh.dev.azure.com:v3/org/proj/repo", "Host key verification failed.\nfatal: Could not read from remote repository.");
+    assert.match(hint, /Host key verification failed/);
+    assert.match(hint, /your own SSH keys/);
+    assert.match(hint, /ssh -T git@ssh\.dev\.azure\.com/);
+    assert.match(core.sshHint("ssh://git@git.example.com:2222/a/b", "Permission denied (publickey)."), /ssh -T -p 2222 git@git\.example\.com/);
+    assert.strictEqual(core.sshHint("https://github.com/a/b", "Permission denied (publickey)."), "Permission denied (publickey).", "not SSH: as it was");
+    assert.strictEqual(core.sshHint("git@github.com:a/b", "marketplace.json is missing"), "marketplace.json is missing", "not an SSH problem: as it was");
   });
   await check("an AI without plugins, or not set up", async () => {
     assert.ok((await core.list("ollama", claude)).error); assert.strictEqual((await core.list("claude", { bin: null })).error, "not installed");

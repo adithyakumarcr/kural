@@ -1,0 +1,173 @@
+# Builds Kural for the Mac, for Ubuntu and for Windows from VS Code's own source (scripts/vscode/: vscode.lock's commit +
+# patches/kural + VSCodium's patches) instead of VSCodium's download, so the fork's patches can be tried. By hand only: each
+# job takes about an hour.
+name: Build from source (Mac, Ubuntu and Windows)
+
+on:
+  workflow_dispatch:   # Actions → Build from source (Mac, Ubuntu and Windows) → Run workflow
+
+# Read-only; this job only builds and uploads an artifact.
+permissions:
+  contents: read
+
+concurrency:
+  group: build-from-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest        # Apple Silicon machine
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: { python-version: "3.12" }
+      - name: Fetch VS Code and apply the patches
+        run: scripts/vscode/fetch.sh
+      - name: Build VS Code (gulp vscode-darwin-arm64-min)
+        run: scripts/vscode/build.sh --download-node darwin-arm64
+      - name: Build Kural from it (build-mac.sh)
+        run: KURAL_SOURCE=1 ./build-mac.sh   # (build/vscode-out is up to date: it is not compiled again)
+      - name: The app starts
+        run: |
+          APP="build/mac/Kural.app"
+          codesign --verify --deep --strict "$APP"
+          "$APP/Contents/Resources/app/bin/kural" --version
+          node -e 'const p=require(process.argv[1]);if(!p.kuralSource)throw new Error("no kuralSource in product.json");console.log(p.kuralSource)' "$PWD/$APP/Contents/Resources/app/product.json"
+          "$APP/Contents/MacOS/Kural" --disable-workspace-trust --user-data-dir "$RUNNER_TEMP/ud" --extensions-dir "$RUNNER_TEMP/ext" "$RUNNER_TEMP" > "$RUNNER_TEMP/kural.log" 2>&1 &
+          sleep 25
+          ps ax -o pid,command | grep -F "Kural Helper (Renderer)" | grep -v grep || {
+            echo "::error::Kural quit or didn't open a window"; cat "$RUNNER_TEMP/kural.log"; exit 1; }
+          pkill -x Kural || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-from-source
+          path: dist/Kural-*-macos-arm64.zip
+
+  linux:
+    # 22.04 like build.yml's .deb: VS Code's native modules need the glibc of the machine they are built on, so the .deb
+    # built here also runs on Ubuntu 24.04, not the other way round.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: What VS Code's build and make-deb.sh need (apt)
+        run: |
+          # build-essential, pkg-config: the compiler for the native modules; libx11-dev, libxkbfile-dev, libsecret-1-dev,
+          # libkrb5-dev: the libraries they are built against (VS Code's "How to Contribute" list for Linux);
+          # python3-pil: the icons. (git, curl, unzip, python3 are on the runner.)
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential pkg-config libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev python3-pil
+      - name: Fetch VS Code and apply the patches
+        run: KURAL_OS=linux scripts/vscode/fetch.sh
+      - name: Build VS Code (gulp vscode-linux-x64-min)
+        run: scripts/vscode/build.sh --download-node linux-x64
+      - name: Build Kural from it (make-deb.sh)
+        run: KURAL_SOURCE=1 ./make-deb.sh   # (build/vscode-out is up to date: it is not compiled again)
+      - name: Install the .deb
+        run: sudo apt-get update -qq && sudo apt-get install -y ./dist/kural_*_amd64.deb
+      - name: Start it
+        run: |
+          ELECTRON_RUN_AS_NODE=1 /usr/share/kural/kural -e 'const assert=require("assert"),r=require("/usr/share/kural/resources/app/package.json").kuralRuntime;assert.equal(process.versions.electron,r.version);assert.equal(process.versions.modules,r.abi);console.log(process.versions)'
+          kural --version
+          grep -q '"nameLong": "Kural Code Editor"' /usr/share/kural/resources/app/product.json
+          node -e 'const p=require(process.argv[1]);if(!p.kuralSource)throw new Error("no kuralSource in product.json");console.log(p.kuralSource)' /usr/share/kural/resources/app/product.json
+          test -f /usr/share/kural/resources/app/extensions/kural/package.json
+          test "$(dpkg -L kural | grep '\.desktop$' | sort | tr '\n' ' ')" = "/usr/share/applications/kural-url-handler.desktop /usr/share/applications/kural.desktop "
+      - name: Open the window
+        run: |
+          sudo apt-get install -y -qq xvfb
+          Xvfb :99 -screen 0 1280x800x24 & sleep 2
+          DISPLAY=:99 /usr/share/kural/kural --disable-workspace-trust --user-data-dir /tmp/ud /tmp > /tmp/kural.log 2>&1 &
+          sleep 25
+          pgrep -af -- "--type=renderer" || { echo "::error::Kural quit or didn't open a window"; cat /tmp/kural.log; exit 1; }
+          # Kural's own extension started completely: its window marker says "ready" (end of activate()). Kural is off in Restricted Mode, so the app starts with --disable-workspace-trust.
+          S=/tmp/ud/User/globalStorage/kural.kural/sessions
+          for i in $(seq 1 35); do grep -qs '"ready":' $S/*.json && break; sleep 1; done
+          grep -qs '"ready":' $S/*.json || { echo "::error::Kural's extension didn't finish starting"; ls -la $S; find /tmp/ud/logs -name 'exthost*.log' -exec cat {} +; exit 1; }
+          pkill -x kural || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-from-source
+          path: dist/kural_*_amd64.deb
+
+  windows:
+    # VS Code's Windows build can only run on Windows (its native modules need MSVC and the Windows SDK; Visual Studio 2022 is on
+    # the runner), under Git Bash like every `run:` here. build-win.sh then makes the installer (NSIS) and the zip from it, the
+    # same way it does from VSCodium's download. Not signed (no certificate here).
+    runs-on: windows-2022
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Before the checkout: Git for Windows turns CRLF line ends on by default, and Kural's patches (patches/kural) must stay LF.
+      - name: Git keeps LF line ends and long paths
+        run: git config --global core.autocrlf false && git config --global core.eol lf && git config --global core.longpaths true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: { python-version: "3.12" }
+      - name: What build-win.sh needs (Pillow for the icons, NSIS for the installer)
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          if ! command -v makensis >/dev/null 2>&1 && [ ! -x "/c/Program Files (x86)/NSIS/makensis.exe" ]; then choco install nsis -y --no-progress; fi
+          echo "C:\Program Files (x86)\NSIS" >> "$GITHUB_PATH"
+      - name: Fetch VS Code and apply the patches
+        run: KURAL_OS=windows scripts/vscode/fetch.sh
+      # The Node version VS Code asks for (.nvmrc of the source we just fetched)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: build/vscode-src/.nvmrc }
+      - name: Build VS Code (gulp vscode-win32-x64-min)
+        run: scripts/vscode/build.sh --download-node win32-x64
+      - name: Build Kural from it (build-win.sh)
+        run: KURAL_SOURCE=1 ./build-win.sh   # (build/vscode-out is up to date: it is not compiled again)
+      - name: Built from the source, and the files are there
+        run: |
+          ls -l dist/Kural-*-windows-x64-setup.exe dist/Kural-*-windows-x64.zip
+          node -e 'const p=require(process.argv[1]);if(!p.kuralSource)throw new Error("no kuralSource in product.json");if(p.nameLong!=="Kural Code Editor")throw new Error("not rebranded: "+p.nameLong);console.log(p.kuralSource)' "$(cygpath -m "$PWD/build/win/Kural/resources/app/product.json")"
+          test -f build/win/Kural/resources/app/extensions/kural/package.json
+      - name: Install silently and start it
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\Kural-*-setup.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S'
+          $dir = "$env:LOCALAPPDATA\Programs\Kural"
+          if (-not (Test-Path "$dir\Kural.exe")) { throw "Kural.exe not installed" }
+          # The runtime is the pinned Electron (kuralRuntime), not the one VS Code's build fetched
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          try {
+            $probe = "$env:RUNNER_TEMP\electron-runtime-check.js"
+            Set-Content -LiteralPath $probe -Value 'const assert=require("assert"),r=require(process.env.LOCALAPPDATA+"\\Programs\\Kural\\resources\\app\\package.json").kuralRuntime;assert.equal(process.versions.electron,r.version);assert.equal(process.versions.modules,r.abi);console.log(process.versions)' -Encoding utf8
+            $p = Start-Process -FilePath "$dir\Kural.exe" -ArgumentList ('"' + $probe + '"') -Wait -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\electron-runtime.log" -RedirectStandardError "$env:RUNNER_TEMP\electron-runtime.err"
+            Get-Content "$env:RUNNER_TEMP\electron-runtime.log"
+            Get-Content "$env:RUNNER_TEMP\electron-runtime.err"
+            if ($p.ExitCode -ne 0) { throw "Patched Electron runtime check failed ($($p.ExitCode))" }
+          } finally { Remove-Item Env:ELECTRON_RUN_AS_NODE }
+          & "$dir\bin\kural.cmd" --version
+          if ($LASTEXITCODE -ne 0) { throw "kural --version failed" }
+          # The real window: still running after 25 s, with its helper processes
+          Start-Process -FilePath "$dir\Kural.exe" -ArgumentList "--disable-workspace-trust", "--user-data-dir", "$env:RUNNER_TEMP\ud", "$env:RUNNER_TEMP"
+          Start-Sleep -Seconds 25
+          $procs = @(Get-Process Kural -ErrorAction SilentlyContinue)
+          Write-Host "Kural processes running: $($procs.Count)"
+          if ($procs.Count -lt 2) { throw "Kural quit or didn't open a window" }
+          # Kural's own extension started completely: its window marker says "ready" (end of activate()).
+          $S = "$env:RUNNER_TEMP\ud\User\globalStorage\kural.kural\sessions"
+          $ready = $false
+          for ($i = 0; $i -lt 35 -and -not $ready; $i++) {
+            $ready = [bool](Get-ChildItem "$S\*.json" -ErrorAction SilentlyContinue | Select-String -SimpleMatch '"ready":' -Quiet)
+            if (-not $ready) { Start-Sleep -Seconds 1 }
+          }
+          if (-not $ready) {
+            Get-ChildItem $S -ErrorAction SilentlyContinue
+            Get-ChildItem "$env:RUNNER_TEMP\ud\logs" -Recurse -Filter 'exthost*.log' -ErrorAction SilentlyContinue | Get-Content
+            throw "Kural's extension didn't finish starting"
+          }
+          $procs | Stop-Process -Force
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-from-source
+          path: |
+            dist/Kural-*-windows-x64-setup.exe
+            dist/Kural-*-windows-x64.zip
+          if-no-files-found: error

@@ -1,0 +1,79 @@
+diff --git a/src/vs/workbench/api/browser/viewsExtensionPoint.ts b/src/vs/workbench/api/browser/viewsExtensionPoint.ts
+index 83378707..8bf26bc0 100644
+--- a/src/vs/workbench/api/browser/viewsExtensionPoint.ts
++++ b/src/vs/workbench/api/browser/viewsExtensionPoint.ts
+@@ -521,8 +521,8 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
+ 						when: ContextKeyExpr.deserialize(item.when),
+ 						containerIcon: icon || viewContainer?.icon,
+ 						containerTitle: item.contextualTitle || (viewContainer && (typeof viewContainer.title === 'string' ? viewContainer.title : viewContainer.title.value)),
+-						canToggleVisibility: true,
+-						canMoveView: viewContainer?.id !== REMOTE,
++						canToggleVisibility: item.id !== 'kural.projects', // Kural: the Projects bar stays
++						canMoveView: viewContainer?.id !== REMOTE && item.id !== 'kural.projects',
+ 						treeView: type === ViewType.Tree ? this.instantiationService.createInstance(CustomTreeView, item.id, item.name, extension.description.identifier.value) : undefined,
+ 						collapsed: this.showCollapsed(container) || initialVisibility === InitialVisibility.Collapsed,
+ 						order: order,
+diff --git a/src/vs/workbench/browser/parts/compositeBar.ts b/src/vs/workbench/browser/parts/compositeBar.ts
+index 8d1020b6..3a943dba 100644
+--- a/src/vs/workbench/browser/parts/compositeBar.ts
++++ b/src/vs/workbench/browser/parts/compositeBar.ts
+@@ -407,6 +407,10 @@ export class CompositeBar extends Widget implements ICompositeBar {
+ 	}
+ 
+ 	unpin(compositeId: string): void {
++		if (compositeId === 'workbench.view.extension.kural-projects') {
++			return; // Kural: the Projects bar can't be hidden
++		}
++
+ 		if (this.model.setPinned(compositeId, false)) {
+ 
+ 			this.updateCompositeSwitcher();
+@@ -464,6 +468,10 @@ export class CompositeBar extends Widget implements ICompositeBar {
+ 	}
+ 
+ 	move(compositeId: string, toCompositeId: string, before?: boolean): void {
++		if (compositeId === 'workbench.view.extension.kural-projects' || toCompositeId === 'workbench.view.extension.kural-projects') {
++			return; // Kural: the Projects bar can't be dragged or pushed aside
++		}
++
+ 		if (before !== undefined) {
+ 			const fromIndex = this.model.items.findIndex(c => c.id === compositeId);
+ 			let toIndex = this.model.items.findIndex(c => c.id === toCompositeId);
+@@ -663,6 +671,7 @@ export class CompositeBar extends Widget implements ICompositeBar {
+ 
+ 	getContextMenuActions(e?: MouseEvent | GestureEvent): IAction[] {
+ 		const actions: IAction[] = this.model.visibleItems
++			.filter(({ id }) => id !== 'workbench.view.extension.kural-projects') // Kural: no Hide for the Projects bar
+ 			.map(({ id, name, activityAction }) => {
+ 				const isPinned = this.isPinned(id);
+ 				return toAction({
+diff --git a/src/vs/workbench/browser/parts/compositeBarActions.ts b/src/vs/workbench/browser/parts/compositeBarActions.ts
+index fe7bce2f..b30ef7c1 100644
+--- a/src/vs/workbench/browser/parts/compositeBarActions.ts
++++ b/src/vs/workbench/browser/parts/compositeBarActions.ts
+@@ -641,7 +641,11 @@ export class CompositeActionViewItem extends CompositeBarActionViewItem {
+ 			actions.push(createConfigureKeybindingAction(this.commandService, this.keybindingService, this.compositeBarActionItem.keybindingId));
+ 		}
+ 
+-		actions.push(this.toggleCompositePinnedAction, this.toggleCompositeBadgeAction);
++		if (this.compositeBarActionItem.id === 'workbench.view.extension.kural-projects') {
++			actions.push(this.toggleCompositeBadgeAction); // Kural: no Hide for the Projects bar
++		} else {
++			actions.push(this.toggleCompositePinnedAction, this.toggleCompositeBadgeAction);
++		}
+ 
+ 		const compositeContextMenuActions = this.compositeContextMenuActionsProvider(this.compositeBarActionItem.id);
+ 		if (compositeContextMenuActions.length) {
+diff --git a/src/vs/workbench/services/views/browser/viewDescriptorService.ts b/src/vs/workbench/services/views/browser/viewDescriptorService.ts
+index 4ea78aec..339c14f9 100644
+--- a/src/vs/workbench/services/views/browser/viewDescriptorService.ts
++++ b/src/vs/workbench/services/views/browser/viewDescriptorService.ts
+@@ -352,7 +352,7 @@ export class ViewDescriptorService extends Disposable implements IViewDescriptor
+ 	}
+ 
+ 	moveViewContainerToLocation(viewContainer: ViewContainer, location: ViewContainerLocation, requestedIndex?: number, reason?: string): void {
+-		if (!this.canMoveViews()) {
++		if (!this.canMoveViews() || viewContainer.id === 'workbench.view.extension.kural-projects') { // Kural: the Projects bar stays where it is
+ 			return;
+ 		}
+ 		this.logger.value.trace(`moveViewContainerToLocation: viewContainer:${viewContainer.id} location:${location} reason:${reason}`);

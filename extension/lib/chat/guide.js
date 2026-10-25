@@ -199,6 +199,32 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   code, the AI lists hypotheses, adds temporary logging that sends to a Kural log server on this computer (127.0.0.1,
   nothing leaves it), asks you to reproduce the bug, reads the logs, fixes the cause and then removes the logging (the
   lines are marked kural-debug). It asks before commands, like Agent.
+- Projects: the first tab in the left bar (a folder-library icon) lists every project with a Kural window (one window
+  per project), like ChatGPT's project list: a folder per project with its chats under it (five, then
+  "Show N more"); the project in this window is bold, the folder is in the tooltip. At a chat's end: a spinner while it
+  works, an orange dot while it waits for you (the question in the tooltip), a blue dot and bold title when it finished
+  and you haven't seen it; a chat with nothing sent yet ("New chat") isn't listed. Click a project's folder icon to fold
+  its chats (a folded one shows its chats' marks on its own row). Three headings: Pinned (the pin on a row; kept for
+  every window), Open, and Recent (VS Code's Open Recent, folders on this computer only). The search button in its title bar opens a box that finds a project or a
+  chat (Esc closes it). Click an open project and its window comes forward;
+  click a Recent (or pinned, not open) one and it opens in this window, like File > Open Recent (if a chat here is
+  working or waiting, Kural asks first: Open Here stops it, or Open in New Window); click a chat and that window shows it. The red cross on an open project closes it after asking (working chats are
+  named and stop; chats stay in History); the red bin on a Recent one removes it from Recent. Right-click a chat: Rename
+  (also F2: the title becomes a box), Move to... and Delete (asks first; also removes it from History); right-click a
+  project: Pin/Unpin, Close Project or Remove from Recent. Drag a chat onto another project with a window to move it
+  there: it keeps its messages and History, and its next message starts a new conversation in that folder that's given
+  the whole chat (like Continue here); a working or waiting chat can't be moved. + has Open folder, Clone Git
+  repository and "New empty project (with Git)", which asks for a name and a place, makes the folder, runs git init and
+  opens it. The icon in the left bar shows a number for finished-and-unseen and waiting chats in other projects, and the
+  status bar says "N projects need a look" while that is so (click it to open Projects). When a chat finishes in a window
+  that isn't the one in front, the window in front shows a small card ("Go to weld-sim") instead of a system notification
+  (the notifications setting still decides whether anything is shown). With a Kural built from VS Code's source, switching
+  projects keeps one window frame: the new project's window appears in the same place and size, no reload, and the chats
+  in the window you left keep running (setting kural.window.oneFrame). Choosing Open after a Git clone opens a
+  new window like that too, and a window you can't see that needs to ask something (Save changes?) comes forward first.
+  Show Next Window and Show Previous Window switch between them on every system (Mac: Cmd+\` and Shift+Cmd+\`; Windows
+  and Linux: Ctrl+Alt+. and Ctrl+Alt+, also "Show Next/Previous Window in Frame" in the Command Palette). On Linux with Wayland a window's place can't be set, so the new one keeps only
+  the old one's size and state. Projects and this source build are meant for Windows, Linux and the Mac.
 - Source Control panel: the sparkle button in the commit message box writes a short commit message (at most 200
   characters: a subject line, maybe a line or two more) from your staged changes (or all changes), in the style of your
   recent commits, with the chat's model; edit it and commit as usual.
@@ -250,7 +276,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   Claude model, ChatGPT's for Codex, Gemini's for Gemini; a model on this computer has none); "Plugins for" shows another
   AI's without changing the chat. Search filters them. Claude: Installed, Available (Anthropic's plugin directory, a few
   thousand, and the marketplaces you add), Marketplaces (Add a Marketplace…: owner/repo such as
-  obra/superpowers-marketplace, an https Git address, or a folder); Install, Turn Off / On, Remove. Claude's Install asks
+  obra/superpowers-marketplace, an https Git address, an SSH one like git@host:org/repo (cloned with your own SSH keys:
+  Azure DevOps, a company GitLab), or a folder); Install, Turn Off / On, Remove. Claude's Install asks
   where, when a project is open: All My Projects, This Project (Shared: in the project's .claude/settings.json, which
   goes into Git, so teammates get it too) or This Project, Only Me (.claude/settings.local.json); such a plugin's row
   says "This project" / "This project, only me" and its Turn Off and Remove act there; click a plugin for

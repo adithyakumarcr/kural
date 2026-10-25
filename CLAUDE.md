@@ -16,7 +16,8 @@ Read `README.md` for the features. This file is how the code works and how to ch
 ## Making a change
 Keep answers short and explain the *why* first; when fixing a bug, say what was wrong and why.
 At the end of every change, give the steps to build and install: `./install.sh` on a Mac or Ubuntu (builds from
-this folder and installs; `./install.sh --ext` when only `extension/` changed; `./install.sh --fresh` to try it as a
+this folder and installs; `./install.sh --ext` when only `extension/` changed; `./install.sh --source` on a Mac to build VS Code from source first
+("Building from source" below; 30-60 minutes); `./install.sh --fresh` to try it as a
 new user: Kural's data is moved to `~/kural-backup-<date>` first; `./install.sh --from-scratch-install` for a real first
 start: `scripts/from-scratch.sh` deletes Kural's data without backup, logs Claude Code/Codex/Antigravity out, resets
 Kural's macOS permissions (`tccutil reset All com.kural`) and its keychain item, and optionally removes those programs;
@@ -48,6 +49,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/rules/` — Rules: `.kural/rules/*.md` (and `.cursor/rules`), what each message gets (`registerRules`).
   - `lib/agent-review/` — Agent Review: a read-only agent reviews the uncommitted changes, findings as comments (`registerAgentReview`).
   - `lib/debug/` — Debug mode: `server.js` the log server on 127.0.0.1, the mode's prompt.
+  - `lib/projects/` — Projects bar: `status.js` (no vscode: each window's status file, inbox, pins), `model.js` (no vscode: the list), `index.js` (`registerProjects`: view, badge, status bar item, clicks, card); UI `media/projects.js` + `projects.css`.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
@@ -61,7 +63,13 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 - `docs/wiki/` — the GitHub wiki's pages; `scripts/push-wiki.sh` publishes them.
 - `scripts/rebrand.py` — turns an unpacked VSCodium into Kural (names, logo, built-in extensions). Shared by:
   `make-deb.sh` (Ubuntu), `build-mac.sh` (Apple Silicon), `build-win.sh` (Windows, runs on Linux).
+- `patches/kural/` — Kural's own patches to VS Code's source (`NNNN-name.patch`, made against pristine VS Code; 0100-0199
+  window management, 0200-0299 the Projects bar's ports from `rebrand.py`). `vscode.lock` pins the VS Code commit.
+  `scripts/vscode/` — `fetch.sh` (source + patches) and `build.sh` (compile). Used only by the source build.
+- `scripts/linux-container/` — Kural on Linux from a Mac, in Docker: `Dockerfile` (Ubuntu 22.04), `run.sh <test|build|live|shell>`
+  (what you run), `inside.sh` (what runs in the container). See "Building from source".
 - `.github/workflows/build.yml` — tests + all three builds; a `v*` tag publishes a Release.
+  `build-from-source.yml` — manual: tries the source build (macOS, Ubuntu, and Windows once its job is in).
 
 ## Things that are easy to break
 - **Keychain prompts on the Mac** ("Kural wants to use … Safe Storage"): anything that reads VS Code's secret storage
@@ -354,6 +362,79 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   severity → medium; findings on deleted files dropped). `run.js` `Reviewer`: tools Read/Grep/Glob, effort medium (Quick) /
   high (Deep), 3 / 10 minutes; `onPermission` refuses anything but a read inside the repository (links out too); Gemini in
   `plan` mode. Test: `test/agent-review.test.js` (real temp repos). NOT checked live: a real AI review, the comment threads.
+- **Projects bar** (`lib/projects/`: `status.js` and `model.js` no vscode, `index.js` `registerProjects(context, {chat, log})`;
+  `media/projects.js` + `projects.css` the page, `media/projects-icon.svg`; commands `kural.projects.show|open|newProject|clone|collapseAll|find`,
+  the + is the submenu `kural.projects.add` in the view's title bar; design: `docs/superpowers/specs/2026-10-24-projects-bar-design.md`,
+  Adithya, 24 Oct 2026, agreed from a mockup). One window per project (VS Code's): the tab lists every project and its chats and
+  brings windows forward; switching a window to another folder in place was rejected (it restarts the window and stops its chats).
+  **The shared folder** `scope.dir("projects", "data")`: `windows/<windowId>.json` per window (`{key, name, folders, workspaceFile,
+  color, branch, focused, chats}` + pid/seen/closed; alive = not closed, seen < 3 min, pid exists), `inbox/<windowId>/*.json`
+  (requests: `showChat` {chatId}, `close`, `card` {from, chatId, title, body, button, color, letter}; 30 s), `pins.json`
+  [{path, workspaceFile}]. Interfaces between the parts: `new ProjectStatus({dir})` (`windowId`, start, publish, flush, dispose({closed}),
+  readAll, adopt(key), prune, send(windowId, request), onRequest, onChange, readPins, setPinned); `model.keyOf({folders,
+  workspaceFile})` and `buildModel({windows, pins, recent, here, query})` → `{sections: [{id, title, projects: [{key, name, letter,
+  color, path, workspaceFile, shortPath, branch, open, here, windowId, pinned, unseen, attention, news: {kind: run|ask|done, text}|null,
+  chats: [{id, title, state: run|ask|done|idle, ask, doneAt, onScreen, label}]}]}], badge, needLook}` (`color` = the Workspace Color, else
+  `colorFor(key)` from `PALETTE`, never Kural's purple; a chat the chat reports as `empty`, nothing sent, isn't listed unless it runs or asks).
+  **The look** (Adithya, 25 Oct 2026, design A "Folders" of `docs/mockups/projects-bar/projects-bar-v3a.html`, like ChatGPT's
+  project list; the earlier "Cards" look was dropped; the Pinned / Open / Recent headings were kept, Adithya: without them
+  you couldn't tell the groups apart): the model's sections in order, each under its heading (`.sec`), with no cards,
+  letter tiles, second lines or project colors (the model still sends `color`, `letter`, `news`: the page
+  uses `news` only in a row's tooltip); a folder per project (`.fic`, the fold button when it has chats), its chats
+  indented under it with a mark at the end (spinner, orange `.needs`, blue `.dot-new`), five then "Show N more" (`S.more`,
+  page only); no "New chat" row (tried and dropped: the chat has its own +); **rename, delete, move** (Adithya, 25 Oct
+  2026: instead of VS Code's Cut/Copy/Paste; moving by drag and drop): rows carry `data-vscode-context` (`webviewSection`
+  chat|project, `key`, `chatId`, `projectOpen`, `projectPinned`; the body `preventDefaultContextMenuItems`) for package.json
+  `webview/context` (`kural.projects.renameChat|moveChat|deleteChat|pin|unpin|close|removeRecent`, hidden from the
+  palette); Rename posts `rename` to the page, which edits in place (`S.renaming`, F2 too; Enter/blur save, Esc cancels)
+  and posts `renameChat`; a chat of an open project that isn't `run`/`ask` is `draggable`, another open project's row takes
+  the drop (`.drop`, VS Code's `list.dropBackground`) → `moveChat {key, chatId, to}`; while renaming or dragging the host's
+  models wait (`S.later`). The host (`chatOf`: only chats of open projects) does it in this window (`chat.rename`,
+  `chat.deleteChat` + `save`, `moveOut`) or sends the owner window `renameChat`/`deleteChat`/`moveChat {toWindow, from}`;
+  the owner's `chat.moveOut(id)` (idle, not visiting, not empty: `closeTab(id, true)`, so it stays in History) then sends
+  the target `adoptChat {chatId, from}` → `chat.adopt(id, from)`: the archive record with the SAME id, `workspace: here`, a
+  new `sessionId`, `started: false` and `carryOver {from, text: transcript}` (like Continue here; History, lessons and
+  handoff notes follow the id). Moved chats' checkpoints keep the old project's paths (`inProject` hides them there).
+  Tests: projects-page, projects-view, projects-chat. NOT checked live: a real right-click menu, a real drag, two windows;
+  the search box is hidden until the title bar's
+  `kural.projects.find` (posts `find`; `findPending` until the page is ready) or a query; no purple in the list,
+  the activity bar icon is Codicons' folder-library made by
+  `scripts/make-projects-icon.js` (`test/projects-icon.test.js`); the chat gives `chat.projectChats()`, `chat.onChatsChanged`,
+  `chat.showChat(id)` and takes `chat.cardElsewhere({tabId, title, body})` (set by `index.js`: true when another live window has
+  `focused`, after sending it a `card`). `index.js` publishes this window (key from `model.keyOf`, no folder → key null; color from
+  the `kural.workspaceColor` setting; branch from the git extension; republished on chat changes, focus, branch, color and folder
+  changes), reads `_workbench.getRecentlyOpened` (file scheme only), and only keys and ids cross from the page: the host looks the
+  project up in the model it built last (`find(key)`); `buildModel`'s `here` is this window's id (`status.windowId`, not its key: the badge leaves this window's own chats out). Clicks: `vscode.openFolder(uri,
+  {forceNewWindow: true})` brings a project's window forward (VS Code looks for it first); a project that isn't open (Recent, a
+  pin, Open folder) opens in THIS window (`forceReuseWindow`; Adithya, 24 Oct 2026: a new window per Recent click was too many),
+  and a chat running/asking here makes `whereToOpen` ask first (Open Here / Open in New Window) **on a VSCodium-based build**; **in a build from
+  source with one-frame windows** (the command `_kural.oneFrame` exists and answers `{enabled: true}`) such a project opens with
+  `forceNewWindow: true` and nothing asks: the new window is put over this one and this one is hidden, not closed (see "Building from
+  source"); no such command, or `enabled: false` (setting `kural.window.oneFrame` off) = today's behaviour; a chat adds a `showChat` request; × asks with `showWarningMessage({modal: true, detail})` (working and
+  waiting chats by name, "Your chats stay in History"), this window → `workbench.action.closeWindow`, another → openFolder then a
+  `close` request; the bin → `vscode.removeFromRecentlyOpened`; New empty project: name checked (`nameProblem`), picker (starts at
+  `kural.projects.lastParent.v1` unless protected/missing, else home), mkdir, `git init` through `lib/git.js` `findGit` (none: folder
+  only and a message), new window. The card: `_kural.card` (rebrand.py, or source patch 0203; 12 s), else `showInformationMessage(title. body, button)`;
+  both `_kural.*` commands are looked for with `getCommands()`, never `getCommands(true)` (that leaves out every name starting with "_": the card never showed);
+  "Go to" → openFolder + a `showChat` request to `from`. Folded projects: globalState `kural.projects.folded.v1`. At every start
+  `workbench.view.extension.kural-projects` is run once as a fallback for the patch. **Four rebrand.py patches** (in a source build
+  they are `patches/kural/0200-0203` and rebrand.py skips them; full
+  `./install.sh`, a miss gives `::warning::` and VS Code's normal behaviour): `drop_explorer_empty_view` (no "You have not yet opened a
+  folder" page), `projects_default_view` (the side bar opens Projects at every start; the container first), `projects_always_shown`
+  (no Hide, no drag; `canToggleVisibility`/`canMoveView` false), `add_in_window_card` (`_kural.card`, `_kural.cardClear`). Tests:
+  `test/projects-page.test.js` (the page on a fake DOM), `test/projects-view.test.js` (the host on a stand-in vscode, a fake store and
+  model; the last check uses the real `status.js`/`model.js`), `projects-status`, `projects-model`, `projects-chat`, `projects-notify`,
+  `rebrand-projects`. NOT checked live: one-frame windows (the command, a hidden window still publishing its status file), the view in a built app (page layout, the + submenu, the badge, the status bar item), two
+  real windows (focus detection, `openFolder` finding the other window, the close request), the card patch, New empty project with a
+  real dialog, real Windows (`process.kill(pid, 0)`, the rename retries against a reader, `fs.watch`, `findGit` without Git on PATH:
+  `lib/git.js` looks only on PATH) and Linux (the container's `live` only runs the app and one-frame, not the bar). **On Windows** project paths
+  compare case-insensitively (`model.pathKey`: normalised and lower-cased; `samePath`/`sameKey` for pins, Recent, `adopt` and the repo
+  lookup; `buildModel` and `ProjectStatus` take an injectable `platform`; the page keeps the original spelling, `shorten` gives `~\…`):
+  `C:\Work\App` and `c:\work\app` are one project; on Mac and Linux they are case-sensitive (`path.resolve`). `status.js`: a pid
+  that isn't a positive integer is dead (`kill(0, 0)` signals the group), EPERM = alive; writes retry a busy rename (EPERM/EACCES/EBUSY,
+  ~155 ms) then write in place, reads retry twice before a file counts as missing. `nameProblem` refuses Windows-invalid names on
+  every OS (`<>:"/\|?*`, control characters, a trailing dot, CON/PRN/AUX/NUL/COM1-9/LPT1-9). Test: `test/projects-windows.test.js`
+  (Windows simulated with `path.win32` on any OS). The bar is meant for all three systems like the source build.
 - **Debug mode** (`lib/debug/`: `server.js` the log server; mode id `debug`). A chat mode beside Agent, Auto, Plan, Ask that maps to
   `agent` for providers and permissions (`decide()`, gate, Codex sandbox: it asks before commands like Agent), with its own prompt:
   hypotheses → temporary logging that posts to the log server (127.0.0.1 only, a token) → you reproduce → read the logs → fix the cause
@@ -642,7 +723,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   --json | install <folder> | uninstall|enable|disable <name> | validate <folder> --json`, no catalog: a folder, or an https
   Git address cloned with `protocol.allow=never` + https + `core.symlinks=false` (Git from PATH/Homebrew; on a Mac
   /usr/bin/git only when `xcode-select -p` works, else Apple's install window opens); enable/disable print nothing and
-  uninstall exits 0 either way, so the list decides. Ids and marketplace sources are checked (`validId`, `marketSource`)
+  uninstall exits 0 either way, so the list decides. Ids and marketplace sources are checked (`validId`, `marketSource`: owner/repo,
+  https, SSH `git@host:path` / `ssh://` via `sshAddress` (Claude Code and Codex clone it with the user's own keys; checked with
+  Claude Code 2.1.296 on 25 Oct 2026; no part may start with "-"), a folder; a failed SSH clone gets `sshHint`; Gemini's
+  "Add a plugin" stays https only, `gitUrl`, since Kural clones that itself)
   and passed after `--`. Checked live on 18 Oct 2026 (Claude Code 2.1.296, codex 0.160.0, agy 1.4.2) in throwaway
   CLAUDE_CONFIG_DIR / CODEX_HOME / HOME folders. The page follows `chat.onChoice` → `brain.engineOf(currentModel())`;
   Install always asks first (source, "runs code as you"). Chats pick changes up: Claude's by `watchSetup`
@@ -830,6 +914,111 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   if the old checksum matches and the anchor ("Ask @vscode" Help item) is found; otherwise it skips with a
   `::warning::` (shows in the CI summary). Because a menu patch can silently miss, updates are also checked daily and
   reachable from the Chat panel's … menu and Kural Settings.
+- **Building from source** (Adithya, 24 Oct 2026: toward Cursor's way, in this same repo, the way VSCodium does it; design:
+  `docs/superpowers/specs/2026-10-24-vscode-source-build-design.md`; wiki `Building-from-Source`). Why: `rebrand.py`'s patches
+  edit minified code and break with VS Code updates, and some things (switching projects without a reload) need the main
+  process. `vscode.lock` (keys `vscode_version`, `vscode_commit`, `vscodium_tag`) pins the commit VSCodium 1.140.06880 is
+  built from: the one in VSCodium's `upstream/stable.json` at that tag (`07f806f…`), NOT the `commit` in an installed app's
+  product.json (`807ba2d…` = sha1 of "1.140.06880", VSCodium's `BUILD_SOURCEVERSION`, which `build.sh` sets the same way). `scripts/vscode/fetch.sh [--dry-run] [dest]` (default `build/vscode-src`) fetches that commit and VSCodium's
+  tag, applies `patches/kural/*.patch` FIRST (name order), then VSCodium's patches, and writes `"kuralSource": {commit,
+  patches: [names]}` into product.json. `scripts/vscode/build.sh <darwin-arm64|linux-x64|win32-x64>` = `npm ci` + gulp
+  `vscode-<platform>-min`. `KURAL_SOURCE=1 ./build-mac.sh` or `./install.sh --source`; then `electron_runtime.py`,
+  `rebrand.py`, renaming and signing run unchanged. **Kural's patches are made against PRISTINE VS Code** (Microsoft's
+  source, not VSCodium's patched one), so re-make them against a new commit with `git apply --3way`; a patch that no longer
+  fits fails the build. **`kuralSource` is the marker**: `rebrand.py` skips each of its patches listed in
+  `kuralSource.patches` (never patch a thing twice); a build without it (the VSCodium download) behaves as before. Number
+  ranges: 0100-0199 window management, 0200-0299 the Projects bar (0200-0203 = `drop_explorer_empty_view`,
+  `projects_default_view`, `projects_always_shown`, `add_in_window_card`); 0100 is the main process, 0101 the git extension. **One-frame windows**
+  (`0100-one-frame-windows`, setting `kural.window.oneFrame`, default true, command `_kural.oneFrame` → `{enabled}`): every
+  project keeps its own window (its chats keep running) but only one is visible; opening or switching to a project places
+  its window exactly over the current one (same bounds, same full-screen state), shows it once it has painted, and HIDES the
+  old one instead of closing or reloading it; closing the visible one shows the last hidden one, a Dock click shows the
+  last one, Window → Show Next/Previous Window (Cmd+` / Shift+Cmd+`; macOS's own Cmd+` can't reach hidden windows) switches.
+  Read by the main process from the user settings.json (anything but `false` = on). Left out: extension-development and test
+  hosts, the agents window, native-tab windows. Frame windows get `backgroundThrottling: false`.
+  **Dialogs of a hidden window** (0100): a message box, save dialog or open dialog for a hidden window sat behind the visible
+  one, so at quit a hidden window with unsaved files asked "Save changes?" where nobody could answer and quitting looked
+  stuck. `NativeHostMainService.showMessageBox/showSaveDialog/showOpenDialog` (every dialog the workbench shows, also the quit
+  veto, which is the renderer's own dialog) first call `showInFrameForDialog(window)`: if `getWindowById(window.id)`
+  `.isHiddenInFrame`, `windowsMainService.showInFrame()` is awaited (the window takes the frame, the visible one hides), then
+  the dialog opens. The wait is raced with a 3 s timeout, so a window that never paints can't block a dialog for good. The
+  window's own "not responding" and "terminated unexpectedly" dialogs (`CodeWindow`, `showInFrameForDialog()`) do the same.
+  Not covered: `DialogMainService` itself (its callers have an Electron `BrowserWindow`, not an `ICodeWindow`; adding a hook to
+  `IDialogMainService` would break the interface's test class), the `pick*AndOpen` dialogs (they pass no window, so `DialogMainService`
+  uses the focused one, and a hidden window can't be focused: the dialog is seen), and the dialogs of an auxiliary window of a hidden window.
+  **Git's "Open"** (`0101-git-open-after-clone`, the built-in git extension, so the only patch outside `src/vs/`): `Open` after
+  a clone (`cloneManager.ts`, `forceReuseWindow` replaced the project and stopped its chats; this also is what
+  `git.openAfterClone` `always` and `whenNoFolderOpen` do) and after `git init` (`commands.ts`) opens a new window when
+  `isOneFrame()` (`util.ts`: executes `_kural.oneFrame`, true only if it answers `{enabled: true}`; a missing command or an error
+  = false). That window takes the frame like any new one. Off or not a source build: the old call, unchanged. "Open in New
+  Window", "Add to Workspace" and the worktree commands are as they were (a worktree's "Open in current window" is the user's
+  explicit choice). Both patches checked 24 Oct 2026 on a fresh pristine tree: apply alone and with 0200-0203, `tsc` for
+  `src/tsconfig.json` and `extensions/git` (needs `node_modules/electron/electron.d.ts`: `npm ci --ignore-scripts` doesn't
+  fetch Electron; copy `.build/typings/electron.d.ts` of a built tree), eslint, the real `fetch.sh` with VSCodium's 42 patches
+  after them. NOT checked live: a hidden window's quit dialog and a clone's Open in a running app.
+  **Known gaps:** native full screen switches Spaces (macOS gives every full-screen window its own Space; showing the new
+  window and hiding the old one is a Space change. Not fixed: it would mean switching to simple full screen behind the user's
+  back. Workaround: the setting `window.nativeFullScreen: false` gives simple full screen, which has no Spaces. Left as a gap
+  on purpose); every restored window still loads at start; a worktree opened "in current window" replaces the project.
+  The Projects bar detects the command (see its bullet). **Ubuntu x64** builds from source too (`KURAL_SOURCE=1 ./make-deb.sh`,
+  `./install.sh --source`, which apt-installs the build packages): `make-deb.sh` runs `fetch.sh` and `build.sh --download-node
+  linux-x64`, packages `build/vscode-out/linux-x64` as the app folder (`usr/share/codium`) and writes the completions, mime
+  file and Depends itself; Depends comes from VS Code's `build/linux/debian/dep-lists.ts` (amd64 list). Everything after that,
+  from `electron_runtime.py` on, is shared with the download path. `build-from-source.yml` (manual) has a `macos` and a `linux`
+  job; the linux one runs on `ubuntu-22.04` (native modules need the build machine's glibc, like `build.yml`'s .deb). The Linux
+  scripts, VSCodium's linux patches after Kural's and the YAML are checked; a full Linux build, its `.deb` and the workflow
+  have NOT been run on a CI runner. **The source build and the Projects bar are meant for all three systems** (Adithya, 24 Oct 2026): the Mac,
+  Ubuntu and Windows. Windows builds from source on a Windows CI runner (`KURAL_SOURCE=1 ./build-win.sh`; the releases' `build.yml` is unchanged
+  until it has run), not on this Mac: only on Windows under Git Bash (`build.sh win32-x64` and `KURAL_SOURCE=1 ./build-win.sh` refuse
+  elsewhere), or the `windows` job of `build-from-source.yml` (`windows-2022`). Needs VS 2022 C++ tools, the Windows SDK, Python with
+  Pillow, Node at `.nvmrc` and NSIS (`makensis` found under Program Files (x86), `cygpath -w` paths). `fetch.sh` sets `core.autocrlf
+  false`, `core.eol lf` and `core.longpaths true` before the checkout (VS Code's `.gitattributes` has `* text=auto`, which gives CRLF on
+  Windows even with autocrlf off, and then Kural's patches don't apply; a Kural patch with CRLF is refused); an old CRLF checkout must be
+  deleted once. A source build is unsigned (`build-win.sh` refuses to sign there: `sign-win.sh` needs Linux or macOS). `--download-node`
+  checks the Windows zip's SHA-256 and unpacks it with Python (Git Bash has no `unzip`). Checked on the Mac only: `KURAL_OS=windows`
+  `fetch.sh` applies the 6 Kural patches and VSCodium's 6 Windows ones; a real Windows build and the CI job have NOT run. Linux can be tried from a Mac in a container (next paragraph). A source build takes 30-60 minutes and needs Node at VS Code's `.nvmrc` version, Python and Xcode command line
+  tools (measured 24 Oct 2026 on this Mac with npm's cache warm: about 6 minutes for `KURAL_SOURCE=1 ./build-mac.sh`).
+  Checked on a Mac, 24 Oct 2026: all six patches and VSCodium's 42 apply, the type check adds no errors to VS Code's own,
+  the build compiles them in, rebrand.py skips 0200-0203 without warnings, and the app starts with Kural loaded.
+  **Linux in a container** (`scripts/linux-container/`, Adithya, 24 Oct 2026: Docker Desktop on the Mac, no Linux machine needed;
+  wiki `Building-from-Source`). `run.sh <mode>`: `test` = `npm test` in Ubuntu 22.04 on a scratch COPY of the repository (mounted
+  read-only; nothing is written to your checkout); `build` = `KURAL_SOURCE=1 ./make-deb.sh` on a copy in the Docker volume
+  `kural-linux-work-<arch>` (source, `node_modules` and the .deb stay there, not in the repo); `live` = installs that .deb in a fresh
+  container, starts Xvfb + openbox + a session bus, checks the app opens a window and Kural's extension writes its "ready" marker, then runs
+  `test/one-frame.live.js`; `shell`; `build-image`; `clean`. `docker run --rm --init`, no `--privileged`, no host network, only the repo
+  (`:ro`) and the volume mounted; Electron runs with `--no-sandbox --disable-gpu --disable-dev-shm-usage` (no user namespaces), as the
+  user `kural`. `--platform linux/amd64` for the x64 .deb under emulation (Rosetta or QEMU: slow: about 5 minutes for `build` under Rosetta, hours under QEMU; Electron may
+  be unstable); the default is the container's own architecture (arm64 on Apple Silicon). **`make-deb.sh` and `build.sh` are x64 only**
+  (`make-deb.sh`: "the source build on Linux is for x64"; `build.sh` knows darwin-arm64, linux-x64, win32-x64), so `build` on arm64 stops
+  with that explanation; a linux-arm64 build would need an arm64 platform in `build.sh`, the package architecture and `dep-lists.ts`
+  list in `make-deb.sh`, `electron_runtime.py` and `sbom.py`. `test` runs on either. Tests: `test/linux-container.test.js` (static: ubuntu:22.04,
+  `:ro`, no `--privileged`, the modes). Wayland can't be tried there (Xvfb is X11).
+  **Live check** `node test/one-frame.live.js` (Mac: needs `build/mac/Kural.app` from a source build, or `KURAL_APP`; Linux: `KURAL_APP`, default
+  `/usr/share/kural/kural`, a `DISPLAY`, `KURAL_APP_FLAGS` for extra flags; the Linux run closes the app's whole process group, never a pattern):
+  a throwaway copy with its
+  own HOME (VS Code keeps Recent in `~/.kural-shared`) and two projects, driven over CDP and the main process's `--inspect`
+  (`BrowserWindow.isVisible()`/`getBounds()`; a hidden frame window's page still says `visibilityState` "visible" because of
+  `backgroundThrottling: false`), sampled every 10 ms while switching: never two windows shown, never none, same bounds,
+  closing the shown one shows the last hidden one; saves a Projects bar screenshot. Passed 18/18 on the Mac, three runs, 24 Oct 2026
+  (before the dialog patch). macOS's CGWindowList still lists hidden windows (and closed ones): not trusted, printed as a
+  FINDING; on Linux `xdotool search --onlyvisible` is the beside-list and is exact (an unmapped window is gone), so a mismatch is a
+  FINDING worth reading. **Systems:** Show Next/Previous Window works on every OS (Mac: Cmd+` / Shift+Cmd+`; Windows and Linux: the actions
+  "Show Next Window in Frame" / "Show Previous Window in Frame", Ctrl+Alt+. / Ctrl+Alt+, (`showNextWindowInFrame` on the native
+  host; Ctrl+Alt+[ ] would take AltGr characters, Ctrl+Alt+PageUp/Down the terminal's scrolling). Windows/Linux in 0100: maximize,
+  unmaximize and full screen SHOW a hidden window in Electron, so a new hidden window gets them only after it painted, just before it
+  shows (bounds = the source's `getNormalBounds`); full screen there is F11's, never Spaces; starting Kural again without a folder
+  focuses the last window (a hidden one takes the frame) unless `--new-window`/`window.openWithoutArgumentsInNewWindow`. On Linux Wayland an app can't set a window's position, so
+  one-frame keeps size and state (full screen, maximized) and the compositor places the window; X11 keeps the exact bounds.
+  **Checked on Linux, 24 Oct 2026** (Docker Desktop on an Apple Silicon Mac, 8 GB, `--platform linux/amd64` under Rosetta): `fetch.sh`
+  applies the 6 patches and VSCodium's linux ones; `KURAL_SOURCE=1 ./make-deb.sh` built `kural_1.2.1-beta.3+1.140.06880_amd64.deb` in about
+  4 minutes (npm ci included) on the second try (the first died in the esbuild step, "The service is no longer running: write EPIPE":
+  esbuild's Go program under emulation; run again); `live`: the app opened a window, the extension wrote "ready", and `one-frame.live.js`
+  passed 18/18 on X11 with openbox (no flash, the shown window and the X server's list agree, Ctrl+Shift+W closes the shown one and the
+  last hidden one comes back; this ran with 0100 BEFORE its Windows/Linux changes above: run `build` and `live` again). `run.sh test`: arm64 all files pass except `listen-host.test.js` (Listen's voice ships for linux-x64 only,
+  `assets.js`; the tests assume a platform with a voice); amd64 all pass except one 10 s timeout in `codex.test.js` under emulation. The
+  image needs `openssh-client` (the devices tests). NOT checked live: native full screen, Show Next/Previous Window, clicking a project in
+  the bar, the CI workflow, Windows, Wayland, a real Linux desktop (GNOME/KDE: the taskbar, window managers that place windows themselves),
+  and the Mac run of the changed `one-frame.live.js` (its Mac code is unchanged; no Mac build here).
 - **Keeping VSCodium and Electron current** (`.github/workflows/upstream-check.yml`, weekly + on demand):
   `scripts/update-codium.sh <ver>` (codium.lock + `CODIUM_VER` in the three build scripts; each archive checked against
   VSCodium's `.sha256`) and `scripts/update-electron.py` (the newest Electron of VSCodium's major: hashes from Electron's
@@ -1109,6 +1298,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
 
 ## Test
 - `npm test` (`test/run.js`: every `test/*.test.js`, so a new test needs no package.json change) — no Claude needed (diff engine, Ctrl+K reply parsing, Jira ticket rules, parallel agents, what Tab learns, Tab panel page script, Get started checks).
+- `scripts/linux-container/run.sh test` — `npm test` in Ubuntu 22.04 in Docker (from a Mac; the checkout is mounted read-only);
+  `run.sh --platform linux/amd64 build` then `run.sh --platform linux/amd64 live` = the .deb built from source, started under Xvfb,
+  and `test/one-frame.live.js` ("Building from source").
+- `node test/one-frame.live.js` — one-frame windows in a built app (Mac, or Linux under a display); not part of `npm test`.
 - `node test/completion.live.js` — real tab completions (needs `claude` logged in): 11 cases + typing burst.
 - `node test/personal.live.js` — Tab and commit messages with vs without what you've been doing (real Haiku).
 - In the editor: `./install.sh --ext` (copies `extension/` into the installed app; on a Mac it re-signs and restarts

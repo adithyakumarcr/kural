@@ -81,12 +81,31 @@ async function untrackedDiff(top, file) {
   return { file, status: "untracked", text, added: n, removed: 0, lines: n };
 }
 
+// Git writes the top as "C:/x/y" (long names) on Windows; the editor and the tests spell the same folder "C:\x\y" or with
+// 8.3 names. So the top is found again by walking up from `root` to the folder that is the same place: names and links
+// then match what the caller passed. Not found (root is a link into the repository): git's own, made a native path.
+function topFor(root, gitTop) {
+  const real = (p) => { try { return fs.realpathSync.native(p); } catch { return null; } };
+  const want = real(gitTop), key = (p) => (process.platform === "win32" ? p.toLowerCase() : p);
+  if (want) {
+    let cur = path.resolve(root);
+    for (let i = 0; i < 64; i++) {
+      const r = real(cur);
+      if (r && key(r) === key(want)) return cur;
+      const up = path.dirname(cur);
+      if (up === cur) break;
+      cur = up;
+    }
+  }
+  return path.resolve(gitTop);
+}
+
 // The uncommitted changes of the repository at `root`, against HEAD.
 // → { top, files: [{ file, status, text, added, removed, lines }], skipped: [{ file, why }] }; files is empty when nothing
 // changed. Throws when `root` isn't in a git repository.
 async function collectDiff(root, git) {
   if (!git) throw new Error("Git isn't installed.");
-  const top = await run(git, ["rev-parse", "--show-toplevel"], root).then((r) => r.code === 0 ? path.resolve(r.stdout.trim()) : null, () => null);
+  const top = await run(git, ["rev-parse", "--show-toplevel"], root).then((r) => r.code === 0 && r.stdout.trim() ? topFor(root, r.stdout.trim()) : null, () => null);
   if (!top) throw new Error("This folder isn't a Git repository.");
   let base = "HEAD";
   if ((await run(git, ["rev-parse", "--verify", "-q", "HEAD"], top)).code !== 0) {
@@ -231,7 +250,7 @@ function fileOf(name, byFile) {
   if (!n) return null;
   if (byFile.has(n)) return n;
   for (const p of ["a/", "b/"]) if (n.startsWith(p) && byFile.has(n.slice(2))) return n.slice(2);
-  if (n.startsWith("/")) for (const k of byFile.keys()) if (n.endsWith(`/${k}`)) return k;
+  if (n.startsWith("/") || /^[A-Za-z]:\//.test(n)) for (const k of byFile.keys()) if (n.endsWith(`/${k}`)) return k;
   return null;
 }
 

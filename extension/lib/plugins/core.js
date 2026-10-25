@@ -245,15 +245,38 @@ async function list(ai, p) {
 }
 
 // owner/repo (GitHub), an https Git address, or a folder on this computer: { source } or { error } in words.
+// An SSH Git address, which Claude Code and Codex clone with your own SSH keys (Azure DevOps, a company GitLab): scp-like
+// user@host:path or ssh://[user@]host[:port]/path. Strict on purpose: no part may start with "-" (it would reach ssh or
+// git as an option), no spaces, quotes or shell characters. null: not one.
+const SSH_SCP = /^([A-Za-z0-9][A-Za-z0-9._-]{0,63})@([A-Za-z0-9][A-Za-z0-9.-]{0,252}):([A-Za-z0-9._~+\/][A-Za-z0-9._~+\/-]{0,300})$/;
+const SSH_URL = /^ssh:\/\/(?:([A-Za-z0-9][A-Za-z0-9._-]{0,63})@)?([A-Za-z0-9][A-Za-z0-9.-]{0,252})(?::(\d{1,5}))?\/([A-Za-z0-9._~+][A-Za-z0-9._~+\/-]{0,300})$/;
+function sshAddress(s) {
+  s = String(s || "").trim();
+  let m = SSH_SCP.exec(s);
+  if (m) return { user: m[1], host: m[2], port: null };
+  m = SSH_URL.exec(s);
+  if (m && (!m[3] || Number(m[3]) <= 65535)) return { user: m[1] || null, host: m[2], port: m[3] || null };
+  return null;
+}
+// An SSH clone that failed because of SSH itself (an unknown host key, no key the server takes, a host it can't reach):
+// say that it's your SSH setup, and the command that shows it in a terminal.
+function sshHint(source, message) {
+  const a = sshAddress(source);
+  if (!a || !/Host key verification failed|Permission denied \(publickey|publickey\)|Could not resolve hostname|Connection (refused|timed out)|No route to host|Could not read from remote repository/i.test(String(message || ""))) return message;
+  const cmd = `ssh -T ${a.port ? `-p ${a.port} ` : ""}${a.user ? `${a.user}@` : ""}${a.host}`;
+  return `${message}\n\nThe marketplace is cloned with your own SSH keys, as git does in a terminal. Run \`${cmd}\` in a terminal first: answer yes if it asks about the host's key, and make sure the server knows your key. Then add it again.`;
+}
+
 function marketSource(s) {
   s = String(s || "").trim();
   if (/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9._-]{1,100}$/.test(s) && !s.endsWith("/")) return { source: s };
   if (/^https:\/\/[A-Za-z0-9.-]+(?::\d+)?\/[^\s"'<>]+$/.test(s)) return { source: s };
+  if (sshAddress(s)) return { source: s };
   if (path.isAbsolute(s)) {
     try { if (fs.statSync(s).isDirectory()) return { source: s }; } catch { /* no such folder */ }
     return { error: "That folder isn't there." };
   }
-  return { error: "Write owner/repo (a GitHub repository), an https:// Git address, or the full path of a folder." };
+  return { error: "Write owner/repo (a GitHub repository), a Git address (https://… or SSH, like git@host:org/repo), or the full path of a folder." };
 }
 // A Git address Kural may clone for Gemini: https only (no ssh://, file:// or ext::, which runs a command).
 const gitUrl = (s) => /^https:\/\/[A-Za-z0-9.-]+(?::\d+)?\/[^\s"'<>]+$/.test(String(s || "").trim());
@@ -319,7 +342,9 @@ async function market(ai, p, what, arg = {}) {
   else return { error: "Unknown action." };
   // (--: a source is never read as an option; clones can take a while.)
   const r = await run(p.bin, ["plugin", "marketplace", what, "--json", "--", target], p.env, { cwd: p.cwd, timeout: 300000 });
-  return ai === "claude" ? claudeResult(r) : codexResult(r);
+  const res = ai === "claude" ? claudeResult(r) : codexResult(r);
+  if (what === "add" && res.error) res.error = sshHint(target, res.error);
+  return res;
 }
 
 // What a plugin folder holds, by its usual layout (skills/<name>/SKILL.md, agents/*.md, commands/*.md, hooks, .mcp.json).
@@ -421,4 +446,4 @@ async function cloneForAgy(p, url, tmpRoot) {
 }
 
 module.exports = { AIS, CAN, BUILT_IN, NAME, SCOPES, validId, sameDir, run, list, act, market, details, parseDetails, inventory, manifest, sourceUrl,
-  shortVersion, marketSource, gitUrl, checkFolder, installFolder, cloneForAgy, lastJson, why };
+  shortVersion, marketSource, sshHint, gitUrl, checkFolder, installFolder, cloneForAgy, lastJson, why };

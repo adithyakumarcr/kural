@@ -7,20 +7,52 @@ NAME=kural            # command / folder name
 TITLE="Kural"         # name shown in the app
 CODIUM_VER="${CODIUM_VER:-1.140.06880}"
 
-# 0. Download VSCodium (the open-source build of VS Code) if we don't have it yet
 mkdir -p dist
-if [ ! -f codium.deb ]; then
-  echo "Downloading VSCodium $CODIUM_VER ..."
-  curl -fL -o codium.deb "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/codium_${CODIUM_VER}_amd64.deb"
+R=pkg
+if [ "${KURAL_SOURCE:-0}" = 1 ]; then
+  # 0. Our own build of VS Code from its source plus Kural's patches (scripts/vscode/), not VSCodium's download.
+  #    (--download-node: VS Code wants one exact Node version; a private copy is kept in build/. build/vscode-out is
+  #    not compiled again when it is up to date.) The result is the app folder (like the one inside VSCodium's .deb);
+  #    the rest of the package (completions, mime, control) is made here the way VS Code's own deb task does it.
+  echo "Building VS Code from source (scripts/vscode/fetch.sh + build.sh) ..."
+  [ "$(uname -m)" = x86_64 ] || { echo "Error: the source build on Linux is for x64 (this computer: $(uname -m))." >&2; exit 1; }
+  ./scripts/vscode/fetch.sh
+  ./scripts/vscode/build.sh --download-node linux-x64
+  SRC=build/vscode-src
+  VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')+$(python3 -c 'import json;print(json.load(open("build/vscode-out/linux-x64/resources/app/package.json"))["version"])')"
+  rm -rf root "$R" && mkdir -p "$R/DEBIAN" "$R/usr/share/codium" "$R/usr/share/pixmaps" "$R/usr/share/applications" \
+    "$R/usr/share/bash-completion/completions" "$R/usr/share/zsh/vendor-completions" "$R/usr/share/mime/packages"
+  cp -a build/vscode-out/linux-x64/. "$R/usr/share/codium/"      # (cp -a keeps links and the sandbox's mode)
+  sed "s/@@APPNAME@@/codium/g" "$SRC/resources/completions/bash/code" > "$R/usr/share/bash-completion/completions/codium"
+  sed "s/@@APPNAME@@/codium/g" "$SRC/resources/completions/zsh/_code" > "$R/usr/share/zsh/vendor-completions/_codium"
+  sed -e "s/@@NAME@@/codium/g" -e "s/@@NAME_LONG@@/VSCodium/g" "$SRC/resources/linux/code-workspace.xml" > "$R/usr/share/mime/packages/codium-workspace.xml"
+  # What the program needs: VS Code's own list for x64 (build/linux/debian/dep-lists.ts), without repeats.
+  DEPENDS="$(python3 -I - "$SRC/build/linux/debian/dep-lists.ts" <<'PYEOF'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r"'amd64':\s*\[(.*?)\]", text, re.S)
+deps = list(dict.fromkeys(re.findall(r"'([^']+)'", m.group(1)))) if m else []
+if len(deps) < 20: sys.exit("could not read the amd64 dependencies from dep-lists.ts: did its layout change?")
+print(", ".join(deps))
+PYEOF
+)"
+else
+  # 0. Download VSCodium (the open-source build of VS Code) if we don't have it yet
+  if [ ! -f codium.deb ]; then
+    echo "Downloading VSCodium $CODIUM_VER ..."
+    curl -fL -o codium.deb "https://github.com/VSCodium/vscodium/releases/download/$CODIUM_VER/codium_${CODIUM_VER}_amd64.deb"
+  fi
+  ./scripts/check-codium.sh "codium_${CODIUM_VER}_amd64.deb" codium.deb || exit 1   # (also a file left from an earlier run)
+  VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')+$(dpkg-deb -f codium.deb Version)"
+  DEPENDS="$(dpkg-deb -f codium.deb Depends)"
 fi
-./scripts/check-codium.sh "codium_${CODIUM_VER}_amd64.deb" codium.deb || exit 1   # (also a file left from an earlier run)
-VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')+$(dpkg-deb -f codium.deb Version)"
 # "1:" (an epoch) makes 1.0.x count as newer than the earlier 3.0.0 builds, so apt upgrades cleanly.
 # A test version like 1.1.0-alpha.1 becomes 1.1.0~alpha.1 inside the package: "~" sorts before the final 1.1.0,
 # so apt later upgrades the alpha to 1.1.0. (A "-" would mean something else to apt.)
 DEBVER="1:${VER//-/\~}"
-R=pkg
-rm -rf root "$R" && dpkg-deb -R codium.deb root && mv root "$R"
+if [ "${KURAL_SOURCE:-0}" != 1 ]; then
+  rm -rf root "$R" && dpkg-deb -R codium.deb root && mv root "$R"
+fi
 echo "Building $TITLE ..."
 
 # 1. Move the app folder and rename the executables
@@ -90,7 +122,6 @@ EOF
 # 5. Package metadata + simple install/uninstall scripts
 #    (VSCodium's originals add a Microsoft apt repo; we don't want that)
 rm -f "$R"/DEBIAN/{postinst,postrm,prerm,templates}
-DEPENDS=$(dpkg-deb -f codium.deb Depends)
 SIZE=$(du -sk "$R/usr" | cut -f1)
 cat > "$R/DEBIAN/control" <<EOF
 Package: $NAME

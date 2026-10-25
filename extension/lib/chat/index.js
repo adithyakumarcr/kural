@@ -203,8 +203,14 @@ class ChatView {
       run: (cmd, args, env) => new Promise((res) => require("child_process").execFile(cmd, args,
         { env: { ...process.env, ...env }, timeout: 15000, windowsHide: true, cwd: os.tmpdir() }, (err, _o, stderr) => { if (err) log(`notify: ${cmd} failed: ${err.message}${stderr ? ` (${String(stderr).trim().slice(0, 200)})` : ""}`); res(!err); })),
       inApp: async (title, body) => (await vscode.window.showInformationMessage(`${title}. ${body}`, "Show")) === "Show",
+      // A card in another Kural window that's in front (lib/projects sets cardElsewhere): true = it was shown there.
+      elsewhere: (o) => this.cardElsewhere ? this.cardElsewhere(o) : false,
       log, platform: process.platform,
     });
+    // Set by lib/projects (the Projects bar): onChatsChanged() whenever what projectChats() reports may have changed;
+    // cardElsewhere({ tabId, title, body }) → Promise<boolean>.
+    this.onChatsChanged = null;
+    this.cardElsewhere = null;
     this.load();
   }
 
@@ -457,7 +463,7 @@ class ChatView {
     if (own && own.panel) { own.panel.reveal(); return; }
     if (own) { this.focusPane = own; this.postTo(own, { type: "focus" }); return; }
     if (pane) pane.activeId = id; else this._activeId = id;
-    tab.unread = false;
+    tab.unread = false; tab.unseen = false;
     this.clearNotice(id);   // (its notification, if any, is old news now)
     if (this.onChoice) try { this.onChoice(tab); } catch { /* (the status bar's own problem) */ }
     if (pane) this.postTo(pane, { type: "full", tab: this.viewTab(tab) });
@@ -553,6 +559,35 @@ class ChatView {
     this.save();
   }
 
+  // The Projects bar moves a chat to another project (lib/projects): it leaves this window but stays in History, and that
+  // project's window takes it in (adopt). Only a chat of this project with something in it that isn't working or waiting
+  // for you. false: it can't go now.
+  moveOut(id) {
+    const tab = this.tab(id);
+    if (!tab || tab.visiting || !tab.messages.length) return false;
+    const state = (this.projectChats().find((c) => c.id === id) || {}).state;
+    if (state === "run" || state === "ask") return false;
+    this.closeTab(id, true);
+    return true;
+  }
+  // A chat moved here from another project: like Continue here, a new conversation in this folder that's given the old
+  // one (Claude keeps conversations per folder), but with the same id, so History, its lesson and handoff notes follow it.
+  adopt(id, from) {
+    if (this.tab(id)) { this.activate(id); return true; }
+    const old = this.archive.read(id);
+    if (!old) return false;
+    this.clean(old);
+    const tab = { ...old, sessionId: newSessionId(), started: false, visiting: false, workspace: this.here, updatedAt: Date.now(),
+      carryOver: { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
+    const blank = this.tabs.find((t) => !t.messages.length && t.status === "idle" && !this.panes.some((p) => p !== this.cur() && p.activeId === t.id));
+    if (blank) this.tabs.splice(this.tabs.indexOf(blank), 1, tab); else this.tabs.push(tab);
+    this.archive.save(tab, this.card(tab));
+    this.activate(tab.id);
+    this.postHistory();
+    this.save();
+    return true;
+  }
+
   // Open the folder a visiting chat came from, in a new window.
   openWorkspaceOf(id) {
     const t = this.tab(id);
@@ -623,6 +658,42 @@ class ChatView {
     this.post({ type: "tabs", tabs: this.tabs.map((t) => this.summary(t)) });   // each pane gets its own activeId (post)
     for (const p of this.panes) if (p.panel) { const t = this.tab(p.activeId); p.panel.title = t ? t.title : "Kural chat"; }
     if (this.onTabs) try { this.onTabs(); } catch { /* (the caller's own problem) */ }
+    this.chatsChanged();
+  }
+
+  // ---------- the Projects bar (lib/projects) ----------
+  // Every change of a tab's state goes through postTabs (status, a card waiting or answered, a tab added, closed or renamed),
+  // so that tells the bar; unseen and the shown tab call it themselves.
+  chatsChanged() {
+    if (this.onChatsChanged) try { this.onChatsChanged(); } catch { /* (the bar's own problem) */ }
+  }
+  // The card a tab is waiting on, in a few words (notify.js says it the same way), or null.
+  askOf(tab) {
+    const last = tab.messages[tab.messages.length - 1];
+    const b = last && last.role === "assistant" ? (last.blocks || []).slice().reverse().find((x) => (x.k === "perm" || x.k === "question" || x.k === "split") && x.state === "pending") : null;
+    if (!b) return tab.status === "waiting" ? "Waiting for you" : null;
+    const text = b.k === "perm" ? notifyText("permission", { tool: b.tool, detail: b.detail, where: b.where, site: b.site, label: b.label }).body
+      : b.k === "question" ? notifyText("question", { question: ((b.questions || [])[0] || {}).question }).body
+      : `Split the work between ${(b.tasks || []).length} agents?`;
+    return text.length > 80 ? `${text.slice(0, 79).trimEnd()}…` : text;
+  }
+  // This window's open chats in tab order, for the Projects bar: state run (answering), ask (a card waits for you), done
+  // (finished while you weren't looking: tab.unseen), idle. Chats from other workspaces (visiting) aren't this project's.
+  projectChats() {
+    return this.tabs.filter((t) => !t.visiting).map((t) => {
+      const ask = this.askOf(t);
+      const last = t.messages[t.messages.length - 1];
+      const state = ask ? "ask" : t.status !== "idle" || (last && last.role === "assistant" && last.running) ? "run" : t.unseen ? "done" : "idle";
+      return { id: t.id, title: t.title, state, ask: state === "ask" ? ask : null, doneAt: t.unseen ? t.doneAt || null : null, onScreen: this.onScreen(t.id),
+        empty: !t.messages.length };   // nothing sent yet: the Projects bar leaves it out
+    });
+  }
+  // The tab is in front of you (activated, its pane became visible, a click on its notification): nothing unseen about it.
+  markSeen(id) {
+    const t = this.tab(id);
+    if (!t || !t.unseen) return;
+    t.unseen = false;
+    this.postTabs(); this.save();
   }
 
   // History: every saved chat (all workspaces), with this window's open tabs as they are right now.
@@ -733,7 +804,11 @@ class ChatView {
       if (pane.layout.includes(this.focusPane)) this.focusPane = null;
     });
     // The panel shown again: its chat's program back, ready for your next message (it may have stopped while idle).
-    if (view.onDidChangeVisibility) view.onDidChangeVisibility(() => { const t = view.visible && this.tab(pane.activeId); if (t && t.status === "idle") this.warm(t); });
+    if (view.onDidChangeVisibility) view.onDidChangeVisibility(() => {
+      const t = view.visible && this.tab(pane.activeId); if (t && t.status === "idle") this.warm(t);
+      if (view.visible) for (const p of pane.layout || [pane]) this.markSeen(p.activeId);
+      this.chatsChanged();   // (the Projects bar shows whether the chat is on screen)
+    });
   }
 
   // Folders whose pictures the chat may show: Kural's page files, your project folders, Kural's storage (pictures a
@@ -826,7 +901,7 @@ class ChatView {
     panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "media", "chat-icon.svg");
     const pane = this.attach(panel.webview, "editor", panel, tabId);
     this.focusPane = pane;
-    panel.onDidChangeViewState((e) => { if (e.webviewPanel.active) this.focusPane = pane; });
+    panel.onDidChangeViewState((e) => { if (e.webviewPanel.active) this.focusPane = pane; if (e.webviewPanel.visible) this.markSeen(pane.activeId); this.chatsChanged(); });
     panel.onDidDispose(() => {
       this.listen.paneGone(pane);
       this.panes.splice(this.panes.indexOf(pane), 1);
@@ -1681,6 +1756,7 @@ class ChatView {
 
   // A new answer, empty for now.
   newReply(tab, routed) {
+    tab.unseen = false;   // (a new answer starts: the old "done" is old news)
     return { role: "assistant", blocks: [], running: true, t0: Date.now(), mode: tab.mode, model: tab.model, models: [tab.model], routing: routed, journal: { tools: [] } };
   }
 
@@ -2239,7 +2315,7 @@ class ChatView {
     if (!parent && (m.type === "stream_event" || m.type === "assistant") && !reply.running && tab.status === "idle" && !r.stale) {
       reply.running = true;
       delete reply.error;
-      tab.status = "running";
+      tab.status = "running"; tab.unseen = false;
       const last = reply.blocks[reply.blocks.length - 1];
       if (last && last.k === "text" && !/\n\n$/.test(last.text)) last.text += "\n\n";
       this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) });
@@ -2427,6 +2503,9 @@ class ChatView {
     } else if (reply.error !== "stopped") {
       log(`chat ${tab.id}: no notification: ${reply.notified ? "already notified for this answer" : queued ? "a queued message is answered next" : "carried on by another AI"}`);
     }
+    // Finished while you weren't looking: the Projects bar shows "done" until you open the chat. Not after Stop (that was you),
+    // not while a queued message is answered next or Auto carries the request on with another AI.
+    if (reply.error !== "stopped" && !queued && !retry && !this.shown(tab.id)) { tab.unseen = true; tab.doneAt = Date.now(); }
     this.finishTurn(tab, r);
     // The answer is done: Kural lets go of the browser tabs it used (its network stop is lifted; the tab is yours again).
     if (this.browserAi) this.browserAi.release(tab.id);
@@ -2736,7 +2815,7 @@ class ChatView {
       const { title, body } = notifyText(kind, { chat: tab.title, ...info });
       log(`chat ${tab.id}: notification (${kind}): ${title}; ${d.why}`);
       if (!this.notifier) { log("notify: no notifier"); return; }
-      return Promise.resolve(this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind) }, () => this.showChat(tab.id)))
+      return Promise.resolve(this.notifier.show({ id: `kural-chat-${tab.id}`, title, body, attention: ["permission", "question", "login"].includes(kind), tabId: tab.id }, () => this.showChat(tab.id)))
         .then((route) => { log(`chat ${tab.id}: notification route: ${route}`); return route; });
     } catch (e) { log(`chat: notification failed: ${e.message}`); }
   }
@@ -2744,7 +2823,7 @@ class ChatView {
   async testNotification() {
     const tab = this.tab(this.activeId) || { id: "test", title: "Kural" };
     const route = await this.notify(tab, "done", { force: true, text: "This is a test notification." });
-    const names = { toast: "Kural's own notification", os: process.platform === "darwin" ? "the Mac's notification (shown as Script Editor)" : "the system's notification command", app: "a message inside the Kural window", none: "nothing (every way failed; see Kural: Show Log)" };
+    const names = { card: "a card in your other Kural window", toast: "Kural's own notification", os: process.platform === "darwin" ? "the Mac's notification (shown as Script Editor)" : "the system's notification command", app: "a message inside the Kural window", none: "nothing (every way failed; see Kural: Show Log)" };
     const mac = process.platform === "darwin" ? " If nothing appeared on screen: System Settings → Notifications → allow Script Editor (and Kural), and check that Focus / Do Not Disturb is off. (Clicking a Mac notification opens Script Editor, not the chat.)" : "";
     const linux = process.platform === "linux" ? " If nothing appeared: check that a notification service is running and that notify-send is installed (libnotify-bin)." : "";
     vscode.window.showInformationMessage(`Test notification sent through ${names[route] || route}.${mac}${linux}`);
@@ -2754,17 +2833,6 @@ class ChatView {
   onScreen(id) {
     return this.panes.some((p) => p.activeId === id && (p.view ? p.view.visible !== false : p.panel ? p.panel.visible !== false : true));
   }
-  // A notification was clicked (Kural is in front already): show that chat, in its own editor or the side panel.
-  async showChat(id) {
-    if (!this.tab(id)) return;
-    const own = this.panes.find((p) => p.single && p.activeId === id);
-    if (own && own.panel) { own.panel.reveal(); return; }
-    await vscode.commands.executeCommand("kural.chat.focus");
-    if (own) { this.postTo(own, { type: "focus" }); return; }   // (in a column of the side panel)
-    const side = this.side();
-    if (side) this.activate(id, side);
-  }
-
   // ---------- messages from the panel ----------
   async onMessage(m, pane = this.cur()) {
     this.pane = pane;                          // replies and "the current tab" mean this pane's
@@ -3175,12 +3243,17 @@ class ChatView {
     vscode.window.setStatusBarMessage("Kural: added part of the lesson to the chat", 3000);
     return true;
   }
-  // This chat on screen (in Kural's panel, or its own editor) for a lesson beside it.
+  // This chat on screen, in its own editor or the side panel: a clicked notification, a lesson beside it, another window's request
+  // (the Projects bar). It's the one place that shows a chat, so it's also where "unseen" ends.
   async showChat(id) {
-    if (!this.shown(id)) this.activate(id, this.side() || this.cur());
-    const own = this.panes.find((p) => p.single && p.activeId === id && p.panel);
-    if (own) own.panel.reveal(undefined, true);
-    else await vscode.commands.executeCommand("kural.chat.focus");
+    if (!this.tab(id)) return;
+    const own = this.panes.find((p) => p.single && p.activeId === id);
+    if (own && own.panel) { own.panel.reveal(undefined, true); this.markSeen(id); return; }
+    // (Not shown anywhere yet: the side panel takes it. In a column of the side panel it's there already.)
+    if (!own && !this.shown(id)) this.activate(id, this.side() || this.cur());
+    await vscode.commands.executeCommand("kural.chat.focus");
+    if (own) this.postTo(own, { type: "focus" });
+    this.markSeen(id);
   }
   // The chat shows in the editor area (dragged out of the panel): a lesson opens beside it instead of over it.
   inEditor(id) { return this.panes.some((p) => p.single && p.activeId === id && !!p.panel); }

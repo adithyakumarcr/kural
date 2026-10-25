@@ -30,6 +30,8 @@ On top of that, Kural adds:
 - **Tab Completion.** Grey suggestions as you type; **Tab** accepts. Change a name, and Kural offers to change it in
   the other files that use it.
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
+- **Projects.** The first tab in the left bar lists every project with a Kural window and each of its chats (working,
+  waiting for you, finished); one click brings that window forward or opens the project.
 - **Parallel agents.** A big request split between agents that work at the same time, each in its own copy of the
   project, on a cheaper model you pick; Kural merges their work.
 - **Fix with Kural, Rules, Agent Review, Debug mode.** One click from an error or a failed command to the chat; project
@@ -253,6 +255,16 @@ file with Kural**. When a command fails in the terminal, **Fix with Kural** show
 adds the command, its exit code and its last 8,000 characters of output. Nothing is sent until you press Send.
 More: [docs/wiki/Fix-with-Kural.md](docs/wiki/Fix-with-Kural.md).
 
+### Projects
+
+The first tab in the left bar lists your projects (**Pinned**, **Open**, **Recent**) and under each open one its chats:
+a spinner while one works, an orange dot while it waits for you, a purple dot when it finished and you haven't seen it.
+Click a project to bring its window forward (or open it), a chat to show it there. The red **×** closes a project
+(after asking, naming chats that are working); **+** opens a folder, clones a repository or makes a new empty project with
+Git. The icon shows a number and the status bar says "N projects need a look" for finished or waiting chats in your other
+projects; a chat finishing in another window shows a small card in the window you're in.
+More: [docs/wiki/Projects.md](docs/wiki/Projects.md).
+
 ### Rules
 
 Instructions for the AI, kept in your project as `.kural/rules/*.md` (`.cursor/rules` works too). A header sets the
@@ -461,6 +473,15 @@ The separate build scripts, if you only want the files in `dist/`:
 | Mac, Apple Silicon | `./build-mac.sh` | `dist/Kural-*-macos-arm64.zip` and `.dmg` (the icon is made with macOS's own `sips` and `iconutil`) |
 | Windows (built on Linux) | `./build-win.sh` | `dist/Kural-*-windows-x64-setup.exe` + portable `.zip` (needs `nsis`, `node`; signed when a code signing certificate is set up: [docs/windows-signing.md](docs/windows-signing.md)) |
 
+**Building from source.** Kural can also build VS Code from its own source and apply Kural's patches
+(`patches/kural/`) instead of editing a finished VSCodium download. On a Mac or Ubuntu (x64): `./install.sh --source`
+(or `KURAL_SOURCE=1 ./build-mac.sh` / `KURAL_SOURCE=1 ./make-deb.sh`). It takes 30 to 60 minutes and needs Node at VS
+Code's `.nvmrc` version, Python and a compiler (Apple's command-line tools; on Ubuntu `install.sh` installs the packages).
+Windows still uses the download. The Mac build and its one-frame project windows were checked in a running app
+(`node test/one-frame.live.js`); a full Ubuntu build hasn't been run yet. Details:
+[the wiki page](docs/wiki/Building-from-Source.md) and
+[the design](docs/superpowers/specs/2026-10-24-vscode-source-build-design.md).
+
 To run the tests (no Claude needed), use `npm test`.
 
 ## Releases
@@ -516,6 +537,7 @@ extension/            the Kural extension (plain JavaScript, no build step)
                       archive.js (History), attachments, tickets, changes
   lib/split/          parallel agents: agent.js (the lead, the agents, the merge), worktrees.js (git), plan.js (prompts)
   lib/fix/            Fix with Kural: core.js (the text, no vscode), index.js (light bulb, terminal button)
+  lib/projects/       Projects bar: status.js (each window's status file and inbox), model.js (the list), index.js (view, clicks, card)
   lib/rules/          Rules (.kural/rules): the rule files and what each message gets
   lib/agent-review/   Agent Review: a read-only agent reviews your uncommitted changes, findings as comments
   lib/debug/          Debug mode: the log server on 127.0.0.1 and the mode's prompt
@@ -527,7 +549,8 @@ extension/            the Kural extension (plain JavaScript, no build step)
   lib/plugins/        the Plugins tab beside Extensions: core.js (each AI's plugin manager), index.js (the view, a plugin's page)
   media/              the panels' pages (HTML/CSS/JS) and the Codicons icon font
   themes/             Kural Dark, Kural Light (written by scripts/make-themes.py)
-scripts/              shared rebranding (rebrand.py), logo, icons (make-status-icons.js), release notes, push-wiki.sh,
+patches/kural/       Kural's patches to VS Code's source (source build only); vscode.lock pins the commit
+scripts/              shared rebranding (rebrand.py), scripts/vscode/ (fetch and build VS Code from source), logo, icons (make-status-icons.js), release notes, push-wiki.sh,
                       bench-memory.js (what a running Kural uses: memory and CPU per part)
 installer/            the Windows installer (NSIS)
 make-deb.sh           Ubuntu .deb    build-mac.sh  Mac app    build-win.sh  Windows

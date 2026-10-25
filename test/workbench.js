@@ -15,8 +15,14 @@ const apps = [   // folders that hold "out/", "node_modules.asar.unpacked/"…
   "/usr/share/kural/resources/app",
 ];
 
-// The "app" folder of a built Kural, or null.
-function findAppRoot() {
+// The source patches an app was built with (product.json kuralSource.patches; none for a VSCodium-based build).
+function builtIn(app) {
+  try { const s = JSON.parse(fs.readFileSync(path.join(app, "product.json"), "utf8")).kuralSource; return (s && Array.isArray(s.patches)) ? s.patches : []; } catch { return []; }
+}
+
+// The "app" folder of a built Kural, or null. notBuiltIn: patch names (patches/kural/, without .patch); an app built from
+// source with any of them is left out, since rebrand.py skips those patches there (a test of them needs another app).
+function findAppRoot({ notBuiltIn = [] } = {}) {
   const given = process.env.KURAL_WORKBENCH || process.env.KURAL_APP_ROOT;
   const list = [];
   if (given) {
@@ -25,12 +31,12 @@ function findAppRoot() {
     list.push(given, path.join(given, "Contents", "Resources", "app"), path.join(given, "resources", "app"));
   }
   list.push(...apps);
-  return list.find((d) => fs.existsSync(path.join(d, WORKBENCH))) || null;
+  return list.find((d) => fs.existsSync(path.join(d, WORKBENCH)) && !builtIn(d).some((n) => notBuiltIn.includes(n))) || null;
 }
 
 // A file inside it (default: the workbench's main script), or null.
-function findWorkbench(rel = WORKBENCH) {
-  const app = findAppRoot();
+function findWorkbench(rel = WORKBENCH, opts) {
+  const app = findAppRoot(opts);
   const f = app && path.join(app, rel);
   return f && fs.existsSync(f) ? f : null;
 }

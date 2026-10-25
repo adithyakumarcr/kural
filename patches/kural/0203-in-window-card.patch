@@ -1,0 +1,184 @@
+diff --git a/src/vs/workbench/contrib/kuralCard/browser/kuralCard.contribution.ts b/src/vs/workbench/contrib/kuralCard/browser/kuralCard.contribution.ts
+new file mode 100644
+index 00000000..230b148f
+--- /dev/null
++++ b/src/vs/workbench/contrib/kuralCard/browser/kuralCard.contribution.ts
+@@ -0,0 +1,164 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { mainWindow } from '../../../../base/browser/window.js';
++import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
++
++/**
++ * Kural: a small card in the window's bottom right corner, above the status bar. The Projects
++ * bar uses it for "finished / needs you" hints when the window has the focus but the chat is not
++ * on screen (the system notification is for when you are away).
++ *
++ * `_kural.card` {id?, title, body?, button?, color?, letter?, timeout?} resolves to {clicked, supported}.
++ * It stays `timeout` ms (12000 by default), is paused while the mouse is over it, and is shown for
++ * at least 1.5 s after the mouse leaves. The button resolves `clicked: true`; the close cross, the
++ * timeout and a clear resolve `clicked: false`. A card with the id of a showing card replaces it.
++ * `_kural.cardClear` {id?} removes one card (no id: all) and resolves to how many were removed.
++ *
++ * Only `textContent` and style properties are set (never innerHTML), so the strings can be anything.
++ */
++
++interface IKuralCardOptions {
++	readonly id?: unknown;
++	readonly title?: unknown;
++	readonly body?: unknown;
++	readonly button?: unknown;
++	readonly color?: unknown;
++	readonly letter?: unknown;
++	readonly timeout?: unknown;
++}
++
++interface IKuralCardResult {
++	readonly clicked: boolean;
++	readonly supported: boolean;
++}
++
++const DEFAULT_TIMEOUT = 12000;
++const MIN_TIME_AFTER_MOUSE_LEAVES = 1500;
++
++/** The showing cards: id -> close it (`clicked`). */
++const cards = new Map<string, (clicked: boolean) => void>();
++
++let container: HTMLElement | undefined;
++
++function create(tag: string, css: string | undefined, text?: string): HTMLElement {
++	const element = mainWindow.document.createElement(tag);
++	if (css) {
++		element.style.cssText = css;
++	}
++	if (text !== undefined) {
++		element.textContent = text;
++	}
++	return element;
++}
++
++function getContainer(): HTMLElement {
++	if (!container || !container.isConnected) {
++		container = create('div', 'position:fixed;right:12px;bottom:34px;z-index:2600;display:flex;flex-direction:column-reverse;gap:8px;max-width:calc(100vw - 24px);pointer-events:none');
++		container.className = 'kural-cards';
++		mainWindow.document.body.appendChild(container);
++	}
++	return container;
++}
++
++function showCard(options: IKuralCardOptions): Promise<IKuralCardResult> {
++	const id = typeof options.id === 'string' && options.id ? options.id : '#' + Math.random();
++	cards.get(id)?.(false);
++
++	return new Promise<IKuralCardResult>(resolve => {
++		const card = create('div', 'pointer-events:auto;box-sizing:border-box;width:340px;max-width:100%;display:flex;align-items:center;gap:10px;padding:10px 8px 10px 10px;border-radius:8px;font-family:var(--vscode-font-family,sans-serif);font-size:13px;line-height:1.35;background:var(--vscode-notifications-background,#252526);color:var(--vscode-notifications-foreground,#cccccc);border:1px solid var(--vscode-notifications-border,var(--vscode-widget-border,transparent));box-shadow:0 2px 12px var(--vscode-widget-shadow,rgba(0,0,0,.4))');
++		card.setAttribute('role', 'status');
++
++		const letter = [...String(options.letter === undefined || options.letter === null ? '' : options.letter).trim()][0] || '';
++		const badge = create('div', 'flex:none;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--vscode-button-background,#0e639c);color:#ffffff;font-weight:700;font-size:16px;user-select:none', letter.toUpperCase());
++		if (options.color) {
++			badge.style.background = String(options.color);
++		}
++
++		const text = create('div', 'flex:1;min-width:0;display:flex;flex-direction:column;gap:2px');
++		text.append(create('div', 'font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', String(options.title === undefined || options.title === null ? 'Kural' : options.title)));
++		if (options.body) {
++			text.append(create('div', 'color:var(--vscode-descriptionForeground,#9d9d9d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap', String(options.body)));
++		}
++		card.append(badge, text);
++
++		const timeout = Number(options.timeout);
++		let left = timeout > 0 ? timeout : DEFAULT_TIMEOUT;
++		let startedAt = 0;
++		let timer: number | undefined;
++		let mouseOver = false;
++		let ended = false;
++
++		const done = (clicked: boolean): void => {
++			if (ended) {
++				return;
++			}
++			ended = true;
++			mainWindow.clearTimeout(timer);
++			card.remove();
++			if (cards.get(id) === done) {
++				cards.delete(id);
++			}
++			resolve({ clicked, supported: true });
++		};
++
++		const arm = (): void => {
++			if (ended || mouseOver) {
++				return;
++			}
++			startedAt = Date.now();
++			timer = mainWindow.setTimeout(() => done(false), Math.max(left, 0));
++		};
++
++		if (options.button) {
++			const button = create('button', 'flex:none;border:0;border-radius:4px;padding:5px 12px;cursor:pointer;background:var(--vscode-button-background,#0e639c);color:var(--vscode-button-foreground,#ffffff);font:inherit;font-size:12px', String(options.button));
++			button.addEventListener('mouseenter', () => { button.style.background = 'var(--vscode-button-hoverBackground,#1177bb)'; });
++			button.addEventListener('mouseleave', () => { button.style.background = 'var(--vscode-button-background,#0e639c)'; });
++			button.addEventListener('click', () => done(true));
++			card.append(button);
++		}
++
++		const close = create('button', 'flex:none;border:0;border-radius:4px;padding:2px 6px;cursor:pointer;background:transparent;color:var(--vscode-icon-foreground,var(--vscode-notifications-foreground,#cccccc));font-size:16px;line-height:1;opacity:.8', '×');
++		close.setAttribute('aria-label', 'Close');
++		close.addEventListener('click', () => done(false));
++		card.append(close);
++
++		card.addEventListener('mouseenter', () => {
++			if (ended || mouseOver) {
++				return;
++			}
++			mouseOver = true;
++			mainWindow.clearTimeout(timer);
++			left -= Date.now() - startedAt;
++		});
++		card.addEventListener('mouseleave', () => {
++			if (ended || !mouseOver) {
++				return;
++			}
++			mouseOver = false;
++			left = Math.max(left, MIN_TIME_AFTER_MOUSE_LEAVES);
++			arm();
++		});
++
++		cards.set(id, done);
++		getContainer().appendChild(card);
++		arm();
++	});
++}
++
++CommandsRegistry.registerCommand('_kural.card', (_accessor, options?: IKuralCardOptions) => showCard(options ?? {}));
++
++CommandsRegistry.registerCommand('_kural.cardClear', (_accessor, options?: { readonly id?: string }) => {
++	const ids = options?.id ? [options.id] : [...cards.keys()];
++	let cleared = 0;
++	for (const id of ids) {
++		const close = cards.get(id);
++		if (close) {
++			close(false);
++			cleared++;
++		}
++	}
++	return cleared;
++});
+diff --git a/src/vs/workbench/workbench.desktop.main.ts b/src/vs/workbench/workbench.desktop.main.ts
+index 60a967c2..23d9341e 100644
+--- a/src/vs/workbench/workbench.desktop.main.ts
++++ b/src/vs/workbench/workbench.desktop.main.ts
+@@ -178,6 +178,9 @@ import './contrib/browserView/electron-browser/browserView.contribution.js';
+ // Splash
+ import './contrib/splash/electron-browser/splash.contribution.js';
+ 
++// Kural: in-window cards
++import './contrib/kuralCard/browser/kuralCard.contribution.js';
++
+ // Local History
+ import './contrib/localHistory/electron-browser/localHistory.contribution.js';
+ 

@@ -16,6 +16,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:kural.chat",
+    "onView:kural.projects",
     "onView:kural.search",
     "onView:kural.plugins",
     "onView:kural.pluginsAlone",
@@ -367,6 +368,66 @@
         "title": "Kural: Show Plugins"
       },
       {
+        "command": "kural.projects.show",
+        "title": "Kural: Show Projects"
+      },
+      {
+        "command": "kural.projects.open",
+        "title": "Open Folder...",
+        "category": "Kural Projects",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "kural.projects.clone",
+        "title": "Clone Git Repository...",
+        "category": "Kural Projects",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "kural.projects.newProject",
+        "title": "New Empty Project (with Git)...",
+        "category": "Kural Projects",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "kural.projects.collapseAll",
+        "title": "Collapse All",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "kural.projects.find",
+        "title": "Find a Project or Chat",
+        "icon": "$(search)"
+      },
+      {
+        "command": "kural.projects.renameChat",
+        "title": "Rename"
+      },
+      {
+        "command": "kural.projects.deleteChat",
+        "title": "Delete"
+      },
+      {
+        "command": "kural.projects.moveChat",
+        "title": "Move to..."
+      },
+      {
+        "command": "kural.projects.pin",
+        "title": "Pin"
+      },
+      {
+        "command": "kural.projects.unpin",
+        "title": "Unpin"
+      },
+      {
+        "command": "kural.projects.close",
+        "title": "Close Project"
+      },
+      {
+        "command": "kural.projects.removeRecent",
+        "title": "Remove from Recent"
+      },
+      {
         "command": "kural.connectors.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
@@ -459,6 +520,11 @@
     "viewsContainers": {
       "activitybar": [
         {
+          "id": "kural-projects",
+          "title": "Projects",
+          "icon": "media/projects-icon.svg"
+        },
+        {
           "id": "kural-search",
           "title": "Search & Ask",
           "icon": "media/search-icon.svg"
@@ -495,6 +561,13 @@
       ]
     },
     "views": {
+      "kural-projects": [
+        {
+          "type": "webview",
+          "id": "kural.projects",
+          "name": "Projects"
+        }
+      ],
       "kural-search": [
         {
           "type": "webview",
@@ -560,8 +633,44 @@
         }
       ]
     },
+    "submenus": [
+      {
+        "id": "kural.projects.add",
+        "label": "Open a project...",
+        "icon": "$(add)"
+      }
+    ],
     "menus": {
+      "kural.projects.add": [
+        {
+          "command": "kural.projects.open",
+          "group": "1_open@1"
+        },
+        {
+          "command": "kural.projects.clone",
+          "group": "1_open@2"
+        },
+        {
+          "command": "kural.projects.newProject",
+          "group": "1_open@3"
+        }
+      ],
       "view/title": [
+        {
+          "command": "kural.projects.find",
+          "when": "view == kural.projects",
+          "group": "navigation@0"
+        },
+        {
+          "submenu": "kural.projects.add",
+          "when": "view == kural.projects",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kural.projects.collapseAll",
+          "when": "view == kural.projects",
+          "group": "navigation@2"
+        },
         {
           "command": "kural.search.refresh",
           "when": "view == kural.search && kural.searchTab != ask",
@@ -636,6 +745,42 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "kural.projects.collapseAll",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.find",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.renameChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.deleteChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.moveChat",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.pin",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.unpin",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.close",
+          "when": "false"
+        },
+        {
+          "command": "kural.projects.removeRecent",
+          "when": "false"
+        },
         {
           "command": "kural.review.accept",
           "when": "kural.reviewPending"
@@ -750,6 +895,41 @@
         }
       ],
       "webview/context": [
+        {
+          "command": "kural.projects.renameChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "1_chat@1"
+        },
+        {
+          "command": "kural.projects.moveChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "1_chat@2"
+        },
+        {
+          "command": "kural.projects.deleteChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "2_delete@1"
+        },
+        {
+          "command": "kural.projects.pin",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && !projectPinned",
+          "group": "1_project@1"
+        },
+        {
+          "command": "kural.projects.unpin",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && projectPinned",
+          "group": "1_project@1"
+        },
+        {
+          "command": "kural.projects.close",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && projectOpen",
+          "group": "2_remove@1"
+        },
+        {
+          "command": "kural.projects.removeRecent",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'project' && !projectOpen && !projectPinned",
+          "group": "2_remove@1"
+        },
         {
           "command": "kural.search.copy",
           "when": "webviewId == 'kural.search' && webviewSection == 'match'",
@@ -1258,6 +1438,12 @@
           "scope": "window",
           "default": "",
           "markdownDescription": "The activity bar color of this workspace, set by **Kural: Workspace Color...** (right-click the activity bar). Kural uses it to know which `workbench.colorCustomizations` entries are its own."
+        },
+        "kural.window.oneFrame": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "markdownDescription": "One window frame for all projects: opening a project from the Projects tab shows its window in the same place and size as the current one and hides the current one, instead of reloading it, so its chats keep working. Needs Kural built from source; the Kural you installed from VSCodium's build ignores it."
         },
         "kural.updates.autoCheck": {
           "type": "boolean",
