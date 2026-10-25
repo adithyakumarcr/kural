@@ -77,6 +77,8 @@ t("live runs the start check and the one-frame check as a normal user", () => {
   assert.ok(/openbox/.test(inside) && /Xvfb/.test(inside));
 });
 t("the scripts are executable and valid bash", () => {
+  // (Windows has no Unix modes, and its bash may be WSL's, which can't read a Windows path; the scripts run from a Mac or Linux.)
+  if (process.platform === "win32") { console.log("     (skipped on Windows)"); return; }
   for (const f of ["run.sh", "inside.sh"]) {
     assert.ok(fs.statSync(path.join(dir, f)).mode & 0o100, `${f} is not executable`);
     const r = spawnSync("bash", ["-n", path.join(dir, f)], { encoding: "utf8" });
