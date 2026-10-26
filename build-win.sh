@@ -15,7 +15,7 @@ python3 -c '' >/dev/null 2>&1 || python3() { python "$@"; }
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WINDOWS_HOST=1 ;; *) WINDOWS_HOST=0 ;; esac
 winpath() { if [ "$WINDOWS_HOST" = 1 ]; then cygpath -w "$1"; else printf '%s\n' "$1"; fi; }
 
-CODIUM_VER="${CODIUM_VER:-1.140.06880}"
+CODIUM_VER="${CODIUM_VER:-1.143.17183}"
 VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')"
 SRC="downloads/VSCodium-win32-x64-$CODIUM_VER.zip"
 WORK="build/win"

@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 NAME=kural            # command / folder name
 TITLE="Kural"         # name shown in the app
-CODIUM_VER="${CODIUM_VER:-1.140.06880}"
+CODIUM_VER="${CODIUM_VER:-1.143.17183}"
 
 mkdir -p dist
 R=pkg

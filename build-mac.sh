@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-CODIUM_VER="${CODIUM_VER:-1.140.06880}"
+CODIUM_VER="${CODIUM_VER:-1.143.17183}"
 VER="$(python3 -c 'import json;print(json.load(open("extension/package.json"))["version"])')"
 SRC="downloads/VSCodium-darwin-arm64-$CODIUM_VER.zip"
 OUT="dist/Kural-$VER-macos-arm64.zip"
