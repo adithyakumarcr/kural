@@ -1,3 +1,7 @@
+## Not released yet
+
+- Kural is built on VSCodium 1.143.17183 with Electron 43.8.3: the latest editor and browser security fixes.
+
 ## What's new in 1.2.1-beta.4
 
 - **A calmer Projects bar.** Like ChatGPT's project list: each project is a folder with its chats under it, under the
