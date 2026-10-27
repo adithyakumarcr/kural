@@ -65,7 +65,17 @@ const moved = (c) => c.ran.filter((r) => r[0] === "vscode.moveViews").map((r) =>
     assert.ok(/canToggleVisibility: item\.id !== 'kural\.projects'/.test(patch));
     assert.ok(/\+\s+canMoveView: viewContainer\?\.id !== REMOTE,/.test(patch) && !/canMoveView:[^\n]*kural\.projects/.test(patch));
     const py = fs.readFileSync(path.join(__dirname, "../scripts/rebrand.py"), "utf8");
-    assert.ok(py.includes("_kv.canToggleVisibility=!1}}") && !py.includes("_kv.canMoveView=!1"));
+    assert.ok(py.includes("_kv.canToggleVisibility=!1;") && !py.includes("_kv.canMoveView=!1"));
+  });
+  // (Seen in the built app, 27 Oct 2026: the second project's window had the Explorer above Projects. The Projects view's
+  // order was 1, its place in Kural's list + 1, like the file view's: VS Code breaks such a tie by which view was added
+  // first, and after the first start the moved Explorer views are placed before any extension's view registers.)
+  await check("0202 and rebrand.py: the Projects view sorts above the Explorer's views (order -1), whichever registered first", () => {
+    const patch = fs.readFileSync(path.join(__dirname, "../patches/kural/0202-projects-always-shown.patch"), "utf8");
+    assert.ok(/\+\s+order: item\.id === 'kural\.projects' \? -1 : order,/.test(patch), "the source patch");
+    assert.ok(/-\s+order: order,/.test(patch), "(in place of VS Code's own line)");
+    const py = fs.readFileSync(path.join(__dirname, "../scripts/rebrand.py"), "utf8");
+    assert.ok(py.includes("_kv.order=-1"), "VSCodium's build (rebrand.py)");
   });
 
   await check("0100: a window that never reports its first paint is shown after 5 s (and the hunk's line counts still match)", () => {

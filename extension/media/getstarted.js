@@ -238,7 +238,7 @@
         el("div", {}, el("h1", {}, "Get started with Kural"), el("p", { class: "muted" }, "Pick where Kural's AI comes from. Kural checks each step, so it works the first time.")),
         el("span", { class: "spacer" }), btn("Check again", "recheck", "small")),
       el("div", { class: "choices" },
-        choice("claude", "Claude", "Anthropic's Claude models: the most capable.", ["Needs a Claude plan and internet", "Agent teams, connectors, skills"], S.claudeReady),
+        choice("claude", "Claude", "Anthropic's Claude models: the most capable.", ["Needs a Claude plan and internet", "Parallel agents, connectors, skills"], S.claudeReady),
         choice("local", "Your own model", "A model on your computer, through Ollama.", ["Free, no account, works offline", "Your code stays on your computer"], !!S.localSet),
         ...Object.entries(S.cliInfo || {}).map(([id, c]) => choice(id, c.label, c.what, c.facts, c.set))),
       ...(S.path === "claude" ? [claudeStep(), loginStep(), testStep()] : S.path === "local" ? [ollamaStep(), modelStep(), localTestStep()]

@@ -429,7 +429,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   they are `patches/kural/0200-0203` and rebrand.py skips them; full
   `./install.sh`, a miss gives `::warning::` and VS Code's normal behaviour): `drop_explorer_empty_view` (no "You have not yet opened a
   folder" page), `projects_default_view` (the side bar opens Projects at every start; the container first), `projects_always_shown`
-  (no Hide, no drag; `canToggleVisibility`/`canMoveView` false), `add_in_window_card` (`_kural.card`, `_kural.cardClear`). Tests:
+  (no Hide: `canToggleVisibility` false; `canMoveView` stays true, so it can be reordered with the Explorer; `order` -1, above
+  the Explorer's views: its own order was 1 like the file view's, and VS Code breaks that tie by which registered first, the
+  Explorer's moved views in every window after the first, seen in the built app 27 Oct 2026), `add_in_window_card` (`_kural.card`, `_kural.cardClear`). Tests:
   `test/projects-page.test.js` (the page on a fake DOM), `test/projects-view.test.js` (the host on a stand-in vscode, a fake store and
   model; the last check uses the real `status.js`/`model.js`), `projects-status`, `projects-model`, `projects-chat`, `projects-notify`,
   `rebrand-projects`. NOT checked live: one-frame windows (the command, a hidden window still publishing its status file), the view in a built app (page layout, the + submenu, the badge, the status bar item), two
@@ -795,8 +797,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `_parentThread.commentThread`), others unchanged; Kural's thread = contextValue `kural-edit` OR an id starting with
   `kural.inlineEdit.` (`kural_edit_thread`): the extension host sends a new thread at once but its contextValue ~100 ms later
   (`eventuallyUpdateCommentThread` is debounced), so the box was sized 5 lines first and shrank only once you typed (Adithya,
-  27 Oct 2026); needs a full `./install.sh` (`test/rebrand-small-edit-box.test.js`; its real-file check prefers the unpatched
-  `build/vscode-out`). NOT clicked live. **The
+  27 Oct 2026); and review.css gives every comment input `min-height: 90px`, so with its editor laid out 2 lines tall the box
+  still LOOKED 5 lines tall (seen in the built app): the reply area marks the thread's body `kural-edit-box` and adds one
+  stylesheet per window lifting that minimum there (`SMALL_BOX_CSS`, more specific than review.css's 4-class rule); needs a full
+  `./install.sh` (`test/rebrand-small-edit-box.test.js`; its real-file check prefers the unpatched `build/vscode-out`). Checked
+  in the built app, 27 Oct 2026. **The
   Explorer** (`lib/explorer/`): a FileDecorationProvider fed by the chat's tool_use (`started`) / tool_result
   (`finished`) / `finishReply` (`ended`); reads blue (2.5 s after), changes yellow (until the answer ends + 4 s); colors
   `kural.explorer.reading/changing` in package.json `colors`. **Listen**: the voice leaves 0.35–0.5 s of silence before

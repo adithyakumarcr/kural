@@ -115,6 +115,7 @@ async function behavesAlways(reg, bar, item, views, label) {
     const mine = { id: "kural.projects", canToggleVisibility: true, canMoveView: true }, other = { id: "kural.chat", canToggleVisibility: true, canMoveView: true };
     reg.addViews([mine, other], "c");
     assert.deepStrictEqual([mine.canToggleVisibility, mine.canMoveView, other.canToggleVisibility, other.canMoveView], [false, true, true, true]);
+    assert.deepStrictEqual([mine.order, other.order], [-1, undefined], "Projects sorts above the Explorer's views; others keep theirs");
     assert.ok(reg._views.get("c").length === 2 && reg._views.get("c")[0] === mine && reg._views.get("c")[1] === other, "both views are still registered");
   });
   await check(`${label}: a frozen view doesn't stop the views after it`, () => {

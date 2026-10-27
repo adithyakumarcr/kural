@@ -30,8 +30,8 @@ On top of that, Kural adds:
 - **Tab Completion.** Grey suggestions as you type; **Tab** accepts. Change a name, and Kural offers to change it in
   the other files that use it.
 - **Inline edit (Ctrl+K).** Select code, say what to change, review it red/green.
-- **Projects.** The first tab in the left bar lists every project with a Kural window and each of its chats (working,
-  waiting for you, finished); one click brings that window forward or opens the project.
+- **Projects.** The first tab in the left bar lists your projects, each in its own color, with their chats (working,
+  waiting for you, finished) and a History of earlier ones; one click brings a project forward or opens it.
 - **Parallel agents.** A big request split between agents that work at the same time, each in its own copy of the
   project, on a cheaper model you pick; Kural merges their work.
 - **Fix with Kural, Rules, Agent Review.** One click from an error or a failed command to the chat; project rules in
@@ -174,25 +174,35 @@ Also in the chat:
 <img src="docs/screenshots/history.gif" align="right" width="270" hspace="12" alt="History: pin a chat, filter by workspace, search, and open a chat from another project">
 
 - **@ mentions.** Type `@` to mention a file in your sentence.
-- **Jira tickets.** **+ → Link ticket** links a Jira epic, story or task to the chat. Search your recent tickets,
-  a key like `PROJ-123`, or words. Claude then knows in every message which ticket you're working on, and reads
-  its details (acceptance criteria, comments) from Jira when needed. This needs the Atlassian connector in Claude
-  (claude.ai → Settings → Connectors); without it, the menu says so and how to connect it.
 - **Devices (SSH).** **+ → Link device** saves a Raspberry Pi or board computer (name, address, username, password;
   the password is used once to set up Kural's own SSH key on the device, and isn't saved) and links it to the chat: the AI runs commands and
   changes files on it, asking first in Agent mode. Click its chip for a terminal on it.
 - **Attachments.** **+ → Add files** adds files, images and PDFs. You can also paste a screenshot, or hold **Shift** and drag
   files from Kural's file explorer into the chat.
+- **Enhance prompt.** The wand beside Send: a quicker model (Claude Sonnet, or ChatGPT's or Gemini's equivalent) looks
+  through your project, read only, and rewrites what you typed into a clear prompt that points to the right files. You
+  check it and press Send; **Undo** puts back what you had. Switch chats meanwhile and it waits for the chat that asked.
+- **Voice input.** The microphone beside the wand (**Ctrl+Alt+V**): talk, and Whisper writes it down on your computer,
+  offline (English; a one-time download of about 60 MB). The quickest model you have takes out the "um"s and false
+  starts. The text goes into the box; nothing is sent until you press Send.
+- **Listen.** The speaker under a finished answer: Kural talks you through it in a voice made on your computer and
+  highlights the part it's explaining (English; a one-time download of about 430 MB).
+- **Side chat.** Select text in an answer and press **Ask** for a quick question about it: a fast model answers right
+  under it, and the conversation itself doesn't change.
+- **Skills and your shortcuts.** Type `/` (at the start or after a space) for your Claude Code skills and commands, and
+  for your own shortcuts: a name such as `/pr-summary` for a text you write once (Kural Settings → Shortcuts).
 - **Questions with options.** When a choice is yours, Kural asks with options you can click.
 - **Send while it works.** Enter while an answer runs doesn't stop it: your message is queued and the AI takes it in
   at its next step, inside the same answer ("You added this while it worked"), or answers it right after. **Stop** (or
   Esc) stops the answer and puts a queued message back into the box.
-- **Model and intensity.** Claude's Opus / Sonnet / Haiku, Google Gemini and ChatGPT (Codex) models, or a model on your
-  computer, and Low → Max. You can switch
-  in the middle of a conversation; the new model gets the conversation so far.
-- **Moods.** **Explorer** compares options, **Critic** pushes back, and **Learn** teaches you: it first asks which
-  ideas behind your question you already know, explains the others, answers, then checks you got it. **Add your own
-  mood…** makes your own (a name, a hint, instructions for the AI; Kural Settings → Moods).
+- **Model and intensity.** The model menu (with a search box) has Claude's Opus / Sonnet / Haiku, Google Gemini and
+  ChatGPT (Codex) models, or a model on your computer, and Low → Max. Its **Auto** switch lets the Model Router pick the
+  model and the intensity for each message. You can switch in the middle of a conversation; the new model gets the
+  conversation so far.
+- **Preferences.** **Explorer** compares options, **Critic** pushes back, and **Learn** teaches you: it first asks which
+  ideas behind your question you already know, explains the others, answers, then checks you got it (ask it to
+  "explain it on a webpage" for a short slide deck beside the chat). **Add your own…** makes your own (a name, a hint,
+  instructions for the AI; Kural Settings → Preferences).
 - **Edit, restore, fork.** Hover a message you sent: **Edit** it and send again, **Restore code** (the files the AI
   changed after it go back), or **Fork from here** (a new chat with the conversation up to that point).
 - **Notifications.** When an answer is done or needs you (a command to allow, a question) and you're not looking, a
@@ -205,8 +215,8 @@ Also in the chat:
 - **Several chats at once.** Drag a chat tab out of the Kural panel into the editor area: it opens there, beside the
   code, with its own input. Or keep them in the panel, side by side (also with the panel maximized): drag a tab to the
   left or right side of the chat, or press Split. All of them can work at the same time.
-- **History.** The clock button lists every chat, from every workspace, in full. Search them, pin the ones you
-  need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
+- **History.** The clock button lists every chat, from every workspace, in full, each with a short title the fastest
+  model wrote. Search them, pin the ones you need on top, delete what you don't (it asks once). A chat from another workspace opens to read; to carry on, open
   its folder, or **Continue here** (a new chat here that knows the old conversation).
 - **How it worked.** The AI's thoughts, reads, searches, commands and edits fold into one line above its answer
   ("Worked for 18 s · 7 thoughts, 2 reads, 3 edits"); click it to see each step.
@@ -257,12 +267,17 @@ More: [docs/wiki/Fix-with-Kural.md](docs/wiki/Fix-with-Kural.md).
 
 ### Projects
 
-The first tab in the left bar lists your projects (**Pinned**, **Open**, **Recent**) and under each open one its chats:
-a spinner while one works, an orange dot while it waits for you, a purple dot when it finished and you haven't seen it.
-Click a project to bring its window forward (or open it), a chat to show it there. The red **×** closes a project
-(after asking, naming chats that are working); **+** opens a folder, clones a repository or makes a new empty project with
-Git. The icon shows a number and the status bar says "N projects need a look" for finished or waiting chats in your other
-projects; a chat finishing in another window shows a small card in the window you're in.
+The first tab in the left bar lists your projects (**Pinned**, **Open**, **Recent**) as folders, each in its own color,
+with its chats under it: a spinner while one works, an orange dot while it waits for you, a blue dot when it finished
+and you haven't seen it. Under them, a folded **History** holds the project's earlier chats (**Clear all** on its
+heading deletes them, after asking). Click a project to bring its window forward (or open it), a chat to show it there.
+Right-click a chat to **Rename** it (or F2), **Fork to** or **Move to** another open project (point at either and the
+open projects show right under it), or **Delete** it; or drag it onto another project to move it. The red **×** closes a
+project (after asking, naming chats that are working); **+** opens a folder, clones a repository or makes a new empty
+project with Git. The Explorer's views are in the same side bar, under Projects (**Ctrl+Shift+E**). The icon shows a
+number and the status bar says "N projects need a look" for finished or waiting chats in your other projects; a chat
+finishing in another window shows a small card in the window you're in. When you build Kural yourself, every project
+keeps its window but they share one frame: switching keeps the place and size, and the chats you left keep running.
 More: [docs/wiki/Projects.md](docs/wiki/Projects.md).
 
 ### Rules
@@ -345,6 +360,9 @@ added the low stock check`, and Kural suggests the command (`git push origin HEA
 Select code, press **Ctrl+K**, and say what to change. Then review the proposed change in a read-only diff and keep it
 (**Ctrl+Enter**) or reject it (**Ctrl+Shift+Backspace**); on a Mac, Cmd instead of Ctrl. With nothing selected, Ctrl+K
 proposes new code at the cursor. The original buffer stays unchanged until you accept, including with Auto Save enabled.
+The box opens right under the selection, two lines tall, and grows as you type. **Alt+Enter** asks a quick question about
+the code instead (the fastest model answers in the box), and **Ctrl+L** sends the code and your words to the chat. With
+code selected, **Add to Chat** and **Quick Edit** buttons show at the cursor.
 
 ![Ctrl+K: select code, say what to change, review the green lines, accept](docs/screenshots/inline-edit.gif)
 
@@ -353,11 +371,13 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
 - **Search & Ask** (magnifier icon). **Search** (Ctrl+Shift+F): find and replace in your files, with everything VS
   Code's own Search had (Kural hides that one). **Ask** (Ctrl+Alt+A): ask "where is the retry limit set?" and get the
   exact `file:line` places, from the fastest model you have (Claude's Haiku, or Gemini's or Codex's lightest).
-- **Extensions & Plugins** (the Extensions icon, Ctrl+Shift+X), two tabs like Search & Ask: VS Code's **Extensions**,
-  and **Plugins**, the AI plugins of the AI your chat uses (skills, commands, agents, hooks, MCP servers: Superpowers,
-  say). Search Anthropic's plugin directory and your marketplaces, install, turn off, remove; a plugin's page says what
-  it adds and how many tokens it costs every chat. It follows the chat's model: Claude's, ChatGPT's (Codex) or
-  Gemini's (Antigravity) plugins. Installing always asks first: a plugin runs code as you.
+- **Extensions, Plugins and Connectors** (the Extensions icon, Ctrl+Shift+X), three tabs like Search & Ask: VS Code's
+  **Extensions**; **Plugins**, the AI plugins of the AI your chat uses (skills, commands, agents, hooks, MCP servers:
+  Superpowers, say), from Anthropic's plugin directory and your marketplaces, with a page that says what each adds and
+  how many tokens it costs every chat; and **Connectors**, the AI's MCP servers: add one from a list (Notion, Linear,
+  Sentry, GitHub…), sign in, or turn one off everywhere in Kural. It follows the chat's model: Claude's, ChatGPT's
+  (Codex) or Gemini's (Antigravity). Install is a download icon that shows when you point at a row, and installing
+  always asks first: a plugin runs code as you.
 - **Kural Settings** (person icon in the status bar, which shows your account's name): your accounts and usage,
   updates, the guide, in one tab.
 - **Browser with Design Mode.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
@@ -372,9 +392,9 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
 - **Claude Code (Ctrl+Esc).** The full Claude Code terminal beside your file.
 - **AI Usage** (bottom panel, next to Terminal). One compact summary per AI, showing its most used limit and reset
   time. **Details** expands other limits and token history. Click the chat's context ring to open it; hover the ring
-  for tokens consumed and tokens in context. **Kural Settings → AI Usage** adds optional automatic switching at an
-  editable percentage (70% initially): the same chat and its context continue with another available service below
-  the threshold, after active work finishes. This works with manual models and Auto. The status bar
+  for tokens consumed and tokens in context. Each AI's page in **Kural Settings** has **Switch to another AI near a
+  limit** (off at first; Session and Weekly points, 70 % to start): the same chat and its context continue with another
+  available service below its own points, after active work finishes. This works with manual models and Auto. The status bar
   shows the Session limit (`Usage 50% · resets 42m`; orange from 80 %, red from 95 %); hover for every limit,
   click for the panel.
 - **A simpler window.** VS Code's Run and Debug side bar, Debug Console and Ports are hidden (while you debug with F5
@@ -390,6 +410,10 @@ proposes new code at the cursor. The original buffer stays unchanged until you a
   intentionally grants broader access. Provider-native reads are not a filesystem sandbox. Gemini asks Kural through an approval gate
   installed in Antigravity's hooks (`~/.gemini/config/hooks.json`), checked with the real program (agy 1.3.4;
   `scripts/verify-agy-gate.sh`). Use these providers only with trusted repositories and separately isolated accounts.
+- **Profiles.** A separate Kural setup with its own Claude and ChatGPT (Codex) accounts, say a personal one and a work
+  one. The profile item in the status bar switches between them; chats can be shared with the main profile or kept apart.
+- **Workspace Color.** Right-click the activity bar → **Workspace Color...** to give each workspace's activity bar its
+  own soft color, so you can tell your windows apart.
 - **Account** (person icon in the status bar). For Claude, Google Gemini and ChatGPT (Codex): who you're logged in as and your
   plan, the usage page, switch account, log out; and check for updates.
 - **Your whole Claude Code setup.** MCP servers, connectors, plugins, skills, hooks and `CLAUDE.md` all work in the
@@ -405,12 +429,16 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 
 | Shortcut | What it does |
 |---|---|
-| **Ctrl+L** | open the chat; with code selected, adds it to the message |
+| **Ctrl+L** | show or hide the chat; with code selected, adds it to the message |
 | **Ctrl+Alt+N** | new chat tab |
 | **Ctrl+K** | inline edit |
 | **Ctrl+Enter** / **Ctrl+Shift+Backspace** | keep / reject an inline edit |
 | **Ctrl+Alt+Space** | Tab Completion on/off *(Ctrl on Mac too)* |
 | **Ctrl+Alt+A** | Ask |
+| **Ctrl+Shift+F** / **Ctrl+Shift+H** | search / replace in your files |
+| **Ctrl+Shift+E** | the Explorer's files (under Projects) |
+| In the Ctrl+K box: **Alt+Enter** / **Ctrl+L** | quick question / send to the chat |
+| In the chat: **Ctrl+Alt+V** | voice input |
 | **Ctrl+Esc** | Claude Code terminal |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |
 | In the chat: **Ctrl+P** | Plan mode on/off *(Ctrl on Mac too)* |

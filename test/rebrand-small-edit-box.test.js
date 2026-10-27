@@ -19,7 +19,8 @@ const patch = (text) => spawnSync("python3", ["-c", `import sys\nsys.path.insert
 const STAND_IN = 'function Pr(a,b,c){return Math.min(Math.max(a,b),c)}' +
   'function MZt(s,o,e){let t=o.getLayoutInfo(),i=o.getOption(75),n=o._getViewModel()?.getLineCount()*i;if(n>t.height||n<t.height&&e>cxe){let r=Math.ceil((n-t.height)/i),a=t.height+i*r;return Pr(a,cxe,Pr(s.getLayoutInfo().height-90,cxe,Vlr))}return e}' +
   'var Ulr=0,cxe=90,Vlr=450,UA=class extends Object{constructor(o,e,t,i){super();this._parentThread=i}};' +
-  'var Cze=class extends Object{constructor(e,t,i,n){super();this.owner=e;this._commentThread=n;this._commentThreadDisposables=[];this._editorHeight=cxe;this._container=t}};';
+  'function E(p,c){p.kids=(p.kids||[]).concat([c]);return c}function _(sel){return{sel}}' +
+  'var Cze=class extends Object{constructor(e,t,i,n){super();this.owner=e;this._commentThread=n;this._commentThreadDisposables=[];this._editorHeight=cxe;this._container=E(t,_(".comment-form-container")),this._form=E(this._container,_(".comment-form"))}};';
 
 function run(code) {
   const ctx = {};
@@ -30,6 +31,11 @@ function run(code) {
 const input = (lines, height, contextValue, threadId = "pr.1") => ({ getLayoutInfo: () => ({ height }), getOption: () => 18,
   _getViewModel: () => ({ getLineCount: () => lines }), _parentThread: { commentThread: { contextValue, threadId } } });
 const parent = { getLayoutInfo: () => ({ height: 1000 }) };
+function body(doc = page()) { const cls = new Set(); return { cls, classList: { add: (c) => cls.add(c) }, ownerDocument: doc }; }
+function page() {
+  const styles = [];
+  return { styles, getElementById: (id) => styles.find((x) => x.id === id) || null, createElement: () => ({ id: "", textContent: "" }), head: { append: (x) => styles.push(x) } };
+}
 
 const out = patch(STAND_IN);
 check("the stand-in is patched without warnings", () => {
@@ -39,9 +45,23 @@ check("the stand-in is patched without warnings", () => {
 });
 const after = run(out.stdout);
 check("Kural's box starts at 2 lines; another comment box at VS Code's 5", () => {
-  assert.strictEqual(new after.Cze(0, null, 0, { contextValue: "kural-edit" })._editorHeight, 36);
-  assert.strictEqual(new after.Cze(0, null, 0, { contextValue: "pr-review" })._editorHeight, 90);
-  assert.strictEqual(new after.Cze(0, null, 0, undefined)._editorHeight, 90);
+  assert.strictEqual(new after.Cze(0, body(), 0, { contextValue: "kural-edit" })._editorHeight, 36);
+  assert.strictEqual(new after.Cze(0, body(), 0, { contextValue: "pr-review" })._editorHeight, 90);
+  assert.strictEqual(new after.Cze(0, body(), 0, undefined)._editorHeight, 90);
+});
+// (Checked in the built app, 27 Oct 2026: the editor WAS laid out 36 px tall, but review.css gives every comment input
+// min-height: 90px, so the box still looked 5 lines tall. Kural's box lifts that minimum for itself only.)
+check("Kural's box lifts VS Code's 90 px minimum (review.css) for itself only, with one stylesheet per window", () => {
+  const doc = page(), mine = body(doc), other = body(doc);
+  new after.Cze(0, mine, 0, { threadId: "kural.inlineEdit.1" });
+  new after.Cze(0, body(doc), 0, { contextValue: "kural-edit" });
+  new after.Cze(0, other, 0, { contextValue: "pr-review", threadId: "pr.4" });
+  assert.ok(mine.cls.has("kural-edit-box"), "Kural's box is marked");
+  assert.ok(!other.cls.has("kural-edit-box"), "another comment box isn't");
+  assert.strictEqual(doc.styles.length, 1, "one stylesheet, however many boxes");
+  const css = doc.styles[0].textContent;
+  // (more specific than review.css's ".review-widget .body .comment-form-container .monaco-editor": 4 classes)
+  assert.ok(css.includes(".review-widget .body.kural-edit-box .comment-form-container .monaco-editor{min-height:0}"), css);
 });
 check("one typed line: Kural's box shrinks to 2 lines, others stay at 5", () => {
   assert.strictEqual(after.MZt(parent, input(1, 90, "kural-edit"), 90), 36);
@@ -50,9 +70,9 @@ check("one typed line: Kural's box shrinks to 2 lines, others stay at 5", () => 
 // (The extension host sends a new thread at once but its contextValue ~100 ms later, debounced: the box was sized before
 // it knew it was Kural's and stayed 5 lines tall until you typed. The thread's id, "kural.inlineEdit.<n>", comes at once.)
 check("before its contextValue arrives, Kural's box is known by its thread id (kural.inlineEdit.<n>)", () => {
-  assert.strictEqual(new after.Cze(0, null, 0, { threadId: "kural.inlineEdit.3" })._editorHeight, 36);
+  assert.strictEqual(new after.Cze(0, body(), 0, { threadId: "kural.inlineEdit.3" })._editorHeight, 36);
   assert.strictEqual(after.MZt(parent, input(1, 0, undefined, "kural.inlineEdit.3"), 36), 36);
-  assert.strictEqual(new after.Cze(0, null, 0, { threadId: "kural.inlineEditor.3" })._editorHeight, 90, "only Kural's controller");
+  assert.strictEqual(new after.Cze(0, body(), 0, { threadId: "kural.inlineEditor.3" })._editorHeight, 90, "only Kural's controller");
   assert.strictEqual(after.MZt(parent, input(1, 90, undefined, "other.1"), 90), 90);
 });
 check("more lines: Kural's box grows with them (up to VS Code's maximum)", () => {
@@ -85,7 +105,8 @@ else {
     assert.ok(!/::warning::/.test(r.stdout.slice(0, 300)), r.stdout.slice(0, 300));
     assert.ok(r.stdout.includes("/*kural-small-box*/"));
     assert.strictEqual((r.stdout.match(/kural-small-box/g) || []).length, 1);
-    assert.ok(/this\._editorHeight=\(this\._commentThread\?\.contextValue==="kural-edit"\|\|String\(this\._commentThread\?\.threadId\|\|""\)\.startsWith\("kural\.inlineEdit\."\)\)\?36:/.test(r.stdout));
+    assert.ok(/this\._editorHeight=\(this\._commentThread\?\.contextValue==="kural-edit"\|\|String\(this\._commentThread\?\.threadId\|\|""\)\.startsWith\("kural\.inlineEdit\."\)\)\?\(\(\)=>\{try\{([\w$]+)\.classList\.add\("kural-edit-box"\).{0,300}return 36\}\)\(\):[\w$]+;this\._container=[\w$]+\(\1,/.test(r.stdout),
+      "the first height, and the body marked: the container the form goes in");
     // (An ES module: checked by node itself, without running it.)
     const tmp = path.join(require("os").tmpdir(), `kural-small-box-${process.pid}.mjs`);
     fs.writeFileSync(tmp, r.stdout);

@@ -9,7 +9,7 @@
   and the text being enhanced no longer comes along into the other chat's box.
 - **History is safer.** A chat is no longer lost to a damaged or missing History card, and deleted chats stay deleted.
 - **History under each project** in the Projects bar (folded; drag a chat to another project, Move to... and Fork to...).
-- **Projects and the Explorer share one container**; projects can be collapsed and reordered.
+- **Projects and the Explorer share one container**, Projects on top in every window; projects can be collapsed and reordered.
 - **Linux:** opening a second project re-checks one-frame windows, and a window whose first paint never reports is shown after 5 s.
 - **Ask's box lines up with Search's.**
 - **Right-click a chat in Projects:** Rename, Fork to › and Move to › (a list of the open projects), Delete.

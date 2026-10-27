@@ -616,7 +616,9 @@ def projects_always_shown(text):
         return text
     pid = json.dumps(PROJECTS_CONTAINER)
     views = adds[0][0].group(1)
-    view_code = (f'{PA_MARK}try{{for(const _kv of {views})try{{if(_kv&&_kv.id==={json.dumps(PROJECTS_VIEW)}){{_kv.canToggleVisibility=!1}}}}catch{{}}}}catch{{}}')
+    # (order -1: above the Explorer's views in Projects' container. Kural's own order was 1, like the file view's, and VS Code
+    # breaks that tie by which view was added first: after the first start the Explorer's moved views come first.)
+    view_code = (f'{PA_MARK}try{{for(const _kv of {views})try{{if(_kv&&_kv.id==={json.dumps(PROJECTS_VIEW)}){{_kv.canToggleVisibility=!1;_kv.order=-1}}}}catch{{}}}}catch{{}}')
     edits = [
         (unpin[0].end(), unpin[0].end(), f'{PA_MARK}if({unpin[0].group(1)}==={pid})return;'),
         (move[0].end(), move[0].end(), f'{PA_MARK}if({move[0].group(1)}==={pid}||{move[0].group(2)}==={pid})return!1;'),
@@ -854,9 +856,13 @@ def patch_webview_microphone(app):
 # Ctrl+K's question box (extension/lib/edit/inline-ask.js) is a comment thread, and VS Code gives every comment input at
 # least 5 lines (90 px; Adithya, 23 Oct 2026: "why such a huge block, keep it small"). Kural's box (contextValue
 # "kural-edit") starts at 2 lines and grows as you type, up to VS Code's own maximum; every other comment box is unchanged.
-# Two places: the reply area's first height (this._editorHeight=<90>, where this._commentThread is already set) and the
-# size rule every comment input uses (its parent widget's commentThread).
+# Three parts: the reply area's first height (this._editorHeight=<90>, where this._commentThread is already set), the
+# size rule every comment input uses (its parent widget's commentThread), and VS Code's CSS: review.css gives every comment
+# input min-height: 90px, so the box still looked 5 lines tall with its editor laid out at 2 (seen in the built app,
+# 27 Oct 2026). The reply area marks the thread's body (its container, `t`) "kural-edit-box" and adds one stylesheet per
+# window that lifts that minimum there, more specific than review.css's rule (4 classes).
 SMALL_BOX_MARK = "/*kural-small-box*/"
+SMALL_BOX_CSS = ".review-widget .body.kural-edit-box .comment-form-container .monaco-editor{min-height:0}"
 
 
 # Is this thread Kural's? Its contextValue says so, but VS Code's extension host sends a new thread at once and its
@@ -869,7 +875,7 @@ def kural_edit_thread(thread):
 
 COMMENT_HEIGHTS = re.compile(r'([\w$]+)=90,([\w$]+)=450,[\w$]+=class extends [\w$]+\{constructor\(')
 COMMENT_SIZE_RULE = r'(function [\w$]+\(([\w$]+),([\w$]+),([\w$]+)\)\{)(let [\w$]+=\3\.getLayoutInfo\(\),[\w$]+=\3\.getOption\((\d+)\),.{0,300}?return \4\})'
-COMMENT_FIRST_HEIGHT = r'this\._editorHeight={MIN};this\._container='
+COMMENT_FIRST_HEIGHT = r'this\._editorHeight={MIN};this\._container=([\w$]+)\(([\w$]+),'
 
 
 def small_edit_box(text):
@@ -894,8 +900,13 @@ def small_edit_box(text):
     pick = (f'let __kmin={SMALL_BOX_MARK}{kural_edit_thread(editor + "._parentThread?.commentThread")}'
             f'?2*{editor}.getOption({option}):{low};')
     text = text[:m.start()] + m.group(1) + pick + body + text[m.end():]
-    return first.sub(lambda _: f'this._editorHeight={kural_edit_thread("this._commentThread")}?36:{low};this._container=',
-                     text, count=1)
+    def mark(fm):   # (the container: the thread's body element, the reply area's second constructor argument)
+        box = fm.group(2)
+        css = (f'try{{{box}.classList.add("kural-edit-box");const d={box}.ownerDocument;if(!d.getElementById("kural-edit-box-css"))'
+               f'{{const s=d.createElement("style");s.id="kural-edit-box-css";s.textContent={json.dumps(SMALL_BOX_CSS)};d.head.append(s)}}}}catch{{}}')
+        return (f'this._editorHeight={kural_edit_thread("this._commentThread")}?(()=>{{{css}return 36}})():{low};'
+                f'this._container={fm.group(1)}({box},')
+    return first.sub(mark, text, count=1)
 
 
 # The side bar stays when the chat is maximized (Adithya, 27 Oct 2026: "when Kural goes full screen, Projects also minimizes").
