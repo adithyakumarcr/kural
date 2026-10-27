@@ -37,7 +37,7 @@
 
     function menuItems(t) {
       if (/^ollama:/.test(t.model || "")) return [];   // (one GPU for every agent: slower, not faster)
-      const editing = t.mode === "agent" || t.mode === "debug" || t.mode === "auto", models = modelsOf(t.model);
+      const editing = t.mode === "agent" || t.mode === "auto", models = modelsOf(t.model);
       return [
         d.el("div", { class: "mh" }, "Parallel agents"),
         d.el("div", { class: `mi${t.split ? " on" : ""}`, role: "menuitemcheckbox", "aria-checked": String(!!t.split),

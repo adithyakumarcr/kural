@@ -37,4 +37,4 @@ right-click menu does the same for the active terminal. If that terminal has no 
 - The chat's mode decides what the AI may do about it: in **Agent** it fixes the code and asks before commands; in **Ask**
   it only explains.
 
-See also [[Chat]], [[Terminal]] and [[Debug Mode]].
+See also [[Chat]] and [[Terminal]].

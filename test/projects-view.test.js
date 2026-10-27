@@ -580,6 +580,38 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     t.p.stop();
   });
 
+  await check("the page's own menu: Fork to and Delete come as messages; a History chat is deleted after asking", async () => {
+    const t = make(); setModel(t, WITH_HISTORY());
+    await t.p.onMessage({ type: "forkChat", key: "f:/p/kural", chatId: "1", to: "x" });
+    assert.deepStrictEqual(t.ch.did, [["forkCopy", "1"]]);
+    assert.deepStrictEqual(t.status.sent, [["w-mesh", { type: "adoptChat", chatId: "f1", from: "kural" }]]);
+    t.ch.did.length = 0;
+    warn = async () => undefined;
+    await t.p.onMessage({ type: "deleteChat", key: "f:/p/kural", chatId: "h1" });
+    assert.ok(!t.ch.did.some((d) => d[0] === "delete"), "closed the question: nothing deleted");
+    warn = async () => "Delete";
+    await t.p.onMessage({ type: "deleteChat", key: "f:/p/kural", chatId: "h1" });
+    assert.ok(t.ch.did.some((d) => d[0] === "delete" && d[1] === "h1"));
+    t.p.stop();
+  });
+
+  await check("Clear all: every saved chat of the project but its open ones, read from disk, deleted after asking; another project's stay", async () => {
+    const t = make(); setModel(t, CHATS());
+    const w = (k) => ({ key: k, name: path.basename(k), open: k });
+    t.ch.cards = [{ id: "a", title: "A", when: 2, workspace: w("/p/kural") }, { id: "b", title: "B", when: 1, workspace: w("/p/kural") },
+      { id: "1", title: "open one", when: 3, workspace: w("/p/kural") }, { id: "z", title: "Z", when: 1, workspace: w("/p/weld-sim") }];
+    let asked = null;
+    warn = async (title, o) => { asked = [title, o.detail]; return undefined; };
+    await t.p.onMessage({ type: "clearHistory", key: "f:/p/kural" });
+    assert.match(asked[0], /Clear kural's History\?/); assert.match(asked[1], /2 saved chats/);
+    assert.ok(!t.ch.did.some((d) => d[0] === "delete"));
+    warn = async () => "Clear All";
+    await t.p.onMessage({ type: "clearHistory", key: "f:/p/kural" });
+    assert.deepStrictEqual(t.ch.did.filter((d) => d[0] === "delete").map((d) => d[1]), ["a", "b"]);
+    assert.ok(t.ch.did.some((d) => d[0] === "cards" && d[1] === true), "read from disk");
+    t.p.stop();
+  });
+
   await check("fork: a chat that is open in another window is copied by that window (a request); a chat that can't be copied says so", async () => {
     const t = make(); setModel(t, WITH_HISTORY());
     t.p.forkChat("w", "5", "x");

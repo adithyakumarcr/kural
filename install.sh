@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Build Kural from this code and install it on this computer: a Mac (Apple Silicon) or Ubuntu / Debian.
 #
-#   ./install.sh            build everything and install it (on a Mac it then opens Kural)
+#   ./install.sh            build everything and install it (on a Mac it then opens Kural). VS Code itself is built from
+#                           its source with Kural's patches (scripts/vscode/): one window for all your projects (the Projects
+#                           bar) needs them. About 5 minutes; the first time 30-60 minutes.
+#   ./install.sh --quick    use VSCodium's download instead of building VS Code (about a minute). That build has no
+#                           one-frame windows: every project opens a window of its own.
 #   ./install.sh --ext      only put your changes in extension/ into the installed Kural (a few seconds)
 #   ./install.sh --no-open  don't open Kural afterwards (Mac)
-#   ./install.sh --source   Mac or Ubuntu (x64): build VS Code from its source with Kural's patches (scripts/vscode/, ~30 min
-#                           the first time) instead of using VSCodium's download
+#   ./install.sh --source   the default (kept for old habits)
 #   ./install.sh --fresh    install like on a new computer: your Kural settings, chats and extensions are moved to a
 #                           backup folder first (Claude Code and Ollama are separate programs: not touched)
 #   ./install.sh --from-scratch-install
@@ -13,24 +16,37 @@
 #                           and Antigravity out, resets the macOS permissions you gave Kural, and can remove those
 #                           programs too (it asks). Ollama stays. See scripts/from-scratch.sh.
 #
-# The first full build downloads VSCodium once (~250 MB, kept in downloads/). Later builds take about a minute.
-# Windows is built on Linux: ./build-win.sh
+# The first build from source fetches VS Code's and VSCodium's code into build/ and npm's packages (a few GB); later builds
+# reuse them. --quick downloads VSCodium once (~250 MB, kept in downloads/). Ubuntu on a computer that isn't x64: --quick
+# (VS Code's source build there is x64 only). Windows is built with ./build-win.sh (from source: on Windows, see
+# docs/wiki/Building-from-Source.md).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-MODE=full OPEN=1 FRESH=0 SCRATCH=0
+MODE=full OPEN=1 FRESH=0 SCRATCH=0 SOURCE=default
 for a in "$@"; do
   case "$a" in
     --ext) MODE=ext ;;
     --no-open) OPEN=0 ;;
-    --source) export KURAL_SOURCE=1 ;;
+    --source) SOURCE=1 ;;
+    --quick) SOURCE=0 ;;
     --fresh) FRESH=1 ;;
     --from-scratch-install|--from-scratch) SCRATCH=1 ;;
-    -h|--help) sed -n 2,17p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,23p "$0"; exit 0 ;;
     *) echo "Unknown option: $a (try --help)"; exit 1 ;;
   esac
 done
 die() { echo "Error: $*" >&2; exit 1; }
+# VS Code from source unless you asked for --quick (Ubuntu on arm64 and other systems: VSCodium's download, said once).
+if [ "$SOURCE" = default ]; then
+  SOURCE=1
+  if [ "$(uname -s)" = Linux ] && [ "$(uname -m)" != x86_64 ]; then
+    SOURCE=0
+    [ "$MODE" = full ] && echo "Note: VS Code's source build on Linux is for x64 computers; this one is $(uname -m), so Kural uses VSCodium's download (no one-frame windows)."
+  fi
+fi
+export KURAL_SOURCE="$SOURCE"   # (also over a KURAL_SOURCE=1 in your environment when you asked for --quick)
+quick_note() { [ "$SOURCE" = 0 ] && echo "(--quick: this Kural has no one-frame windows; every project opens a window of its own. ./install.sh without --quick builds them in.)" || true; }
 
 # Which code this build is from, so Kural shows "Unreleased version · main (b233785)" instead of the release number.
 # Exactly a release tag (vX.Y.Z of this version, no changes): no note, it's that release. (extension/build.json isn't
@@ -148,6 +164,7 @@ mac() {
     # (The app icon: macOS's own sips and iconutil make it, or Pillow if your python3 has it: scripts/make-icons.py.
     # Nothing is installed for the build.)
     ./build-mac.sh
+    quick_note
     # (The new app is copied next to the old one and checked first, the old one is only renamed, never deleted before the
     # new one is in place and checked: lib/mac-swap.sh, the same code the in-app updater uses.)
     replace_app "$clear; . $(qs "$PWD/extension/lib/mac-swap.sh"); echo 'Installing into $APPDIR ...'; if kural_swap $(qs "$PWD/build/mac/Kural.app") $(qs "$APPDIR"); then echo Done.; else echo 'Kural was NOT updated (the old version is still there).'; fi; $start"
@@ -182,6 +199,7 @@ linux() {
     sudo apt-get update -qq && sudo apt-get install -y "${need[@]}"
   fi
   ./make-deb.sh
+  quick_note
   local deb; deb=$(ls -t dist/kural_*_amd64.deb | head -1)
   # apt replaces Kural's files: with Kural open they'd change under it (it can crash). Close it first. From Kural's own
   # terminal that can't work (closing Kural ends this script): use another terminal.

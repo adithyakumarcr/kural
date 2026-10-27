@@ -70,7 +70,6 @@ const allowedKinds = (allowAll) => Array.isArray(allowAll) ? allowAll : allowAll
 //   that keep an approval gate working (agy's hooks, Kural's launcher): writing one asks, even in Auto. Auto runs everything else.
 //   privateFolders: check the AI's looks into Desktop, Documents, Downloads, Music, Pictures… (on a Mac, where macOS asks).
 function decide({ tool, input = {}, mode, allowAll = false, allowAllDevice = null, device = null, writeRoots = [], readRoots = [], granted = [], cwd = "/", notice = false, unclassified = false, guard = null, privateFolders = process.platform === "darwin" }) {
-  if (mode === "debug") mode = "agent";   // (Debug asks and allows exactly like Agent)
   // Enforce read-only modes here, even after a live transition or a provider sends an unexpected call.
   if ((mode === "ask" || mode === "plan") && (EDIT_TOOLS.has(tool) || ["Bash", "DeviceCommand", "DeviceWrite", "Browser", "BrowserAction", "BrowserUpload"].includes(tool)))
     return { deny: true, message: `${mode} mode cannot run commands or change files.` };
@@ -175,11 +174,8 @@ function privateWhy(tool, input, cwd, ok) {
 // chat's: that mode. A stricter one (parallel agents' lead plans in Plan while the chat is in Agent, or
 // the chat was switched to a looser mode mid-answer): the stricter one, which can only refuse more. A looser one (the chat
 // was switched to a stricter mode mid-answer): null, refuse (nothing more runs in that answer).
-// (Debug is Agent here: the programs are started in Agent for it, so the two must compare equal.)
 const STRICTNESS = { ask: 0, plan: 1, agent: 2, auto: 3 };
-const asAgent = (m) => m === "debug" ? "agent" : m;
 function gatedMode(chatMode, startedFor) {
-  chatMode = asAgent(chatMode); startedFor = asAgent(startedFor);
   if (!startedFor || startedFor === chatMode) return chatMode;
   return STRICTNESS[startedFor] < STRICTNESS[chatMode] ? startedFor : null;
 }

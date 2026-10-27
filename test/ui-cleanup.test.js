@@ -84,16 +84,17 @@ const tick = () => new Promise((r) => setImmediate(r));
   // ---------- 2. the chat page ----------
   const chat = fs.readFileSync(path.join(root, "extension", "media", "chat.js"), "utf8");
   await check("+ in the chat: Add files and Link device; no Link ticket, no Pick from a browser", () => {
-    const add = chat.slice(chat.indexOf('if (kind === "add") {'), chat.indexOf('} else if (kind === "more") {')).replace(/^\s*\/\/.*$/gm, "");   // (not the comments)
+    const add = chat.slice(chat.indexOf('if (kind === "add") {'), chat.indexOf('} else if (kind === "device") {')).replace(/^\s*\/\/.*$/gm, "");   // (not the comments)
     assert.ok(/"Add files"/.test(add) && /Link device/.test(add));
     assert.ok(!/Link ticket|Pick from a browser|browserPick/.test(add), add);
   });
-  await check("the tab line: +, split, history, Kural Settings and … (Get started, updates, What's new)", () => {
-    assert.match(chat, /el\("div", \{ class: "tabbar" \}, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn, moreBtn\)/);
-    const more = chat.slice(chat.indexOf('} else if (kind === "more") {'), chat.indexOf('} else if (kind === "device") {'));
-    for (const w of ["settings", "getStarted", "updates", "whatsNew"]) assert.ok(more.includes(`"${w}"`), w);
-    const host = fs.readFileSync(path.join(root, "extension", "lib", "chat", "index.js"), "utf8");
-    assert.match(host, /case "panelCommand": \{\s*const id = \{ settings: "kural\.account", getStarted: "kural\.getStarted", updates: "kural\.checkForUpdates", whatsNew: "kural\.whatsNew" \}\[m\.what\];/);
+  await check("the tab line: +, split, history and Kural Settings; no \"…\" (its items are in Kural Settings)", () => {
+    assert.match(chat, /el\("div", \{ class: "tabbar" \}, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn\)/);
+    assert.ok(!/moreBtn|kind === "more"|openMenu\("more"/.test(chat));
+    const page = fs.readFileSync(path.join(root, "extension", "media", "settings.js"), "utf8");
+    for (const w of ["getStarted", "whatsNew", "updates"]) assert.ok(page.includes(`"${w}"`), w);
+    const host = fs.readFileSync(path.join(root, "extension", "lib", "settings-page.js"), "utf8");
+    assert.match(host, /case "whatsNew": vscode\.commands\.executeCommand\("kural\.whatsNew"\)/);
   });
 
   await check("the model menu: Search models, then an Auto switch (role=switch, aria-checked, Space/Enter); Auto on hides the models, keeps the router profile", () => {
@@ -103,12 +104,13 @@ const tick = () => new Promise((r) => setImmediate(r));
     assert.match(menu, /e\.key === "Enter" \|\| e\.key === " "/);
     assert.match(menu, /Balanced quality and speed, recommended for most tasks/);
     assert.match(menu, /const models = auto \? \[\] :/);                       // on: no model rows or headings
+    assert.match(menu, /const intensity = auto \? \[\] : \[/);                  // on: the router picks the intensity too
     assert.match(menu, /const profiles = !auto \? \[\] : \[mhead\("Router profile", "", "router"\)/);   // on: Balance / Cost / Intelligence + the gear
     assert.match(menu, /post\(\{ type: "setRouterProfile", tabId: t\.id, profile: profileName\(t\.routingProfile\) \}\)/);   // off → on
     assert.match(menu, /post\(\{ type: "setModel", tabId: t\.id, model: back \}\)/);                                     // on → off: the model it had
     assert.ok(!/Auto · Model Router/.test(chat.replace(/^\s*\/\/.*$/gm, "").replace(/"aria-label": "Auto, Model Router[^"]*"/, "")));
     const css = fs.readFileSync(path.join(root, "extension", "media", "chat.css"), "utf8");
-    assert.match(css, /\.switch\.on \{ background: var\(--green\); \}/);
+    assert.match(css, /\.auto-row \.switch\.on \{ background: var\(--green\); \}/);
     assert.ok(!/style:/.test(menu), "the CSP forbids style attributes");
   });
   await check("the \"/\" list opens after a space or new line too, with skills; a path there stays quiet", () => {
@@ -119,11 +121,6 @@ const tick = () => new Promise((r) => setImmediate(r));
     assert.match(r, /const pool = \[\.\.\.mine, \.\.\.list\.items\.filter\(\(c\) => !names\.has\(c\.name\)\)\]/);
     assert.match(r, /if \(!P\.lead && !found && \(mine\.length \|\| P\.query\)\) \{ closePopup\(\)/);
     assert.match(chat, /r\.setStart\(P\.node, Math\.max\(0, P\.start\)\); r\.setEnd\(P\.node, Math\.min\(P\.node\.data\.length, P\.end\)\);\s*closePopup\(\);\s*const sel/);
-  });
-  await check("the '…' menu has only what's nowhere else on the tab line: Kural Settings, Get started, Check for updates, What's new (no History, +, Split)", () => {
-    const more = chat.slice(chat.indexOf('} else if (kind === "more") {'), chat.indexOf('} else if (kind === "device") {'));
-    assert.strictEqual((more.match(/row\("/g) || []).length, 4);
-    assert.ok(!/history|split|"add"|attach/i.test(more.replace(/^\s*\/\/.*$/gm, "")));
   });
 
   // ---------- 3. Ctrl+K's box ----------

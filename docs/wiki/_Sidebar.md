@@ -7,7 +7,6 @@
 - [[Fix with Kural]]
 - [[Rules]]
 - [[Agent Review]]
-- [[Debug Mode]]
 - [[Google Gemini and ChatGPT]]
 - [[Your Own Model]]
 - [[Tab Completion]]

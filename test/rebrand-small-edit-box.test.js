@@ -27,8 +27,8 @@ function run(code) {
   return ctx;
 }
 // The input as MZt sees it: `lines` typed, laid out `height` px tall, in a thread with this contextValue.
-const input = (lines, height, contextValue) => ({ getLayoutInfo: () => ({ height }), getOption: () => 18,
-  _getViewModel: () => ({ getLineCount: () => lines }), _parentThread: { commentThread: { contextValue } } });
+const input = (lines, height, contextValue, threadId = "pr.1") => ({ getLayoutInfo: () => ({ height }), getOption: () => 18,
+  _getViewModel: () => ({ getLineCount: () => lines }), _parentThread: { commentThread: { contextValue, threadId } } });
 const parent = { getLayoutInfo: () => ({ height: 1000 }) };
 
 const out = patch(STAND_IN);
@@ -47,6 +47,14 @@ check("one typed line: Kural's box shrinks to 2 lines, others stay at 5", () => 
   assert.strictEqual(after.MZt(parent, input(1, 90, "kural-edit"), 90), 36);
   assert.strictEqual(after.MZt(parent, input(1, 90, "other"), 90), 90);
 });
+// (The extension host sends a new thread at once but its contextValue ~100 ms later, debounced: the box was sized before
+// it knew it was Kural's and stayed 5 lines tall until you typed. The thread's id, "kural.inlineEdit.<n>", comes at once.)
+check("before its contextValue arrives, Kural's box is known by its thread id (kural.inlineEdit.<n>)", () => {
+  assert.strictEqual(new after.Cze(0, null, 0, { threadId: "kural.inlineEdit.3" })._editorHeight, 36);
+  assert.strictEqual(after.MZt(parent, input(1, 0, undefined, "kural.inlineEdit.3"), 36), 36);
+  assert.strictEqual(new after.Cze(0, null, 0, { threadId: "kural.inlineEditor.3" })._editorHeight, 90, "only Kural's controller");
+  assert.strictEqual(after.MZt(parent, input(1, 90, undefined, "other.1"), 90), 90);
+});
 check("more lines: Kural's box grows with them (up to VS Code's maximum)", () => {
   assert.strictEqual(after.MZt(parent, input(4, 36, "kural-edit"), 36), 72);
   assert.strictEqual(after.MZt(parent, input(60, 72, "kural-edit"), 72), 450);
@@ -61,17 +69,23 @@ check("a VS Code without that shape: a warning, the file unchanged", () => {
   assert.strictEqual(stdout.replace(/^::warning::.*\n/gm, ""), "var x=1;");
 });
 
-const src = require("./workbench").findWorkbench();
+// (The source build's own output, not yet patched, comes first; an app patched by an older rebrand.py keeps its old patch,
+// since the patch isn't applied twice: nothing to check there until it is built again.)
+const unpatched = ["darwin-arm64/VSCodium.app/Contents/Resources/app", "linux-x64", "win32-x64"]
+  .map((d) => path.join(root, "build", "vscode-out", d, "out", "vs", "workbench", "workbench.desktop.main.js")).find((f) => fs.existsSync(f));
+const src = process.env.KURAL_WORKBENCH ? require("./workbench").findWorkbench() : unpatched || require("./workbench").findWorkbench();
+const text = src && fs.readFileSync(src, "utf8");
 if (!src) console.log("(real workbench file: skipped: no built workbench (set KURAL_WORKBENCH))");
+else if (text.includes("/*kural-small-box*/") && !text.includes('startsWith("kural.inlineEdit.")'))
+  console.log(`(real workbench file: skipped: ${src} has an older version of the patch; build Kural again)`);
 else {
-  const text = fs.readFileSync(src, "utf8");
   check("the patch matches the real workbench file once and stays valid JavaScript", () => {
     const r = patch(text);
     assert.strictEqual(r.status, 0, r.stderr);
     assert.ok(!/::warning::/.test(r.stdout.slice(0, 300)), r.stdout.slice(0, 300));
     assert.ok(r.stdout.includes("/*kural-small-box*/"));
     assert.strictEqual((r.stdout.match(/kural-small-box/g) || []).length, 1);
-    assert.ok(/this\._editorHeight=this\._commentThread\?\.contextValue==="kural-edit"\?36:/.test(r.stdout));
+    assert.ok(/this\._editorHeight=\(this\._commentThread\?\.contextValue==="kural-edit"\|\|String\(this\._commentThread\?\.threadId\|\|""\)\.startsWith\("kural\.inlineEdit\."\)\)\?36:/.test(r.stdout));
     // (An ES module: checked by node itself, without running it.)
     const tmp = path.join(require("os").tmpdir(), `kural-small-box-${process.pid}.mjs`);
     fs.writeFileSync(tmp, r.stdout);

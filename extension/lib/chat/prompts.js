@@ -43,38 +43,6 @@ PROMPTS.auto = PROMPTS.agent +
   "End every answer with a short list titled \"What I did\": each command you ran (also ones that read, install, delete or " +
   "change things outside the project) and each file you changed or created. Name anything hard to undo.";
 
-// Debug mode: the agent's job, plus a way of working that finds the cause with evidence (logs) before fixing. The endpoint
-// and log file are given with every message (debugNote); lib/debug/server.js is what listens.
-PROMPTS.debug = PROMPTS.agent.replace(FORMAT, "") +
-  " You are in Debug mode: find the cause of a bug with evidence, not guesses. Work in these steps and say which one you are on:\n" +
-  "1. Restate the bug in one or two sentences and list 2 to 4 hypotheses for the cause.\n" +
-  "2. Add temporary instrumentation at the places that decide between the hypotheses. Mark EVERY line you add with a " +
-  "`kural-debug` comment (in the language's comment syntax), so all of it can be found and removed. Each one sends a small JSON " +
-  "object to Kural's log endpoint (given in the <kural_debug> block of the user's message), or appends to the log file when " +
-  "that is easier; say which hypothesis each one tests and log values, not just \"got here\".\n" +
-  "3. Ask the user to reproduce the bug, with AskUserQuestion and the options \"I reproduced it\" and \"It didn't happen\" " +
-  "(they can also write their own answer). Tell them exactly what to do first. Then wait.\n" +
-  "4. Read the log file and say which hypothesis the evidence supports and why. If it supports none, add more " +
-  "instrumentation and ask again.\n" +
-  "5. Fix the cause, not the symptom.\n" +
-  "6. Remove every line marked `kural-debug` (check with a search that none is left), then ask the user to confirm that the " +
-  "bug is gone. Never leave instrumentation behind unless the user asks you to." + FORMAT;
-
-// What a Debug-mode message carries: where the instrumentation sends its data and where the log is read (lib/debug/server.js).
-function debugNote(url, file) {
-  return "<kural_debug>\n" +
-    `Log endpoint (POST JSON; reachable only from this computer): ${url}\n` +
-    `Log file (one JSON object per line, newest last): ${file}\n` +
-    "Ready to paste, one line each:\n" +
-    `- JavaScript (Node or a browser): fetch(${JSON.stringify(url)}, { method: "POST", body: JSON.stringify({ where: "<place>", value }) }).catch(() => {}); // kural-debug\n` +
-    `- Python: import json, urllib.request; urllib.request.urlopen(urllib.request.Request(${JSON.stringify(url)}, json.dumps({"where": "<place>", "value": str(value)}).encode()))  # kural-debug\n` +
-    `- Shell: curl -s -X POST --data '{"where":"<place>","value":"..."}' ${JSON.stringify(url)} # kural-debug\n` +
-    "If an app can't reach 127.0.0.1 (a phone, a container), append one JSON line to the log file instead.\n" +
-    "Marker rule: every line you add for debugging carries the comment `kural-debug`, and you remove all of them before you finish " +
-    "(search for `kural-debug` to be sure). Keep each log call small (under 16 KB) and wrap it so a failed send never breaks the app.\n" +
-    "</kural_debug>\n\n";
-}
-
 // Moods: how the chat works with you.
 const MOODS = [
   { id: "default", label: "Default", hint: "balanced" },
@@ -103,7 +71,7 @@ const MOOD_PROMPTS = {
 function lessonPrompt(dir, mode) {
   const head = "\n\nLesson pages: when the user asks you to explain something on a webpage (visually, as slides, a presentation, " +
     "\"show me\"), ";
-  if (mode !== "agent" && mode !== "auto" && mode !== "debug") return head + "say in one line that lesson pages need Agent or Auto mode (the mode menu under " +
+  if (mode !== "agent" && mode !== "auto") return head + "say in one line that lesson pages need Agent or Auto mode (the mode menu under " +
     "the chat), then explain in the chat for now.";
   return head + "build a lesson page instead of a long answer:\n" +
     `- Write ONE self-contained HTML file with your Write tool to ${dir}/<short-topic-name>.html (only that folder; a new name ` +
@@ -176,4 +144,4 @@ const MOOD_EXAMPLES = [
       "detail. When you change code, add a short comment on each part you changed." },
 ];
 
-module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS, MOOD_LIMITS, MOOD_EXAMPLES, customMoods, shownMoods, moodPrompt, moodId, lessonPrompt, debugNote };
+module.exports = { FORMAT, PROMPTS, MOODS, MOOD_PROMPTS, MOOD_LIMITS, MOOD_EXAMPLES, customMoods, shownMoods, moodPrompt, moodId, lessonPrompt };

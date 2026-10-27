@@ -43,7 +43,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   first switch to Auto explains this once; Gemini too, through Kural's gate; but the AI still never publishes in the
   browser, Gemini's own browser still asks, and so does a look into your Desktop, Documents, Downloads, Music, Pictures
   or Movies), Plan
-  (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only), Debug (see Debug Mode below). Claude, Gemini and Codex search the web and read pages in every mode
+  (a plan, then "Save plan" to write it to plans/*.md in the project, or "Build it"), Ask (answers only). Claude, Gemini and Codex search the web and read pages in every mode
   (Plan and Ask too). Claude and Gemini ask first (a card: Allow / Allow all), except in Auto: a web address can carry
   your project's data away. Codex: live search without asking, its commands stay offline. A model on this computer can't.
   Enhance prompt (the wand beside Send): your rough request goes to a quicker model (Claude Sonnet 5.5; for a ChatGPT or
@@ -93,7 +93,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   box remember it; Add to chat under a side answer brings that Q&A into your message. Model menu (bottom of the chat): a search box and an Auto switch (Model Router; its profile shows only while Auto is on), Claude's Opus/Sonnet/Haiku, Google Gemini and
   ChatGPT (Codex) models (only the AIs you've set up), or a model on this computer (once you have one that can chat).
   The gear beside each name opens its settings: Auto's opens the Model Router; Claude's, Gemini's, ChatGPT's and your
-  own model's open Kural Settings at that AI's page (where its connectors are, when to switch away near a limit); intensity Low to Max (for Gemini it picks the model's thinking
+  own model's open Kural Settings at that AI's page (where its connectors are, when to switch away near a limit); intensity Low to Max (hidden while Auto is on: the router picks it with the model; for Gemini it picks the model's thinking
   level); preferences (the menu's "Preference" row, called moods before: Explorer, Critic, Learn: teaches you
   step by step and checks what you know first; in Learn, ask "explain it on a webpage" (Agent or Auto mode) and the AI
   builds a lesson page, a short slide deck with diagrams and few words, shown in Kural's browser beside the chat (the
@@ -166,8 +166,8 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   files in an answer (and file names in \`code\`) open the file (at the line), also when the answer gives only its name
   or a path from another folder: Kural finds it in the project (several with that name: you pick one); web links open
   in Kural's browser tab. The chat's tab line holds all its buttons (the panel's title bar has none of its own): +
-  (new chat), Split, the clock (every chat from every workspace: search, pin, delete), the gear (Kural Settings) and "…"
-  (Get started, Check for updates, What's new). Drag a chat tab out of the Kural panel and let go (in
+  (new chat), Split, the clock (every chat from every workspace: search, pin, delete), and the gear (Kural Settings,
+  which also has Get started, Check for updates and What's new; there is no "…" menu). Drag a chat tab out of the Kural panel and let go (in
   the editor area, say) to open it beside the code, in an editor group next to the one you're in (VS Code's own
   above/below drop zones don't show for it: move its editor tab afterwards for that); it then shows only that chat, and
   leaves the side panel's tabs until its editor closes (also "Kural: Open a Chat Beside the Code"). To bring it back:
@@ -195,10 +195,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   uncommitted changes. Quick uses the fastest model; "Review Changes (Deep)" (the "..." menu of Source Control) uses the chat's
   model and looks harder. It only reads: nothing is changed. Each finding shows as a comment on its line with "Fix in
   Chat" (adds the finding to your message, then you press Send) and "Dismiss"; "Clear Review Comments" removes them.
-- Debug Mode: a mode in the chat's mode menu beside Agent, Auto, Plan and Ask. For a bug that is hard to see in the
-  code, the AI lists hypotheses, adds temporary logging that sends to a Kural log server on this computer (127.0.0.1,
-  nothing leaves it), asks you to reproduce the bug, reads the logs, fixes the cause and then removes the logging (the
-  lines are marked kural-debug). It asks before commands, like Agent.
+- Debug mode was removed (27 Oct 2026): ask for a bug fix in Agent mode. A chat that was in Debug goes on in Agent.
 - Projects: the first tab in the left bar (a folder-library icon) lists every project with a Kural window (one window
   per project), like ChatGPT's project list: a folder per project with its chats under it (five, then
   "Show N more"); the project in this window is bold, the folder is in the tooltip. At a chat's end: a spinner while it
@@ -210,8 +207,12 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   click a Recent (or pinned, not open) one and it opens in this window, like File > Open Recent (if a chat here is
   working or waiting, Kural asks first: Open Here stops it, or Open in New Window); click a chat and that window shows it. The red cross on an open project closes it after asking (working chats are
   named and stop; chats stay in History); the red bin on a Recent one removes it from Recent. Right-click a chat: Rename
-  (also F2: the title becomes a box), Move to... and Delete (asks first; also removes it from History); right-click a
-  project: Pin/Unpin, Close Project or Remove from Recent. Drag a chat onto another project with a window to move it
+  (also F2: the title becomes a box; a History chat has Open instead), Fork to › and Move to › (pointing at one, or a click,
+  opens the list of open projects right under it in the menu; Fork copies the chat into the project you pick, its own
+  too) and Delete (asks first; also removes
+  it from History); right-click a project: Pin/Unpin, Close Project or Remove from Recent. Each project has a folded
+  History of its saved chats; pointing at its heading shows "Clear all", which deletes all of them after asking (the open
+  chats stay). Drag a chat onto another project (its name, its chats or its History) to move it
   there: it keeps its messages and History, and its next message starts a new conversation in that folder that's given
   the whole chat (like Continue here); a working or waiting chat can't be moved. + has Open folder, Clone Git
   repository and "New empty project (with Git)", which asks for a name and a place, makes the folder, runs git init and
@@ -432,7 +433,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Crash reports: when Kural closed unexpectedly, the next start saves a report (macOS's crash reports, VS Code's logs, which
   windows ended) on this computer and offers Show report / Report a bug (copies it; you paste it into the bug form).
   "Kural: Show Crash Reports" lists them.
-- Updates: Kural checks once a day; also Help > Check for Updates, the "…" on the chat's tab line, or Kural Settings. A
+- Updates: Kural checks once a day; also Help > Check for Updates, or Kural Settings. A
   final version is offered final versions only, a test version (alpha, beta, rc) also newer test versions; the setting
   kural.updates.testVersions offers test versions to anyone. It
   installs after Kural has fully closed (an unsaved file keeps it open: Kural says so), checks the new copy is whole
@@ -440,7 +441,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   install fails, and says at the next start if it didn't finish. It installs only a release whose checksum list is signed
   by Kural's release key and matches the download; "Kural: Verify this installation..." checks the running version's list.
   After an update (also one installed by hand), the first start opens "What's New in Kural": the release notes of every
-  version since the one you had. "Kural: What's New" opens it any time.
+  version since the one you had. "Kural: What's New" (or Kural Settings → More) opens it any time.
 - Uninstalling: first Command Palette "Kural: Remove Kural's Data..." (takes Kural's key off your devices and its gate
   out of Gemini's settings, removes connectors whose key Kural keeps, logs out other profiles, then closes Kural and
   deletes everything it keeps: chats, History, checkpoints, settings, extensions, caches). Then remove the program (Mac:
@@ -480,8 +481,8 @@ const GUIDE_LOCAL = `
 About Kural (when the user asks about Kural itself): a code editor (VSCodium, so VS Code's features and extensions
 work) with an AI assistant: Claude, Google Gemini, ChatGPT (Codex) or a model on the user's computer (Ollama, offline:
 that's you). Main features: Get started (set up an AI); the chat (Ctrl+L shows or hides it: modes Agent, Auto, Plan,
-Ask, Debug; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; the mic beside it (Ctrl+Alt+V) turns what you say into text; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and preferences; hover a message to Edit it, Restore code, or
-Fork from here; the tab line has +, the clock (every chat), the gear (Kural Settings) and …); Ctrl+K asks in a box under the selected code and proposes changes in a read-only diff; the Explorer shows the files the AI reads (blue) and changes (yellow); the light bulb on an error ("Fix with Kural" adds it to your message); Rules (.kural/rules/*.md); Review in Source Control (checklist button); Debug mode (temporary logging, you reproduce the bug); Tab Completion; plain words in
+Ask; @ mentions a file; / lists your skills (Claude); the wand beside Send enhances your prompt; the mic beside it (Ctrl+Alt+V) turns what you say into text; + attaches files; select text in the chat, then "Add to chat" quotes it; the model menu has models, intensity and preferences; hover a message to Edit it, Restore code, or
+Fork from here; the tab line has +, the clock (every chat), the gear (Kural Settings)); Ctrl+K asks in a box under the selected code and proposes changes in a read-only diff; the Explorer shows the files the AI reads (blue) and changes (yellow); the light bulb on an error ("Fix with Kural" adds it to your message); Rules (.kural/rules/*.md); Review in Source Control (checklist button); Tab Completion; plain words in
 the terminal ("push this to main", then Tab); Search & Ask; Extensions & Plugins (the chat's AI's plugins and connectors beside VS
 Code's extensions); Kural's browser; devices over SSH; the Model Router (Auto);
 Kural Settings (accounts, usage switching, preferences, updates). Claude Code's connectors need Claude. For anything else, point to the full guide: ${WIKI}. If Kural can't do something, say so plainly and

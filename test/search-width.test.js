@@ -16,12 +16,16 @@ check("Ask's box starts and ends where Search's box does", () => {
   assert.strictEqual(top[3], find[3] + twist + gap, "left edge");
   assert.strictEqual(top[1], find[1], "right edge");
 });
-check("Ask's box has the Search box's radius and padding; the send button is smaller than the box", () => {
+check("Ask's box has the Search box's radius and padding; the send button is a small circle with room around it", () => {
   const box = rule(".box"), ask = rule(".top .box");
   assert.strictEqual(prop(ask, "border-radius"), prop(box, "border-radius"));
   assert.strictEqual(prop(ask, "padding"), prop(box, "padding"));
-  assert.match(prop(rule(".go"), "width"), /20px/);
-  assert.match(css, /\.go \.codicon \{ font-size: calc\(12px/);
+  // (Adithya, 27 Oct 2026: the 20 px circle filled the box's whole height. 16 px, a 10 px arrow, 2 px on each side.)
+  const go = rule(".go");
+  assert.match(prop(go, "width"), /calc\(16px/); assert.match(prop(go, "height"), /calc\(16px/);
+  assert.strictEqual(prop(go, "border-radius"), "50%");
+  assert.strictEqual(prop(go, "margin"), "0 2px");
+  assert.match(css, /\.go \.codicon \{ font-size: calc\(10px/);
 });
 check("both tabs use the same box class and border-box sizing", () => {
   assert.match(css, /\* \{ box-sizing: border-box; \}/);

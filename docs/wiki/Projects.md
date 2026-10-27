@@ -6,7 +6,7 @@ project and every chat in them in one list, so you see what each chat is doing a
 ## The list
 
 One list, like ChatGPT's project list: each project is a folder with its chats under it, in three sections, each with
-its heading:
+its heading. It has the Explorer's font and size (13 px, 22 px rows), whatever size your code editor uses:
 
 | Section | What's in it |
 |---|---|
@@ -47,8 +47,9 @@ finished chats you haven't seen.
 
 ## Rename, delete and move a chat
 
-Right-click a chat (in a project with a window) for **Rename**, **Move to...** and **Delete** (Kural's own menu, not Cut,
-Copy and Paste); right-click a project for **Pin** / **Unpin** and **Close Project** or **Remove from Recent**.
+Right-click a chat for **Rename** (a History chat: **Open**), **Fork to ›**, **Move to ›** and **Delete** (Kural's own menu,
+not Cut, Copy and Paste). Point at Fork to or Move to (or click it) and the open projects show right under it, in the menu
+itself, so the menu always fits the side bar. Fork makes a copy in the project you pick (its own too), Move takes the chat there. Right-click a project for **Pin** / **Unpin** and **Close Project** or **Remove from Recent**.
 
 - **Rename** (or F2 on a chat) turns its title into a box: Enter or clicking away saves, Esc cancels.
 - **Delete** asks first, then removes the chat from its project and from History (a working chat stops).
@@ -116,3 +117,9 @@ a Docker container (`scripts/linux-container/run.sh`, [[Building from Source]]).
 ## History and the Explorer
 
 Each project has a folded **History** of its chats: click one to open it, drag it to another project, or right-click for Move to... and Fork to... (open chats get Fork to... too). The Projects view and the Explorer's views share one container, so projects can be collapsed and reordered.
+
+**Clear all**: point at a project's History heading and "Clear all" takes the place of the count. It asks first, then deletes
+every saved chat of that project; its open chats stay. Drop a dragged chat anywhere on a project (its name, its chats or its
+History). The Explorer's icon is gone from the activity bar: all its views (files, Open Editors, Outline, Timeline, NPM
+Scripts) are under Projects, and **Shift+Cmd+E** (Ctrl+Shift+E) goes to the files there. Outline and Timeline start hidden
+(right-click a view's title to show them). Maximizing the chat panel keeps the side bar with Projects open.

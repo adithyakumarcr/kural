@@ -282,10 +282,10 @@ window.KURAL_CHAT = function (app, port) {
   const splitBtn = el("button", { class: "icon-btn", "aria-label": "Split",
     onmouseenter: () => { splitBtn.title = port.canSplit() ? "Split: a new chat beside this one (or drag a tab to a side of the chat)" : port.full() ? NO_ROOM : "Open a new chat beside the code (or drag a tab out of this panel)"; },
     onclick: () => { closeHistory(); if (!port.split()) flash(NO_ROOM, 2600); } }, icon("split-horizontal"));
-  // Kural Settings and "…" live here too (they were in the panel's title bar, with a second "+": Adithya, one place).
+  // Kural Settings lives here too (it was in the panel's title bar, with a second "+": Adithya, one place). No "…": Get
+  // started, Check for updates and What's new are all in Kural Settings (Adithya, 27 Oct 2026: no duplicates).
   const settingsBtn = el("button", { class: "icon-btn", title: "Kural Settings", onclick: () => { closeHistory(); post({ type: "panelCommand", what: "settings" }); } }, icon("settings-gear"));
-  const moreBtn = el("button", { class: "icon-btn", title: "More", onclick: (e) => openMenu("more", e.currentTarget) }, icon("ellipsis"));
-  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn, moreBtn);
+  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn);
   tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   // A chat in a column of its own (split): its title instead of the tab bar. Drag the title to move it; × puts it back
   // among the tabs.
@@ -644,9 +644,14 @@ window.KURAL_CHAT = function (app, port) {
   // there and put in the box when you go back to it (the box is shared by the tabs, so it never goes into another chat's).
   function enhanceTab(newId) {
     if (!S.enhBy) S.enhBy = new Map();
-    if (S.enh && S.enh.tabId !== newId) { S.enhBy.set(S.enh.tabId, S.enh); S.enh = null; }
+    if (S.enh && S.enh.tabId !== newId) {
+      // The text being enhanced belongs to its chat: it doesn't stay in the box of the one you go to (E.before has it).
+      if (S.enh.state === "running") { S.enh.held = true; input.replaceChildren(); renderQueueBtn(); }
+      S.enhBy.set(S.enh.tabId, S.enh); S.enh = null;
+    }
     if (!S.enh && S.enhBy.has(newId)) { S.enh = S.enhBy.get(newId); S.enhBy.delete(newId); }
     const E = S.enh;
+    if (E && E.held) { E.held = false; input.replaceChildren(...E.before.map((n) => n.cloneNode(true))); renderQueueBtn(); }
     if (E && E.state === "running") { input.setAttribute("contenteditable", "false"); input.classList.add("enh-locked"); return; }
     unlockInput();
     if (E && E.state === "done" && E.pending != null) { const text = E.pending; E.pending = null; putPrompt(text); }
@@ -1481,13 +1486,6 @@ window.KURAL_CHAT = function (app, port) {
         el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
           el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
           el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];
-    } else if (kind === "more") {
-      // The tab line's "…" (it was the panel title bar's; Adithya: everything in one place).
-      const run = (what) => () => { closeMenu(); post({ type: "panelCommand", what }); };
-      const row = (what, ic, label, hint) => el("div", { class: "mi", onclick: run(what) },
-        el("span", { class: "mi-icon" }, icon(ic)), el("span", { class: "mi-label" }, label), hint ? el("span", { class: "mi-hint" }, hint) : null);
-      items = [row("settings", "settings-gear", "Kural Settings"), row("getStarted", "rocket", "Get started", "set up an AI"),
-        row("updates", "sync", "Check for updates"), row("whatsNew", "megaphone", "What's new")];
     } else if (kind === "device") {
       items = deviceItems(t);
     } else if (kind === "ticket") {
@@ -1499,7 +1497,7 @@ window.KURAL_CHAT = function (app, port) {
           onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
           el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
     } else {
-      const editing = t.mode === "agent" || t.mode === "debug" || t.mode === "auto";
+      const editing = t.mode === "agent" || t.mode === "auto";
       const local = /^ollama:/.test(t.model || "");
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
       // "Search models", then the Auto switch. Auto on: only the router's profile (the models are the router's to pick);
@@ -1532,10 +1530,13 @@ window.KURAL_CHAT = function (app, port) {
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, S.claudeReady ? m.hint : "set up Claude…"))),
         ...cliMenuItems(t),
         ...localMenuItems(t)];
-      items = [search, autoRow, ...profiles, ...models,
+      // (In Auto the router picks the intensity with the model for every message (setRouterProfile unpins it), so the
+      // Intensity row shows only when you pick the model yourself.)
+      const intensity = auto ? [] : [
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
-        levelNote(t),
+        levelNote(t)];
+      items = [search, autoRow, ...profiles, ...models, ...intensity,
         ...split.menuItems(t),
         // Preferences (moods in the code): the four built-in ones, then yours (Kural Settings → Preferences), then a way to add one.
         el("div", { class: "mh" }, "Preference"),
@@ -1554,9 +1555,8 @@ window.KURAL_CHAT = function (app, port) {
     }
     const a = anchor.getBoundingClientRect(), col = app.getBoundingClientRect();   // (placed in the column: chat.css .col)
     menuEl.style.left = Math.max(6, Math.min(a.left - col.left, col.width - menuEl.offsetWidth - 6)) + "px";
-    // (The tab line's "…" is at the top: its menu opens downwards; the box's menus open upwards.)
-    if (kind === "more") { menuEl.style.top = (a.bottom - col.top + 4) + "px"; menuEl.style.bottom = ""; }
-    else { menuEl.style.top = ""; menuEl.style.bottom = (col.bottom - a.top + 6) + "px"; }
+    // (The box's menus open upwards.)
+    menuEl.style.top = ""; menuEl.style.bottom = (col.bottom - a.top + 6) + "px";
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }

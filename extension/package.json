@@ -1064,6 +1064,11 @@
     },
     "keybindings": [
       {
+        "command": "workbench.explorer.fileView.focus",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e"
+      },
+      {
         "command": "kural.chat.voice",
         "key": "ctrl+alt+v",
         "mac": "cmd+alt+v",
@@ -1280,15 +1285,13 @@
             "agent",
             "auto",
             "plan",
-            "ask",
-            "debug"
+            "ask"
           ],
           "enumDescriptions": [
             "Kural edits files; asks before running commands",
             "Kural edits files and runs commands without asking",
             "Kural writes a plan first; click Build it to carry it out",
-            "Answers only; nothing changes",
-            "Kural finds a bug's cause with temporary logging, then fixes it; asks before running commands"
+            "Answers only; nothing changes"
           ],
           "description": "Mode for your very first chat. After that, new chats use whatever you picked last."
         },

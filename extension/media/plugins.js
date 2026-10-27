@@ -55,8 +55,13 @@
   });
 
   // ---------- the rows ----------
-  // Heights in px at font scale 1 (rows are drawn only where you look, so every row's height is known).
-  const H = { head: 24, plugin: 44, market: 24, hint: 40, action: 34 };
+  // Heights in px at font scale 1 (rows are drawn only where you look, so every row's height is known). A plugin has three
+  // lines, like VS Code's Extensions: its name and version; what it does; where it is installed and its buttons (Adithya,
+  // 27 Oct 2026: with two, "This project, only me" was cut off and the buttons squeezed the description).
+  const H = { head: 24, plugin: 66, slim: 46, market: 26, hint: 40, action: 36 };
+  // A plugin you can add has no third line: its Install is a hover icon at the end of the name's line (Adithya, 27 Oct 2026).
+  const slim = (p) => !p.installed && !(p.marketplace && marketName(p.marketplace));
+  const hOf = (r) => H[r.type === "plugin" && slim(r.p) ? "slim" : r.type];
   const fs = () => Number(getComputedStyle(document.documentElement).getPropertyValue("--fs")) || 1;
   let rows = [], tops = [], total = 0;
 
@@ -109,7 +114,7 @@
     }
     tops = []; total = 0;
     const k = fs();
-    for (const r of rows) { tops.push(total); total += Math.round(H[r.type] * k); }
+    for (const r of rows) { tops.push(total); total += Math.round(hOf(r) * k); }
     spacer.style.height = total + "px";
     renderMsg();
     draw();
@@ -136,7 +141,8 @@
   function actions(p) {
     const st = S.st, can = st.can || {}, busy = busyOf(p);
     if (busy) return [el("span", { class: "busy" }, busy)];
-    if (!p.installed) return p.installable ? [btn("Install", { type: "install", id: p.key }, "primary", `Install ${p.name} for ${st.names[st.ai]}`)] : [];
+    if (!p.installed) return p.installable ? [el("button", { class: "icon-btn install", title: `Install ${p.name} for ${st.names[st.ai]}`, "aria-label": `Install ${p.name}`,
+      onclick: (e) => { e.stopPropagation(); post({ type: "install", id: p.key }); } }, icon("cloud-download"))] : [];
     if (p.readOnly) return [];
     return [can.toggle && btn(p.enabled ? "Turn Off" : "Turn On", { type: p.enabled ? "disable" : "enable", id: p.key }),
       el("button", { class: "icon-btn", title: `Remove ${p.name}`, "aria-label": `Remove ${p.name}`, onclick: (e) => { e.stopPropagation(); post({ type: "uninstall", id: p.key }); } }, icon("trash"))].filter(Boolean);
@@ -154,12 +160,13 @@
   // directory: saying so on every row was noise). The plugin's page always says.
   const marketName = (name) => { const m = S.st && S.st.marketplaces.find((x) => x.name === name); return m && m.removable ? m.label : ""; };
   function rowEl(r, i) {
-    const top = tops[i], h = Math.round(H[r.type] * fs());
+    const top = tops[i], h = Math.round(hOf(r) * fs());
     let n;
     if (r.type === "head") {
       const open = !S.closed.has(r.key);
-      n = el("div", { class: "row head", role: "button", "aria-expanded": String(open), onclick: () => { if (open) S.closed.add(r.key); else S.closed.delete(r.key); keep(); build(); } },
-        icon(open ? "chevron-down" : "chevron-right"), el("span", { class: "htitle" }, r.title), r.sub && el("span", { class: "hsub" }, r.sub),
+      // (What a section holds, "Anthropic's directory and your marketplaces", is its tooltip: on the row it was cut off.)
+      n = el("div", { class: "row head", role: "button", "aria-expanded": String(open), title: r.sub || null, onclick: () => { if (open) S.closed.add(r.key); else S.closed.delete(r.key); keep(); build(); } },
+        icon(open ? "chevron-down" : "chevron-right"), el("span", { class: "htitle" }, r.title),
         el("span", { class: "grow" }), r.key !== "add" && el("span", { class: "badge" }, String(r.count)));
     } else if (r.type === "plugin") {
       const p = r.p, off = p.installed && !p.enabled;
@@ -167,10 +174,10 @@
       n = el("div", { class: `row plugin${S.sel === p.key ? " sel" : ""}${off ? " off" : ""}`, role: "listitem", title: p.description || p.name,
         onclick: () => { S.sel = p.key; keep(); draw(); post({ type: "details", id: p.key }); } },
         el("div", { class: "pmain" },
-          el("div", { class: "ptop" }, el("span", { class: "pname" }, p.name), p.version && el("span", { class: "pver" }, p.version),
-            off && el("span", { class: "tag" }, "Off"), whereTag(p), el("span", { class: "grow" }),
-            from && el("span", { class: "pfrom" }, from)),
-          el("div", { class: "pline" }, el("span", { class: "pdesc" }, p.description || "No description."), el("span", { class: "pacts" }, actions(p)))));
+          el("div", { class: "ptop" }, el("span", { class: "pname" }, p.name), p.version && el("span", { class: "pver" }, p.version), off && el("span", { class: "tag" }, "Off"),
+            slim(p) && el("span", { class: "pacts" }, actions(p))),
+          el("div", { class: "pdesc" }, p.description || "No description."),
+          !slim(p) && el("div", { class: "pline" }, el("span", { class: "pmeta" }, whereTag(p), from && el("span", { class: "pfrom" }, from)), el("span", { class: "pacts" }, actions(p)))));
     } else if (r.type === "market") {
       const m = r.m, busy = S.st.busy[`market:${m.name}`];
       n = el("div", { class: "row market", title: m.source },
@@ -187,7 +194,7 @@
   function draw() {
     const from = list.scrollTop, to = from + list.clientHeight;
     let lo = 0, hi = rows.length;
-    while (lo < hi) { const mid = (lo + hi) >> 1; if (tops[mid] + Math.round(H[rows[mid].type] * fs()) <= from) lo = mid + 1; else hi = mid; }
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (tops[mid] + Math.round(hOf(rows[mid]) * fs()) <= from) lo = mid + 1; else hi = mid; }
     const out = [];
     for (let i = Math.max(0, lo - 5); i < rows.length && tops[i] < to + 200; i++) out.push(rowEl(rows[i], i));
     rowsEl.replaceChildren(...out);
@@ -203,7 +210,7 @@
     const at = ps.findIndex((i) => rows[i].p.key === S.sel);
     const next = ps[Math.max(0, Math.min(ps.length - 1, at < 0 ? 0 : at + d))];
     S.sel = rows[next].p.key; keep();
-    const top = tops[next], h = Math.round(H.plugin * fs());
+    const top = tops[next], h = Math.round(hOf(rows[next]) * fs());
     if (top < list.scrollTop) list.scrollTop = top; else if (top + h > list.scrollTop + list.clientHeight) list.scrollTop = top + h - list.clientHeight;
     draw();
   }

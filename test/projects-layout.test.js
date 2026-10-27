@@ -2,33 +2,45 @@
 // two workbench rules that go with it: the Projects view can be collapsed and reordered (patch 0202 / rebrand.py) but not hidden.
 const assert = require("assert");
 const fs = require("fs"), path = require("path");
-const { arrangeViews, CONTAINER, EXPLORER_VIEWS, MERGED_KEY } = require("../extension/lib/projects/layout");
+const { arrangeViews, CONTAINER, EXPLORER_VIEWS, QUIET_VIEWS, MERGED_KEY, MOVED_KEY, QUIET_KEY } = require("../extension/lib/projects/layout");
 
 let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("ok  ", name); } catch (e) { failed++; console.error("FAIL", name, e.stack); } };
 const fakeCommands = (list, { fail = [] } = {}) => {
   const ran = [];
-  return { ran, getCommands: async () => list, executeCommand: async (id, arg) => { ran.push([id, arg]); if (fail.includes(arg && arg.viewIds[0])) throw new Error("no such view"); } };
+  return { ran, getCommands: async () => list, executeCommand: async (id, arg) => { ran.push([id, arg]); if (arg && fail.includes(arg.viewIds[0])) throw new Error("no such view"); } };
 };
 const fakeState = (init = {}) => { const m = new Map(Object.entries(init)); return { m, get: (k) => m.get(k), update: async (k, v) => { m.set(k, v); } }; };
-const moved = (c) => c.ran.map((r) => r[1].viewIds[0]);
+const moved = (c) => c.ran.filter((r) => r[0] === "vscode.moveViews").map((r) => r[1].viewIds[0]);
 
 (async () => {
-  await check("first start: Projects, then the Explorer's views, all into the Projects container; remembered", async () => {
-    const c = fakeCommands(["vscode.moveViews"]), state = fakeState();
+  const ALL = ["vscode.moveViews", "outline.removeView", "timeline.removeView"];
+  const runs = (c, id) => c.ran.filter((r) => r[0] === id);
+  await check("first start: Projects, then every Explorer view (NPM Scripts too: the Explorer's icon goes), remembered; Outline and Timeline hidden once", async () => {
+    const c = fakeCommands(ALL), state = fakeState();
     const r = await arrangeViews({ commands: c, state });
     assert.deepStrictEqual(moved(c), ["kural.projects", ...EXPLORER_VIEWS]);
-    assert.ok(c.ran.every((x) => x[0] === "vscode.moveViews" && x[1].destinationId === CONTAINER && x[1].viewIds.length === 1));
+    assert.ok(EXPLORER_VIEWS.includes("npm") && EXPLORER_VIEWS[0] === "workbench.explorer.fileView");
+    assert.ok(c.ran.filter((x) => x[0] === "vscode.moveViews").every((x) => x[1].destinationId === CONTAINER && x[1].viewIds.length === 1));
     assert.strictEqual(CONTAINER, "workbench.view.extension.kural-projects");
-    assert.ok(EXPLORER_VIEWS[0] === "workbench.explorer.fileView");
-    assert.strictEqual(state.get(MERGED_KEY), true);
-    assert.strictEqual(r.moved.length, 1 + EXPLORER_VIEWS.length);
+    assert.deepStrictEqual(state.get(MOVED_KEY), EXPLORER_VIEWS);
+    assert.deepStrictEqual(r.hidden, QUIET_VIEWS);
+    assert.deepStrictEqual(c.ran.filter((x) => x[0] !== "vscode.moveViews").map((x) => x[0]), ["outline.removeView", "timeline.removeView"]);
+    assert.deepStrictEqual(state.get(QUIET_KEY), QUIET_VIEWS);
   });
 
-  await check("later starts: only the Projects view is put back; the Explorer views stay where you left them", async () => {
-    const c = fakeCommands(["vscode.moveViews"]);
-    await arrangeViews({ commands: c, state: fakeState({ [MERGED_KEY]: true }) });
+  await check("later starts: only the Projects view is put back; nothing is hidden again (you may have shown Outline since)", async () => {
+    const c = fakeCommands(ALL);
+    await arrangeViews({ commands: c, state: fakeState({ [MOVED_KEY]: EXPLORER_VIEWS, [QUIET_KEY]: QUIET_VIEWS }) });
     assert.deepStrictEqual(moved(c), ["kural.projects"]);
+  });
+
+  await check("merged by the older version (four views): NPM Scripts moves now; Outline and Timeline are hidden once", async () => {
+    const c = fakeCommands(ALL), state = fakeState({ [MERGED_KEY]: true });
+    await arrangeViews({ commands: c, state });
+    assert.deepStrictEqual(moved(c), ["kural.projects", "npm"]);
+    assert.deepStrictEqual(state.get(MOVED_KEY), EXPLORER_VIEWS);
+    assert.strictEqual(runs(c, "outline.removeView").length, 1);
   });
 
   await check("no vscode.moveViews: nothing runs, nothing is remembered, a note is logged", async () => {
@@ -37,14 +49,15 @@ const moved = (c) => c.ran.map((r) => r[1].viewIds[0]);
     assert.deepStrictEqual(c.ran, []); assert.strictEqual(state.m.size, 0); assert.strictEqual(r.missing, true); assert.ok(notes.length === 1);
   });
 
-  await check("a view that can't be moved doesn't stop the others; not remembered when the Explorer's own view failed", async () => {
-    const c = fakeCommands(["vscode.moveViews"], { fail: ["outline"] }), state = fakeState();
+  await check("a view that can't be moved doesn't stop the others and is tried again next start; it isn't hidden", async () => {
+    const c = fakeCommands(ALL, { fail: ["outline"] }), state = fakeState();
     await arrangeViews({ commands: c, state });
     assert.strictEqual(moved(c).length, 1 + EXPLORER_VIEWS.length, "all were tried");
-    assert.strictEqual(state.get(MERGED_KEY), true);
-    const c2 = fakeCommands(["vscode.moveViews"], { fail: ["workbench.explorer.fileView"] }), s2 = fakeState();
-    await arrangeViews({ commands: c2, state: s2 });
-    assert.strictEqual(s2.m.size, 0, "tried again next start");
+    assert.ok(!state.get(MOVED_KEY).includes("outline"));
+    assert.deepStrictEqual(runs(c, "outline.removeView"), []);
+    const c2 = fakeCommands(ALL);
+    await arrangeViews({ commands: c2, state });
+    assert.deepStrictEqual(moved(c2), ["kural.projects", "outline"]);
   });
 
   await check("0202 and rebrand.py: the Projects view can't be hidden but can be moved (reordered with the Explorer)", () => {

@@ -17,8 +17,7 @@ const { execFile } = require("child_process");
 const scope = require("../profiles/scope");
 const { isProtected } = require("../paths");
 const { findGit } = require("../git");
-const { fontScale, watchFontScale } = require("../ui");
-const { samePath } = require("./model");
+const { samePath, historyOf } = require("./model");
 const { arrangeViews } = require("./layout");
 
 const CARD_MS = 12000;
@@ -236,7 +235,6 @@ class Projects {
       }),
       { dispose: () => this.stop() },
     );
-    watchFontScale(c, (m) => { for (const v of this.views) v.webview.postMessage(m); });
     // (The chat tells when a tab's state changes: working, waiting for you, finished, seen.)
     const prev = this.chat.onChatsChanged;
     this.chat.onChatsChanged = () => { if (typeof prev === "function") prev(); this.publish(); };
@@ -273,7 +271,8 @@ class Projects {
   html(webview) {
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
     const nonce = crypto.randomBytes(16).toString("base64"), uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
-    return `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
+    // (No font scale: the page has the Explorer's font and size, 13 px, whatever size the code editor uses. Adithya, 27 Oct 2026.)
+    return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("projects.css")}"></head>
 <body data-vscode-context='{"preventDefaultContextMenuItems": true}'><div id="app"></div><script nonce="${nonce}" src="${uri("projects.js")}"></script></body></html>`;
@@ -298,6 +297,9 @@ class Projects {
       case "removeRecent": if (p) await this.removeRecent(p); break;
       case "renameChat": this.renameChat(m.key, m.chatId, m.title); break;
       case "moveChat": this.moveChat(m.key, m.chatId, m.to); break;
+      case "forkChat": this.forkChat(m.key, m.chatId, m.to); break;
+      case "deleteChat": await this.deleteChat(m.key, m.chatId); break;
+      case "clearHistory": await this.clearHistory(m.key); break;
       case "log": this.log(`projects page: ${m.message}`); break;
     }
   }
@@ -319,13 +321,37 @@ class Projects {
   }
   async deleteChat(key, chatId) {
     const found = this.chatOf(key, chatId);
-    if (!found) return;
+    if (!found) {
+      // (A History chat isn't open anywhere: it is only its saved files, deleted from this window.)
+      const past = this.historyOf(key, chatId);
+      if (!past) return;
+      const ok = await vscode.window.showWarningMessage(`Delete "${past.c.title}"?`, { modal: true, detail: `It's removed from ${past.p.name}'s History. This can't be undone.` }, "Delete");
+      if (ok === "Delete") { this.chat.deleteChat(chatId); this.rebuild(true); }
+      return;
+    }
     const busy = found.c.state === "run" || found.c.state === "ask";
     const detail = `It's removed from ${found.p.name} and from History. This can't be undone.${busy ? " It's working now: it stops." : ""}`;
     const ok = await vscode.window.showWarningMessage(`Delete "${found.c.title}"?`, { modal: true, detail }, "Delete");
     if (ok !== "Delete") return;
     if (found.p.here) { this.chat.deleteChat(chatId); this.chat.save(); }
     else this.status.send(found.p.windowId, { type: "deleteChat", chatId });
+  }
+  // Clear all (the History heading's button): every saved chat of the project that isn't open in its window, after asking.
+  // Read from disk first (another window may have saved one since), so the count asked about is the count deleted.
+  async clearHistory(key) {
+    const p = this.find(key);
+    if (!p) return;
+    const open = new Set((p.chats || []).map((c) => c.id));
+    const cards = typeof this.chat.historyCards === "function" ? this.chat.historyCards(true) : [];
+    const items = historyOf(cards, p, { exclude: open });
+    if (!items.length) { vscode.window.showInformationMessage(`Kural: ${p.name} has no earlier chats.`); return; }
+    const detail = `${plural(items.length, "saved chat", "saved chats")} of ${p.name} ${items.length === 1 ? "is" : "are"} removed from History. ` +
+      "Its open chats stay. This can't be undone.";
+    const ok = await vscode.window.showWarningMessage(`Clear ${p.name}'s History?`, { modal: true, detail }, "Clear All");
+    if (ok !== "Clear All") return;
+    for (const h of items) { try { this.chat.deleteChat(h.id); } catch (e) { this.log(`projects: clear history: ${h.id}: ${e.message}`); } }
+    this.log(`projects: cleared ${items.length} History chats of ${p.name}`);
+    this.rebuild(true);
   }
   // Move: only to another project with a window, and not while the chat works or waits for you. The chat's own window
   // lets it go, then asks the target window to take it in (lib/chat: moveOut, adopt).
@@ -341,10 +367,11 @@ class Projects {
   homeOf(p) { return p.workspaceFile ? { key: p.workspaceFile, name: p.name, open: p.workspaceFile } : { key: vscode.Uri.file(p.path).path, name: p.name, open: p.path }; }
   moveChat(key, chatId, to) {
     const target = this.find(to);
-    if (!target || target.key === key || !this.canTake(target)) return;
+    // (Every refusal is logged: a drop that does nothing was impossible to tell apart from one that never arrived.)
+    if (!target || target.key === key || !this.canTake(target)) { this.log(`projects: move ${chatId}: ${!target ? "no such project" : target.key === key ? "same project" : "a workspace file without a window"}`); return; }
     const found = this.chatOf(key, chatId);
     if (found) {
-      if (found.c.state === "run" || found.c.state === "ask") return;
+      if (found.c.state === "run" || found.c.state === "ask") { this.log(`projects: move ${chatId}: it's working or waiting`); return; }
       const home = target.open ? undefined : this.homeOf(target);
       if (found.p.here) this.moveOut(chatId, target.windowId || null, found.p.name, home);
       else this.status.send(found.p.windowId, { type: "moveChat", chatId, toWindow: target.windowId || null, from: found.p.name, ...(home ? { home } : {}) });
@@ -352,6 +379,7 @@ class Projects {
     }
     const past = this.historyOf(key, chatId);
     if (past) this.deliver(chatId, target.open ? target.windowId : null, target.open ? null : this.homeOf(target), past.p.name);
+    else this.log(`projects: move ${chatId}: not a chat of ${key} (open or in its History)`);
   }
   // The chat is out of its window (or was only saved): the target's window takes it in, or it is filed under the target.
   deliver(chatId, toWindow, home, from) {

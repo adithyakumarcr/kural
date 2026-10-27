@@ -24,7 +24,9 @@ class El {
   fire(t, ev = {}) { for (const f of this.on[t] || []) f({ preventDefault() {}, stopPropagation() {}, ...ev }); }
   append(...ks) { for (const k of ks) this.kids.push(k); }
   replaceChildren(...ks) { this.kids = []; this.append(...ks); }
-  focus() {}
+  focus() {} remove() { this.removed = true; }
+  get offsetWidth() { return 100; } get offsetHeight() { return 100; }
+  getBoundingClientRect() { return { top: 0, right: 100, bottom: 20, left: 0 }; }
   get textContent() { return this.text !== undefined ? this.text : this.kids.map((k) => k.textContent).join(""); }
 }
 const all = (n, pred, out = []) => { for (const k of n.kids || []) { if (k instanceof El) { if (pred(k)) out.push(k); all(k, pred, out); } } return out; };
@@ -49,7 +51,7 @@ function load() {
   const send = (m) => listeners.message({ data: m });
   const runTimers = () => { while (timers.length) timers.shift()(); };
   const [find, list] = app.kids;
-  return { app, posted, state, send, runTimers, list, input: all(find, (k) => k.tag === "input")[0] };
+  return { app, ctx, posted, state, send, runTimers, list, input: all(find, (k) => k.tag === "input")[0] };
 }
 
 const chat = (id, title, state = "idle", o = {}) => ({ id, title, state, ask: "", doneAt: 0, onScreen: false, label: "", ...o });
@@ -61,6 +63,8 @@ const kinds = (p) => all(p.list, (r) => ["new-chat", "sec", "row", "chat-row", "
   .map((r) => r._cls.has("new-chat") ? "new" : r._cls.has("sec") ? `sec:${r.textContent.trim()}` : r._cls.has("row") ? `row:${one(r, "nmt").textContent}`
     : r._cls.has("chat-row") ? `chat:${one(r, "ct").textContent}` : r._cls.has("more") ? `more:${r.textContent}` : "empty");
 const rowOf = (p, name) => all(p.list, (r) => r._cls.has("row") && one(r, "nmt").textContent === name)[0];
+// (The project's group, its row with its chats and History, is what takes a dropped chat. The fake DOM doesn't bubble.)
+const grpOf = (p, name) => all(p.list, (r) => r._cls.has("grp") && r.kids.includes(rowOf(p, name)))[0];
 const chatOf = (p, title) => all(p.list, (r) => r._cls.has("chat-row") && one(r, "ct").textContent === title)[0];
 const findBox = (p) => p.app.kids[0];
 
@@ -102,7 +106,9 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     assert.ok(!/parallel-agents|~\/p\/kural|this window/.test(k.textContent));
     assert.strictEqual(k.attrs.title, "~/p/kural");
     assert.strictEqual(w.attrs.title, "~/p/weld-sim\nWaiting for you: Allow npm run build?");
-    assert.ok(!k.style.vars["--ring"] && !one(k, "sw"), "no project colors in the bar");
+    assert.ok(!k.style.vars["--ring"] && !one(k, "sw"), "no swatches or ring in the bar");
+    const pc = (r) => [...r._cls].filter((c) => /^pc[0-7]$/.test(c));
+    assert.strictEqual(pc(k).length, 1, "each project has one color class");
   });
 
   await check("chats: the title, and at the end a spinner (working), an orange dot (waiting), a blue dot (new answer) or nothing", () => {
@@ -266,7 +272,7 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     assert.ok(!rowOf(p, "kural"), "the update shows once you're done");
   });
 
-  await check("drag a chat onto another open project: the row lights up, the drop asks the host to move it", () => {
+  await check("drag a chat onto another open project (its row, chats or History): it lights up, the drop asks the host to move it", () => {
     const p = load(); p.send(model(SECTIONS())); p.posted.length = 0;
     const dt = { setData() {}, effectAllowed: "", dropEffect: "" };
     const src = chatOf(p, "Refactor notify");
@@ -276,17 +282,17 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     src.fire("dragstart", { dataTransfer: dt });
     let prevented = 0;
     const over = (r) => { r.fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ }); };
-    over(rowOf(p, "kural"));
+    over(grpOf(p, "kural"));
     assert.strictEqual(prevented, 0, "not its own project");
-    over(rowOf(p, "dotfiles"));
+    over(grpOf(p, "dotfiles"));
     assert.strictEqual(prevented, 1, "a folder without a window takes it too (it is filed under it)");
-    over(rowOf(p, "weld-sim"));
+    over(grpOf(p, "weld-sim"));
     assert.strictEqual(prevented, 2);
-    assert.ok(rowOf(p, "weld-sim")._cls.has("drop"));
-    rowOf(p, "weld-sim").fire("drop", { dataTransfer: dt });
+    assert.ok(grpOf(p, "weld-sim")._cls.has("drop"));
+    grpOf(p, "weld-sim").fire("drop", { dataTransfer: dt });
     assert.deepStrictEqual(p.posted, [{ type: "moveChat", key: "k", chatId: "1", to: "w" }]);
+    assert.ok(!grpOf(p, "weld-sim")._cls.has("drop"));
     src.fire("dragend");
-    assert.ok(!rowOf(p, "weld-sim")._cls.has("drop"));
   });
 
   await check("drag: a workspace-file project without a window doesn't take a chat (its key isn't known without the window)", () => {
@@ -295,7 +301,7 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     const dt = { setData() {}, effectAllowed: "", dropEffect: "" };
     chatOf(p, "Refactor notify").fire("dragstart", { dataTransfer: dt });
     let prevented = 0;
-    rowOf(p, "wsproj").fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ });
+    grpOf(p, "wsproj").fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ });
     assert.strictEqual(prevented, 0);
   });
 
@@ -354,12 +360,121 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     const dt = { setData() {}, effectAllowed: "", dropEffect: "" };
     r.fire("dragstart", { dataTransfer: dt });
     let prevented = 0;
-    rowOf(p, "weld-sim").fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ });
-    rowOf(p, "weld-sim").fire("drop", { dataTransfer: dt });
+    grpOf(p, "weld-sim").fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ });
+    grpOf(p, "weld-sim").fire("drop", { dataTransfer: dt });
     assert.strictEqual(prevented, 1);
     assert.deepStrictEqual(p.posted, [{ type: "moveChat", key: "d", chatId: "h0", to: "w" }]);
   });
 
+
+  await check("right-click a chat: Kural's own menu (VS Code's stays shut): Rename, Fork to › every open project, Move to › the other ones, Delete", () => {
+    const p = load(); p.send(model(SECTIONS())); p.posted.length = 0;
+    const body = []; p.ctx.document.body = { append: (n) => body.push(n) };
+    let prevented = 0;
+    chatOf(p, "Refactor notify").fire("contextmenu", { clientX: 10, clientY: 10, preventDefault: () => prevented++ });
+    assert.strictEqual(prevented, 1);
+    const menu = body[0];
+    const labels = (n) => byClass(n, "cm-label").map((x) => x.textContent);
+    const top = menu.kids.filter((k) => k._cls && k._cls.has("cm-item"));
+    assert.deepStrictEqual(top.map((k) => one(k, "cm-label").textContent), ["Rename", "Fork to", "Move to", "Delete"]);
+    const openNames = SECTIONS().flatMap((x) => x.projects).filter((x) => x.open).map((x) => x.name);
+    const listOf = (head) => menu.kids[menu.kids.indexOf(head) + 1];
+    assert.deepStrictEqual(labels(listOf(top[1])), openNames, "fork: into any open project, its own too");
+    assert.deepStrictEqual(labels(listOf(top[2])), openNames.filter((n) => n !== "kural"), "move: another one");
+    const weld = listOf(top[2]).kids.find((k) => one(k, "cm-label").textContent === "weld-sim");
+    weld.fire("click");
+    assert.deepStrictEqual(p.posted, [{ type: "moveChat", key: "k", chatId: "1", to: "w" }]);
+    assert.ok(menu.removed, "the menu closes");
+  });
+  // (Adithya, 27 Oct 2026: a list beside the menu was cut off in the side bar, or covered the menu: it opens under its row.)
+  await check("Fork to › / Move to ›: the projects open in the menu itself, under the row (hover after a moment, or a click); one at a time", () => {
+    const p = load(); p.send(model(SECTIONS())); p.posted.length = 0;
+    p.ctx.window.innerWidth = 300; p.ctx.window.innerHeight = 600;
+    const body = []; p.ctx.document.body = { append: (n) => body.push(n) };
+    chatOf(p, "Refactor notify").fire("contextmenu", { clientX: 10, clientY: 10 });
+    const menu = body[0], heads = menu.kids.filter((k) => k._cls && k._cls.has("cm-sub"));
+    const [fork, move] = heads, listOf = (head) => menu.kids[menu.kids.indexOf(head) + 1];
+    const isOpen = (head) => head._cls.has("open") && listOf(head)._cls.has("open") && head.attrs["aria-expanded"] === "true";
+    const isShut = (head) => !head._cls.has("open") && !listOf(head)._cls.has("open") && head.attrs["aria-expanded"] === "false";
+    assert.ok(isShut(fork) && isShut(move), "closed at first");
+    assert.strictEqual(byClass(menu, "cm-side").length, 0, "nothing beside the menu");
+    fork.fire("mouseenter"); p.runTimers();
+    assert.ok(isOpen(fork) && isShut(move), "hover: Fork to's projects open");
+    move.fire("mouseenter"); move.fire("mouseleave"); p.runTimers();
+    assert.ok(isOpen(fork) && isShut(move), "passing over Move to on the way down opens nothing");
+    // (Move to sits under Fork to's list: when that closes, the menu moves down by as much, so Move to stays under the pointer.)
+    move.getBoundingClientRect = () => ({ top: listOf(fork)._cls.has("open") ? 120 : 48, bottom: 0, left: 0, right: 100 });
+    const top0 = parseFloat(menu.style.top);
+    move.fire("mouseenter"); p.runTimers();
+    assert.ok(isShut(fork) && isOpen(move), "one open at a time");
+    assert.strictEqual(parseFloat(menu.style.top), top0 + 72, "the row under the pointer stays where it was");
+    fork.fire("click");
+    assert.ok(isOpen(fork) && isShut(move), "a click opens it at once");
+    fork.fire("click");
+    assert.ok(isOpen(fork), "a second click doesn't close it");
+    assert.ok(!menu.removed, "the menu stays open meanwhile");
+    listOf(fork).kids.find((k) => one(k, "cm-label").textContent === "weld-sim").fire("click");
+    assert.deepStrictEqual(p.posted, [{ type: "forkChat", key: "k", chatId: "1", to: "w" }]);
+    assert.ok(menu.removed, "the menu closes");
+    const css = fs.readFileSync(path.join(__dirname, "../extension/media/projects.css"), "utf8");
+    assert.match(css, /\.cm-list \{ display: none; \}/); assert.match(css, /\.cm-list\.open \{ display: block; \}/);
+    assert.match(css, /\.cm-menu \{ max-height: calc\(100vh - 8px\); overflow-y: auto; \}/, "a long list scrolls inside the page");
+  });
+  await check("Fork to / Move to while the chat works: greyed out, with the reason, and nothing opens", () => {
+    const p = load(); p.send(model(SECTIONS())); p.posted.length = 0;
+    const body = []; p.ctx.document.body = { append: (n) => body.push(n) };
+    chatOf(p, "Tune the arc model").fire("contextmenu", { clientX: 0, clientY: 0 });
+    const heads = byClass(body[0], "cm-sub");
+    assert.strictEqual(heads.length, 2);
+    assert.ok(heads.every((h) => h._cls.has("off") && /while it's working/.test(h.attrs.title)));
+    assert.strictEqual(byClass(body[0], "cm-list").length, 0, "no list to open");
+  });
+  await check("the page has the Explorer's font and size: VS Code's 13 px font, 22 px rows, no editor font scale", () => {
+    const css = fs.readFileSync(path.join(__dirname, "../extension/media/projects.css"), "utf8");
+    const js = fs.readFileSync(path.join(__dirname, "../extension/media/projects.js"), "utf8");
+    const host = fs.readFileSync(path.join(__dirname, "../extension/lib/projects/index.js"), "utf8");
+    assert.ok(!/--fs/.test(css.replace(/\/\*[^]*?\*\//g, "")), "no font scale in the rules");
+    assert.ok(!/setFs|fontScale/.test(js) && !/fontScale|data-fs/.test(host), "nor in the page or its host");
+    assert.match(css, /body \{ font-family: var\(--vscode-font-family\); font-size: var\(--vscode-font-size, 13px\);/);
+    assert.match(css, /--row: 22px;/);
+    for (const sel of [".row", ".chat-row", ".more", ".hist-head", ".hist-note"]) {
+      const m = css.match(new RegExp(`\\n\\${sel} \\{([^}]*)\\}`));
+      assert.ok(m && /height: var\(--row\)/.test(m[1]), `${sel}: a 22 px row`);
+      assert.ok(!/font-size/.test(m[1]), `${sel}: the page's 13 px`);
+    }
+  });
+  await check("History's Clear all: the count's size and right edge, no box of its own, centred in the row", () => {
+    const css = fs.readFileSync(path.join(__dirname, "../extension/media/projects.css"), "utf8");
+    const rule = (sel) => (css.match(new RegExp(`\\n${sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`)) || [])[1] || "";
+    const ca = rule(".hist-head .clear-all");
+    assert.match(ca, /font-size: \.9em/); assert.match(rule(".hist-head .hn, .chat-row.hist .when"), /font-size: \.9em/);
+    assert.match(ca, /background: none/);
+    assert.match(ca, /margin: 0 -4px 0 0; padding: 0 4px;/, "its text ends where the count's does");
+    assert.match(ca, /height: 18px; line-height: 18px/);
+    assert.match(rule(".hist-head"), /align-items: center/);
+    assert.ok(!/background/.test(rule(".hist-head .clear-all:hover")), "hover: underline, not a second box");
+  });
+  await check("right-click a History chat: Open instead of Rename; Delete asks the host (which asks you)", () => {
+    const p = load(); const secs = SECTIONS(); secs[2].projects[0].history = HIST(1);
+    p.send(model(secs)); p.posted.length = 0;
+    const body = []; p.ctx.document.body = { append: (n) => body.push(n) };
+    histOf(p)[0].fire("contextmenu", { clientX: 0, clientY: 0 });
+    const top = body[0].kids.filter((k) => k._cls && k._cls.has("cm-item"));
+    assert.deepStrictEqual(top.map((k) => one(k, "cm-label").textContent), ["Open", "Fork to", "Move to", "Delete"]);
+    top[3].fire("click");
+    assert.deepStrictEqual(p.posted, [{ type: "deleteChat", key: "d", chatId: "h0" }]);
+  });
+  await check("History heading: Clear all (shown under the pointer) asks the host; none while it's empty or searching", () => {
+    const p = load(); const secs = SECTIONS(); secs[0].projects[0].history = HIST(3);
+    p.send(model(secs)); p.posted.length = 0;
+    const btn = one(headOf(p, 0), "clear-all");
+    assert.strictEqual(btn.textContent, "Clear all");
+    btn.fire("click");
+    assert.deepStrictEqual(p.posted, [{ type: "clearHistory", key: "k" }]);
+    const empty = SECTIONS(); empty[0].projects[0].history = HIST(0);
+    p.send(model(empty));
+    assert.ok(!one(headOf(p, 0), "clear-all"));
+  });
   await check("History: ten rows, then \"Show N more\" adds twenty at a time", () => {
     const p = load(); const secs = SECTIONS(); secs[2].projects[0].history = HIST(45);
     p.send(model(secs));

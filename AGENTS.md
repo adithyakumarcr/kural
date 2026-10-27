@@ -46,7 +46,6 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/fix/` — Fix with Kural: `core.js` (no vscode: `problemText`, `terminalText`, ANSI, the 8,000-character tail), `index.js` (`registerFix`: light bulb, terminal status bar button).
   - `lib/rules/` — Rules: `.kural/rules/*.md` (and `.cursor/rules`), what each message gets (`registerRules`).
   - `lib/agent-review/` — Agent Review: a read-only agent reviews the uncommitted changes, findings as comments (`registerAgentReview`).
-  - `lib/debug/` — Debug mode: `server.js` the log server on 127.0.0.1, the mode's prompt.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
   - `lib/edit/` — `inline.js` (Ctrl+K, Apply), `review.js` (red/green), `code-reply.js`, `diff.js`.
@@ -319,17 +318,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   severity → medium; findings on deleted files dropped). `run.js` `Reviewer`: tools Read/Grep/Glob, effort medium (Quick) /
   high (Deep), 3 / 10 minutes; `onPermission` refuses anything but a read inside the repository (links out too); Gemini in
   `plan` mode. Test: `test/agent-review.test.js` (real temp repos). NOT checked live: a real AI review, the comment threads.
-- **Debug mode** (`lib/debug/`: `server.js` the log server; mode id `debug`). A chat mode beside Agent, Auto, Plan, Ask that maps to
-  `agent` for providers and permissions (`decide()`, gate, Codex sandbox: it asks before commands like Agent), with its own prompt:
-  hypotheses → temporary logging that posts to the log server (127.0.0.1 only, a token) → you reproduce → read the logs → fix the cause
-  → remove the logging. Every line it adds is marked `kural-debug`, so a left-over is found by searching for it.
-  `agentLike(mode)` in the chat; `makeAgent` maps debug → agent once (before the split branch), `decide()`/`gatedMode()` treat
-  it as agent (else agy's gate, started in agent, would refuse). `DebugLogs` (lazy, one per ChatView, stopped on dispose): one
-  HTTP server on 127.0.0.1, random port, Host checked; per chat `/<32-byte hex token>/log` (sha256 lookup + timingSafeEqual);
-  POST ≤ 16 KB (413), JSON or text → an NDJSON line in a 0600 file from `privateTmp("debug")`, capped at 5 MB (oldest half
-  dropped); CORS preflight for POST only. `debugNote(url, file)` (`<kural_debug>`: endpoint, log file, one-liners) goes with
-  every Debug message (`send()`, `retryElsewhere`); the chat's log ends on close/delete. The log file is in the temp roots,
-  so reading it needs no card. Test: `test/debug-mode.test.js`. NOT checked live: a real Debug session in the app.
+- **Debug mode was removed** (Adithya, 27 Oct 2026: "unnecessary"). `lib/debug/`, its prompt, `debugNote`, `agentLike` and the
+  `debug` value of `kural.chat.mode` are gone. A saved chat in mode `debug` becomes `agent` in `fix()` (explicitly, never the
+  default mode, which may be Auto); an unknown mode in `decide()` takes Agent's path (asks), in `gatedMode()` refuses.
 - **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
   and `--forward-subagent-text`. Old Codex refuses unknown flags, so `supportedFlags()` probes once
   (`Codex -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. The answer is saved in

@@ -15,7 +15,7 @@ a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: 
 .grow { flex: 1; min-width: 0; }
 
 /* ---------- the top: whose plugins, search ---------- */
-.top { display: flex; align-items: center; gap: 6px; padding: 6px 10px 0 12px; }
+.top { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
 .for { color: var(--muted); font-size: calc(12px * var(--fs, 1)); white-space: nowrap; }
 .ai { flex: 1; min-width: 0; background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border, var(--border));
   border-radius: 4px; padding: 2px 4px; font-size: calc(12.5px * var(--fs, 1)); height: calc(24px * var(--fs, 1)); }
@@ -24,7 +24,7 @@ a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: 
 .icon-btn:hover { background: var(--vscode-toolbar-hoverBackground, var(--hover)); }
 .icon-btn[disabled] { opacity: .4; cursor: default; background: none; }
 .icon-btn .codicon { font-size: calc(14px * var(--fs, 1)); }
-.find { padding: 6px 10px 4px 12px; }
+.find { padding: 8px 12px 6px; }
 .box { display: flex; align-items: center; gap: 4px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border)); border-radius: 4px; padding: 0 6px; }
 .box:focus-within { border-color: var(--vscode-focusBorder); }
 .box .codicon { color: var(--muted); font-size: calc(14px * var(--fs, 1)); }
@@ -50,40 +50,51 @@ a { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: 
   border-top: 1px solid var(--vscode-sideBarSectionHeader-border, transparent); background: var(--vscode-sideBarSectionHeader-background, transparent); color: var(--vscode-sideBarSectionHeader-foreground, inherit); }
 .row.head .codicon { font-size: calc(14px * var(--fs, 1)); }
 .htitle { white-space: nowrap; }
-.hsub { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 9px; font-size: calc(10.5px * var(--fs, 1)); padding: 0 6px; line-height: 1.6; flex-shrink: 0; font-weight: 400; }
-.row.plugin { cursor: pointer; padding-left: 20px; }
+/* a plugin: three lines (name and version; what it does; where it is and its buttons), with room above and below */
+.row.plugin { cursor: pointer; padding: 0 12px 0 20px; }
 .row.plugin:hover { background: var(--hover); }
 .row.plugin.sel { background: var(--vscode-list-inactiveSelectionBackground, rgba(128,128,128,.2)); }
 .rlist:focus .row.plugin.sel { background: var(--vscode-list-activeSelectionBackground, rgba(139,108,239,.3)); color: var(--vscode-list-activeSelectionForeground, inherit);
   outline: 1px solid var(--vscode-list-focusOutline, transparent); outline-offset: -1px; }
 .row.plugin.off .pname, .row.plugin.off .pdesc { opacity: .6; }
-.pmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pmain { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .ptop, .pline { display: flex; align-items: center; gap: 6px; min-width: 0; }
-/* (The name has the room first; where it comes from gives way.) */
-.pname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 0; max-width: 72%; }
-.pver, .pfrom { color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; flex-shrink: 0; }
-.pfrom { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+.ptop { height: calc(18px * var(--fs, 1)); }
+.pline { height: calc(20px * var(--fs, 1)); }
+/* (The name has the room first; the version gives way.) */
+.pname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pver { color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; flex-shrink: 0; }
 .tag { font-size: calc(10.5px * var(--fs, 1)); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
-.pdesc { flex: 1; min-width: 0; color: var(--muted); font-size: calc(12px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pacts { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.pdesc { color: var(--muted); font-size: calc(12px * var(--fs, 1)); line-height: calc(16px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the third line: where it is installed and which marketplace it comes from (muted words, "·" between), then its buttons */
+.pmeta { flex: 1; min-width: 0; display: flex; align-items: center; color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; overflow: hidden; }
+.pmeta > * { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pmeta > * + *::before { content: "\00b7"; margin: 0 6px; }
+.pmeta .tag { border: 0; padding: 0; font-size: inherit; flex-shrink: 1; }
+.pfrom { flex-shrink: 1; }
+.pacts { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: auto; }
 .pbtn { border: 1px solid var(--vscode-button-border, transparent); border-radius: 3px; padding: 0 7px; height: calc(20px * var(--fs, 1)); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap;
   background: var(--vscode-button-secondaryBackground, rgba(128,128,128,.2)); color: var(--vscode-button-secondaryForeground, inherit); display: inline-flex; align-items: center; gap: 5px; }
 .pbtn:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(128,128,128,.3)); }
 .pbtn.primary { background: var(--vscode-button-background, var(--accent)); color: var(--vscode-button-foreground, #fff); }
 .pbtn.primary:hover { background: var(--vscode-button-hoverBackground, var(--accent)); }
 .pbtn.wide { height: calc(24px * var(--fs, 1)); padding: 0 10px; font-size: calc(12px * var(--fs, 1)); }
+/* Install: an icon at the end of the name's line, only while the pointer (or the keyboard) is on the row; "Installing…" stays */
+.row.plugin .icon-btn.install { visibility: hidden; }
+.row.plugin:hover .icon-btn.install, .row.plugin.sel .icon-btn.install, .row.plugin .icon-btn.install:focus-visible { visibility: visible; }
+.ptop .pacts { margin-left: auto; }
 .pbtn .codicon { font-size: calc(14px * var(--fs, 1)); }
 .busy { color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); font-style: italic; white-space: nowrap; }
-.row.market { padding-left: 20px; font-size: calc(12.5px * var(--fs, 1)); }
+.row.market { padding: 0 12px 0 20px; gap: 8px; font-size: calc(12.5px * var(--fs, 1)); }
 .row.market:hover { background: var(--hover); }
 .row.market .codicon { color: var(--muted); font-size: calc(14px * var(--fs, 1)); flex-shrink: 0; }
 .mname { white-space: nowrap; }
 .msrc { color: var(--muted); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .row.market .icon-btn { visibility: hidden; }
 .row.market:hover .icon-btn, .row.market .icon-btn:focus { visibility: visible; }
-.row.action { padding-left: 20px; gap: 6px; }
-.row.hint { padding-left: 20px; color: var(--muted); font-size: calc(12px * var(--fs, 1)); line-height: 1.4; white-space: normal; align-items: flex-start; padding-top: 3px; }
+.row.action { padding: 0 12px 0 20px; gap: 8px; }
+.row.hint { padding: 4px 12px 0 20px; color: var(--muted); font-size: calc(12px * var(--fs, 1)); line-height: 1.4; white-space: normal; align-items: flex-start; }
 
 /* ---------- a plugin's page (an editor tab) ---------- */
 body.details { background: var(--vscode-editor-background); }

@@ -15,9 +15,11 @@ Read `README.md` for the features. This file is how the code works and how to ch
 
 ## Making a change
 Keep answers short and explain the *why* first; when fixing a bug, say what was wrong and why.
-At the end of every change, give the steps to build and install: `./install.sh` on a Mac or Ubuntu (builds from
-this folder and installs; `./install.sh --ext` when only `extension/` changed; `./install.sh --source` on a Mac to build VS Code from source first
-("Building from source" below; 30-60 minutes); `./install.sh --fresh` to try it as a
+At the end of every change, give the steps to build and install: `./install.sh` on a Mac or Ubuntu (builds VS Code from
+source with Kural's patches, then Kural, and installs: "Building from source" below, about 5 minutes, 30-60 the first time;
+since 27 Oct 2026 the default, because one-frame windows exist only there: the Mac app from VSCodium's download opened a
+window per project; `./install.sh --quick` = VSCodium's download, about a minute; `./install.sh --ext` when only
+`extension/` changed; `--source` is accepted and does nothing more); `./install.sh --fresh` to try it as a
 new user: Kural's data is moved to `~/kural-backup-<date>` first; `./install.sh --from-scratch-install` for a real first
 start: `scripts/from-scratch.sh` deletes Kural's data without backup, logs Claude Code/Codex/Antigravity out, resets
 Kural's macOS permissions (`tccutil reset All com.kural`) and its keychain item, and optionally removes those programs;
@@ -48,7 +50,6 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   - `lib/fix/` — Fix with Kural: `core.js` (no vscode: `problemText`, `terminalText`, ANSI, the 8,000-character tail), `index.js` (`registerFix`: light bulb, terminal status bar button).
   - `lib/rules/` — Rules: `.kural/rules/*.md` (and `.cursor/rules`), what each message gets (`registerRules`).
   - `lib/agent-review/` — Agent Review: a read-only agent reviews the uncommitted changes, findings as comments (`registerAgentReview`).
-  - `lib/debug/` — Debug mode: `server.js` the log server on 127.0.0.1, the mode's prompt.
   - `lib/projects/` — Projects bar: `status.js` (no vscode: each window's status file, inbox, pins), `model.js` (no vscode: the list), `index.js` (`registerProjects`: view, badge, status bar item, clicks, card); UI `media/projects.js` + `projects.css`.
   - `lib/tab/` — `completion.js` (editor), `terminal.js` (terminal + plain words), `local.js` (Ollama FIM),
     `activity.js` (what Tab learns), `panel.js`.
@@ -382,7 +383,14 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   letter tiles, second lines or project colors (the model still sends `color`, `letter`, `news`: the page
   uses `news` only in a row's tooltip); a folder per project (`.fic`, the fold button when it has chats), its chats
   indented under it with a mark at the end (spinner, orange `.needs`, blue `.dot-new`), five then "Show N more" (`S.more`,
-  page only); no "New chat" row (tried and dropped: the chat has its own +); **rename, delete, move** (Adithya, 25 Oct
+  page only); no "New chat" row (tried and dropped: the chat has its own +); **the Explorer's font and size** (Adithya,
+  27 Oct 2026): `projects.css` uses `var(--vscode-font-size)` (13 px), `--row: 22px`, 16 px icons, 0.9em for the count, ages
+  and Clear all (which takes the count's place and right edge), and NOT `--fs` (the host sends no font scale);
+  **the chat's menu** (`chatMenu`) is drawn by the page, so it can't leave the webview: Fork to › / Move to › open their
+  projects in the menu itself, under the row (`.cm-list`, indented; Adithya, 27 Oct 2026: a list beside the menu was cut off
+  in the side bar or covered the menu): on hover after 150 ms (passing over opens nothing) or at once on a click (a click
+  never closes it), one at a time, the menu moved down by what closed above so the row under the pointer stays; the menu
+  scrolls when taller than the page; **rename, delete, move** (Adithya, 25 Oct
   2026: instead of VS Code's Cut/Copy/Paste; moving by drag and drop): rows carry `data-vscode-context` (`webviewSection`
   chat|project, `key`, `chatId`, `projectOpen`, `projectPinned`; the body `preventDefaultContextMenuItems`) for package.json
   `webview/context` (`kural.projects.renameChat|moveChat|deleteChat|pin|unpin|close|removeRecent`, hidden from the
@@ -435,17 +443,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   ~155 ms) then write in place, reads retry twice before a file counts as missing. `nameProblem` refuses Windows-invalid names on
   every OS (`<>:"/\|?*`, control characters, a trailing dot, CON/PRN/AUX/NUL/COM1-9/LPT1-9). Test: `test/projects-windows.test.js`
   (Windows simulated with `path.win32` on any OS). The bar is meant for all three systems like the source build.
-- **Debug mode** (`lib/debug/`: `server.js` the log server; mode id `debug`). A chat mode beside Agent, Auto, Plan, Ask that maps to
-  `agent` for providers and permissions (`decide()`, gate, Codex sandbox: it asks before commands like Agent), with its own prompt:
-  hypotheses → temporary logging that posts to the log server (127.0.0.1 only, a token) → you reproduce → read the logs → fix the cause
-  → remove the logging. Every line it adds is marked `kural-debug`, so a left-over is found by searching for it.
-  `agentLike(mode)` in the chat; `makeAgent` maps debug → agent once (before the split branch), `decide()`/`gatedMode()` treat
-  it as agent (else agy's gate, started in agent, would refuse). `DebugLogs` (lazy, one per ChatView, stopped on dispose): one
-  HTTP server on 127.0.0.1, random port, Host checked; per chat `/<32-byte hex token>/log` (sha256 lookup + timingSafeEqual);
-  POST ≤ 16 KB (413), JSON or text → an NDJSON line in a 0600 file from `privateTmp("debug")`, capped at 5 MB (oldest half
-  dropped); CORS preflight for POST only. `debugNote(url, file)` (`<kural_debug>`: endpoint, log file, one-liners) goes with
-  every Debug message (`send()`, `retryElsewhere`); the chat's log ends on close/delete. The log file is in the temp roots,
-  so reading it needs no card. Test: `test/debug-mode.test.js`. NOT checked live: a real Debug session in the app.
+- **Debug mode was removed** (Adithya, 27 Oct 2026: "unnecessary"). `lib/debug/`, its prompt, `debugNote`, `agentLike` and the
+  `debug` value of `kural.chat.mode` are gone. A saved chat in mode `debug` becomes `agent` in `fix()` (explicitly, never the
+  default mode, which may be Auto); an unknown mode in `decide()` takes Agent's path (asks), in `gatedMode()` refuses.
 - **Thinking and agents' text** need `--thinking-display summarized` (hidden flag; otherwise thinking arrives empty)
   and `--forward-subagent-text`. Old Claude Code refuses unknown flags, so `supportedFlags()` probes once
   (`claude -p … < /dev/null`, ~0.5 s, no request) and adds only the known ones. The answer is saved in
@@ -700,7 +700,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   A click brings the window to the front. Test: `test/rebrand-toast.test.js` (also on the real workbench file).
 - **Extensions | Plugins** (`lib/plugins/`: `core.js` no vscode, `index.js` the view + a plugin's page (WebviewPanel
   "kural.pluginDetails"); `media/plugins.*`, `media/plugin-details.js`; Adithya, 18 Oct 2026: like Search & Ask, VS Code's
-  feature and Kural's side by side; the plugins of whichever AI the chat's model is). Each AI's own plugin manager does the
+  feature and Kural's side by side; the plugins of whichever AI the chat's model is). The page draws only the rows on
+  screen, so every row type has a fixed height (`H` in `media/plugins.js`, at font scale 1): a plugin has three lines like
+  VS Code's Extensions (name + version + Off; description; where + marketplace, then its buttons: 66 px; Adithya, 27 Oct
+  2026, "better spacing"), a section's description is its tooltip, the switch's tabs are as wide as their words
+  (`flex: 1 1 auto` in rebrand.py's `PT_CSS`). Each AI's own plugin manager does the
   work. Claude: `claude plugin list --json --available` (Anthropic's built-in directory `anthropic-plugin-directory`, a few
   thousand, isn't in `marketplace list`; installed plugins aren't in `available`, their descriptions come from
   `<installPath>/.claude-plugin/plugin.json`), `install|uninstall|enable|disable|update <id> --json --scope user|project|local`
@@ -788,8 +792,11 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   `--extensionDevelopmentPath`, the fake Claude, driven over CDP): the box's 4 buttons, Alt+Enter's answer in the box,
   Send to Chat's chip, Esc then Cmd+K. **The box's height**: VS Code gives every comment input at least 90 px (5 lines);
   `rebrand.py small_edit_box` makes a `kural-edit` thread's 2 lines (first height + the size rule `MZt`, through the input's
-  `_parentThread.commentThread`), others unchanged; needs a full `./install.sh`
-  (`test/rebrand-small-edit-box.test.js`). NOT clicked live. **The
+  `_parentThread.commentThread`), others unchanged; Kural's thread = contextValue `kural-edit` OR an id starting with
+  `kural.inlineEdit.` (`kural_edit_thread`): the extension host sends a new thread at once but its contextValue ~100 ms later
+  (`eventuallyUpdateCommentThread` is debounced), so the box was sized 5 lines first and shrank only once you typed (Adithya,
+  27 Oct 2026); needs a full `./install.sh` (`test/rebrand-small-edit-box.test.js`; its real-file check prefers the unpatched
+  `build/vscode-out`). NOT clicked live. **The
   Explorer** (`lib/explorer/`): a FileDecorationProvider fed by the chat's tool_use (`started`) / tool_result
   (`finished`) / `finishReply` (`ended`); reads blue (2.5 s after), changes yellow (until the answer ends + 4 s); colors
   `kural.explorer.reading/changing` in package.json `colors`. **Listen**: the voice leaves 0.35–0.5 s of silence before
@@ -922,7 +929,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   product.json (`807ba2d…` = sha1 of "1.140.06880", VSCodium's `BUILD_SOURCEVERSION`, which `build.sh` sets the same way). `scripts/vscode/fetch.sh [--dry-run] [dest]` (default `build/vscode-src`) fetches that commit and VSCodium's
   tag, applies `patches/kural/*.patch` FIRST (name order), then VSCodium's patches, and writes `"kuralSource": {commit,
   patches: [names]}` into product.json. `scripts/vscode/build.sh <darwin-arm64|linux-x64|win32-x64>` = `npm ci` + gulp
-  `vscode-<platform>-min`. `KURAL_SOURCE=1 ./build-mac.sh` or `./install.sh --source`; then `electron_runtime.py`,
+  `vscode-<platform>-min`. `KURAL_SOURCE=1 ./build-mac.sh` or `./install.sh` (the default since 27 Oct 2026; `--quick` = VSCodium's download); then `electron_runtime.py`,
   `rebrand.py`, renaming and signing run unchanged. **Kural's patches are made against PRISTINE VS Code** (Microsoft's
   source, not VSCodium's patched one), so re-make them against a new commit with `git apply --3way`; a patch that no longer
   fits fails the build. **`kuralSource` is the marker**: `rebrand.py` skips each of its patches listed in
@@ -961,7 +968,7 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   back. Workaround: the setting `window.nativeFullScreen: false` gives simple full screen, which has no Spaces. Left as a gap
   on purpose); every restored window still loads at start; a worktree opened "in current window" replaces the project.
   The Projects bar detects the command (see its bullet). **Ubuntu x64** builds from source too (`KURAL_SOURCE=1 ./make-deb.sh`,
-  `./install.sh --source`, which apt-installs the build packages): `make-deb.sh` runs `fetch.sh` and `build.sh --download-node
+  `./install.sh`, which apt-installs the build packages; Linux that isn't x64 falls back to `--quick` with a note): `make-deb.sh` runs `fetch.sh` and `build.sh --download-node
   linux-x64`, packages `build/vscode-out/linux-x64` as the app folder (`usr/share/codium`) and writes the completions, mime
   file and Depends itself; Depends comes from VS Code's `build/linux/debian/dep-lists.ts` (amd64 list). Everything after that,
   from `electron_runtime.py` on, is shared with the download path. `build-from-source.yml` (manual) has a `macos` and a `linux`

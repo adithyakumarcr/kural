@@ -82,24 +82,26 @@ const tab = () => ({ id: "t1", model: "opus", messages: [], status: "idle" });
   const fs = require("fs");
   const src = fs.readFileSync(path.join(__dirname, "..", "extension", "media", "chat.js"), "utf8");
   const code = src.slice(src.indexOf("  function enhanceTab("), src.indexOf("  function renderEnhance()"));
+  const node = (text) => ({ text, cloneNode() { return this; } });
   const page = () => {
-    const log = { put: [], locked: false, renders: 0 };
+    const log = { put: [], locked: false, renders: 0, box: ["orig"] };
     const S = { tab: { id: "t1" }, enh: null };
-    const input = { setAttribute: (k, v) => { log.locked = v === "false"; }, classList: { add() {}, remove() {} } };
-    const api = new Function("S", "input", "unlockInput", "putPrompt", "renderEnhance", `${code}; return { enhanceTab, onEnhanceState };`)(
-      S, input, () => { log.locked = false; }, (t) => log.put.push(t), () => { log.renders++; });
+    const input = { replaceChildren: (...n) => { log.box = n.map((x) => x.text); }, setAttribute: (k, v) => { log.locked = v === "false"; }, classList: { add() {}, remove() {} } };
+    const api = new Function("S", "input", "unlockInput", "putPrompt", "renderEnhance", "renderQueueBtn", `${code}; return { enhanceTab, onEnhanceState };`)(
+      S, input, () => { log.locked = false; }, (t) => log.put.push(t), () => { log.renders++; }, () => {});
     return { S, log, ...api };
   };
   await check("page: a result for a chat that isn't on screen never goes into the box; it waits for that chat", () => {
     const p = page();
-    p.S.enh = { tabId: "t1", id: "r1", state: "running", before: ["orig"] };
+    p.S.enh = { tabId: "t1", id: "r1", state: "running", before: [node("orig")] };
     p.S.tab = { id: "t2" }; p.enhanceTab("t2");                   // you opened another chat while it loads
+    assert.deepStrictEqual(p.log.box, [], "the text being enhanced doesn't come along to the other chat");
     assert.strictEqual(p.S.enh, null); assert.strictEqual(p.log.locked, false, "the other chat's box is not locked");
     p.onEnhanceState({ tabId: "t1", id: "r1", state: "done", prompt: "BETTER", label: "L", calls: 2, ms: 3000 });
     assert.deepStrictEqual(p.log.put, [], "the other chat's box got the text");
     p.S.tab = { id: "t1" }; p.enhanceTab("t1");                   // back
     assert.deepStrictEqual(p.log.put, ["BETTER"]);
-    assert.strictEqual(p.S.enh.state, "done"); assert.deepStrictEqual(p.S.enh.before, ["orig"], "Undo still has that chat's own text");
+    assert.strictEqual(p.S.enh.state, "done"); assert.deepStrictEqual(p.S.enh.before.map((n) => n.text), ["orig"], "Undo still has that chat's own text");
   });
   await check("page: progress of the other chat is kept, the one on screen is not touched; back on screen it is locked again", () => {
     const p = page();
@@ -110,6 +112,7 @@ const tab = () => ({ id: "t1", model: "opus", messages: [], status: "idle" });
     assert.strictEqual(p.log.renders, renders);
     p.enhanceTab("t1");
     assert.strictEqual(p.S.enh.status, "Reading a.js"); assert.strictEqual(p.log.locked, true);
+    assert.deepStrictEqual(p.log.box, [], "back on screen the chat's own text returns (here: it had none)");
   });
   await check("page: on the chat that asked, the result goes straight into the box", () => {
     const p = page();

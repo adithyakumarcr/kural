@@ -5,12 +5,39 @@
 - **Auto is a switch.** The model menu has a search box and an Auto switch; the profile (Balance, Cost, Intelligence)
   shows only while Auto is on.
 - **Chat titles are short summaries** made by the fastest model; failures keep the first words of your message.
-- **Enhance prompt stays with its chat.** A result that arrives after you switched chats waits for the chat that asked.
+- **Enhance prompt stays with its chat.** A result that arrives after you switched chats waits for the chat that asked,
+  and the text being enhanced no longer comes along into the other chat's box.
 - **History is safer.** A chat is no longer lost to a damaged or missing History card, and deleted chats stay deleted.
 - **History under each project** in the Projects bar (folded; drag a chat to another project, Move to... and Fork to...).
 - **Projects and the Explorer share one container**; projects can be collapsed and reordered.
 - **Linux:** opening a second project re-checks one-frame windows, and a window whose first paint never reports is shown after 5 s.
 - **Ask's box lines up with Search's.**
+- **Right-click a chat in Projects:** Rename, Fork to › and Move to › (a list of the open projects), Delete.
+- **Clear all** on a project's History heading (asks first; open chats stay).
+- **Drag a chat anywhere onto a project** (its name, chats or History) to move it.
+- **No Explorer icon:** all of the Explorer's views are under Projects; Shift+Cmd+E goes there. Outline and Timeline start hidden.
+- **Maximizing the chat keeps the side bar** (Projects stayed hidden until you un-maximized).
+- **No "…" on the chat's tab line:** Get started, Check for updates and What's new are in Kural Settings.
+- **Auto hides Intensity:** the Model Router picks it with the model.
+- **Debug mode is gone.** Ask for a bug fix in Agent mode; a chat that was in Debug goes on in Agent.
+- **Projects looks like the Explorer:** the same font and size (13 px, 22 px rows) whatever size the code editor uses.
+- **Each project has its own color** in the Projects bar: its name and its folder (the same one every time), softer for a
+  Recent one.
+- **Dragging over Projects selects nothing** (it selected the names like text); the search and rename boxes still do.
+- **Ctrl+K's box is small from the start.** It opened five lines tall and shrank to two only once you typed: VS Code told
+  it that it was Kural's box a moment too late.
+- **Fork to › and Move to › fit the side bar.** Point at one (or click it) and the open projects show right under it, in
+  the menu itself (a list beside the menu was cut off at the side bar's edge).
+- **History's Clear all** sits exactly where the count is, in the same size, without a box of its own.
+- **A smaller send button in Ask** (16 px).
+- **More room in the Plugins tab.** An installed plugin has three lines, like VS Code's Extensions: name and version, what
+  it does, then where it is installed with its buttons; one you can add has two; a section's description is its tooltip,
+  and "Connectors" fits in the tabs.
+- **No purple Install button on every row.** In Plugins and in Extensions, Install is a download icon that shows when you
+  point at the row (or select it); "Installing…" stays visible.
+- **One window for all your projects when you build Kural yourself:** `./install.sh` now builds VS Code from its source
+  with Kural's patches (one-frame windows: the old build from VSCodium's download opened a window per project, the cause of
+  "several Kural windows" on the Mac), on a Mac and on Ubuntu x64. `./install.sh --quick` is the old, faster way.
 
 ## What's new in 1.2.1-beta.4
 
