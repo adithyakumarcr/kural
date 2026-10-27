@@ -1,7 +1,8 @@
 // The Projects tab's page (lib/projects/index.js): every project with a Kural window, the pinned ones and the recent ones,
 // and under a project each of its chats with what it is doing. The look (Adithya, 25 Oct 2026: design A "Folders" of
 // docs/mockups/projects-bar/projects-bar-v3a.html, like ChatGPT's project list; then the Pinned / Open / Recent headings
-// back, so you can tell them apart): a folder per project with its chats under it, no cards, letter tiles or second lines;
+// back, so you can tell them apart): a folder per project with its chats under it, no cards, letter tiles or second lines
+// (each project's name and folder in its own color);
 // a chat's news is a mark at its end (spinner, orange dot, blue dot). It only draws what the host sends ({type: "model"},
 // {type: "find"}, {type: "rename"}) and posts clicks: open, openChat, pin, close, removeRecent, search, fold, renameChat,
 // moveChat (a chat dragged onto another project), historyFold, openHistory (a saved chat of the project's History). The right-click menus are package.json's "webview/context", fed

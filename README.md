@@ -470,19 +470,22 @@ No GitHub needed: one command builds Kural from the code in this folder and inst
 (a Mac with Apple Silicon, or Ubuntu / Debian):
 
 ```bash
-./install.sh            # build and install (on a Mac it opens Kural when done)
+./install.sh            # build and install (on a Mac it opens Kural when done); VS Code is built from its source
+./install.sh --quick    # the same with VSCodium's download instead (about a minute; no one-frame project windows)
 ./install.sh --ext      # changed only files in extension/? put them into the installed Kural in a few seconds
+./install.sh --no-open  # don't open Kural afterwards (Mac)
 ./install.sh --fresh    # install like a new user: your Kural settings and chats go to a backup folder first
 ./install.sh --from-scratch-install   # test as a brand-new user: Kural's data deleted (no backup), Claude Code,
                         # Codex and Antigravity logged out, macOS permissions for Kural reset; asks first
 ```
 
-The first build downloads VSCodium and the platform's patched Electron runtime (about 120–150 MB extra,
+`./install.sh` builds VS Code from its source with Kural's patches (below): the first time 30 to 60 minutes, later about
+5. With `--quick` it downloads VSCodium instead, and the platform's patched Electron runtime (about 120–150 MB extra,
 cached in `downloads/`). Builds verify the VSCodium pins in `codium.lock` and the Electron pins in
 `vendor/electron-runtime.json`; a mismatch stops the build. The runtime replacement keeps the editor core,
 bundle identities and vendor security fuses. A weekly job (`upstream-check`) updates both pins when VSCodium or
 Electron publish a newer version (`scripts/update-codium.sh`, `scripts/update-electron.py`), builds it and opens a
-pull request. After that, a build takes about a
+pull request. After that, a `--quick` build takes about a
 minute. On a Mac you need Apple's command-line tools once (`xcode-select --install`). `install.sh` sets up
 everything else itself. After `--ext` on Ubuntu, reload the window (**Developer: Reload Window**). On a Mac,
 Kural restarts.
@@ -502,7 +505,8 @@ default (one window for all your projects needs it; `./install.sh --quick` uses 
 5) and needs Node at VS Code's `.nvmrc` version, Python and a compiler (Apple's command-line tools; on Ubuntu `install.sh`
 installs the packages).
 Windows still uses the download. The Mac build and its one-frame project windows were checked in a running app
-(`node test/one-frame.live.js`); a full Ubuntu build hasn't been run yet. Details:
+(`node test/one-frame.live.js`); the Ubuntu build was built and started in Docker (`scripts/linux-container/`), not yet on
+a real Ubuntu computer. Details:
 [the wiki page](docs/wiki/Building-from-Source.md) and
 [the design](docs/superpowers/specs/2026-10-24-vscode-source-build-design.md).
 

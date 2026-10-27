@@ -380,8 +380,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   **The look** (Adithya, 25 Oct 2026, design A "Folders" of `docs/mockups/projects-bar/projects-bar-v3a.html`, like ChatGPT's
   project list; the earlier "Cards" look was dropped; the Pinned / Open / Recent headings were kept, Adithya: without them
   you couldn't tell the groups apart): the model's sections in order, each under its heading (`.sec`), with no cards,
-  letter tiles, second lines or project colors (the model still sends `color`, `letter`, `news`: the page
-  uses `news` only in a row's tooltip); a folder per project (`.fic`, the fold button when it has chats), its chats
+  letter tiles or second lines (the model still sends `color`, `letter`, `news`: the page uses `news` only in a row's
+  tooltip); **each project's own color** (Adithya, 27 Oct 2026): the row gets `pc0`..`pc7` from a hash of its key (the page's
+  `hue`), projects.css colors the name and folder with it (soft shades dark, deeper light; softer for Recent), not the
+  model's `color`; a folder per project (`.fic`, the fold button when it has chats), its chats
   indented under it with a mark at the end (spinner, orange `.needs`, blue `.dot-new`), five then "Show N more" (`S.more`,
   page only); no "New chat" row (tried and dropped: the chat has its own +); **the Explorer's font and size** (Adithya,
   27 Oct 2026): `projects.css` uses `var(--vscode-font-size)` (13 px), `--row: 22px`, 16 px icons, 0.9em for the count, ages

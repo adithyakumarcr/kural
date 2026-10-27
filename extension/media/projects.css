@@ -1,7 +1,8 @@
 /* The Projects tab (media/projects.js): design A "Folders" (docs/mockups/projects-bar/projects-bar-v3a.html, Adithya,
    25 Oct 2026, like ChatGPT's project list, with the Pinned / Open / Recent headings): a folder per project with its chats
-   indented under it; no cards or project colors. A chat's news is a mark at its end: spinner (blue), orange dot (waiting for
-   you), blue dot (new answer). VS Code's theme colors; no Kural purple in the list; red only for what closes or removes.
+   indented under it; no cards. Each project's name and folder have their own color (pc0..pc7, Adithya, 27 Oct 2026). A chat's
+   news is a mark at its end: spinner (blue), orange dot (waiting for you), blue dot (new answer). VS Code's theme colors
+   otherwise; no Kural purple in the list; red only for what closes or removes.
    The Explorer's font and size (Adithya, 27 Oct 2026: "the same as the Explorer"): VS Code's font at 13 px, 22 px rows,
    16 px icons, smaller text only where VS Code has it (descriptions at 0.9em, section headings at 11 px). Not the editor's
    font size (--fs), which the chat follows. */

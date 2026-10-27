@@ -198,7 +198,10 @@ model on their computer (Ollama, offline, no account). Features and how to use t
 - Debug mode was removed (27 Oct 2026): ask for a bug fix in Agent mode. A chat that was in Debug goes on in Agent.
 - Projects: the first tab in the left bar (a folder-library icon) lists every project with a Kural window (one window
   per project), like ChatGPT's project list: a folder per project with its chats under it (five, then
-  "Show N more"); the project in this window is bold, the folder is in the tooltip. At a chat's end: a spinner while it
+  "Show N more"); each project's name and folder have their own color (the same every time; softer for a Recent one);
+  the project in this window is bold, the folder is in the tooltip. The Explorer's views (files, Open Editors, NPM
+  Scripts; Outline and Timeline start hidden) are in the same side bar, below Projects (Ctrl/Cmd+Shift+E goes there):
+  there is no separate Explorer icon; drag a view's title to reorder them. At a chat's end: a spinner while it
   works, an orange dot while it waits for you (the question in the tooltip), a blue dot and bold title when it finished
   and you haven't seen it; a chat with nothing sent yet ("New chat") isn't listed. Click a project's folder icon to fold
   its chats (a folded one shows its chats' marks on its own row). Three headings: Pinned (the pin on a row; kept for

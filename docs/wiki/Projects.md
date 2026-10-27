@@ -6,7 +6,9 @@ project and every chat in them in one list, so you see what each chat is doing a
 ## The list
 
 One list, like ChatGPT's project list: each project is a folder with its chats under it, in three sections, each with
-its heading. It has the Explorer's font and size (13 px, 22 px rows), whatever size your code editor uses:
+its heading. Each project's name and folder have their own color, the same one every time (a little softer for a Recent
+one), so you can tell them apart at a glance. It has the Explorer's font and size (13 px, 22 px rows), whatever size your
+code editor uses:
 
 | Section | What's in it |
 |---|---|

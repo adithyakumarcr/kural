@@ -9,6 +9,7 @@
 - [[Agent Review]]
 - [[Google Gemini and ChatGPT]]
 - [[Your Own Model]]
+- [[Model Router]]
 - [[Tab Completion]]
 - [[Terminal]]
 - [[Devices]]
