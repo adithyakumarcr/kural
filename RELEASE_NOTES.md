@@ -1,4 +1,4 @@
-## Not released yet
+## What's new in 1.2.1-beta.5
 
 - **Skills anywhere in a message.** The "/" list now works after a space too, not only at the start; a skill picked
   mid-message is moved to the front when sent.
