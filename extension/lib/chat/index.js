@@ -35,6 +35,7 @@ const slashList = require("./slash");
 const shortcuts = require("./shortcuts");
 const projectRules = require("../rules/core");
 const { Enhancer } = require("../enhance");
+const { Titler } = require("./title");
 const { Voice } = require("../voice");
 const { Listen } = require("../listen");
 const { pickModel } = require("../listen/script");
@@ -164,6 +165,8 @@ class ChatView {
       textOf: (segments) => ChatView.textOf(segments), cwd: () => this.root() || ws.workDir(),
       post: (msg) => this.post(msg), save: () => this.save(),
     });
+    // A new chat's title: the first words at once, then a short summary from the quickest model (title.js).
+    this.titler = new Titler({ ...this.sideChats.d });
     // Voice input (lib/voice): the page records; Whisper transcribes on this computer (downloaded the first time, after you
     // agree); Side chat's quick model tidies the text up. The result goes into the box, never sent by itself.
     this.voice = new Voice({ dir: path.join(context.globalStorageUri.fsPath, "voice"), post: (msg) => this.post(msg),
@@ -578,7 +581,8 @@ class ChatView {
     if (!old) return false;
     this.clean(old);
     const tab = { ...old, sessionId: newSessionId(), started: false, visiting: false, workspace: this.here, updatedAt: Date.now(),
-      carryOver: { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
+      carryOver: old.carryOver && old.carryOver.fork ? old.carryOver   // (a fork not sent yet keeps its own: "branches from that conversation")
+        : { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
     const blank = this.tabs.find((t) => !t.messages.length && t.status === "idle" && !this.panes.some((p) => p !== this.cur() && p.activeId === t.id));
     if (blank) this.tabs.splice(this.tabs.indexOf(blank), 1, tab); else this.tabs.push(tab);
     this.archive.save(tab, this.card(tab));
@@ -586,6 +590,37 @@ class ChatView {
     this.postHistory();
     this.save();
     return true;
+  }
+
+  // ---------- the Projects bar's History, moves to a project that isn't open, and forks (lib/projects) ----------
+  // The saved chats' cards (all projects); fromDisk: other windows may have saved some since.
+  historyCards(fromDisk = false) { return fromDisk ? this.archive.refresh() : this.archive.list(); }
+  // A saved chat, not open here, moved to another project's History without that project's window (adopt does it for a
+  // window that takes it in): same id, `home` ({key, name, open}) as its workspace, a fresh conversation given the old one.
+  rehome(id, home, from) {
+    if (this.tab(id) || !home) return false;
+    this.archive.refresh();
+    const old = this.archive.read(id);
+    if (!old) return false;
+    this.clean(old);
+    const tab = { ...old, sessionId: newSessionId(), started: false, visiting: false, workspace: home, updatedAt: Date.now(),
+      carryOver: old.carryOver && old.carryOver.fork ? old.carryOver
+        : { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
+    return this.archive.save(tab, this.card(tab));
+  }
+  // Fork: a copy of the whole recorded conversation (an open chat as it is now, else the saved one) as a NEW chat, saved in
+  // History under `home`; the original stays. The window of the project that gets it then adopts it. The new id, or null.
+  forkCopy(id, home) {
+    let src = this.tab(id);
+    if (!src) {
+      src = this.archive.read(id);
+      if (!src) return null;
+      this.clean(src); src.visiting = false;
+    }
+    const tab = forkConversation(src, src.messages.length - 1, { id: shortId(), sessionId: newSessionId() });
+    if (!tab) return null;
+    if (home) tab.workspace = home;
+    return this.archive.save(tab, this.card(tab)) ? tab.id : null;
   }
 
   // Open the folder a visiting chat came from, in a new window.
@@ -1641,7 +1676,9 @@ class ChatView {
   async enhance(tab, m) {
     if (!this.enhancing) this.enhancing = new Map();
     if (this.enhancing.has(tab.id) || tab.visiting) return;
-    const id = String(m.requestId || "").slice(0, 80), state = (o) => this.post({ type: "enhanceState", tabId: tab.id, id, ...o });
+    // The reply goes to the pane that asked, tagged with its chat and request: another chat on screen never gets it.
+    const pane = this.pane, id = String(m.requestId || "").slice(0, 80);
+    const state = (o) => { const msg = { type: "enhanceState", tabId: tab.id, id, ...o }; if (pane && this.panes && this.panes.includes(pane)) this.postTo(pane, msg); else this.post(msg); };
     if (vscode.workspace.isTrusted === false) { state({ state: "error", kind: "unavailable", message: "Trust this workspace before using Kural AI." }); return; }
     const run = this.enhancer.run({ text: ChatView.textOf(Array.isArray(m.segments) ? m.segments : []), root: this.root(), chatEngine: engineOf(tab.model),
       onStatus: (status) => state({ state: "running", status }) });
@@ -1747,6 +1784,18 @@ class ChatView {
       : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
   }
 
+  // Replaces the first-words title with a summary, if the chat is still there, still has that title and wasn't renamed meanwhile.
+  // Not the conversation: no status, no notification; a failure keeps the first words.
+  summarizeTitle(tab, text) {
+    const first = tab.title;
+    if (!this.titler) return;
+    this.titler.ask(tab.id, text).then((title) => {
+      if (!title || tab.renamed || tab.title !== first || !this.tab(tab.id)) return;
+      tab.title = title;
+      this.postTabs(); this.save();
+    }, () => {});
+  }
+
   // A tab title from your first message; pills read as "main.py (L3-9)".
   static titleOf(segments) {
     return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "shortcut" ? `/${s.ctx.name}` : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? s.ctx.label
@@ -1848,7 +1897,7 @@ class ChatView {
       return;
     }
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
-    if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
+    if (tab.title === "New chat" && !tab.renamed) { tab.title = ChatView.titleOf(segments); this.summarizeTitle(tab, text); }
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
     const picked = ChatView.cleanPicks(picks);
     if (picked.length) user.picks = picked;   // (options you picked in the answer: shown as chips on your message)

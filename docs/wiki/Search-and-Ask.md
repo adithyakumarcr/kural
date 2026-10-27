@@ -40,3 +40,5 @@ lightest Google Gemini (Flash) or ChatGPT (Codex "mini") model, the chat's own A
 own model ([[Your Own Model]]). Under the results it says which model answered and how long it took.
 
 An empty box shows no results: empty the question (or the Search box) and the old results go away.
+
+The Ask box has the same width, radius and padding as the Search box.

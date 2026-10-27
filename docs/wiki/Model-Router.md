@@ -94,3 +94,5 @@ node scripts/train-router.js                # after changing examples.json: retr
 Nothing is downloaded by these scripts: helpers that aren't installed are skipped. `test/router-words.test.js` fails when `words-model.json` is out of date with the examples. The labelled requests are written for Kural (not taken from a benchmark), and the same folds chose the blend settings, so the blended numbers are slightly optimistic; they measure reading a request's size, not answer quality.
 
 Earlier reports (6 October: MiniLM matched 8 example sentences and accepted only 3 of 24 requests; a generative Qwen3 0.6B helper was tried and removed) are kept in `docs/benchmarks/` for history.
+
+Auto is a switch under a Search models box in the model menu; the profile (Balance, Cost, Intelligence) shows only while it is on.

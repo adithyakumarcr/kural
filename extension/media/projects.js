@@ -4,7 +4,7 @@
 // back, so you can tell them apart): a folder per project with its chats under it, no cards, letter tiles or second lines;
 // a chat's news is a mark at its end (spinner, orange dot, blue dot). It only draws what the host sends ({type: "model"},
 // {type: "find"}, {type: "rename"}) and posts clicks: open, openChat, pin, close, removeRecent, search, fold, renameChat,
-// moveChat (a chat dragged onto another open project). The right-click menus are package.json's "webview/context", fed
+// moveChat (a chat dragged onto another project), historyFold, openHistory (a saved chat of the project's History). The right-click menus are package.json's "webview/context", fed
 // by each row's data-vscode-context. The host knows what a click means (the page sends keys and ids only).
 // Nothing is built from HTML text: everything is made with el().
 (function () {
@@ -17,10 +17,12 @@
 
   const saved = vscode.getState() || {};
   const SHOWN = 5;              // chats a project shows before "Show N more"
+  const HIST_SHOWN = 10, HIST_STEP = 20;   // History rows shown first, and added by each "Show N more"
   const S = {
     model: null,              // { sections, badge, query, folded } from the host
     folded: new Set(),        // project keys you folded (the host keeps them)
     more: new Set(),          // projects whose every chat you asked to see (this page only)
+    hist: new Map(),          // project key -> History rows shown (this page only)
     q: saved.q || "",
     findOpen: !!saved.q,      // the search box (the title bar's search button opens it)
     renaming: null,           // {key, chatId}: that chat's title is a box
@@ -97,15 +99,15 @@
   }
 
   function projectRow(p, showing) {
-    const folded = S.folded.has(p.key), chats = p.chats || [];
+    const folded = S.folded.has(p.key) && !query(), chats = p.chats || [];
     const row = el("div", { class: `row${p.here ? " cur" : ""}${p.open ? "" : " recent"}`, role: "treeitem", tabindex: "0",
       title: [p.shortPath || p.path || "", p.news && p.news.text].filter(Boolean).join("\n"),
-      "data-key": p.key, "aria-expanded": chats.length ? String(!folded) : null,
+      "data-key": p.key, "aria-expanded": String(!folded),
       "data-vscode-context": menu({ webviewSection: "project", key: p.key, projectOpen: !!p.open, projectPinned: !!p.pinned }),
       onclick: () => post({ type: "open", key: p.key }),
       onkeydown: (e) => { if (e.key === "Enter") post({ type: "open", key: p.key }); } });
-    // A chat dragged here: only another project with a window takes it.
-    const takes = () => S.drag && p.open && p.key !== S.drag.key;
+    // A chat dragged here: another project takes it (one without a window only when it is a folder; the host decides the rest).
+    const takes = () => S.drag && (p.open || !p.workspaceFile) && p.key !== S.drag.key;
     row.addEventListener("dragover", (e) => {
       if (!takes()) return;
       e.preventDefault();
@@ -119,15 +121,13 @@
       row.classList.remove("drop");
       post({ type: "moveChat", key: S.drag.key, chatId: S.drag.chatId, to: p.key });
     });
-    // The folder: open while its chats show. With chats it is the fold button (an arrow under the pointer).
+    // The folder: open while it is unfolded (its chats and History show). It is the fold button (an arrow under the pointer).
     const folder = icon(showing ? "folder-opened" : "folder");
-    const fic = chats.length
-      ? el("button", { class: `fic${folded ? " folded" : ""}`, type: "button", tabindex: "-1", "aria-label": folded ? "Unfold" : "Fold",
-        onclick: (e) => { e.stopPropagation(); fold(p.key, !folded); } }, folder, icon(folded ? "chevron-right" : "chevron-down", "arrow"))
-      : el("span", { class: "fic" }, folder);
+    const fic = el("button", { class: `fic${folded ? " folded" : ""}`, type: "button", tabindex: "-1", "aria-label": folded ? "Unfold" : "Fold",
+      onclick: (e) => { e.stopPropagation(); fold(p.key, !folded); } }, folder, icon(folded ? "chevron-right" : "chevron-down", "arrow"));
     const end = el("div", { class: "end" });
     // (A folded project carries what its chats would show.)
-    if (!showing) for (const st of ["run", "ask", "done"]) if (chats.some((c) => c.state === st)) end.append(stateMark(st));
+    if (folded) for (const st of ["run", "ask", "done"]) if (chats.some((c) => c.state === st)) end.append(stateMark(st));
     end.append(rowButton(`pin${p.pinned ? " on" : ""}`, p.pinned ? "Unpin" : "Pin", p.pinned ? "pinned" : "pin", () => post({ type: "pin", key: p.key })));
     // (Open: the red cross; Recent and not pinned: the red bin.)
     if (p.open) end.append(rowButton("red close-p", p.here ? "Close this project (and this window)" : "Close project", "close", () => post({ type: "close", key: p.key })));
@@ -190,6 +190,45 @@
     draw();
   }
 
+  // ---------- a project's History (every saved chat of it, folded until you open it) ----------
+  function historyRow(p, h) {
+    return el("div", { class: "chat-row hist", role: "treeitem", tabindex: "0", title: [h.title, h.ago].filter(Boolean).join("\n"),
+      "data-chat": h.id, draggable: "true",
+      "data-vscode-context": menu({ webviewSection: "history", key: p.key, chatId: h.id, projectOpen: !!p.open }),
+      onclick: () => post({ type: "openHistory", key: p.key, chatId: h.id }),
+      onkeydown: (e) => { if (e.key === "Enter") post({ type: "openHistory", key: p.key, chatId: h.id }); },
+      ondragstart: (e) => {
+        S.drag = { key: p.key, chatId: h.id };
+        if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", h.title); }
+      },
+      ondragend: () => { S.drag = null; S.later = false; draw(); } },
+    el("span", { class: "ct" }, marked(h.title)), el("span", { class: "when" }, h.ago || ""));
+  }
+  function historyNodes(p) {
+    const h = p.history || { open: false, items: [], total: 0 }, searching = !!query();
+    const open = h.open || (searching && h.items.length > 0);
+    if (searching && !h.items.length) return [];
+    const head = el("div", { class: "hist-head", role: "button", tabindex: "0", "aria-expanded": String(open),
+      onclick: () => historyFold(p.key, !open), onkeydown: (e) => { if (e.key === "Enter") historyFold(p.key, !open); } },
+    icon(open ? "chevron-down" : "chevron-right"), el("span", { class: "hl" }, "History"), open && h.loaded ? el("span", { class: "hn" }, String(h.total)) : null);
+    if (!open) return [head];
+    if (!h.loaded) return [head, el("div", { class: "hist-note" }, "Loading...")];
+    if (!h.items.length) return [head, el("div", { class: "hist-note" }, "No earlier chats.")];
+    const shown = Math.min(h.items.length, S.hist.get(p.key) || HIST_SHOWN), rows = h.items.slice(0, shown).map((x) => historyRow(p, x));
+    if (shown < h.items.length) {
+      const n = Math.min(HIST_STEP, h.items.length - shown);
+      const more = () => { S.hist.set(p.key, shown + HIST_STEP); draw(); };
+      rows.push(el("div", { class: "more hist-more", role: "button", tabindex: "0", onclick: more, onkeydown: (e) => { if (e.key === "Enter") more(); } }, `Show ${n} more`));
+    }
+    return [head, ...rows];
+  }
+  function historyFold(key, open) {
+    post({ type: "historyFold", key, open });
+    // (Drawn at once as open; the host sends the items.)
+    const p = ((S.model && S.model.sections) || []).flatMap((x) => x.projects || []).find((x) => x.key === key);
+    if (p) { p.history = { loaded: false, total: 0, items: [], ...p.history, open }; draw(); }
+  }
+
   // The first five chats (the host puts waiting, finished and working ones first), plus the one on screen; the rest
   // behind "Show N more". A search shows every chat that matched.
   function chatRows(p) {
@@ -222,8 +261,8 @@
     for (const s of sections) {
       rows.push(el("div", { class: "sec", role: "presentation" }, s.title));
       for (const p of s.projects) {
-        const showing = (p.chats || []).length > 0 && (searching || !S.folded.has(p.key));
-        rows.push(el("div", { class: `grp${showing ? " with-chats" : ""}`, role: "group" }, projectRow(p, showing), showing ? chatRows(p) : null));
+        const unfolded = searching || !S.folded.has(p.key), showing = (p.chats || []).length > 0 && unfolded;
+        rows.push(el("div", { class: `grp${unfolded ? " with-chats" : ""}`, role: "group" }, projectRow(p, unfolded), showing ? chatRows(p) : null, unfolded ? historyNodes(p) : null));
       }
     }
     if (!sections.length && S.model) {

@@ -77,12 +77,12 @@ const writeWindow = (dir, id, rec) => {
     writeWindow(dir, "w-live", { pid: 10, seen: t - 1000, key: "/a" });
     writeWindow(dir, "w-crashed", { pid: 12, seen: t - 1000, key: "/b" });
     writeWindow(dir, "w-closed", { pid: 11, seen: t - 1000, closed: true, key: "/c" });
-    writeWindow(dir, "w-stale", { pid: 13, seen: t - 4 * 60 * 1000, key: "/d" });
+    writeWindow(dir, "w-stale", { pid: 13, seen: t - 20 * 60 * 1000, key: "/d" });
     s.publish(state());
     s.flush();
     const by = Object.fromEntries(s.readAll().map((w) => [w.windowId, w.alive]));
     assert.deepStrictEqual(by, { me: true, "w-live": true, "w-crashed": false, "w-closed": false, "w-stale": false });
-    t += 2 * 60 * 1000 + 58_000; // 179 s after the live one was seen
+    t += 14 * 60 * 1000 + 58_000; // 14 min 59 s after the live one was seen (a hidden or full-screen window's timers can be slow)
     assert.strictEqual(s.readAll().find((w) => w.windowId === "w-live").alive, true);
     t += 5000;
     assert.strictEqual(s.readAll().find((w) => w.windowId === "w-live").alive, false);

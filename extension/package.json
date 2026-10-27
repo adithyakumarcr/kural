@@ -412,6 +412,10 @@
         "title": "Move to..."
       },
       {
+        "command": "kural.projects.forkChat",
+        "title": "Fork to..."
+      },
+      {
         "command": "kural.projects.pin",
         "title": "Pin"
       },
@@ -766,6 +770,10 @@
           "when": "false"
         },
         {
+          "command": "kural.projects.forkChat",
+          "when": "false"
+        },
+        {
           "command": "kural.projects.pin",
           "when": "false"
         },
@@ -903,6 +911,16 @@
         {
           "command": "kural.projects.moveChat",
           "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "1_chat@2"
+        },
+        {
+          "command": "kural.projects.forkChat",
+          "when": "webviewId == 'kural.projects' && webviewSection =~ /^(chat|history)$/",
+          "group": "1_chat@3"
+        },
+        {
+          "command": "kural.projects.moveChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'history'",
           "group": "1_chat@2"
         },
         {

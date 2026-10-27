@@ -1,3 +1,17 @@
+## Not released yet
+
+- **Skills anywhere in a message.** The "/" list now works after a space too, not only at the start; a skill picked
+  mid-message is moved to the front when sent.
+- **Auto is a switch.** The model menu has a search box and an Auto switch; the profile (Balance, Cost, Intelligence)
+  shows only while Auto is on.
+- **Chat titles are short summaries** made by the fastest model; failures keep the first words of your message.
+- **Enhance prompt stays with its chat.** A result that arrives after you switched chats waits for the chat that asked.
+- **History is safer.** A chat is no longer lost to a damaged or missing History card, and deleted chats stay deleted.
+- **History under each project** in the Projects bar (folded; drag a chat to another project, Move to... and Fork to...).
+- **Projects and the Explorer share one container**; projects can be collapsed and reordered.
+- **Linux:** opening a second project re-checks one-frame windows, and a window whose first paint never reports is shown after 5 s.
+- **Ask's box lines up with Search's.**
+
 ## What's new in 1.2.1-beta.4
 
 - **A calmer Projects bar.** Like ChatGPT's project list: each project is a folder with its chats under it, under the

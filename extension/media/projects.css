@@ -89,3 +89,13 @@ mark { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inhe
 .needs { background: var(--warn); }
 .spin { animation: spin 1.2s linear infinite; color: var(--run); }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- a project's History: folded until you open it; the saved chats under it, their age at the end ---------- */
+.hist-head { display: flex; align-items: center; gap: 4px; height: calc(26px * var(--fs, 1)); padding: 0 8px 0 calc(32px * var(--fs, 1)); border-radius: 7px; cursor: pointer; outline: 0;
+  color: var(--faint); font-size: calc(12.5px * var(--fs, 1)); }
+.hist-head:hover { color: var(--vscode-foreground); background: var(--hover); }
+.hist-head:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.hist-head .codicon { font-size: calc(13px * var(--fs, 1)); }
+.hist-head .hn { margin-left: auto; font-size: calc(11px * var(--fs, 1)); }
+.hist-note { padding: 4px 8px 4px calc(36px * var(--fs, 1)); color: var(--faint); font-size: calc(12.5px * var(--fs, 1)); }
+.chat-row.hist .when { flex: none; color: var(--faint); font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; }

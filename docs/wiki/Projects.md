@@ -112,3 +112,7 @@ a Docker container (`scripts/linux-container/run.sh`, [[Building from Source]]).
 - The list reads only what each Kural window writes about itself (its color, branch and chat states) in Kural's own
   storage. It never looks into another project's files, so drawing it asks for no folder permission.
 - Remote folders (SSH, WSL, containers) aren't in Recent.
+
+## History and the Explorer
+
+Each project has a folded **History** of its chats: click one to open it, drag it to another project, or right-click for Move to... and Fork to... (open chats get Fork to... too). The Projects view and the Explorer's views share one container, so projects can be collapsed and reordered.

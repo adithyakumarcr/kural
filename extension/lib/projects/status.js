@@ -14,7 +14,11 @@ const crypto = require("crypto");
 const { privateFolder, writePrivate } = require("../private-file");
 const { samePath, sameKey } = require("./model");
 
-const ALIVE_MS = 3 * 60 * 1000;          // a window that hasn't refreshed `seen` for this long has crashed or hung
+// A window that hasn't refreshed `seen` for this long has hung. The pid is the real test (a crash is found at once); this
+// is only for a pid that was taken by another program. It is generous because a window that is hidden in the one-frame
+// build, or sits in another full-screen Space, can have its timers slowed by the system for minutes (3 minutes made a
+// project vanish from the list, and look closed, when the window in front went full screen).
+const ALIVE_MS = 15 * 60 * 1000;
 const KEEP_MS = 30 * 24 * 60 * 60 * 1000; // closed/dead windows' files are kept this long (their finished chats)
 const REQUEST_MS = 30 * 1000;            // a request nobody picked up by then is stale: the owner is gone or busy
 const CHANGE_MS = 50;                    // watch events for one write come in bursts

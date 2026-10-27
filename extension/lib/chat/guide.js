@@ -74,7 +74,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   ChatGPT set up, Listen is greyed out). The walkthrough's text is kept with the answer, so listening again is instant and
   asks no AI; the audio isn't saved. One answer at a time; the sound plays only where you clicked; showing another chat
   there stops it. English only. Linux x64, Apple Silicon Macs and Windows x64.
-  "/" at the start of the message lists your skills and commands (Claude models with "Use my Claude Code setup" on: your
+  "/" at the start of the message or after a space lists your skills and commands (Claude models with "Use my Claude Code setup" on: your
   plugins' skills such as Superpowers' superpowers:brainstorming, your own, and Claude Code's like /code-review); type
   to filter, Tab or Enter puts it in, then add what it's for and send.
   Your shortcuts (every AI): a name that stands for a text you write once, like /pr-summary or /test. Make them in Kural
@@ -90,7 +90,7 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   answer and press Ask (beside Add to chat) to ask a quick question about it right under the answer; a fast model answers
   (Haiku, or the lightest Gemini model, or your own model; not ChatGPT, which can't be limited to answering), without tools. It's separate from the conversation (the
   chat's AI never sees it, it doesn't wait for or stop the main answer) and saved with the answer; follow-ups in the same
-  box remember it; Add to chat under a side answer brings that Q&A into your message. Model menu (bottom of the chat): Auto (Model Router), Claude's Opus/Sonnet/Haiku, Google Gemini and
+  box remember it; Add to chat under a side answer brings that Q&A into your message. Model menu (bottom of the chat): a search box and an Auto switch (Model Router; its profile shows only while Auto is on), Claude's Opus/Sonnet/Haiku, Google Gemini and
   ChatGPT (Codex) models (only the AIs you've set up), or a model on this computer (once you have one that can chat).
   The gear beside each name opens its settings: Auto's opens the Model Router; Claude's, Gemini's, ChatGPT's and your
   own model's open Kural Settings at that AI's page (where its connectors are, when to switch away near a limit); intensity Low to Max (for Gemini it picks the model's thinking

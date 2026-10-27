@@ -73,12 +73,14 @@ del { text-decoration: line-through; background: var(--vscode-diffEditor-removed
 ins { text-decoration: none; background: var(--vscode-diffEditor-insertedTextBackground, rgba(155,185,85,.2)); }
 
 /* ---------- Ask ---------- */
-.top { padding: 8px 10px 6px; display: grid; gap: 6px; }
-.top .box { border-radius: 6px; padding: 3px 3px 3px 7px; }
+/* (The Ask box has the Search box's left and right edge (.find: 2px + the 16px twist + 2px = 20px on the left, 10px on the
+   right), its radius and padding, so the two tabs line up; the send button is a little smaller to fit its height.) */
+.top { padding: 6px 10px 6px 20px; display: grid; gap: 6px; }
+.top .box { border-radius: 4px; padding: 1px 2px 1px 6px; }
 /* (padding: 0: a button keeps the browser's 6 px side padding otherwise, too little room for the icon, which then
    sits off to the right) */
-.go { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: calc(12px * var(--fs, 1)); font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
-.go .codicon { font-size: calc(14px * var(--fs, 1)); }
+.go { width: calc(20px * var(--fs, 1)); height: calc(20px * var(--fs, 1)); padding: 0; border-radius: 50%; border: 0; background: var(--accent); color: #fff; font-size: calc(12px * var(--fs, 1)); font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
+.go .codicon { font-size: calc(12px * var(--fs, 1)); }
 .status { padding: 0 10px; }
 .answer { font-size: calc(12.5px * var(--fs, 1)); line-height: 1.5; padding: 6px 9px; margin-bottom: 6px; border-left: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 0 6px 6px 0; }
 .err { color: var(--vscode-errorForeground, #e2685f); font-size: calc(12px * var(--fs, 1)); padding: 4px 0; }

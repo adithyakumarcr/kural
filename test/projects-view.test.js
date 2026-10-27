@@ -82,7 +82,9 @@ function make(extra = {}, stand = {}) {
   const status = new FakeStatus(), store = new Map();
   const ch = { chatsNow: [chat("1", "Refactor notify")], showed: [], did: [], movable: true, projectChats() { return this.chatsNow; }, async showChat(id) { this.showed.push(id); },
     rename(id, title) { this.did.push(["rename", id, title]); }, deleteChat(id) { this.did.push(["delete", id]); }, save() { this.did.push(["save"]); },
-    moveOut(id) { this.did.push(["moveOut", id]); return this.movable; }, adopt(id, from) { this.did.push(["adopt", id, from]); return true; } };
+    moveOut(id) { this.did.push(["moveOut", id]); return this.movable; }, adopt(id, from) { this.did.push(["adopt", id, from]); return true; },
+    rehome(id, home, from) { this.did.push(["rehome", id, home, from]); return true; }, forkCopy(id) { this.did.push(["forkCopy", id]); return this.forkId; }, forkId: "f1",
+    reopen(id) { this.did.push(["reopen", id]); }, historyCards(fresh) { this.did.push(["cards", !!fresh]); return this.cards || []; }, cards: [] };
   const ctx = { subscriptions: [], globalState: { get: (k) => store.get(k), update: (k, v) => { store.set(k, v); return Promise.resolve(); } },
     extensionUri: Uri.file("/ext"), globalStorageUri: Uri.file(tmp), store };
   const p = new Projects(ctx, { chat: ch, log: () => {}, deps: { statusStore: status, model: fakeModel, ...extra } });
@@ -274,6 +276,35 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     t.p.stop();
   });
 
+  await check("one frame: a miss at start-up isn't final: asked again before a project opens (Linux: not 'one project at a time')", async () => {
+    const t = make();
+    assert.strictEqual(t.p.oneFrame, false, "the workbench hadn't registered the command yet");
+    commandList = ["_kural.card", "_kural.oneFrame"]; frameAnswer = { enabled: true }; ran.length = 0;
+    setModel(t, [{ id: "recent", title: "Recent", projects: [proj("d", "dotfiles", { open: false, windowId: null })] }]);
+    t.ch.chatsNow = [chat("1", "Fix the login", "run")];
+    warn = async () => "Open Here";
+    await t.p.onMessage({ type: "open", key: "d" });
+    assert.deepStrictEqual(openFolder(), [["/p/dotfiles", { forceNewWindow: true }]], "a new window, not forceReuseWindow");
+    assert.strictEqual(t.p.oneFrame, true);
+    t.p.stop();
+  });
+
+  await check("one frame: a miss is asked again a few times, and stop() ends it", async () => {
+    const t = make();
+    await sleep(5); // (the start's own look, and its follow-up, are over)
+    commandList = ["_kural.card"]; frameAnswer = { enabled: true };
+    t.later = []; t.p.later = (name, ms, fn) => { if (name === "frame") t.later.push([name, ms, fn]); };
+    t.p.detectOneFrameLater(2);
+    assert.strictEqual(t.later.length, 1);
+    commandList = ["_kural.card", "_kural.oneFrame"];
+    await t.later[0][2]();
+    assert.strictEqual(t.p.oneFrame, true, "found on the second look");
+    assert.strictEqual(t.later.length, 1, "found: no more looks");
+    t.p.oneFrame = false; t.p.stop();
+    t.p.detectOneFrameLater(2);
+    assert.strictEqual(t.later.length, 1, "stopped: no look");
+  });
+
   await check("one frame: a project that isn't open opens in a new window, with no question and nothing stopped", async () => {
     const t = await makeFrame();
     t.ch.chatsNow = [chat("1", "Fix the login", "run"), chat("2", "Docs", "ask")];
@@ -429,9 +460,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     t.p.stop();
   });
 
-  await check("move: not to a project without a window, not to its own project, not a working chat; a chat that can't go says so", async () => {
+  await check("move: not to its own project, not a working chat; a chat that can't go says so", async () => {
     const t = make(); setModel(t, CHATS());
-    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "d" });
     await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "f:/p/kural" });
     await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "2", to: "w" });
     assert.deepStrictEqual(t.ch.did, []);
@@ -448,7 +478,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     pick = async (list) => list.find((i) => i.label === "mesh");
     await commands["kural.projects.moveChat"]({ webviewSection: "chat", key: "f:/p/kural", chatId: "1" });
     const [, list] = shown.find((x) => x[0] === "pick");
-    assert.deepStrictEqual(list.map((i) => i.label), ["weld-sim", "mesh"], "open projects only, not its own");
+    assert.deepStrictEqual(list.map((i) => i.label), ["weld-sim", "mesh", "dotfiles"], "open projects and folders without a window, not its own");
     assert.deepStrictEqual(t.status.sent, [["w-mesh", { type: "adoptChat", chatId: "1", from: "kural" }]]);
     t.p.stop();
   });
@@ -461,6 +491,108 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await t.p.onRequest({ type: "adoptChat", chatId: "7", from: "weld-sim" });
     assert.deepStrictEqual(t.ch.did, [["rename", "1", "New name"], ["delete", "1"], ["save"], ["moveOut", "1"], ["adopt", "7", "weld-sim"]]);
     assert.deepStrictEqual(t.status.sent, [["w-mesh", { type: "adoptChat", chatId: "1", from: "kural" }]]);
+    t.p.stop();
+  });
+
+  // ---- History, a move to a project without a window, fork ----
+  const WITH_HISTORY = () => { const m = CHATS(); m[0].projects[0].history = { open: true, loaded: true, total: 1, items: [{ id: "h1", title: "Saved one", when: 1, count: 2, ago: "1 h ago" }] }; return m; };
+  await check("History: unfolding is remembered and read from disk; folding stops reading; the model gets the cards and the open keys", async () => {
+    const t = make(); setModel(t, CHATS());
+    assert.strictEqual(fakeModel.args.archive, null, "folded everywhere: no cards are read");
+    t.ch.cards = [{ id: "h1" }]; t.ch.did.length = 0;
+    await t.p.onMessage({ type: "historyFold", key: "f:/p/kural", open: true });
+    assert.deepStrictEqual(t.ch.did, [["cards", true]]);
+    assert.deepStrictEqual(fakeModel.args.archive, [{ id: "h1" }]);
+    assert.deepStrictEqual(fakeModel.args.historyOpen, ["f:/p/kural"]);
+    assert.deepStrictEqual(t.store.get("kural.projects.historyOpen.v1"), ["f:/p/kural"]);
+    await t.p.onMessage({ type: "historyFold", key: "f:/p/kural", open: false });
+    assert.deepStrictEqual(t.store.get("kural.projects.historyOpen.v1"), []);
+    assert.strictEqual(fakeModel.args.archive, null);
+    t.p.stop();
+  });
+
+  await check("History: a click opens the chat in this window; in another project's window that window is brought forward and asked; a project without a window shows it here", async () => {
+    const t = make(); setModel(t, WITH_HISTORY());
+    await t.p.onMessage({ type: "openHistory", key: "f:/p/kural", chatId: "h1" });
+    assert.deepStrictEqual(t.ch.did, [["reopen", "h1"]]);
+    assert.deepStrictEqual(t.ch.showed, ["h1"]);
+    ran.length = 0;
+    await t.p.onMessage({ type: "openHistory", key: "w", chatId: "h2" });
+    assert.ok(ran.some((a) => a[0] === "vscode.openFolder" && a[2].forceNewWindow));
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "showHistory", chatId: "h2" }]]);
+    t.ch.did.length = 0; ran.length = 0;
+    await t.p.onMessage({ type: "openHistory", key: "d", chatId: "h3" });
+    assert.deepStrictEqual(t.ch.did, [["reopen", "h3"]], "read here (visiting), nothing is opened or stopped");
+    assert.ok(!ran.some((a) => a[0] === "vscode.openFolder"));
+    await t.p.onRequest({ type: "showHistory", chatId: "h4" });
+    assert.deepStrictEqual(t.ch.did[1], ["reopen", "h4"]);
+    t.p.stop();
+  });
+
+  await check("move to a project without a window: a chat of this window goes out and is filed under the target; one of another window is asked to do it", async () => {
+    const t = make(); setModel(t, CHATS());
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "d" });
+    assert.deepStrictEqual(t.ch.did, [["moveOut", "1"], ["rehome", "1", { key: "/p/dotfiles", name: "dotfiles", open: "/p/dotfiles" }, "kural"]]);
+    assert.deepStrictEqual(t.status.sent, []);
+    await t.p.onMessage({ type: "moveChat", key: "w", chatId: "5", to: "d" });
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "moveChat", chatId: "5", toWindow: null, from: "weld-sim", home: { key: "/p/dotfiles", name: "dotfiles", open: "/p/dotfiles" } }]]);
+    t.ch.did.length = 0;
+    await t.p.onRequest({ type: "moveChat", chatId: "5", toWindow: null, from: "weld-sim", home: { key: "/p/dotfiles", name: "dotfiles", open: "/p/dotfiles" } });
+    assert.deepStrictEqual(t.ch.did[0], ["moveOut", "5"]);
+    assert.strictEqual(t.ch.did[1][0], "rehome");
+    t.p.stop();
+  });
+
+  await check("move: a project that is a workspace file and has no window can't take a chat", async () => {
+    const t = make(); const m = CHATS(); m[1].projects[0].workspaceFile = "/w/x.code-workspace"; setModel(t, m);
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "1", to: "d" });
+    assert.deepStrictEqual(t.ch.did, []);
+    t.p.stop();
+  });
+
+  await check("move a History chat: to an open project (this window adopts it, another window is asked) or filed under a project without a window; not into its own project", async () => {
+    const t = make(); const m = WITH_HISTORY(); m[0].projects[1].history = { open: true, loaded: true, total: 1, items: [{ id: "h5", title: "Weld old", when: 1, ago: "1 h ago" }] }; setModel(t, m);
+    await t.p.onMessage({ type: "moveChat", key: "w", chatId: "h5", to: "f:/p/kural" });
+    assert.deepStrictEqual(t.ch.did, [["adopt", "h5", "weld-sim"]], "into this window: adopted at once");
+    t.ch.did.length = 0;
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "h1", to: "w" });
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "adoptChat", chatId: "h1", from: "kural" }]]);
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "h1", to: "d" });
+    assert.deepStrictEqual(t.ch.did, [["rehome", "h1", { key: "/p/dotfiles", name: "dotfiles", open: "/p/dotfiles" }, "kural"]]);
+    t.ch.did.length = 0;
+    await t.p.onMessage({ type: "moveChat", key: "f:/p/kural", chatId: "h1", to: "f:/p/kural" });
+    assert.deepStrictEqual(t.ch.did, []);
+    t.p.stop();
+  });
+
+  await check("Fork to...: a list of the open projects (its own too); a chat of this window or a saved chat is copied here and the target's window takes the copy in", async () => {
+    const t = make(); setModel(t, WITH_HISTORY());
+    pick = async (list) => list.find((i) => i.label === "mesh");
+    await commands["kural.projects.forkChat"]({ webviewSection: "chat", key: "f:/p/kural", chatId: "1" });
+    const [, list] = shown.find((x) => x[0] === "pick");
+    assert.deepStrictEqual(list.map((i) => i.label), ["kural", "weld-sim", "mesh"], "open projects only");
+    assert.deepStrictEqual(t.ch.did, [["forkCopy", "1"]]);
+    assert.deepStrictEqual(t.status.sent, [["w-mesh", { type: "adoptChat", chatId: "f1", from: "kural" }]]);
+    t.ch.did.length = 0; t.status.sent.length = 0;
+    pick = async (list) => list.find((i) => i.label === "kural");
+    await commands["kural.projects.forkChat"]({ webviewSection: "history", key: "f:/p/kural", chatId: "h1" });
+    assert.deepStrictEqual(t.ch.did, [["forkCopy", "h1"], ["adopt", "f1", "kural"]], "into this window: adopted at once");
+    t.p.stop();
+  });
+
+  await check("fork: a chat that is open in another window is copied by that window (a request); a chat that can't be copied says so", async () => {
+    const t = make(); setModel(t, WITH_HISTORY());
+    t.p.forkChat("w", "5", "x");
+    assert.deepStrictEqual(t.status.sent, [["w-weld-sim", { type: "forkChat", chatId: "5", toWindow: "w-mesh", from: "weld-sim" }]]);
+    assert.deepStrictEqual(t.ch.did, []);
+    t.status.sent.length = 0;
+    await t.p.onRequest({ type: "forkChat", chatId: "5", toWindow: "w-mesh", from: "weld-sim" });
+    assert.deepStrictEqual(t.ch.did, [["forkCopy", "5"]]);
+    assert.deepStrictEqual(t.status.sent, [["w-mesh", { type: "adoptChat", chatId: "f1", from: "weld-sim" }]]);
+    t.ch.did.length = 0; t.status.sent.length = 0; t.ch.forkId = null;
+    await t.p.onRequest({ type: "forkChat", chatId: "5", toWindow: "w-mesh", from: "weld-sim" });
+    assert.deepStrictEqual(t.status.sent, []);
+    assert.ok(shown.some((x) => x[0] === "info" && /can't be forked/.test(x[1])));
     t.p.stop();
   });
 

@@ -97,7 +97,7 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     p.send(model(SECTIONS()));
     const k = rowOf(p, "kural"), w = rowOf(p, "weld-sim"), d = rowOf(p, "dotfiles");
     assert.ok(one(k, "fic").kids[0]._cls.has("codicon-folder-opened"));
-    assert.ok(one(d, "fic").kids[0]._cls.has("codicon-folder") && d._cls.has("recent"));
+    assert.ok(one(d, "fic").kids[0]._cls.has("codicon-folder-opened") && d._cls.has("recent"), "unfolded: its History shows under it");
     assert.ok(k._cls.has("cur") && !w._cls.has("cur"));
     assert.ok(!/parallel-agents|~\/p\/kural|this window/.test(k.textContent));
     assert.strictEqual(k.attrs.title, "~/p/kural");
@@ -170,10 +170,10 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     assert.ok(kinds(p).includes("chat:Mesh import"));
   });
 
-  await check("the host's folded list is what the page shows; a project without chats has a plain icon, not a button", () => {
+  await check("the host's folded list is what the page shows; a project without chats has the fold button too (its History is under it)", () => {
     const p = load(); p.send(model(SECTIONS(), { folded: ["k"] }));
     assert.ok(!kinds(p).includes("chat:Refactor notify") && kinds(p).includes("chat:Mesh import"));
-    assert.strictEqual(one(rowOf(p, "dotfiles"), "fic").tag, "span");
+    assert.strictEqual(one(rowOf(p, "dotfiles"), "fic").tag, "button");
     assert.ok(one(rowOf(p, "kural"), "fic")._cls.has("folded"));
   });
 
@@ -276,15 +276,27 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     src.fire("dragstart", { dataTransfer: dt });
     let prevented = 0;
     const over = (r) => { r.fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ }); };
-    over(rowOf(p, "kural")); over(rowOf(p, "dotfiles"));
-    assert.strictEqual(prevented, 0, "not its own project, not one without a window");
+    over(rowOf(p, "kural"));
+    assert.strictEqual(prevented, 0, "not its own project");
+    over(rowOf(p, "dotfiles"));
+    assert.strictEqual(prevented, 1, "a folder without a window takes it too (it is filed under it)");
     over(rowOf(p, "weld-sim"));
-    assert.strictEqual(prevented, 1);
+    assert.strictEqual(prevented, 2);
     assert.ok(rowOf(p, "weld-sim")._cls.has("drop"));
     rowOf(p, "weld-sim").fire("drop", { dataTransfer: dt });
     assert.deepStrictEqual(p.posted, [{ type: "moveChat", key: "k", chatId: "1", to: "w" }]);
     src.fire("dragend");
     assert.ok(!rowOf(p, "weld-sim")._cls.has("drop"));
+  });
+
+  await check("drag: a workspace-file project without a window doesn't take a chat (its key isn't known without the window)", () => {
+    const p = load();
+    p.send(model([{ id: "recent", title: "Recent", projects: [proj("ws", "wsproj", { open: false, workspaceFile: "/w/x.code-workspace", windowId: null }), ...SECTIONS()[0].projects] }]));
+    const dt = { setData() {}, effectAllowed: "", dropEffect: "" };
+    chatOf(p, "Refactor notify").fire("dragstart", { dataTransfer: dt });
+    let prevented = 0;
+    rowOf(p, "wsproj").fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ });
+    assert.strictEqual(prevented, 0);
   });
 
   await check("dragging: the host's updates wait until the drag ends", () => {
@@ -306,6 +318,71 @@ const many = (n, o = {}) => Array.from({ length: n }, (_, i) => chat(`c${i}`, `C
     assert.strictEqual(byClass(p.list, "empty")[0].textContent, 'Nothing matches "zzz".');
     p.send(model([{ id: "open", title: "Open", projects: [] }]));
     assert.deepStrictEqual(kinds(p), ["empty"], "a section with nothing in it isn't drawn");
+  });
+
+  const HIST = (n = 3, o = {}) => ({ open: true, loaded: true, total: n, items: Array.from({ length: n }, (_, i) => ({ id: `h${i}`, title: `Saved ${i}`, when: 1, count: 2, ago: `${i + 1} h ago` })), ...o });
+  const histOf = (p) => all(p.list, (r) => r._cls.has("chat-row") && r._cls.has("hist"));
+  const headOf = (p, key) => all(p.list, (r) => r._cls.has("hist-head"))[key];
+
+  await check("History: a folded header under each project; unfolding asks the host, which sends the items", () => {
+    const p = load(); p.send(model(SECTIONS())); p.posted.length = 0;
+    const heads = all(p.list, (r) => r._cls.has("hist-head"));
+    assert.strictEqual(heads.length, 4, "every project, Recent and pinned ones too");
+    assert.strictEqual(heads[0].attrs["aria-expanded"], "false");
+    assert.strictEqual(histOf(p).length, 0);
+    heads[0].fire("click");
+    assert.deepStrictEqual(p.posted, [{ type: "historyFold", key: "k", open: true }]);
+    assert.ok(one(p.list, "hist-note").textContent.includes("Loading"), "until the host's items come");
+    const secs = SECTIONS(); secs[0].projects[0].history = HIST(2);
+    p.send(model(secs));
+    assert.deepStrictEqual(histOf(p).map((r) => one(r, "ct").textContent), ["Saved 0", "Saved 1"]);
+    assert.strictEqual(one(histOf(p)[0], "when").textContent, "1 h ago");
+    assert.strictEqual(one(headOf(p, 0), "hn").textContent, "2");
+    all(p.list, (r) => r._cls.has("hist-head"))[0].fire("click");
+    assert.deepStrictEqual(p.posted[1], { type: "historyFold", key: "k", open: false });
+  });
+
+  await check("History: a click opens the chat; the row carries the right-click context and can be dragged", () => {
+    const p = load(); const secs = SECTIONS(); secs[2].projects[0].history = HIST(1);
+    p.send(model(secs)); p.posted.length = 0;
+    const r = histOf(p)[0];
+    r.fire("click");
+    assert.deepStrictEqual(p.posted, [{ type: "openHistory", key: "d", chatId: "h0" }]);
+    assert.deepStrictEqual(JSON.parse(r.attrs["data-vscode-context"]), { preventDefaultContextMenuItems: true, webviewSection: "history", key: "d", chatId: "h0", projectOpen: false });
+    assert.strictEqual(r.attrs.draggable, "true");
+    p.posted.length = 0;
+    const dt = { setData() {}, effectAllowed: "", dropEffect: "" };
+    r.fire("dragstart", { dataTransfer: dt });
+    let prevented = 0;
+    rowOf(p, "weld-sim").fire("dragover", { dataTransfer: dt, preventDefault: () => prevented++ });
+    rowOf(p, "weld-sim").fire("drop", { dataTransfer: dt });
+    assert.strictEqual(prevented, 1);
+    assert.deepStrictEqual(p.posted, [{ type: "moveChat", key: "d", chatId: "h0", to: "w" }]);
+  });
+
+  await check("History: ten rows, then \"Show N more\" adds twenty at a time", () => {
+    const p = load(); const secs = SECTIONS(); secs[2].projects[0].history = HIST(45);
+    p.send(model(secs));
+    assert.strictEqual(histOf(p).length, 10);
+    const more = () => all(p.list, (r) => r._cls.has("hist-more"))[0];
+    assert.strictEqual(more().textContent, "Show 20 more");
+    more().fire("click");
+    assert.strictEqual(histOf(p).length, 30);
+    more().fire("click");
+    assert.strictEqual(histOf(p).length, 45);
+    assert.ok(!more(), "all shown");
+  });
+
+  await check("History: an empty one says so; a search shows the matching saved chats, and no header when none match", () => {
+    const p = load(); const secs = SECTIONS(); secs[2].projects[0].history = HIST(0);
+    p.send(model(secs));
+    assert.strictEqual(one(p.list, "hist-note").textContent, "No earlier chats.");
+    const q = SECTIONS(); q[2].projects[0].history = { open: false, loaded: true, total: 1, items: [{ id: "h9", title: "Saved match", when: 1, ago: "1 h ago" }] };
+    p.send(model(q, { query: "saved" }));
+    assert.strictEqual(histOf(p).length, 1, "shown open while searching");
+    const none = SECTIONS(); none[2].projects[0].history = { open: false, loaded: true, total: 0, items: [] };
+    p.send(model(none, { query: "zzz" }));
+    assert.strictEqual(all(p.list, (r) => r._cls.has("hist-head")).length, 0);
   });
 
   await check("the page is made with el() only, no emoji, no style attributes, no inline events", () => {

@@ -235,7 +235,7 @@ index 4a4172f5..2c80ec62 100644
  
  			this._lastFocusTime = Date.now(); // since we show directly, we need to set the last focus time too
  		}
-@@ -871,6 +898,200 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+@@ -871,6 +898,202 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
  		return this.readyState === ReadyState.READY;
  	}
  
@@ -268,7 +268,9 @@ index 4a4172f5..2c80ec62 100644
 +			}
 +		}
 +
-+		await this.whenPainted;
++		// (A window whose first paint never reports, which a hidden window on some Linux setups does, is shown after 5 s anyway:
++		// else the project would never open and the visible window would stay, which looked like "one project at a time".)
++		await Promise.race([this.whenPainted, timeout(5000)]);
 +
 +		// Shown by someone else while we waited, or gone
 +		if (!this._hiddenInFrame || this._win.isDestroyed()) {
@@ -436,7 +438,7 @@ index 4a4172f5..2c80ec62 100644
  	get whenClosedOrLoaded(): Promise<void> {
  		return new Promise<void>(resolve => {
  
-@@ -1052,6 +1273,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+@@ -1052,6 +1275,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
  					this.jsCallStackCollectorStopScheduler.schedule();
  
  					// Show Dialog
@@ -444,7 +446,7 @@ index 4a4172f5..2c80ec62 100644
  					const { response, checkboxChecked } = await this.dialogMainService.showMessageBox({
  						type: 'warning',
  						buttons: [
-@@ -1082,6 +1304,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+@@ -1082,6 +1306,7 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
  					}
  
  					// Show Dialog

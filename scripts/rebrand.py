@@ -574,7 +574,7 @@ def projects_default_view(text):
 # 3. The Projects bar stays: no "Hide" for it in the activity bar's right-click menu (neither its own item nor the list of
 # checkable containers; the bar's `unpin` ignores it too, for any other way in), it can't be dragged to another place (the
 # composite bar's `move`, and moving a container to a side bar/panel: viewDescriptorService.moveViewContainerToLocation), and its
-# view has canToggleVisibility and canMoveView false (views registry's addViews, after the code the two patches above put there).
+# view has canToggleVisibility false (it can be collapsed and reordered with the Explorer in its container: lib/projects/layout.js; views registry's addViews, after the code the two patches above put there).
 # All or nothing.
 PA_MARK = "/*kural-projects-fixed*/"
 PA_UNPIN = re.compile(r'(?<![\w$.])unpin\(([\w$]+)\)\{(?=this\.model\.setPinned\(\1,!1\))')
@@ -602,7 +602,7 @@ def projects_always_shown(text):
         return text
     pid = json.dumps(PROJECTS_CONTAINER)
     views = adds[0][0].group(1)
-    view_code = (f'{PA_MARK}try{{for(const _kv of {views})try{{if(_kv&&_kv.id==={json.dumps(PROJECTS_VIEW)}){{_kv.canToggleVisibility=!1;_kv.canMoveView=!1}}}}catch{{}}}}catch{{}}')
+    view_code = (f'{PA_MARK}try{{for(const _kv of {views})try{{if(_kv&&_kv.id==={json.dumps(PROJECTS_VIEW)}){{_kv.canToggleVisibility=!1}}}}catch{{}}}}catch{{}}')
     edits = [
         (unpin[0].end(), unpin[0].end(), f'{PA_MARK}if({unpin[0].group(1)}==={pid})return;'),
         (move[0].end(), move[0].end(), f'{PA_MARK}if({move[0].group(1)}==={pid}||{move[0].group(2)}==={pid})return!1;'),

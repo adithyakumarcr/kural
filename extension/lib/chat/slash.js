@@ -34,11 +34,21 @@ function clean(commands) {
 
 // "/superpowers:brainstorming a login page" → { name: "superpowers:brainstorming", rest: "a login page" } when it's one of
 // the chat's commands (by name or alias); otherwise null (a path like "/usr/bin" or a plain "/" stays text).
+// A command in the middle of a message ("please /code-review this") counts too (the first one that is a command): its
+// name comes out of the text, which becomes the rest, because Claude Code runs a skill only when the message starts with it.
 function split(text, commands) {
-  const m = /^\/([A-Za-z0-9][A-Za-z0-9:._-]*)(?=\s|$)([\s\S]*)$/.exec(String(text || ""));
-  if (!m || !Array.isArray(commands)) return null;
-  const c = commands.find((x) => x.name === m[1] || (x.aliases || []).includes(m[1]));
-  return c ? { name: m[1], rest: m[2].replace(/^[ \t]+/, "") } : null;
+  text = String(text || "");
+  if (!Array.isArray(commands)) return null;
+  const re = /(^|\s)\/([A-Za-z0-9][A-Za-z0-9:._-]*)(?=\s|$)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const c = commands.find((x) => x.name === m[2] || (x.aliases || []).includes(m[2]));
+    if (!c) continue;
+    const at = m.index + m[1].length, after = text.slice(at + 1 + m[2].length);
+    if (at === 0) return { name: m[2], rest: after.replace(/^[ \t]+/, "") };
+    return { name: m[2], rest: text.slice(0, at).replace(/[ \t]+$/, "") + after };
+  }
+  return null;
 }
 
 module.exports = { clean, split, SCREEN_ONLY };

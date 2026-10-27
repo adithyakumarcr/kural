@@ -96,6 +96,82 @@ check("BUG-14: old .tmp files of a killed window are swept when the archive open
   fs.rmSync(d2, { recursive: true, force: true });
 });
 
+// ---- History going missing (root causes found 27 Oct 2026) ----
+const fresh = () => fs.mkdtempSync(path.join(os.tmpdir(), "kural-archive-h-"));
+
+check("HIST-1: a chat whose card is unreadable (empty/truncated after a crash) is still listed: the card is rebuilt from the chat", () => {
+  const d = fresh(), a = new ChatArchive(d);
+  const t = chat("cardbad", 4, wsA, "Kept title");
+  a.save(t, card(t));
+  fs.writeFileSync(path.join(d, "cardbad.meta.json"), "");           // zero bytes: what a crash leaves without fsync
+  const listed = new ChatArchive(d).list().find((m) => m.id === "cardbad");
+  assert.ok(listed, "the chat vanished from History");
+  assert.strictEqual(listed.title, "Kept title");
+  assert.strictEqual(listed.workspace.name, "robot");
+  assert.ok(fs.readdirSync(d).some((n) => n.startsWith("cardbad.meta.json.") && n.endsWith(".corrupt")), "the bad card is kept as .corrupt, not deleted");
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+check("HIST-1b: a chat with no card at all (only <id>.json) is listed", () => {
+  const d = fresh(), a = new ChatArchive(d);
+  const t = chat("nocard", 2, wsB);
+  a.save(t, card(t));
+  fs.unlinkSync(path.join(d, "nocard.meta.json"));
+  assert.ok(new ChatArchive(d).list().some((m) => m.id === "nocard"));
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+check("HIST-2: a changed chat is saved even when its JSON has the same length and the same updatedAt", () => {
+  const d = fresh(), a = new ChatArchive(d);
+  const t = { id: "samelen", title: "T", updatedAt: 5, workspace: wsA, messages: [{ role: "user", segments: [{ t: "text", v: "aaaa" }] }] };
+  assert.ok(a.save(t, card(t)));
+  t.messages[0].segments[0].v = "bbbb";
+  assert.ok(a.save(t, card(t)), "the edit was skipped as unchanged");
+  assert.strictEqual(new ChatArchive(d).read("samelen").messages[0].segments[0].v, "bbbb");
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+check("HIST-3: a deleted chat stays deleted when deleted.json is overwritten, truncated or capped (another window, an old version)", () => {
+  const d = fresh(), a = new ChatArchive(d);
+  const t = chat("tomb", 2, wsA);
+  a.save(t, card(t)); a.remove("tomb");
+  fs.writeFileSync(path.join(d, "deleted.json"), "[]");              // a lost update
+  const b = new ChatArchive(d);
+  assert.strictEqual(b.save(t, card(t)), false, "a window that still has it open brought it back");
+  fs.writeFileSync(path.join(d, "deleted.json"), "[");               // truncated
+  assert.strictEqual(new ChatArchive(d).save(t, card(t)), false);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+check("HIST-4: an unreadable deleted.json is kept (quarantined), never silently replaced", () => {
+  const d = fresh();
+  fs.writeFileSync(path.join(d, "deleted.json"), '["a1","a2"');
+  const a = new ChatArchive(d);
+  const t = chat("other", 2, wsA);
+  a.save(t, card(t)); a.remove("other");
+  assert.ok(fs.readdirSync(d).some((n) => /^deleted\.json\..*\.corrupt$/.test(n)), "the damaged list was overwritten");
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+check("HIST-5: a chat file that can't be parsed is kept as .corrupt (not lost to the next save) and reads as missing", () => {
+  const d = fresh(), a = new ChatArchive(d);
+  const t = chat("badbody", 4, wsA);
+  a.save(t, card(t));
+  fs.writeFileSync(path.join(d, "badbody.json"), '{"id":"badbody","messages":[{"role":"us');   // cut off
+  assert.strictEqual(a.read("badbody"), null);
+  assert.ok(fs.readdirSync(d).some((n) => n.startsWith("badbody.json.") && n.endsWith(".corrupt")), "the damaged chat must be kept for recovery");
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+check("HIST-6: writes are flushed to disk before the rename (no empty file after a power cut)", () => {
+  const d = fresh(), a = new ChatArchive(d);
+  const calls = [], fsync = fs.fsyncSync;
+  fs.fsyncSync = (...x) => { calls.push("fsync"); return fsync(...x); };
+  try { const t = chat("flush", 2, wsA); a.save(t, card(t)); } finally { fs.fsyncSync = fsync; }
+  assert.ok(calls.length >= 2, "expected an fsync for the chat and its card");
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(fail ? `archive: ${fail} FAILED` : "archive: ALL PASS");
 process.exit(fail ? 1 : 0);

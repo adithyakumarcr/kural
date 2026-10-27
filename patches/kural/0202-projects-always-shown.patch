@@ -9,7 +9,7 @@ index 83378707..8bf26bc0 100644
 -						canToggleVisibility: true,
 -						canMoveView: viewContainer?.id !== REMOTE,
 +						canToggleVisibility: item.id !== 'kural.projects', // Kural: the Projects bar stays
-+						canMoveView: viewContainer?.id !== REMOTE && item.id !== 'kural.projects',
++						canMoveView: viewContainer?.id !== REMOTE, // Kural: Projects may be reordered with the Explorer in its container (it is put back if dragged out: lib/projects/layout.js)
  						treeView: type === ViewType.Tree ? this.instantiationService.createInstance(CustomTreeView, item.id, item.name, extension.description.identifier.value) : undefined,
  						collapsed: this.showCollapsed(container) || initialVisibility === InitialVisibility.Collapsed,
  						order: order,
