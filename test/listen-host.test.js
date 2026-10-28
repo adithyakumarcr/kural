@@ -284,7 +284,8 @@ const until = async (fn, ms = 2000) => { const t = Date.now(); while (!fn()) { i
     await until(() => sent.some((s) => s.msg.type === "listenEnd"));
     assert.ok(!sent.some((s) => s.msg.opener), "the old ones aren't played");
     await until(() => OPENERS.every((l) => spoken.includes(l)));
-    await until(() => fs.existsSync(path.join(dir, "openers", "lines")));
+    // (Not just "the file exists": writeFile creates it before it writes, and on Windows the test read it empty in between.)
+    await until(() => fs.existsSync(path.join(dir, "openers", "lines")) && fs.readFileSync(path.join(dir, "openers", "lines"), "utf8") === JSON.stringify(OPENERS));
     assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, "openers", "lines"), "utf8")), OPENERS);
   });
   await check("clean drops walkthroughs that aren't the right shape", () => {
