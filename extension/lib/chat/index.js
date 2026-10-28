@@ -23,8 +23,7 @@ const brain = require("../ai");
 const { installOllama } = require("../tab/local");
 const { watchSetup } = require("../ai/claude-setup");
 const { Tickets, atlassianState, ticketNote } = require("./tickets");
-const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt, lessonPrompt, debugNote } = require("./prompts");
-const { DebugLogs } = require("../debug/server");
+const { PROMPTS, MOOD_PROMPTS, customMoods, shownMoods, moodPrompt, lessonPrompt } = require("./prompts");
 const { GUIDE, GUIDE_LOCAL } = require("./guide");
 const { registerTabEditor, openBeside, tabOf, SCHEME } = require("./tab-editor");
 const { profileOf, limitUsed, limitParts } = require("../router/policy");
@@ -35,6 +34,7 @@ const slashList = require("./slash");
 const shortcuts = require("./shortcuts");
 const projectRules = require("../rules/core");
 const { Enhancer } = require("../enhance");
+const { Titler } = require("./title");
 const { Voice } = require("../voice");
 const { Listen } = require("../listen");
 const { pickModel } = require("../listen/script");
@@ -68,7 +68,6 @@ const EFFORTS = [
 ];
 const MODES = [
   { id: "agent", label: "Agent", hint: "edits; asks before commands" },
-  { id: "debug", label: "Debug", hint: "finds the cause with logs" },
   { id: "auto", label: "Auto", hint: "edits and runs commands freely" },
   { id: "plan", label: "Plan", hint: "a plan first, no changes" },
   { id: "ask", label: "Ask", hint: "answers only" },
@@ -111,8 +110,6 @@ const LAST_KEY = "kural.chat.last";   // your last model / intensity / mode / pa
 const cfg = () => vscode.workspace.getConfiguration("kural");
 const shortId = () => require("crypto").randomBytes(8).toString("hex").slice(0, 9);   // (chat and card ids: never guessable)
 const valid = (list, v) => list.some((x) => x.id === v);
-// Modes that edit files and ask before commands: Agent, and Debug (Agent with a way of working: lib/debug).
-const agentLike = (m) => m === "agent" || m === "debug";
 // The kural.chat.mode setting for new chats. Auto (commands run without asking) only from YOUR settings: a project's
 // .vscode/settings.json can't turn it on for you (APP-8).
 function settingMode() {
@@ -164,6 +161,8 @@ class ChatView {
       textOf: (segments) => ChatView.textOf(segments), cwd: () => this.root() || ws.workDir(),
       post: (msg) => this.post(msg), save: () => this.save(),
     });
+    // A new chat's title: the first words at once, then a short summary from the quickest model (title.js).
+    this.titler = new Titler({ ...this.sideChats.d });
     // Voice input (lib/voice): the page records; Whisper transcribes on this computer (downloaded the first time, after you
     // agree); Side chat's quick model tidies the text up. The result goes into the box, never sent by itself.
     this.voice = new Voice({ dir: path.join(context.globalStorageUri.fsPath, "voice"), post: (msg) => this.post(msg),
@@ -314,7 +313,7 @@ class ChatView {
         return [{ type: "setMode", mode: "plan" }, null];
       })),
       vscode.commands.registerCommand("kural.chat.history", async () => { await this.reveal(); this.post({ type: "showHistory" }); }),
-      { dispose: () => { this.sideChats.stopAll(); if (this.debugServer) this.debugServer.stop(); this.voice.dispose(); this.listen.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
+      { dispose: () => { this.sideChats.stopAll(); this.voice.dispose(); this.listen.dispose(); for (const c of this.routingJobs.values()) c.abort(); for (const r of this.runtime.values()) { if (r.checkpointAbort) r.checkpointAbort.abort(); if (r.proc) r.proc.kill(); } } },
     );
   }
 
@@ -372,6 +371,9 @@ class ChatView {
     // the intensity (the menu lists each Gemini model once now).
     const lv = cliOf(tab.model) === "agy" && splitLevel(cliModel(tab.model));
     if (lv) { tab.model = `agy:${lv.base}`; tab.effort = { minimal: "low", xhigh: "max" }[lv.level] || lv.level; }
+    // (Debug mode was removed, 27 Oct 2026: its chats go on in Agent, which asks before commands as Debug did. Not the
+    // default mode below: that may be Auto.)
+    if (tab.mode === "debug") tab.mode = "agent";
     if (!valid(MODES, tab.mode)) tab.mode = d.mode;
     tab.split = !!tab.split; tab.workers = cleanWorkers(tab.workers);
     delete tab.team; delete tab.roles; delete tab.teamStyle; delete tab.noTeamOffer;   // (the old agent team, switched off since 1.1)
@@ -498,7 +500,6 @@ class ChatView {
     if (r && r.proc) { r.stale = true; r.proc.kill(); }
     this.endDevice(r);
     if (this.browserAi) this.browserAi.end(id);
-    if (this.debugServer) this.debugServer.end(id);
     this.runtime.delete(id);
     this.slashes().delete(id);
     const i = this.tabs.indexOf(tab);
@@ -578,7 +579,8 @@ class ChatView {
     if (!old) return false;
     this.clean(old);
     const tab = { ...old, sessionId: newSessionId(), started: false, visiting: false, workspace: this.here, updatedAt: Date.now(),
-      carryOver: { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
+      carryOver: old.carryOver && old.carryOver.fork ? old.carryOver   // (a fork not sent yet keeps its own: "branches from that conversation")
+        : { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
     const blank = this.tabs.find((t) => !t.messages.length && t.status === "idle" && !this.panes.some((p) => p !== this.cur() && p.activeId === t.id));
     if (blank) this.tabs.splice(this.tabs.indexOf(blank), 1, tab); else this.tabs.push(tab);
     this.archive.save(tab, this.card(tab));
@@ -586,6 +588,37 @@ class ChatView {
     this.postHistory();
     this.save();
     return true;
+  }
+
+  // ---------- the Projects bar's History, moves to a project that isn't open, and forks (lib/projects) ----------
+  // The saved chats' cards (all projects); fromDisk: other windows may have saved some since.
+  historyCards(fromDisk = false) { return fromDisk ? this.archive.refresh() : this.archive.list(); }
+  // A saved chat, not open here, moved to another project's History without that project's window (adopt does it for a
+  // window that takes it in): same id, `home` ({key, name, open}) as its workspace, a fresh conversation given the old one.
+  rehome(id, home, from) {
+    if (this.tab(id) || !home) return false;
+    this.archive.refresh();
+    const old = this.archive.read(id);
+    if (!old) return false;
+    this.clean(old);
+    const tab = { ...old, sessionId: newSessionId(), started: false, visiting: false, workspace: home, updatedAt: Date.now(),
+      carryOver: old.carryOver && old.carryOver.fork ? old.carryOver
+        : { from: from || (old.workspace && old.workspace.name) || "another project", text: ChatView.transcript(old) } };
+    return this.archive.save(tab, this.card(tab));
+  }
+  // Fork: a copy of the whole recorded conversation (an open chat as it is now, else the saved one) as a NEW chat, saved in
+  // History under `home`; the original stays. The window of the project that gets it then adopts it. The new id, or null.
+  forkCopy(id, home) {
+    let src = this.tab(id);
+    if (!src) {
+      src = this.archive.read(id);
+      if (!src) return null;
+      this.clean(src); src.visiting = false;
+    }
+    const tab = forkConversation(src, src.messages.length - 1, { id: shortId(), sessionId: newSessionId() });
+    if (!tab) return null;
+    if (home) tab.workspace = home;
+    return this.archive.save(tab, this.card(tab)) ? tab.id : null;
   }
 
   // Open the folder a visiting chat came from, in a new window.
@@ -610,7 +643,6 @@ class ChatView {
     this.archive.remove(id);
     try { fs.rmSync(this.handoffDir({ id }), { recursive: true, force: true }); } catch { /* best effort, like History */ }
     if (this.lessons) this.lessons.forget(id);
-    if (this.debugServer) this.debugServer.end(id);
     this.postHistory();
   }
 
@@ -1082,7 +1114,7 @@ class ChatView {
   // ---------- parallel agents (lib/split) ----------
   // Does this chat's next answer split the work? Switched on in the model menu, in a mode that edits, with a cloud AI (a
   // model on this computer would run every agent on the one GPU: slower, not faster).
-  splitOn(tab) { return !!tab.split && (agentLike(tab.mode) || tab.mode === "auto") && !isLocal(tab.model); }
+  splitOn(tab) { return !!tab.split && (tab.mode === "agent" || tab.mode === "auto") && !isLocal(tab.model); }
   // The models the agents can use: the chat's AI's (the plan card and the model menu offer these).
   workerModels(tab) {
     const engine = engineOf(tab.model);
@@ -1253,7 +1285,7 @@ class ChatView {
   routingRequest(tab, text, attachments = [], contexts = []) {
     return { prompt: text, recentContext: ChatView.transcript(tab, 10000), current: tab.model,
       historyChars: ChatView.conversationSize(tab), context: ChatView.routingContext(contexts, attachments),
-      profile: tab.routingProfile, mode: tab.mode, editing: agentLike(tab.mode) || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
+      profile: tab.routingProfile, mode: tab.mode, editing: tab.mode === "agent" || tab.mode === "auto", wellDefined: text === BUILD_TEXT,
       split: !!tab.split, device: !!tab.device, connectors: !!tab.ticket,
       images: attachments.some((a) => a.kind === "image"), pdf: attachments.some((a) => a.kind === "pdf") };
   }
@@ -1441,7 +1473,7 @@ class ChatView {
     this.endDevice(old);
     const full = fullSetup();
     const instr = full ? { text: "", files: [] } : projectInstructions(this.root(), vscode.workspace.isTrusted !== false);
-    const editing = agentLike(tab.mode) || tab.mode === "auto";
+    const editing = tab.mode === "agent" || tab.mode === "auto";
     // steers: messages you sent while it answered, given to the program but not taken in yet (see queueSend);
     // expect: every message given to the program, in order, until its echo says it was taken in (onEcho).
     const r = { proc: null, turn: null, perms: new Map(), procKey: this.procKey(tab), gotOutput: false, started: Date.now(), agents: new Map(), tasks: new Map(),
@@ -1641,7 +1673,9 @@ class ChatView {
   async enhance(tab, m) {
     if (!this.enhancing) this.enhancing = new Map();
     if (this.enhancing.has(tab.id) || tab.visiting) return;
-    const id = String(m.requestId || "").slice(0, 80), state = (o) => this.post({ type: "enhanceState", tabId: tab.id, id, ...o });
+    // The reply goes to the pane that asked, tagged with its chat and request: another chat on screen never gets it.
+    const pane = this.pane, id = String(m.requestId || "").slice(0, 80);
+    const state = (o) => { const msg = { type: "enhanceState", tabId: tab.id, id, ...o }; if (pane && this.panes && this.panes.includes(pane)) this.postTo(pane, msg); else this.post(msg); };
     if (vscode.workspace.isTrusted === false) { state({ state: "error", kind: "unavailable", message: "Trust this workspace before using Kural AI." }); return; }
     const run = this.enhancer.run({ text: ChatView.textOf(Array.isArray(m.segments) ? m.segments : []), root: this.root(), chatEngine: engineOf(tab.model),
       onStatus: (status) => state({ state: "running", status }) });
@@ -1657,14 +1691,6 @@ class ChatView {
   // tabId -> the skills and commands its Claude has (the "/" list in the box: lib/chat/slash.js).
   slashes() { return this.slash || (this.slash = new Map()); }
 
-  // Debug mode (lib/debug): one log endpoint for every chat, started with the first Debug message. Each message of a chat in
-  // Debug mode says where to send what the instrumentation logs and where to read it (the file is emptied by `clear`).
-  debugLogs() { return this.debugServer || (this.debugServer = new DebugLogs({ log })); }
-  async debugText(tab) {
-    if (tab.mode !== "debug") return "";
-    try { const s = await this.debugLogs().session(tab.id); return debugNote(s.url, s.file); }
-    catch (e) { log(`chat ${tab.id}: debug log endpoint: ${e.message}`); return ""; }
-  }
   // The chat's skills and commands (null: none here, a model that isn't Claude or Claude without your setup), to its page.
   setSlash(tab, list) {
     if (list) this.slashes().set(tab.id, list); else if (!this.slashes().delete(tab.id)) return;   // (none before, none now)
@@ -1745,6 +1771,18 @@ class ChatView {
   static textOf(segments) {
     return segments.map((s) => s.t === "text" ? s.v : s.ctx.kind === "shortcut" ? `/${s.ctx.name}` : s.ctx.kind === "quote" ? `"${s.ctx.label}"` : s.ctx.kind === "element" ? `[element ${s.ctx.label} on ${s.ctx.path}]`
       : `@${s.ctx.path}${s.ctx.kind === "selection" ? ` (L${s.ctx.startLine}-${s.ctx.endLine})` : ""}`).join("");
+  }
+
+  // Replaces the first-words title with a summary, if the chat is still there, still has that title and wasn't renamed meanwhile.
+  // Not the conversation: no status, no notification; a failure keeps the first words.
+  summarizeTitle(tab, text) {
+    const first = tab.title;
+    if (!this.titler) return;
+    this.titler.ask(tab.id, text).then((title) => {
+      if (!title || tab.renamed || tab.title !== first || !this.tab(tab.id)) return;
+      tab.title = title;
+      this.postTabs(); this.save();
+    }, () => {});
   }
 
   // A tab title from your first message; pills read as "main.py (L3-9)".
@@ -1848,7 +1886,7 @@ class ChatView {
       return;
     }
     if (!text) { text = "Have a look at what I attached."; segments = [{ t: "text", v: text }]; }
-    if (tab.title === "New chat" && !tab.renamed) tab.title = ChatView.titleOf(segments);
+    if (tab.title === "New chat" && !tab.renamed) { tab.title = ChatView.titleOf(segments); this.summarizeTitle(tab, text); }
     const user = { role: "user", segments, mode: tab.mode, contexts: contexts.filter((c) => c.kind === "current").map((c) => ({ kind: c.kind, path: c.path, name: c.name })) };
     const picked = ChatView.cleanPicks(picks);
     if (picked.length) user.picks = picked;   // (options you picked in the answer: shown as chips on your message)
@@ -1917,7 +1955,6 @@ class ChatView {
     this.beginTurn(tab, r, reply, ask);
     const deviceNote = tab.device && this.devices && deviceOk(tab.model) ? this.devices.note(tab.device) : "";
     const ctl = new AbortController(); this.routingJobs.set(tab.id,ctl);
-    const debugText = tab.mode === "debug" ? await this.debugText(tab) : "";   // (no extra wait in other modes)
     let retrieved = "";
     if (this.router && this.router.options().context && vscode.workspace.isTrusted) {
       try {
@@ -1934,7 +1971,7 @@ class ChatView {
     const built = await this.buildPrompt(slash ? slash.rest : text,contexts);
     if (ctl.signal.aborted || !reply.running) { if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id); return; }
     if (this.routingJobs.get(tab.id) === ctl) this.routingJobs.delete(tab.id);
-    const { content: prompt, meta } = this.attachments.content(lead + carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + this.rulesMessage(tab, contexts) + debugText + retrieved + built, attachIds, carry ? previousMedia : []);
+    const { content: prompt, meta } = this.attachments.content(lead + carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + deviceNote + this.rulesMessage(tab, contexts) + retrieved + built, attachIds, carry ? previousMedia : []);
     user.sentText = lead + journal.textOf(prompt).slice(lead.length + carry.length);
     r.turn.attachments = [...meta,...previousMedia];
     if (meta.length) {
@@ -2179,7 +2216,7 @@ class ChatView {
     if (!r) { reply.running = false; tab.status = "idle"; reply.error = `${whoOf(tab.model)} didn't start. Check it in Get started.`; this.post({ type: "patch", tabId: tab.id, msg: this.patchOf(reply) }); this.postTabs(); return false; }
     this.beginTurn(tab, r, reply, ask);
     const carry = this.carryText(usageChoice ? { usage: who } : { retry: who }, record);
-    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket) + await this.debugText(tab), [], media);
+    const { content } = this.attachments.content(carry + this.instructionsNote(tab) + ticketNote(tab.ticket), [], media);
     r.turn.attachments = media;
     r.pendingSend = content; r.turn.dispatched = true;
     this.sendTo(r, content, "turn");
@@ -2226,7 +2263,7 @@ class ChatView {
   async buildPlan(tab) {
     if (tab.status !== "idle") return;
     const was = tab.mode;
-    tab.mode = tab.mode === "auto" || tab.mode === "debug" ? tab.mode : "agent";
+    tab.mode = tab.mode === "auto" ? "auto" : "agent";
     if (tab.mode !== was) this.revokeAllowAll(tab);
     this.postTabs();
     await this.send(tab, [{ t: "text", v: BUILD_TEXT }], []);
@@ -2550,7 +2587,7 @@ class ChatView {
 
   finishTurn(tab, r) {
     const reply = r.turn.reply;
-    if (!agentLike(reply.mode) && reply.mode !== "auto") return;
+    if (reply.mode !== "agent" && reply.mode !== "auto") return;
     try {
       const roots = this.projectRoots(tab);
       const files = this.changes.summary(r.turn, this.root()).filter((c) => inProject(c.file, roots));
@@ -2695,7 +2732,7 @@ class ChatView {
         if (resolve) { r.perms.delete(b.pid); resolve(true); }
       }
     }
-    const editing = (x) => agentLike(x) || x === "auto";
+    const editing = (x) => x === "agent" || x === "auto";
     // Gemini (Antigravity): its flags are fixed when it starts. Kural's gate stops approving anything for the agy that was
     // started for the old mode (so a late "yes" can't count under the new one); the new mode applies from the next message.
     if (engineOf(tab.model) === "agy") {
@@ -2705,7 +2742,6 @@ class ChatView {
     else if (editing(was) !== editing(tab.mode)) this.post({ type: "flash", text: `${tab.mode === "plan" || tab.mode === "ask" ? "Read-only permissions apply now; tools refresh" : "Editing tools become available"} from your next message` });
     else if (tab.mode === "auto") this.post({ type: "flash", text: "Auto: commands run without asking from now on" });
     else if (tab.mode === "agent") this.post({ type: "flash", text: "Agent: Kural asks before the next command" });
-    else if (tab.mode === "debug") this.post({ type: "flash", text: "Debug: Kural asks before the next command" });
   }
 
   // Claude asks you a question with options: show a card, wait for your pick.

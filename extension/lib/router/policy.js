@@ -34,7 +34,7 @@ function eligible(models, request) {
     (!request.split || m.split) && (!request.device || m.device) &&
     (!request.images || m.images) && (!request.pdf || m.pdf) &&
     (!request.connectors || m.connectors) &&
-    (!((request.mode === "agent" || request.mode === "debug") && request.editing) || m.commands));
+    (!(request.mode === "agent" && request.editing) || m.commands));
 }
 // Error output pasted into the message: a stack trace, "TypeError: …", a panic, a failed exit code.
 const TRACE = /traceback \(most recent call last\)|\b\w*(?:error|exception):\s|^\s+at \S+ \(?\S+:\d+:\d+\)?|\bpanic:|segmentation fault|exit (?:code|status) [1-9]/im;

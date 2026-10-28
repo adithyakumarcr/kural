@@ -127,7 +127,37 @@ function better(a, b, here) {
   return (Number(a.seen) || 0) > (Number(b.seen) || 0);
 }
 
-function buildModel({ windows = [], pins = [], recent = [], here = null, query = "", home = os.homedir(), now = Date.now(), platform = process.platform } = {}) {
+// ---------- a project's History (every saved chat of it, from lib/chat/archive.js's cards) ----------
+const HISTORY_MAX = 300;   // cards sent to the page per project; it pages through them ("Show N more")
+
+// A card's workspace is {key, name, open}: key = the folders' uri paths joined by "|" (lib/workspace.js), open = the
+// workspace file or the first folder. A uri path on Windows is "/c:/Code/App": the drive's own spelling is "c:\Code\App".
+function fsOf(p, platform) {
+  const s = String(p || "");
+  return platform === "win32" && /^\/[a-zA-Z]:/.test(s) ? s.slice(1) : s;
+}
+
+// Does this saved chat belong to the project? Same key, or its folder / workspace file is the project's.
+function belongs(meta, p, platform = process.platform) {
+  const w = meta && meta.workspace;
+  if (!w) return false;
+  if (w.key && sameKey(w.key, p.key, platform)) return true;
+  const mine = [p.workspaceFile, p.path].filter(Boolean);
+  const theirs = [w.open, String(w.key || "").split("|")[0]].filter(Boolean).map((x) => fsOf(x, platform));
+  return theirs.some((t) => mine.some((m) => samePath(t, m, platform)));
+}
+
+// The project's saved chats, newest first, without the ones its window shows as open chats (`exclude`: ids).
+function historyOf(metas, p, { exclude = new Set(), now = Date.now(), platform = process.platform } = {}) {
+  return (metas || []).filter((m) => m && m.id && !exclude.has(m.id) && belongs(m, p, platform))
+    .map((m) => ({ id: m.id, title: String(m.title || m.preview || "Chat"), when: Number(m.when) || 0, count: Number(m.count) || 0 }))
+    .sort((a, b) => b.when - a.when)
+    .map((h) => ({ ...h, ago: h.when ? ago(h.when, now) : "" }));
+}
+
+// `archive`: the History cards (null = not read: no project's History is open, nothing is searched). `historyOpen`: keys of
+// the projects whose History is unfolded; only those (and everything while searching) get their items.
+function buildModel({ windows = [], pins = [], recent = [], here = null, query = "", home = os.homedir(), now = Date.now(), platform = process.platform, archive = null, historyOpen = [] } = {}) {
   const api = pathApi(platform);
   const byKey = new Map();
   for (const w of windows) {
@@ -190,11 +220,18 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
   }
 
   const q = String(query || "").trim().toLowerCase();
+  const unfolded = new Set(historyOpen || []);
+  for (const p of all) {
+    const want = unfolded.has(p.key) || !!q;
+    const items = archive && want ? historyOf(archive, p, { exclude: new Set(p.chats.map((c) => c.id)), now, platform }) : [];
+    p.history = { open: unfolded.has(p.key), loaded: !!(archive && want), total: items.length, items: items.slice(0, HISTORY_MAX) };
+  }
   const filter = (p) => {
     if (!q) return p;
     if (p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q)) return p;
     const hit = p.chats.filter((c) => c.title.toLowerCase().includes(q));
-    return hit.length ? { ...p, chats: hit } : null;
+    const past = p.history.items.filter((h) => h.title.toLowerCase().includes(q));
+    return hit.length || past.length ? { ...p, chats: hit, history: { ...p.history, total: past.length, items: past } } : null;
   };
   const sections = [["pinned", "Pinned", pinned], ["open", "Open", open], ["recent", "Recent", recents]]
     .map(([id, title, list]) => ({ id, title, projects: list.map(filter).filter(Boolean) }))
@@ -203,4 +240,4 @@ function buildModel({ windows = [], pins = [], recent = [], here = null, query =
   return { sections, badge, needLook };
 }
 
-module.exports = { keyOf, pathKey, samePath, sameKey, shorten, chatOrder, buildModel, ago, colorFor, PALETTE };
+module.exports = { historyOf, belongs, HISTORY_MAX, keyOf, pathKey, samePath, sameKey, shorten, chatOrder, buildModel, ago, colorFor, PALETTE };

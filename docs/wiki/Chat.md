@@ -12,7 +12,6 @@ it to your message instead (also while the chat is open).
 | **Auto** | edits files and runs commands without asking |
 | **Plan** | writes a plan and changes nothing; **Build it** carries the plan out (**Ctrl+P** switches Plan on/off) |
 | **Ask** | only answers |
-| **Debug** | like Agent, for bugs: adds temporary logging, asks you to reproduce, reads the logs, fixes the cause and removes the logging (see [[Debug Mode]]) |
 
 Every file change shows under the answer: open the before/after, **keep** it or **undo** it. Only your project's files
 are listed: a note the AI writes in the temp folder, or Claude Code's own plans and memory (`~/.claude`), aren't.
@@ -74,7 +73,8 @@ your next message, because which tools the model has is fixed when it starts.
   the gear.
 - **Intensity.** Low, Medium, High, Max: how much the model thinks before answering (**Ctrl+M / H / O** in the chat for
   Medium / High / Max). Google Gemini's models come in thinking levels; the menu lists each model once and the
-  intensity picks its level (the nearest one the model has; a line under the buttons says which it has).
+  intensity picks its level (the nearest one the model has; a line under the buttons says which it has). While **Auto** is on the
+  Intensity row is hidden: the Model Router picks the intensity with the model.
 - **Preference** (called mood before).
   - **Default**: balanced.
   - **Explorer**: looks around and compares options before settling.
@@ -370,7 +370,7 @@ parts: a new chat starts empty. Every AI's tokens per day are in the AI Usage pa
 ## Tabs, history, two chats
 
 - **The tab line** has all the chat's buttons (the panel's title bar has none of its own): **+** (new chat), **Split**,
-  the clock (**History**), the gear (**Kural Settings**) and **…** (Get started, Check for updates, What's new).
+  the clock (**History**), and the gear (**Kural Settings**, which also has Get started, Check for updates and What's new).
 - **Tabs**: **+** or **Ctrl+Alt+N** for a new chat; **Ctrl+PageDown / PageUp** to switch; **Ctrl+W** to close. A chat
   you haven't used for 10 minutes and that isn't on screen lets its AI program go (to save memory; at most two idle ones
   stay ready); it starts again in the same conversation when you open it or send to it, in a second or two.

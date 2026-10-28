@@ -1,60 +1,84 @@
 /* The Projects tab (media/projects.js): design A "Folders" (docs/mockups/projects-bar/projects-bar-v3a.html, Adithya,
    25 Oct 2026, like ChatGPT's project list, with the Pinned / Open / Recent headings): a folder per project with its chats
-   indented under it; no cards, letter tiles or project colors. A chat's news is a mark at its end: spinner (blue), orange dot
-   (waiting for you), blue dot (new answer). VS Code's theme colors and font (the system font: SF Pro on a Mac); no
-   Kural purple in the list; red only for what closes or removes. Font sizes follow the editor (--fs, lib/ui.js). */
+   indented under it; no cards. Each project's name and folder have their own color (pc0..pc7, Adithya, 27 Oct 2026). A chat's
+   news is a mark at its end: spinner (blue), orange dot (waiting for you), blue dot (new answer). VS Code's theme colors
+   otherwise; no Kural purple in the list; red only for what closes or removes.
+   The Explorer's font and size (Adithya, 27 Oct 2026: "the same as the Explorer"): VS Code's font at 13 px, 22 px rows,
+   16 px icons, smaller text only where VS Code has it (descriptions at 0.9em, section headings at 11 px). Not the editor's
+   font size (--fs), which the chat follows. */
 :root { --run: #8fb8ff; --new: #4f8ff7;
   --strong: var(--vscode-foreground);
   --muted: var(--vscode-descriptionForeground); --faint: var(--vscode-disabledForeground, rgba(128,128,128,.8));
   --warn: var(--vscode-editorWarning-foreground, #d7a24a); --red: var(--vscode-errorForeground, #f14c4c);
   --hover: var(--vscode-list-hoverBackground, rgba(128,128,128,.12));
-  --sel: var(--vscode-list-inactiveSelectionBackground, rgba(128,128,128,.22)); }
-body.vscode-light { --run: #2a6bd1; --new: #2a6bd1; --warn: #b5791a; --red: #c9302c; }
+  --sel: var(--vscode-list-inactiveSelectionBackground, rgba(128,128,128,.22));
+  --row: 22px;          /* the Explorer's row height */
+  --name-x: 26px;       /* where a project's name starts in its row (the folder: 4 + 16 + 6): a chat's title starts there too */
+  --radius: 4px; }
+/* project colors: soft ones on a dark side bar, deeper ones on a light one; no Kural purple */
+:root { --c0: #6cb6ff; --c1: #5fd3a6; --c2: #e6b450; --c3: #f08a7a; --c4: #d58ad9; --c5: #4fd0d6; --c6: #a3d56a; --c7: #f0a35e; }
+body.vscode-light { --run: #2a6bd1; --new: #2a6bd1; --warn: #b5791a; --red: #c9302c;
+  --c0: #1f6fc2; --c1: #12875f; --c2: #9a6a00; --c3: #c2452f; --c4: #9a3fa3; --c5: #0c7f86; --c6: #4f8a14; --c7: #bb5f12; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
-body { font-family: var(--vscode-font-family); font-size: calc(13px * var(--fs, 1)); color: var(--vscode-foreground); background: var(--vscode-sideBar-background); }
+body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size, 13px); font-weight: var(--vscode-font-weight, normal);
+  color: var(--vscode-foreground); background: var(--vscode-sideBar-background); }
+/* A list, not a document: dragging over it selects nothing (the search and rename boxes still take text) */
+body { -webkit-user-select: none; user-select: none; }
+input { -webkit-user-select: text; user-select: text; }
 #app { display: flex; flex-direction: column; height: 100vh; }
 button { font: inherit; color: inherit; cursor: pointer; }
-.codicon { font-size: calc(16px * var(--fs, 1)); }
+.codicon { font-size: 16px; }
 
 /* ---------- search (opened by the title bar's search button) ---------- */
-.find { padding: 2px 8px 8px; flex: none; }
+.find { padding: 2px 8px 6px; flex: none; }
 .find.hidden { display: none; }
-.box { display: flex; align-items: center; gap: 6px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 6px; padding: 0 4px 0 8px; }
+.box { display: flex; align-items: center; gap: 6px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: var(--radius); padding: 0 2px 0 6px; }
 .box:focus-within { border-color: var(--vscode-focusBorder); }
-.box > .codicon { color: var(--muted); font-size: calc(14px * var(--fs, 1)); }
-.q { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--vscode-input-foreground); font: inherit; padding: 5px 0; height: calc(28px * var(--fs, 1)); }
+.box > .codicon { color: var(--muted); font-size: 14px; }
+.q { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--vscode-input-foreground); font: inherit; padding: 3px 0; height: 24px; }
 .q::placeholder { color: var(--vscode-input-placeholderForeground, var(--muted)); }
 mark { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inherit; border-radius: 2px; }
 
 /* ---------- the list ---------- */
-.plist { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 8px 14px; }
-.empty { color: var(--muted); padding: 14px 8px; line-height: 1.5; }
-.sec { font-size: calc(11px * var(--fs, 1)); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 14px 8px 6px; }
-.sec:first-child { padding-top: 6px; }
+.plist { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 4px 12px; line-height: var(--row); }
+.empty { color: var(--muted); padding: 10px 8px; line-height: 1.5; }
+/* Pinned, Open, Recent: like VS Code's section headings */
+.sec { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); height: var(--row); line-height: var(--row);
+  padding: 0 8px; margin-top: 8px; }
+.sec:first-child { margin-top: 0; }
 
-/* a project and its chats: a little room around a project that shows chats */
-.grp.with-chats { margin-bottom: 8px; }
+/* a project and its chats: a little room under a project that shows chats */
+.grp.with-chats { margin-bottom: 4px; }
+.grp.drop { background: var(--vscode-list-dropBackground, rgba(128,128,128,.18)); border-radius: var(--radius); }
 
-.row { display: flex; align-items: center; gap: 10px; padding: 0 4px 0 8px; height: calc(30px * var(--fs, 1)); border-radius: 7px; cursor: pointer; outline: 0; font-size: calc(13.5px * var(--fs, 1)); }
+.row { display: flex; align-items: center; gap: 6px; padding: 0 2px 0 4px; height: var(--row); border-radius: var(--radius); cursor: pointer; outline: 0; }
 .row:hover { background: var(--hover); }
 .row:focus-visible, .chat-row:focus-visible, .more:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .nmt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.row.cur .nmt { font-weight: 600; color: var(--strong); }
-.row.recent .nmt { color: var(--muted); }
+/* Each project has its own color (pc0..pc7, chosen in projects.js from its key): its name and its folder. A Recent project's
+   name is a little softer. */
+.row { --pc: var(--c0); }
+.row.pc0 { --pc: var(--c0); } .row.pc1 { --pc: var(--c1); } .row.pc2 { --pc: var(--c2); } .row.pc3 { --pc: var(--c3); }
+.row.pc4 { --pc: var(--c4); } .row.pc5 { --pc: var(--c5); } .row.pc6 { --pc: var(--c6); } .row.pc7 { --pc: var(--c7); }
+.row .nmt { color: var(--pc); }
+.row .fic { color: var(--pc); }
+.row.cur .nmt { font-weight: 600; }
+.row.recent .nmt { color: color-mix(in srgb, var(--pc) 70%, var(--muted)); }
+.row.recent .fic { color: color-mix(in srgb, var(--pc) 70%, var(--muted)); }
 /* the folder; with chats it folds them, and shows an arrow under the pointer */
-.fic { width: calc(18px * var(--fs, 1)); padding: 0; border: 0; background: none; color: var(--muted); flex: none; display: grid; place-items: center; }
+.fic { width: 16px; height: 16px; padding: 0; border: 0; background: none; color: var(--muted); flex: none; display: grid; place-items: center; }
 .fic .arrow { display: none; }
 .row:hover button.fic .codicon:not(.arrow) { display: none; }
 .row:hover button.fic .arrow { display: block; }
 .end { display: flex; align-items: center; gap: 2px; flex: none; }
 .end > .needs, .end > .dot-new { margin: 0 6px; }
-.end > .spin { font-size: calc(13px * var(--fs, 1)); margin: 0 3px; }
+.end > .spin { font-size: 14px; margin: 0 3px; }
 
-.tbtn { width: calc(22px * var(--fs, 1)); height: calc(22px * var(--fs, 1)); padding: 0; border: 0; border-radius: 5px; background: none; color: var(--vscode-foreground);
+.tbtn { width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius); background: none; color: var(--vscode-foreground);
   display: grid; place-items: center; flex: none; }
 .tbtn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.25)); }
-.tbtn .codicon { font-size: calc(14px * var(--fs, 1)); }
+.tbtn .codicon { font-size: 16px; }
 .tbtn:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
 /* (The pin, the cross and the bin show when you point at the row, or when a key reaches them; until then they take no
    room, so the name has the whole width. A pinned project keeps a faint pin.) */
@@ -67,25 +91,66 @@ mark { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inhe
 .tbtn.red { color: var(--red); }
 .tbtn.red:hover { background: rgba(241,76,76,.2); color: var(--red); }
 
-/* ---------- chats under a project ---------- */
-.chat-row { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 calc(36px * var(--fs, 1)); height: calc(28px * var(--fs, 1)); border-radius: 7px; cursor: pointer; outline: 0; }
+/* ---------- chats under a project: the title where the project's name starts ---------- */
+.chat-row { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 var(--name-x); height: var(--row); border-radius: var(--radius); cursor: pointer; outline: 0; }
 .chat-row:hover { background: var(--hover); }
 .chat-row.cur-chat { background: var(--sel); color: var(--strong); }
 .chat-row .ct { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-row.done .ct, .chat-row.ask .ct { font-weight: 600; color: var(--strong); }
-.chat-row .st { width: calc(16px * var(--fs, 1)); display: grid; place-items: center; flex: none; }
-.chat-row .st .codicon { font-size: calc(13px * var(--fs, 1)); }
+.chat-row .st { width: 16px; display: grid; place-items: center; flex: none; }
+.chat-row .st .codicon { font-size: 14px; }
 /* renaming a chat in place (F2 or the right-click menu) */
-.rename { flex: 1; min-width: 0; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 2px 6px; outline: 0; }
+.rename { flex: 1; min-width: 0; height: 20px; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-focusBorder); border-radius: 2px; padding: 0 4px; outline: 0; }
 /* a chat dragged over another open project */
 .row.drop { background: var(--vscode-list-dropBackground, rgba(128,128,128,.25)); }
 .chat-row[draggable="true"] { cursor: pointer; }
-.more { height: calc(26px * var(--fs, 1)); display: flex; align-items: center; padding-left: calc(36px * var(--fs, 1)); color: var(--faint); font-size: calc(12.5px * var(--fs, 1)); border-radius: 7px; cursor: pointer; outline: 0; }
+.more { height: var(--row); display: flex; align-items: center; padding-left: var(--name-x); color: var(--faint); border-radius: var(--radius); cursor: pointer; outline: 0; }
 .more:hover { color: var(--vscode-foreground); background: var(--hover); }
 
-.dot-new, .needs { width: calc(7px * var(--fs, 1)); height: calc(7px * var(--fs, 1)); border-radius: 50%; display: inline-block; flex: none; }
+.dot-new, .needs { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
 .dot-new { background: var(--new); }
 .needs { background: var(--warn); }
 .spin { animation: spin 1.2s linear infinite; color: var(--run); }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- a project's History: folded until you open it; the saved chats under it, their age at the end ---------- */
+/* (Its arrow stands where the chats' titles start; the count, the age of each saved chat and Clear all end at the same edge.) */
+.hist-head { display: flex; align-items: center; gap: 2px; height: var(--row); padding: 0 6px 0 calc(var(--name-x) - 4px); border-radius: var(--radius);
+  cursor: pointer; outline: 0; color: var(--faint); }
+.hist-head:hover { color: var(--vscode-foreground); background: var(--hover); }
+.hist-head:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.hist-head .codicon { font-size: 16px; }
+.hist-head .hl { flex: 1; min-width: 0; }
+.hist-head .hn, .chat-row.hist .when { font-size: .9em; color: var(--faint); white-space: nowrap; flex: none; }
+.hist-note { height: var(--row); padding: 0 6px 0 calc(var(--name-x) + 14px); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* History's Clear all: in place of the count, under the pointer: the same size and the same right edge as the count, red,
+   no box of its own (the row already has the hover background). */
+.hist-head .clear-all { display: none; flex: none; height: 18px; line-height: 18px; margin: 0 -4px 0 0; padding: 0 4px; border: 0; border-radius: 3px;
+  background: none; color: var(--red); font-size: .9em; }
+.hist-head:hover .clear-all, .hist-head .clear-all:focus-visible { display: block; }
+.hist-head:hover .hn { display: none; }
+.hist-head .clear-all:hover { text-decoration: underline; }
+.hist-head .clear-all:focus-visible { outline: 1px solid var(--vscode-focusBorder); }
+
+/* ---------- a chat's right-click menu (media/projects.js chatMenu): VS Code's menu colors ---------- */
+.cm-menu { position: fixed; z-index: 50; min-width: 160px; max-width: calc(100vw - 8px); padding: 4px; border-radius: 6px; line-height: normal;
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background)); color: var(--vscode-menu-foreground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-menu-border, var(--vscode-widget-border, rgba(128,128,128,.35))); box-shadow: 0 4px 16px var(--vscode-widget-shadow, rgba(0,0,0,.35)); }
+/* (Taller than the page with a long list of projects: it scrolls.) */
+.cm-menu { max-height: calc(100vh - 8px); overflow-y: auto; }
+.cm-item { position: relative; display: flex; align-items: center; gap: 12px; height: 24px; padding: 0 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.cm-item:hover, .cm-sub:hover { background: var(--vscode-menu-selectionBackground, var(--hover)); color: var(--vscode-menu-selectionForeground, inherit); }
+.cm-item.off { color: var(--faint); cursor: default; }
+.cm-item.off:hover { background: none; color: var(--faint); }
+.cm-item.red { color: var(--red); }
+.cm-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cm-key { color: var(--muted); font-size: .9em; flex: none; }
+.cm-arrow { font-size: 14px; color: var(--muted); flex: none; }
+.cm-sep { height: 1px; margin: 4px 6px; background: var(--vscode-menu-separatorBackground, rgba(128,128,128,.3)); }
+/* Fork to / Move to: the open projects under the row, indented, while it is open (its arrow points down) */
+.cm-list { display: none; }
+.cm-list.open { display: block; }
+.cm-list .cm-item { padding-left: 22px; }
+.cm-sub .cm-arrow { transition: transform .12s; }
+.cm-sub.open .cm-arrow { transform: rotate(90deg); }

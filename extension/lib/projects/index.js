@@ -17,12 +17,13 @@ const { execFile } = require("child_process");
 const scope = require("../profiles/scope");
 const { isProtected } = require("../paths");
 const { findGit } = require("../git");
-const { fontScale, watchFontScale } = require("../ui");
-const { samePath } = require("./model");
+const { samePath, historyOf } = require("./model");
+const { arrangeViews } = require("./layout");
 
 const CARD_MS = 12000;
 const FOLDED_KEY = "kural.projects.folded.v1";
 const PARENT_KEY = "kural.projects.lastParent.v1";
+const HISTORY_KEY = "kural.projects.historyOpen.v1";   // the projects whose History is unfolded (it is folded by default)
 // What no folder can be called on Windows, checked on every system: a project made on a Mac may be shared with Windows.
 const BAD_CHARS = /[<>:"/\\|?*\u0000-\u001f\u007f]/;
 const RESERVED = /^(con|prn|aux|nul|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])[ ]*(\..*)?$/i;
@@ -47,6 +48,7 @@ class Projects {
     this.built = { sections: [], badge: 0, needLook: 0 };
     this.query = "";
     this.folded = new Set(context.globalState.get(FOLDED_KEY) || []);
+    this.historyOpen = new Set(context.globalState.get(HISTORY_KEY) || []);
     this.branch = "";
     this.timers = {};
     this.item = null;
@@ -123,6 +125,21 @@ class Projects {
       const r = have ? await vscode.commands.executeCommand("_kural.oneFrame") : null;
       this.oneFrame = !!(r && r.enabled);
     } catch (e) { this.oneFrame = false; this.log(`projects: one frame: ${e.message}`); }
+    return this.oneFrame;
+  }
+  // The command comes from the workbench, which may not have registered it when this window's extensions start (a slow
+  // computer, Linux first start). A miss at that moment must not stay: with `oneFrame` false every project that isn't open
+  // opens IN THIS window (forceReuseWindow), which is "only one project at a time". So a miss is asked again a few times.
+  detectOneFrameLater(tries = 5) {
+    if (this.oneFrame || tries <= 0 || this.stopped) return;
+    this.later("frame", 2000, async () => { await this.detectOneFrame(); this.detectOneFrameLater(tries - 1); });
+  }
+  // Projects and the Explorer share one side bar container (see layout.js).
+  async arrangeViews() {
+    try {
+      const r = await arrangeViews({ commands: vscode.commands, state: this.context.globalState, log: (m) => this.log(m) });
+      if (r && r.moved && r.moved.length) this.log(`projects: views in the Projects container: ${r.moved.join(", ")}`);
+    } catch (e) { this.log(`projects: arranging the views: ${e.message}`); }
   }
 
   // ---------- Open Recent ----------
@@ -142,13 +159,15 @@ class Projects {
   // ---------- the model and what shows it ----------
   later(name, ms, fn) { clearTimeout(this.timers[name]); this.timers[name] = setTimeout(fn, ms); }
   refresh() { this.later("refresh", 60, () => this.rebuild()); }
-  rebuild() {
+  // fresh: read the History cards from disk again (other windows save chats); else the ones this window knows.
+  rebuild(fresh = false) {
     let windows = [];
     try { windows = this.status.readAll(); } catch (e) { this.log(`projects: reading windows: ${e.message}`); }
     let pins = [];
     try { pins = this.status.readPins(); } catch (e) { this.log(`projects: reading pins: ${e.message}`); }
     // (`here` is this window's id: the model needs it before it counts the badge, where this window's own chats don't count.)
-    this.built = this.model.buildModel({ windows, pins, recent: this.recent, here: this.status.windowId, query: this.query });
+    this.built = this.model.buildModel({ windows, pins, recent: this.recent, here: this.status.windowId, query: this.query,
+      archive: this.historyCards(fresh), historyOpen: [...this.historyOpen] });
     this.show();
   }
   show() {
@@ -164,6 +183,21 @@ class Projects {
         this.item.show();
       } else this.item.hide();
     }
+  }
+  // The saved chats' cards, read only while a History is unfolded or a search runs (null: nothing needs them).
+  historyCards(fresh) {
+    if (!this.historyOpen.size && !this.query) return null;
+    try { return typeof this.chat.historyCards === "function" ? this.chat.historyCards(fresh) : null; } catch (e) { this.log(`projects: history: ${e.message}`); return null; }
+  }
+  // The archive folder changes when any window saves a chat: the open Histories follow (debounced, one read).
+  watchHistory() {
+    const dir = this.chat.archive && this.chat.archive.dir;
+    if (!dir) return;
+    try {
+      const w = fs.watch(dir, () => { if (this.historyOpen.size || this.query) this.later("history", 1000, () => this.rebuild(true)); });
+      w.on("error", () => {});
+      this.context.subscriptions.push({ dispose: () => w.close() });
+    } catch (e) { this.log(`projects: watching History: ${e.message}`); }
   }
   message() { return { type: "model", sections: this.built.sections, badge: this.built.badge, query: this.query, folded: [...this.folded] }; }
   find(key) {
@@ -188,6 +222,7 @@ class Projects {
       vscode.commands.registerCommand("kural.projects.renameChat", (c) => c && this.post({ type: "rename", key: c.key, chatId: c.chatId })),
       vscode.commands.registerCommand("kural.projects.deleteChat", (c) => c && this.deleteChat(c.key, c.chatId)),
       vscode.commands.registerCommand("kural.projects.moveChat", (c) => c && this.moveChatTo(c.key, c.chatId)),
+      vscode.commands.registerCommand("kural.projects.forkChat", (c) => c && this.forkChatTo(c.key, c.chatId)),
       vscode.commands.registerCommand("kural.projects.pin", (c) => c && this.onMessage({ type: "pin", key: c.key })),
       vscode.commands.registerCommand("kural.projects.unpin", (c) => c && this.onMessage({ type: "pin", key: c.key })),
       vscode.commands.registerCommand("kural.projects.close", (c) => c && this.onMessage({ type: "close", key: c.key })),
@@ -200,7 +235,6 @@ class Projects {
       }),
       { dispose: () => this.stop() },
     );
-    watchFontScale(c, (m) => { for (const v of this.views) v.webview.postMessage(m); });
     // (The chat tells when a tab's state changes: working, waiting for you, finished, seen.)
     const prev = this.chat.onChatsChanged;
     this.chat.onChatsChanged = () => { if (typeof prev === "function") prev(); this.publish(); };
@@ -213,11 +247,14 @@ class Projects {
     try { this.status.prune(); } catch (e) { this.log(`projects: prune: ${e.message}`); }
     this.loadRecent();
     this.watchGit();
-    this.detectOneFrame();
+    this.watchHistory();
+    this.detectOneFrame().then(() => this.detectOneFrameLater());
+    this.later("layout", 1500, () => this.arrangeViews());
     // (Without the workbench patch that opens it, Kural opens Projects when a window starts.)
     this.later("open", 800, () => vscode.commands.executeCommand("workbench.view.extension.kural-projects"));
   }
   stop() {
+    this.stopped = true;
     for (const t of Object.values(this.timers)) clearTimeout(t);
     try { this.status.dispose({ closed: true }); } catch (e) { this.log(`projects: closing: ${e.message}`); }
   }
@@ -234,7 +271,8 @@ class Projects {
   html(webview) {
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
     const nonce = crypto.randomBytes(16).toString("base64"), uri = (f) => webview.asWebviewUri(vscode.Uri.joinPath(media, f));
-    return `<!doctype html><html data-fs="${fontScale()}"><head><meta charset="utf-8">
+    // (No font scale: the page has the Explorer's font and size, 13 px, whatever size the code editor uses. Adithya, 27 Oct 2026.)
+    return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${uri("codicons/codicon.css")}"><link rel="stylesheet" href="${uri("projects.css")}"></head>
 <body data-vscode-context='{"preventDefaultContextMenuItems": true}'><div id="app"></div><script nonce="${nonce}" src="${uri("projects.js")}"></script></body></html>`;
@@ -250,6 +288,8 @@ class Projects {
         break;
       case "search": this.query = String(m.q || ""); this.rebuild(); break;
       case "fold": if (m.key) { if (m.folded) this.folded.add(m.key); else this.folded.delete(m.key); this.saveFolded(); } break;
+      case "historyFold": if (m.key) { if (m.open) this.historyOpen.add(m.key); else this.historyOpen.delete(m.key); this.context.globalState.update(HISTORY_KEY, [...this.historyOpen]); this.rebuild(!!m.open); } break;
+      case "openHistory": if (p) await this.openHistory(p, m.chatId); break;
       case "open": if (p) await this.openProject(p); break;
       case "openChat": if (p) await this.openProject(p, m.chatId); break;
       case "pin": if (p) { this.status.setPinned({ path: p.path, workspaceFile: p.workspaceFile || null }, !p.pinned); this.refresh(); } break;
@@ -257,6 +297,9 @@ class Projects {
       case "removeRecent": if (p) await this.removeRecent(p); break;
       case "renameChat": this.renameChat(m.key, m.chatId, m.title); break;
       case "moveChat": this.moveChat(m.key, m.chatId, m.to); break;
+      case "forkChat": this.forkChat(m.key, m.chatId, m.to); break;
+      case "deleteChat": await this.deleteChat(m.key, m.chatId); break;
+      case "clearHistory": await this.clearHistory(m.key); break;
       case "log": this.log(`projects page: ${m.message}`); break;
     }
   }
@@ -278,7 +321,14 @@ class Projects {
   }
   async deleteChat(key, chatId) {
     const found = this.chatOf(key, chatId);
-    if (!found) return;
+    if (!found) {
+      // (A History chat isn't open anywhere: it is only its saved files, deleted from this window.)
+      const past = this.historyOf(key, chatId);
+      if (!past) return;
+      const ok = await vscode.window.showWarningMessage(`Delete "${past.c.title}"?`, { modal: true, detail: `It's removed from ${past.p.name}'s History. This can't be undone.` }, "Delete");
+      if (ok === "Delete") { this.chat.deleteChat(chatId); this.rebuild(true); }
+      return;
+    }
     const busy = found.c.state === "run" || found.c.state === "ask";
     const detail = `It's removed from ${found.p.name} and from History. This can't be undone.${busy ? " It's working now: it stops." : ""}`;
     const ok = await vscode.window.showWarningMessage(`Delete "${found.c.title}"?`, { modal: true, detail }, "Delete");
@@ -286,27 +336,99 @@ class Projects {
     if (found.p.here) { this.chat.deleteChat(chatId); this.chat.save(); }
     else this.status.send(found.p.windowId, { type: "deleteChat", chatId });
   }
+  // Clear all (the History heading's button): every saved chat of the project that isn't open in its window, after asking.
+  // Read from disk first (another window may have saved one since), so the count asked about is the count deleted.
+  async clearHistory(key) {
+    const p = this.find(key);
+    if (!p) return;
+    const open = new Set((p.chats || []).map((c) => c.id));
+    const cards = typeof this.chat.historyCards === "function" ? this.chat.historyCards(true) : [];
+    const items = historyOf(cards, p, { exclude: open });
+    if (!items.length) { vscode.window.showInformationMessage(`Kural: ${p.name} has no earlier chats.`); return; }
+    const detail = `${plural(items.length, "saved chat", "saved chats")} of ${p.name} ${items.length === 1 ? "is" : "are"} removed from History. ` +
+      "Its open chats stay. This can't be undone.";
+    const ok = await vscode.window.showWarningMessage(`Clear ${p.name}'s History?`, { modal: true, detail }, "Clear All");
+    if (ok !== "Clear All") return;
+    for (const h of items) { try { this.chat.deleteChat(h.id); } catch (e) { this.log(`projects: clear history: ${h.id}: ${e.message}`); } }
+    this.log(`projects: cleared ${items.length} History chats of ${p.name}`);
+    this.rebuild(true);
+  }
   // Move: only to another project with a window, and not while the chat works or waits for you. The chat's own window
   // lets it go, then asks the target window to take it in (lib/chat: moveOut, adopt).
-  moveChat(key, chatId, to) {
-    const found = this.chatOf(key, chatId), target = this.find(to);
-    if (!found || !target || !target.open || target.key === found.p.key) return;
-    if (found.c.state === "run" || found.c.state === "ask") return;
-    if (found.p.here) this.moveOut(chatId, target.windowId, found.p.name);
-    else this.status.send(found.p.windowId, { type: "moveChat", chatId, toWindow: target.windowId, from: found.p.name });
+  // A chat of the project's History (saved, not open in its window) can be moved too, and any chat to a project without a window
+  // when that is a folder (a workspace file's chats are filed under the folders' key, which isn't known without its window):
+  // then the chat is filed in History under the target (chat.rehome) and opens in it when that project is next opened.
+  historyOf(key, chatId) {
+    const p = this.find(key), c = p && p.history && (p.history.items || []).find((x) => x.id === chatId);
+    return c ? { p, c } : null;
   }
-  moveOut(chatId, toWindow, from) {
+  canTake(target) { return !!target && (target.open || !target.workspaceFile); }
+  // What a project without a window is called in a saved chat (lib/workspace.js: key = the folders' uri paths, open = the first).
+  homeOf(p) { return p.workspaceFile ? { key: p.workspaceFile, name: p.name, open: p.workspaceFile } : { key: vscode.Uri.file(p.path).path, name: p.name, open: p.path }; }
+  moveChat(key, chatId, to) {
+    const target = this.find(to);
+    // (Every refusal is logged: a drop that does nothing was impossible to tell apart from one that never arrived.)
+    if (!target || target.key === key || !this.canTake(target)) { this.log(`projects: move ${chatId}: ${!target ? "no such project" : target.key === key ? "same project" : "a workspace file without a window"}`); return; }
+    const found = this.chatOf(key, chatId);
+    if (found) {
+      if (found.c.state === "run" || found.c.state === "ask") { this.log(`projects: move ${chatId}: it's working or waiting`); return; }
+      const home = target.open ? undefined : this.homeOf(target);
+      if (found.p.here) this.moveOut(chatId, target.windowId || null, found.p.name, home);
+      else this.status.send(found.p.windowId, { type: "moveChat", chatId, toWindow: target.windowId || null, from: found.p.name, ...(home ? { home } : {}) });
+      return;
+    }
+    const past = this.historyOf(key, chatId);
+    if (past) this.deliver(chatId, target.open ? target.windowId : null, target.open ? null : this.homeOf(target), past.p.name);
+    else this.log(`projects: move ${chatId}: not a chat of ${key} (open or in its History)`);
+  }
+  // The chat is out of its window (or was only saved): the target's window takes it in, or it is filed under the target.
+  deliver(chatId, toWindow, home, from) {
+    if (toWindow && toWindow === this.status.windowId) this.chat.adopt(chatId, from);
+    else if (toWindow) this.status.send(toWindow, { type: "adoptChat", chatId, from });
+    else if (home) this.chat.rehome(chatId, home, from);
+  }
+  moveOut(chatId, toWindow, from, home) {
     if (!this.chat.moveOut(chatId)) {
       vscode.window.showInformationMessage("Kural: this chat can't be moved while it's working or waiting for you.");
       return;
     }
-    this.status.send(toWindow, { type: "adoptChat", chatId, from });
+    this.deliver(chatId, toWindow, home, from);
+  }
+  // Fork: a copy of the whole conversation as a NEW chat in an open project's window; the original stays where it is.
+  // Menus can't list projects by name (a menu item's title is fixed in package.json), so "Fork to..." asks with a QuickPick.
+  async forkChatTo(key, chatId) {
+    const src = this.chatOf(key, chatId) || this.historyOf(key, chatId);
+    if (!src) return;
+    const list = this.built.sections.flatMap((s) => s.projects).filter((p) => p.open)
+      .map((p) => ({ label: p.name, description: p.shortPath || "", key: p.key }));
+    if (!list.length) { vscode.window.showInformationMessage("Kural: there's no open project to fork this chat into."); return; }
+    const pick = await vscode.window.showQuickPick(list, { placeHolder: `Fork "${src.c.title}" into…` });
+    if (pick) this.forkChat(key, chatId, pick.key);
+  }
+  forkChat(key, chatId, to) {
+    const target = this.find(to), found = this.chatOf(key, chatId), src = found || this.historyOf(key, chatId);
+    if (!target || !target.open || !src) return;
+    // (An open chat of another window is copied by that window: only it has the chat as it is right now.)
+    if (found && !found.p.here) this.status.send(found.p.windowId, { type: "forkChat", chatId, toWindow: target.windowId, from: found.p.name });
+    else this.doFork(chatId, target.windowId, src.p.name);
+  }
+  doFork(chatId, toWindow, from) {
+    const id = this.chat.forkCopy(chatId);
+    if (!id) { vscode.window.showInformationMessage("Kural: this chat can't be forked while it's working or waiting for you."); return; }
+    this.deliver(id, toWindow, null, from);
+  }
+  // A History chat is clicked: this project's own window opens it; another window is brought forward and opens it; a project
+  // without a window shows it here to read (visiting), which also keeps this window's chats running.
+  async openHistory(p, chatId) {
+    if (p.here || !p.open) { this.chat.reopen(chatId); await this.chat.showChat(chatId); return; }
+    await vscode.commands.executeCommand("vscode.openFolder", this.uriOf(p), { forceNewWindow: true });
+    if (p.windowId) this.status.send(p.windowId, { type: "showHistory", chatId });
   }
   // Move to... (the menu): the other projects with a window.
   async moveChatTo(key, chatId) {
-    const found = this.chatOf(key, chatId);
+    const found = this.chatOf(key, chatId) || this.historyOf(key, chatId);
     if (!found) return;
-    const list = this.built.sections.flatMap((s) => s.projects).filter((p) => p.open && p.key !== found.p.key)
+    const list = this.built.sections.flatMap((s) => s.projects).filter((p) => this.canTake(p) && p.key !== found.p.key)
       .map((p) => ({ label: p.name, description: p.shortPath || "", key: p.key }));
     if (!list.length) { vscode.window.showInformationMessage("Kural: there's no other open project to move this chat to."); return; }
     const pick = await vscode.window.showQuickPick(list, { placeHolder: `Move "${found.c.title}" to…` });
@@ -339,6 +461,7 @@ class Projects {
       if (chatId && p.windowId) this.status.send(p.windowId, { type: "showChat", chatId });
       return;
     }
+    if (!this.oneFrame) await this.detectOneFrame(); // (a start-up miss is not final)
     if (this.oneFrame) { await vscode.commands.executeCommand("vscode.openFolder", this.uriOf(p), { forceNewWindow: true }); return; }
     const where = await this.whereToOpen(p);
     if (!where) return;
@@ -441,7 +564,9 @@ class Projects {
     else if (r.type === "card") await this.card(r);
     else if (r.type === "renameChat") this.chat.rename(r.chatId, r.title);
     else if (r.type === "deleteChat") { this.chat.deleteChat(r.chatId); this.chat.save(); }
-    else if (r.type === "moveChat") this.moveOut(r.chatId, r.toWindow, r.from);
+    else if (r.type === "moveChat") this.moveOut(r.chatId, r.toWindow, r.from, r.home);
+    else if (r.type === "forkChat") this.doFork(r.chatId, r.toWindow, r.from);
+    else if (r.type === "showHistory") { this.chat.reopen(r.chatId); await this.chat.showChat(r.chatId); }
     else if (r.type === "adoptChat") this.chat.adopt(r.chatId, r.from);
   }
   // A chat finished (or needs you) in a window that isn't in front: the window that is, shows a card.

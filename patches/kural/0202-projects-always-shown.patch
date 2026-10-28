@@ -2,17 +2,21 @@ diff --git a/src/vs/workbench/api/browser/viewsExtensionPoint.ts b/src/vs/workbe
 index 83378707..8bf26bc0 100644
 --- a/src/vs/workbench/api/browser/viewsExtensionPoint.ts
 +++ b/src/vs/workbench/api/browser/viewsExtensionPoint.ts
-@@ -521,8 +521,8 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
+@@ -521,11 +521,11 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
  						when: ContextKeyExpr.deserialize(item.when),
  						containerIcon: icon || viewContainer?.icon,
  						containerTitle: item.contextualTitle || (viewContainer && (typeof viewContainer.title === 'string' ? viewContainer.title : viewContainer.title.value)),
 -						canToggleVisibility: true,
 -						canMoveView: viewContainer?.id !== REMOTE,
 +						canToggleVisibility: item.id !== 'kural.projects', // Kural: the Projects bar stays
-+						canMoveView: viewContainer?.id !== REMOTE && item.id !== 'kural.projects',
++						canMoveView: viewContainer?.id !== REMOTE, // Kural: Projects may be reordered with the Explorer in its container (it is put back if dragged out: lib/projects/layout.js)
  						treeView: type === ViewType.Tree ? this.instantiationService.createInstance(CustomTreeView, item.id, item.name, extension.description.identifier.value) : undefined,
  						collapsed: this.showCollapsed(container) || initialVisibility === InitialVisibility.Collapsed,
- 						order: order,
+-						order: order,
++						order: item.id === 'kural.projects' ? -1 : order, // Kural: above the Explorer's views in Projects' container (a tie at 1 with the file view went to whichever registered first)
+ 						extensionId: extension.description.identifier,
+ 						originalContainerId: key,
+ 						group: item.group,
 diff --git a/src/vs/workbench/browser/parts/compositeBar.ts b/src/vs/workbench/browser/parts/compositeBar.ts
 index 8d1020b6..3a943dba 100644
 --- a/src/vs/workbench/browser/parts/compositeBar.ts

@@ -111,16 +111,17 @@ const buttons = (card) => card.all((e) => e.tag === "button");
 
 // The stand-in's behaviour for patch 3, with the patched classes; also this build's (real) pieces through `viewsClass`.
 async function behavesAlways(reg, bar, item, views, label) {
-  await check(`${label}: the Projects view can't be toggled or moved; others are left as they are`, () => {
+  await check(`${label}: the Projects view can't be hidden but can be moved (reordered with the Explorer); others are left as they are`, () => {
     const mine = { id: "kural.projects", canToggleVisibility: true, canMoveView: true }, other = { id: "kural.chat", canToggleVisibility: true, canMoveView: true };
     reg.addViews([mine, other], "c");
-    assert.deepStrictEqual([mine.canToggleVisibility, mine.canMoveView, other.canToggleVisibility, other.canMoveView], [false, false, true, true]);
+    assert.deepStrictEqual([mine.canToggleVisibility, mine.canMoveView, other.canToggleVisibility, other.canMoveView], [false, true, true, true]);
+    assert.deepStrictEqual([mine.order, other.order], [-1, undefined], "Projects sorts above the Explorer's views; others keep theirs");
     assert.ok(reg._views.get("c").length === 2 && reg._views.get("c")[0] === mine && reg._views.get("c")[1] === other, "both views are still registered");
   });
   await check(`${label}: a frozen view doesn't stop the views after it`, () => {
     const frozen = Object.freeze({ id: "kural.projects", canMoveView: true }), next = { id: "kural.projects", canMoveView: true };
     reg.addViews([frozen, next], "d");
-    assert.strictEqual(next.canMoveView, false); assert.ok(reg._views.get("d").includes(frozen));
+    assert.strictEqual(next.canToggleVisibility, false); assert.strictEqual(next.canMoveView, true); assert.ok(reg._views.get("d").includes(frozen));
   });
   if (!bar) return;
   await check(`${label}: no Hide for it: not in the checkable list, not in its own menu (the badge entry stays), others unchanged`, () => {

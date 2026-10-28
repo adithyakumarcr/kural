@@ -350,14 +350,28 @@ PT_REFRESH = re.compile(r'async refresh\(\)\{(?=await this\.updateInstalledExten
 PT_CSS = (".extensions-viewlet>.kural-ext-tabs{height:34px;box-sizing:border-box;padding:6px 8px 0}"
           ".kural-ext-seg{display:flex;gap:2px;height:28px;box-sizing:border-box;padding:2px;"
           "border:1px solid var(--vscode-widget-border,rgba(128,128,128,.22));border-radius:7px;background:var(--vscode-input-background)}"
-          ".kural-ext-tab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:0;padding:0 4px;border:0;"
+          # (Each tab as wide as its words, the rest shared: equal thirds cut "Connectors" off in a side bar of ~300 px.)
+          ".kural-ext-tab{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:0;padding:0 6px;border:0;"
           "border-radius:5px;background:none;color:var(--vscode-descriptionForeground);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;overflow:hidden}"
           ".kural-ext-tab:hover{color:var(--vscode-foreground)}.kural-ext-tab:focus-visible{outline:1px solid var(--vscode-focusBorder);outline-offset:-1px}"
           ".kural-ext-tab.on{background:color-mix(in srgb,#8b6cef 25%,transparent);color:var(--vscode-foreground);font-weight:600}"
           ".vs .kural-ext-tab.on,.hc-light .kural-ext-tab.on{background:color-mix(in srgb,#6447d6 25%,transparent)}"
           ".kural-ext-tab .codicon{font-size:14px;flex-shrink:0}.kural-ext-label{overflow:hidden;text-overflow:ellipsis}.extensions-viewlet.kural-plugins-on>.header{display:none}"
           # (VS Code sizes the views' area as 100% minus its 41 px header in CSS: minus the switch's 34 px too.)
-          ".extensions-viewlet.kural-tabs>.extensions{height:calc(100% - 75px)}.extensions-viewlet.kural-tabs.kural-plugins-on>.extensions{height:calc(100% - 34px)}")
+          ".extensions-viewlet.kural-tabs>.extensions{height:calc(100% - 75px)}.extensions-viewlet.kural-tabs.kural-plugins-on>.extensions{height:calc(100% - 34px)}"
+          # (Adithya, 27 Oct 2026: no brand-colored Install button on every row: a download icon, only under the pointer or the
+          # keyboard. The words are hidden with font-size 0; the icon is the codicon cloud-download, \eac2. "Installing" keeps its words.)
+          ".extensions-viewlet .extension-list-item .extension-action.label.prominent.install:not(.installing){background:transparent!important;"
+          "color:var(--vscode-foreground)!important;font-size:0!important;padding:0!important;width:22px;height:22px;display:inline-flex;"
+          "align-items:center;justify-content:center;opacity:0}"
+          ".extensions-viewlet .extension-list-item .extension-action.label.prominent.install:not(.installing)::before{content:'\\eac2';"
+          "font:normal 16px/1 codicon}"
+          ".extensions-viewlet .monaco-list-row:hover .extension-action.label.prominent.install:not(.installing),"
+          ".extensions-viewlet .monaco-list-row.focused .extension-action.label.prominent.install:not(.installing),"
+          ".extensions-viewlet .monaco-list-row.selected .extension-action.label.prominent.install:not(.installing),"
+          ".extensions-viewlet .extension-list-item .extension-action.label.prominent.install:not(.installing):focus-visible{opacity:1}"
+          ".extensions-viewlet .extension-list-item .extension-action.label.prominent.install:not(.installing):hover"
+          "{background:var(--vscode-toolbar-hoverBackground)!important}")
 # (Inside create(): `this` is the side bar. Plain DOM calls, no minified helpers, so nothing else has to be found.)
 PT_CREATE_CODE = PT_MARK + (
     'try{const r=this.root,doc=r.ownerDocument,bar=doc.createElement("div"),seg=doc.createElement("div");bar.className="kural-ext-tabs";'
@@ -574,7 +588,7 @@ def projects_default_view(text):
 # 3. The Projects bar stays: no "Hide" for it in the activity bar's right-click menu (neither its own item nor the list of
 # checkable containers; the bar's `unpin` ignores it too, for any other way in), it can't be dragged to another place (the
 # composite bar's `move`, and moving a container to a side bar/panel: viewDescriptorService.moveViewContainerToLocation), and its
-# view has canToggleVisibility and canMoveView false (views registry's addViews, after the code the two patches above put there).
+# view has canToggleVisibility false (it can be collapsed and reordered with the Explorer in its container: lib/projects/layout.js; views registry's addViews, after the code the two patches above put there).
 # All or nothing.
 PA_MARK = "/*kural-projects-fixed*/"
 PA_UNPIN = re.compile(r'(?<![\w$.])unpin\(([\w$]+)\)\{(?=this\.model\.setPinned\(\1,!1\))')
@@ -602,7 +616,9 @@ def projects_always_shown(text):
         return text
     pid = json.dumps(PROJECTS_CONTAINER)
     views = adds[0][0].group(1)
-    view_code = (f'{PA_MARK}try{{for(const _kv of {views})try{{if(_kv&&_kv.id==={json.dumps(PROJECTS_VIEW)}){{_kv.canToggleVisibility=!1;_kv.canMoveView=!1}}}}catch{{}}}}catch{{}}')
+    # (order -1: above the Explorer's views in Projects' container. Kural's own order was 1, like the file view's, and VS Code
+    # breaks that tie by which view was added first: after the first start the Explorer's moved views come first.)
+    view_code = (f'{PA_MARK}try{{for(const _kv of {views})try{{if(_kv&&_kv.id==={json.dumps(PROJECTS_VIEW)}){{_kv.canToggleVisibility=!1;_kv.order=-1}}}}catch{{}}}}catch{{}}')
     edits = [
         (unpin[0].end(), unpin[0].end(), f'{PA_MARK}if({unpin[0].group(1)}==={pid})return;'),
         (move[0].end(), move[0].end(), f'{PA_MARK}if({move[0].group(1)}==={pid}||{move[0].group(2)}==={pid})return!1;'),
@@ -840,12 +856,26 @@ def patch_webview_microphone(app):
 # Ctrl+K's question box (extension/lib/edit/inline-ask.js) is a comment thread, and VS Code gives every comment input at
 # least 5 lines (90 px; Adithya, 23 Oct 2026: "why such a huge block, keep it small"). Kural's box (contextValue
 # "kural-edit") starts at 2 lines and grows as you type, up to VS Code's own maximum; every other comment box is unchanged.
-# Two places: the reply area's first height (this._editorHeight=<90>, where this._commentThread is already set) and the
-# size rule every comment input uses (its parent widget's commentThread).
+# Three parts: the reply area's first height (this._editorHeight=<90>, where this._commentThread is already set), the
+# size rule every comment input uses (its parent widget's commentThread), and VS Code's CSS: review.css gives every comment
+# input min-height: 90px, so the box still looked 5 lines tall with its editor laid out at 2 (seen in the built app,
+# 27 Oct 2026). The reply area marks the thread's body (its container, `t`) "kural-edit-box" and adds one stylesheet per
+# window that lifts that minimum there, more specific than review.css's rule (4 classes).
 SMALL_BOX_MARK = "/*kural-small-box*/"
+SMALL_BOX_CSS = ".review-widget .body.kural-edit-box .comment-form-container .monaco-editor{min-height:0}"
+
+
+# Is this thread Kural's? Its contextValue says so, but VS Code's extension host sends a new thread at once and its
+# contextValue ~100 ms later (eventuallyUpdateCommentThread is debounced): the box was sized before that and stayed 5 lines
+# tall until you typed (Adithya, 27 Oct 2026). The thread's id comes with it: "<controller id>.<n>", the controller being
+# Kural's "kural.inlineEdit" (extension/lib/edit/inline-ask.js).
+def kural_edit_thread(thread):
+    return f'({thread}?.contextValue==="kural-edit"||String({thread}?.threadId||"").startsWith("kural.inlineEdit."))'
+
+
 COMMENT_HEIGHTS = re.compile(r'([\w$]+)=90,([\w$]+)=450,[\w$]+=class extends [\w$]+\{constructor\(')
 COMMENT_SIZE_RULE = r'(function [\w$]+\(([\w$]+),([\w$]+),([\w$]+)\)\{)(let [\w$]+=\3\.getLayoutInfo\(\),[\w$]+=\3\.getOption\((\d+)\),.{0,300}?return \4\})'
-COMMENT_FIRST_HEIGHT = r'this\._editorHeight={MIN};this\._container='
+COMMENT_FIRST_HEIGHT = r'this\._editorHeight={MIN};this\._container=([\w$]+)\(([\w$]+),'
 
 
 def small_edit_box(text):
@@ -867,11 +897,37 @@ def small_edit_box(text):
     m = rules[0]
     editor, option = m.group(3), m.group(6)
     body = re.sub(rf'(?<![\w$]){re.escape(low)}(?![\w$])', "__kmin", m.group(5))
-    pick = (f'let __kmin={SMALL_BOX_MARK}{editor}._parentThread?.commentThread?.contextValue==="kural-edit"'
+    pick = (f'let __kmin={SMALL_BOX_MARK}{kural_edit_thread(editor + "._parentThread?.commentThread")}'
             f'?2*{editor}.getOption({option}):{low};')
     text = text[:m.start()] + m.group(1) + pick + body + text[m.end():]
-    return first.sub(lambda _: f'this._editorHeight=this._commentThread?.contextValue==="kural-edit"?36:{low};this._container=',
-                     text, count=1)
+    def mark(fm):   # (the container: the thread's body element, the reply area's second constructor argument)
+        box = fm.group(2)
+        css = (f'try{{{box}.classList.add("kural-edit-box");const d={box}.ownerDocument;if(!d.getElementById("kural-edit-box-css"))'
+               f'{{const s=d.createElement("style");s.id="kural-edit-box-css";s.textContent={json.dumps(SMALL_BOX_CSS)};d.head.append(s)}}}}catch{{}}')
+        return (f'this._editorHeight={kural_edit_thread("this._commentThread")}?(()=>{{{css}return 36}})():{low};'
+                f'this._container={fm.group(1)}({box},')
+    return first.sub(mark, text, count=1)
+
+
+# The side bar stays when the chat is maximized (Adithya, 27 Oct 2026: "when Kural goes full screen, Projects also minimizes").
+# The chat panel's Maximize button is VS Code's "maximize the secondary side bar" (layoutService.setAuxiliaryBarMaximized),
+# which hides the editor, the bottom panel AND the primary side bar. Only the side bar's line is taken out: Projects, the
+# Explorer and the activity bar stay; the editor and panel still make room. Maximized is a remembered flag
+# (AUXILIARYBAR_WAS_LAST_MAXIMIZED), not "the side bar is hidden", so the button and its toggle keep working; un-maximizing
+# shows again what was visible before, the side bar included.
+MAXIMIZE_SIDEBAR_MARK = "/*kural-keep-sidebar*/"
+MAXIMIZE_HIDES_SIDEBAR = re.compile(r'(setAuxiliaryBarMaximized\([\w$]+\)\{.{0,700}?)([\w$]+)\.sideBarVisible&&this\.setSideBarHidden\(!0\),')
+
+
+def keep_sidebar_when_maximized(text):
+    if MAXIMIZE_SIDEBAR_MARK in text:
+        return text
+    found = MAXIMIZE_HIDES_SIDEBAR.findall(text)
+    if len(found) != 1:
+        print(f"::warning::the secondary side bar's maximize not found as expected ({len(found)} matches); maximizing the chat "
+              "still hides Projects and the Explorer")
+        return text
+    return MAXIMIZE_HIDES_SIDEBAR.sub(lambda m: m.group(1) + MAXIMIZE_SIDEBAR_MARK, text, count=1)
 
 
 # A build from source (scripts/vscode/build.sh) applies Kural's own patches to VS Code's TypeScript (patches/kural/NNNN-name.patch)
@@ -904,7 +960,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = small_edit_box(terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))))))
+    new = keep_sidebar_when_maximized(small_edit_box(terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))))))))
     # (The Projects bar's four: after the views patches above, whose code at the start of addViews one of them looks for.
     # A build from source has them as patches/kural/*.patch and lists them in product.json's kuralSource: not done twice.)
     built = built_in_patches(product)

@@ -218,6 +218,52 @@ const stopped = { type: "result", subtype: "error_during_execution", is_error: t
     assert.strictEqual(two.chat.adopt(b.id, "weld"), true, "already here: shown again");
     assert.strictEqual(two.chat.tabs.filter((x) => x.id === b.id).length, 1);
   });
+  await check("rehome: a saved chat is filed under a project without a window: same id, that workspace, a fresh conversation given the old one; an open chat isn't touched", () => {
+    const { chat, b } = fixture();
+    b.messages.push({ role: "user", segments: [{ t: "text", v: "make the mesh finer" }] }, { role: "assistant", blocks: [{ k: "text", text: "Done." }] });
+    b.workspace = { key: "/p/weld", name: "weld", open: "/p/weld" }; b.started = true;
+    assert.strictEqual(chat.rehome(b.id, { key: "/p/x", name: "x", open: "/p/x" }, "weld"), false, "still open here");
+    assert.ok(chat.moveOut(b.id));
+    const home = { key: "/p/kural", name: "kural", open: "/p/kural" };
+    assert.strictEqual(chat.rehome(b.id, home, "weld"), true);
+    const rec = chat.archive.read(b.id);
+    assert.deepStrictEqual(rec.workspace, home);
+    assert.ok(rec.started === false && !rec.visiting);
+    assert.match(rec.carryOver.text, /make the mesh finer/);
+    assert.strictEqual(rec.carryOver.from, "weld");
+    assert.deepStrictEqual(chat.historyCards().find((m) => m.id === b.id).workspace, home, "History lists it under the new project");
+    assert.strictEqual(chat.rehome("nope", home, "weld"), false);
+    assert.strictEqual(chat.rehome(b.id, null, "weld"), false);
+  });
+  await check("forkCopy: the whole conversation as a NEW chat under the target; the original stays; adopt keeps the fork's own carry-over", () => {
+    const one = fixture(), two = fixture();
+    const { b } = one;
+    b.messages.push({ role: "user", segments: [{ t: "text", v: "explain the gate" }] }, { role: "assistant", blocks: [{ k: "text", text: "It checks every call." }] });
+    b.workspace = { key: "/p/weld", name: "weld", open: "/p/weld" };
+    const home = { key: "/p/kural", name: "kural", open: "/p/kural" };
+    const id = one.chat.forkCopy(b.id, home);
+    assert.ok(id && id !== b.id);
+    assert.ok(one.chat.tab(b.id), "the original is still open");
+    const rec = one.chat.archive.read(id);
+    assert.strictEqual(rec.messages.length, 2);
+    assert.match(rec.title, /\(fork\)$/);
+    assert.deepStrictEqual(rec.workspace, home);
+    assert.strictEqual(rec.forkedFrom.id, b.id);
+    two.chat.here = home;
+    assert.strictEqual(two.chat.adopt(id, "weld"), true);
+    const t = two.chat.tab(id);
+    assert.ok(t && t.carryOver.fork === true && /explain the gate/.test(t.carryOver.text), "branches from that conversation");
+    assert.deepStrictEqual(t.workspace, home);
+    assert.ok(t.started === false);
+    // a saved chat that isn't open
+    assert.ok(one.chat.moveOut(b.id));
+    const again = one.chat.forkCopy(b.id, home);
+    assert.ok(again && one.chat.archive.read(again).messages.length === 2);
+    assert.strictEqual(one.chat.forkCopy("nope", home), null);
+    // a working chat can't be forked
+    const a = one.a; a.messages.push({ role: "user", segments: [] }, { role: "assistant", blocks: [], running: true }); a.status = "running";
+    assert.strictEqual(one.chat.forkCopy(a.id, home), null);
+  });
   await check("onChatsChanged: tab added, renamed, closed; a throwing callback breaks nothing", () => {
     const { chat, a, events } = fixture();
     const c = chat.newTab(false); assert.ok(events.length >= 1); events.length = 0;

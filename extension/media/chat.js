@@ -282,10 +282,10 @@ window.KURAL_CHAT = function (app, port) {
   const splitBtn = el("button", { class: "icon-btn", "aria-label": "Split",
     onmouseenter: () => { splitBtn.title = port.canSplit() ? "Split: a new chat beside this one (or drag a tab to a side of the chat)" : port.full() ? NO_ROOM : "Open a new chat beside the code (or drag a tab out of this panel)"; },
     onclick: () => { closeHistory(); if (!port.split()) flash(NO_ROOM, 2600); } }, icon("split-horizontal"));
-  // Kural Settings and "…" live here too (they were in the panel's title bar, with a second "+": Adithya, one place).
+  // Kural Settings lives here too (it was in the panel's title bar, with a second "+": Adithya, one place). No "…": Get
+  // started, Check for updates and What's new are all in Kural Settings (Adithya, 27 Oct 2026: no duplicates).
   const settingsBtn = el("button", { class: "icon-btn", title: "Kural Settings", onclick: () => { closeHistory(); post({ type: "panelCommand", what: "settings" }); } }, icon("settings-gear"));
-  const moreBtn = el("button", { class: "icon-btn", title: "More", onclick: (e) => openMenu("more", e.currentTarget) }, icon("ellipsis"));
-  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn, moreBtn);
+  const tabBar = el("div", { class: "tabbar" }, tabsEl, newTabBtn, splitBtn, historyBtn, settingsBtn);
   tabsEl.addEventListener("wheel", (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabsEl.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   // A chat in a column of its own (split): its title instead of the tab bar. Drag the title to move it; × puts it back
   // among the tabs.
@@ -640,16 +640,32 @@ window.KURAL_CHAT = function (app, port) {
     input.replaceChildren(...S.enh.before.map((n) => n.cloneNode(true)));
     S.enh = null; renderEnhance(); input.focus(); renderQueueBtn();
   }
-  function onEnhanceState(m) {
+  // Per tab: S.enh is the shown tab's, the others' wait in S.enhBy (tabId -> E). A result for a tab that isn't on screen is kept
+  // there and put in the box when you go back to it (the box is shared by the tabs, so it never goes into another chat's).
+  function enhanceTab(newId) {
+    if (!S.enhBy) S.enhBy = new Map();
+    if (S.enh && S.enh.tabId !== newId) {
+      // The text being enhanced belongs to its chat: it doesn't stay in the box of the one you go to (E.before has it).
+      if (S.enh.state === "running") { S.enh.held = true; input.replaceChildren(); renderQueueBtn(); }
+      S.enhBy.set(S.enh.tabId, S.enh); S.enh = null;
+    }
+    if (!S.enh && S.enhBy.has(newId)) { S.enh = S.enhBy.get(newId); S.enhBy.delete(newId); }
     const E = S.enh;
-    if (!E || m.id !== E.id || E.state !== "running") return;
-    if (m.state === "running") { E.status = m.status || E.status; renderEnhance(); return; }
+    if (E && E.held) { E.held = false; input.replaceChildren(...E.before.map((n) => n.cloneNode(true))); renderQueueBtn(); }
+    if (E && E.state === "running") { input.setAttribute("contenteditable", "false"); input.classList.add("enh-locked"); return; }
     unlockInput();
+    if (E && E.state === "done" && E.pending != null) { const text = E.pending; E.pending = null; putPrompt(text); }
+  }
+  function onEnhanceState(m) {
+    const here = S.enh && m.id === S.enh.id;
+    const E = here ? S.enh : (S.enhBy && S.enhBy.get(m.tabId));
+    if (!E || m.id !== E.id || E.state !== "running") return;
+    if (m.state === "running") { E.status = m.status || E.status; if (here) renderEnhance(); return; }
     if (m.state === "done") {
       Object.assign(E, { state: "done", label: m.label, calls: m.calls, ms: m.ms, dropped: (m.dropped || []).length, flagged: (m.flagged || []).length, prompt: m.prompt });
-      putPrompt(m.prompt);
-    } else Object.assign(E, { state: "error", kind: m.kind, message: m.message || "It didn't work.", label: m.label });
-    renderEnhance();
+      if (here) { unlockInput(); putPrompt(m.prompt); } else E.pending = m.prompt;
+    } else { Object.assign(E, { state: "error", kind: m.kind, message: m.message || "It didn't work.", label: m.label }); if (here) unlockInput(); }
+    if (here) renderEnhance();
   }
   function renderEnhance() {
     const E = S.enh;
@@ -1260,12 +1276,13 @@ window.KURAL_CHAT = function (app, port) {
     const node = r.startContainer;
     if (node.nodeType !== 3 || !input.contains(node)) return closePopup();
     const before = node.data.slice(0, r.startOffset);
-    // "/" as the first thing in the box: your shortcuts, then Claude's skills and commands (Claude runs one only when
-    // the message starts with it). "/" after a space anywhere else: your shortcuts ("hi! please do /pr-summary").
+    // "/" as the first thing in the box or after a space or new line anywhere: your shortcuts, then Claude's skills and
+    // commands (the host moves a skill to the front: Claude runs one only when the message starts with it). `lead`: it's
+    // the first thing in the box; elsewhere nothing matching closes the list ("see /usr/bin" is a path).
     const sl = before.match(/(?:^|\s)\/([^\s/]*)$/);
     if (sl) {
       S.popup = { kind: "slash", node, start: r.startOffset - sl[1].length - 1, end: r.startOffset, query: sl[1], index: 0, items: [],
-        skills: sl.index === 0 && atStart(node) };
+        lead: sl.index === 0 && atStart(node) };
       return renderPopup();
     }
     const m = before.match(/(?:^|\s)@([^\s@]*)$/);
@@ -1315,13 +1332,13 @@ window.KURAL_CHAT = function (app, port) {
     popupEl.replaceChildren(...rows);
   }
 
-  // Your shortcuts first (marked "Your shortcut"), then, at the start of the message, Claude's skills and commands (a
+  // Your shortcuts first (marked "Your shortcut"), then Claude's skills and commands, anywhere in the message (a
   // skill with a shortcut's name is left out: yours wins). Without shortcuts the last row makes one (Kural Settings).
   function renderSlash(P) {
     const list = S.tab && S.slash[S.tab.id] || { items: [], why: "Loading your skills…" };
     const mine = S.shortcuts.map((x) => ({ name: x.name, description: x.text.split("\n").find((l) => l.trim()) || "", text: x.text, shortcut: true }));
     const names = new Set(mine.map((x) => x.name));
-    const pool = [...mine, ...(P.skills ? list.items.filter((c) => !names.has(c.name)) : [])];
+    const pool = [...mine, ...list.items.filter((c) => !names.has(c.name))];
     const ranked = (items) => items.map((c) => [slashScore(c, P.query), c]).filter((x) => x[0] > 0).sort((a, b) => b[0] - a[0]).map((x) => x[1]);
     P.items = [...ranked(pool.filter((c) => c.shortcut)), ...ranked(pool.filter((c) => !c.shortcut))].slice(0, 50);
     if (!mine.length) P.items.push({ make: true, name: "" });
@@ -1336,9 +1353,9 @@ window.KURAL_CHAT = function (app, port) {
     // In the middle of a message nothing matching closes the list ("see /usr/bin" is a path); there, "Make a shortcut…"
     // shows only right after the "/".
     const found = P.items.some((c) => !c.make);
-    if (!P.skills && !found && (mine.length || P.query)) { closePopup(); return; }
+    if (!P.lead && !found && (mine.length || P.query)) { closePopup(); return; }
     const why = list.items.length || mine.length ? "No shortcut, skill or command matches" : list.why || "No skills or commands";
-    const rows = [...(found || !P.skills ? [] : [el("div", { class: "pop-empty" }, why)]), ...P.items.filter((c) => found || c.make).map(row)];
+    const rows = [...(found || !P.lead ? [] : [el("div", { class: "pop-empty" }, why)]), ...P.items.filter((c) => found || c.make).map(row)];
     popupEl.replaceChildren(...rows);
     const sel = popupEl.querySelector(".pop-item.sel");
     if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: "nearest" });
@@ -1356,8 +1373,8 @@ window.KURAL_CHAT = function (app, port) {
         insertPill({ kind: "shortcut", name: c.name, text: c.text }, r);
         return;
       }
-      // "/brain" → "/superpowers:brainstorming " (what you typed after it stays).
-      r.setStart(P.node, 0); r.setEnd(P.node, Math.min(P.node.data.length, P.end));
+      // "/brain" → "/superpowers:brainstorming " (what you typed after it stays; in the middle of a message only the "/brain" is replaced).
+      r.setStart(P.node, Math.max(0, P.start)); r.setEnd(P.node, Math.min(P.node.data.length, P.end));
       closePopup();
       const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
       const after = P.node.data.slice(Math.min(P.node.data.length, P.end));
@@ -1469,13 +1486,6 @@ window.KURAL_CHAT = function (app, port) {
         el("div", { class: "mi", onclick: () => { closeMenu(); S.deviceUI = null; post({ type: "devices" }); openMenu("device", anchor); } },
           el("span", { class: "mi-icon" }, icon("remote")), el("span", { class: "mi-label" }, t.device ? "Change device" : "Link device"),
           el("span", { class: "mi-hint" }, "Raspberry Pi, board computer… over SSH"))];
-    } else if (kind === "more") {
-      // The tab line's "…" (it was the panel title bar's; Adithya: everything in one place).
-      const run = (what) => () => { closeMenu(); post({ type: "panelCommand", what }); };
-      const row = (what, ic, label, hint) => el("div", { class: "mi", onclick: run(what) },
-        el("span", { class: "mi-icon" }, icon(ic)), el("span", { class: "mi-label" }, label), hint ? el("span", { class: "mi-hint" }, hint) : null);
-      items = [row("settings", "settings-gear", "Kural Settings"), row("getStarted", "rocket", "Get started", "set up an AI"),
-        row("updates", "sync", "Check for updates"), row("whatsNew", "megaphone", "What's new")];
     } else if (kind === "device") {
       items = deviceItems(t);
     } else if (kind === "ticket") {
@@ -1487,25 +1497,46 @@ window.KURAL_CHAT = function (app, port) {
           onclick: () => { post({ type: "setMode", tabId: t.id, mode: md.id }); closeMenu(); } },
           el("span", { class: "mi-label" }, md.label), el("span", { class: "mi-hint" }, md.hint)))];
     } else {
-      const editing = t.mode === "agent" || t.mode === "debug" || t.mode === "auto";
+      const editing = t.mode === "agent" || t.mode === "auto";
       const local = /^ollama:/.test(t.model || "");
       // Claude's models: usable once Claude is set up (Get started); before that they say so and open it.
-      items = [mhead("Auto · Model Router", "", "router"),
-        ...["balance","cost","intelligence"].map((profile) => el("div", { class: `mi ${t.autoRoute && profileName(t.routingProfile) === profile ? "on" : ""}`,onclick: () => { post({ type: "setRouterProfile",tabId: t.id,profile }); closeMenu(); } },
-          el("span", { class: `check radio${t.autoRoute && profileName(t.routingProfile) === profile ? " on" : ""}` }),el("span", { class: "mi-label" },cap(profile)),
-          el("span", { class: "mi-hint" }, { balance: "quality, then speed",cost: "saves your usage limits",intelligence: "most capable" }[profile]))),
-        el("div", { class: "sep" }),
-        mhead("Claude", S.claudeReady ? "" : "not set up", S.claudeReady ? "claude" : null), ...S.models.map((m) =>
-        el("div", { class: `mi ${!t.autoRoute && t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
+      // "Search models", then the Auto switch. Auto on: only the router's profile (the models are the router's to pick);
+      // off: every model, filtered by the search box.
+      const auto = !!t.autoRoute;
+      const search = auto ? null : el("div", { class: "msearch" }, icon("search"),
+        el("input", { type: "text", class: "msearch-in", placeholder: "Search models", "aria-label": "Search models", value: S.modelQuery || "",
+          oninput: (e) => { S.modelQuery = e.target.value; filterModels(menuEl, S.modelQuery); }, onkeydown: (e) => { if (e.key === "Escape" && e.target.value) { e.stopPropagation(); e.target.value = ""; S.modelQuery = ""; filterModels(menuEl, ""); } } }));
+      const flip = () => {
+        if (!auto) { post({ type: "setRouterProfile", tabId: t.id, profile: profileName(t.routingProfile) }); return; }
+        const ids = selectableModels(), back = ids.includes(t.model) ? t.model : ids[0];   // (the model it had before Auto, else the first)
+        if (back) post({ type: "setModel", tabId: t.id, model: back });
+      };
+      const autoRow = el("div", { class: `mi auto-row${auto ? " on" : ""}`, role: "switch", "aria-checked": String(auto), tabindex: "0",
+        "aria-label": "Auto, Model Router: Balanced quality and speed, recommended for most tasks",
+        onclick: flip, onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); flip(); } } },
+        el("span", { class: "auto-text" }, el("span", { class: "mi-label" }, "Auto"),
+          el("span", { class: "auto-sub" }, "Balanced quality and speed, recommended for most tasks")),
+        el("span", { class: `switch${auto ? " on" : ""}`, "aria-hidden": "true" }, el("span", { class: "knob" })));
+      const profiles = !auto ? [] : [mhead("Router profile", "", "router"),
+        ...["balance","cost","intelligence"].map((profile) => el("div", { class: `mi ${profileName(t.routingProfile) === profile ? "on" : ""}`,onclick: () => { post({ type: "setRouterProfile",tabId: t.id,profile }); closeMenu(); } },
+          el("span", { class: `check radio${profileName(t.routingProfile) === profile ? " on" : ""}` }),el("span", { class: "mi-label" },cap(profile)),
+          el("span", { class: "mi-hint" }, { balance: "quality, then speed",cost: "saves your usage limits",intelligence: "most capable" }[profile])))];
+      const models = auto ? [] : [
+        mhead("Claude", S.claudeReady ? "" : "not set up", S.claudeReady ? "claude" : null, true), ...S.models.map((m) =>
+        el("div", { "data-q": `${m.label} claude`.toLowerCase(), class: `mi ${t.model === m.id ? "on" : ""} ${S.claudeReady ? "" : "dim"}`, onclick: () => {
           if (S.claudeReady) post({ type: "setModel", tabId: t.id, model: m.id }); else post({ type: "getStarted", path: "claude" });
           closeMenu(); } },
-          el("span", { class: `check radio${!t.autoRoute && t.model === m.id ? " on" : ""}` }),
+          el("span", { class: `check radio${t.model === m.id ? " on" : ""}` }),
           el("span", { class: "mi-label" }, m.label), el("span", { class: "mi-hint" }, S.claudeReady ? m.hint : "set up Claude…"))),
         ...cliMenuItems(t),
-        ...localMenuItems(t),
+        ...localMenuItems(t)];
+      // (In Auto the router picks the intensity with the model for every message (setRouterProfile unpins it), so the
+      // Intensity row shows only when you pick the model yourself.)
+      const intensity = auto ? [] : [
         el("div", { class: "mh" }, "Intensity", el("span", { class: "mh-key" }, keys("Control+M / H / O"))),
         el("div", { class: "seg" }, S.efforts.map((e) => el("button", { class: t.effort === e.id ? "on" : "", title: levelHint(t, e.id), onclick: () => post({ type: "setEffort", tabId: t.id, effort: e.id }) }, e.label))),
-        levelNote(t),
+        levelNote(t)];
+      items = [search, autoRow, ...profiles, ...models, ...intensity,
         ...split.menuItems(t),
         // Preferences (moods in the code): the four built-in ones, then yours (Kural Settings → Preferences), then a way to add one.
         el("div", { class: "mh" }, "Preference"),
@@ -1517,11 +1548,15 @@ window.KURAL_CHAT = function (app, port) {
     }
     menuEl.replaceChildren(...items.filter(Boolean));
     menuEl.classList.remove("hidden");
+    if (kind === "model") {
+      if (S.modelQuery) filterModels(menuEl, S.modelQuery);
+      const box = menuEl.querySelector(".msearch-in");
+      if (box && S.modelQuery) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+    }
     const a = anchor.getBoundingClientRect(), col = app.getBoundingClientRect();   // (placed in the column: chat.css .col)
     menuEl.style.left = Math.max(6, Math.min(a.left - col.left, col.width - menuEl.offsetWidth - 6)) + "px";
-    // (The tab line's "…" is at the top: its menu opens downwards; the box's menus open upwards.)
-    if (kind === "more") { menuEl.style.top = (a.bottom - col.top + 4) + "px"; menuEl.style.bottom = ""; }
-    else { menuEl.style.top = ""; menuEl.style.bottom = (col.bottom - a.top + 6) + "px"; }
+    // (The box's menus open upwards.)
+    menuEl.style.top = ""; menuEl.style.bottom = (col.bottom - a.top + 6) + "px";
     openMenu.anchor = anchor;
     if (kind === "ticket" && S.ticketUI) S.ticketUI.input.focus();   // keep typing after the list updates
     if (kind === "device" && S.deviceUI && S.deviceUI.focus) { const f = S.deviceUI.focus; S.deviceUI.focus = null; f.focus(); }
@@ -1552,15 +1587,35 @@ window.KURAL_CHAT = function (app, port) {
   // ---------- Gemini and Codex ----------
   // Set up: a section with their models (from the program itself). Not set up: not in the menu (Adithya: set them up in
   // Get started or Kural Settings).
+  const cliModels = (c) => (c.models.length ? c.models : [{ id: "default", label: `${c.short} (its default model)` }]).slice(0, 8);
+  // Every model the menu lists (when Auto goes off, the chat goes back to one of these).
+  function selectableModels() {
+    const out = S.claudeReady ? S.models.map((m) => m.id) : [];
+    for (const c of S.clis || []) if (c.ready) out.push(...cliModels(c).map((m) => `${c.id}:${m.id}`));
+    const L = S.local;
+    if (L && L.status.running && L.status.ok) out.push(...L.models.filter((x) => x.chat).map((x) => `ollama:${x.name}`));
+    return out;
+  }
+  // Search models: hides the rows that don't match, and a heading with none left (no rebuild: the box keeps the keyboard).
+  function filterModels(box, query) {
+    const q = String(query || "").trim().toLowerCase();
+    let head = null, any = false;
+    const end = () => { if (head) head.classList.toggle("hidden", !!q && !any); };
+    for (const n of box.children) {
+      if (n.classList.contains("mh-model")) { end(); head = n; any = false; }
+      else if (n.getAttribute("data-q") !== null) { const hit = !q || n.getAttribute("data-q").includes(q); n.classList.toggle("hidden", !hit); any = any || hit; }
+      else if (n.classList.contains("mh") || n.classList.contains("seg")) { end(); head = null; }
+    }
+    end();
+  }
   function cliMenuItems(t) {
     const out = [];
     for (const c of S.clis || []) {
       if (!c.ready) continue;
-      out.push(mhead(c.label, c.account || "", c.id));
-      const models = c.models.length ? c.models : [{ id: "default", label: `${c.short} (its default model)` }];
-      for (const m of models.slice(0, 8)) {
+      out.push(mhead(c.label, c.account || "", c.id, true));
+      for (const m of cliModels(c)) {
         const id = `${c.id}:${m.id}`;
-        out.push(el("div", { class: `mi ${!t.autoRoute && t.model === id ? "on" : ""}`, title: m.description || "", onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
+        out.push(el("div", { "data-q": `${m.label} ${c.label}`.toLowerCase(), class: `mi ${!t.autoRoute && t.model === id ? "on" : ""}`, title: m.description || "", onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
           el("span", { class: `check radio${!t.autoRoute && t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln" }, m.label),
           el("span", { class: "mi-hint" }, m.isDefault ? "default" : "")));
       }
@@ -1578,10 +1633,10 @@ window.KURAL_CHAT = function (app, port) {
     const L = S.local;
     const chat = L && L.status.running && L.status.ok ? L.models.filter((x) => x.chat) : [];   // (models without tools can't chat)
     if (!chat.length) return [];
-    const out = [mhead("On this computer", "offline", "local")];
+    const out = [mhead("On this computer", "offline", "local", true)];
     for (const m of chat) {
       const id = `ollama:${m.name}`;
-      out.push(el("div", { class: `mi ${!t.autoRoute && t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
+      out.push(el("div", { "data-q": `${m.name} ollama local`.toLowerCase(), class: `mi ${!t.autoRoute && t.model === id ? "on" : ""}`, onclick: () => { post({ type: "setModel", tabId: t.id, model: id }); closeMenu(); } },
         el("span", { class: `check radio${!t.autoRoute && t.model === id ? " on" : ""}` }), el("span", { class: "mi-label ln", title: m.name }, m.name), el("span", { class: "mi-hint" }, [m.params, gb(m.size)].filter(Boolean).join(" · "))));
     }
     return out;
@@ -1750,14 +1805,14 @@ ${d.system}` : ""}`,
   // A section's heading in the model menu, with a gear that opens that AI's settings (Kural Settings, on its card:
   // connectors, when to switch away near a limit; for Auto, the Model Router). (Claude Code's setup and connectors were
   // shown here; Adithya: keep the menu clean, put them in settings.)
-  function mhead(label, key, ai) {
+  function mhead(label, key, ai, model) {
     const names = { router: "Model Router settings", local: "Your own model's settings" };
     const what = names[ai] || `${label} settings: connectors, when to switch near a limit`;
-    return el("div", { class: "mh mh-gear" }, el("span", {}, label), el("span", { class: "spacer" }), key ? el("span", { class: "mh-key" }, key) : null,
+    return el("div", { class: `mh mh-gear${model ? " mh-model" : ""}` }, el("span", {}, label), el("span", { class: "spacer" }), key ? el("span", { class: "mh-key" }, key) : null,
       ai ? el("button", { class: "mh-btn", title: what, "aria-label": what, onclick: (e) => { e.stopPropagation(); closeMenu(); post({ type: "aiSettings", ai }); } }, icon("settings-gear")) : null);
   }
   openMenu.refresh = () => { const k = S.menu; S.menu = null; if (k) openMenu(k, openMenu.anchor); };
-  function closeMenu() { S.menu = null; menuEl.classList.add("hidden"); }
+  function closeMenu() { S.menu = null; S.modelQuery = ""; menuEl.classList.add("hidden"); }
   // Clicking outside the panel (in the editor) or pressing Esc closes menus and the @ list.
   window.addEventListener("blur", () => { closeMenu(); closePopup(); }, on);
   document.addEventListener("keydown", (e) => {
@@ -1847,7 +1902,7 @@ ${d.system}` : ""}`,
         break;
       case "setupReady": S.notReady = !m.ready; S.claudeReady = m.claudeReady !== false; if (m.clis) S.clis = m.clis; renderAll(); if (S.menu) openMenu.refresh(); break;
       case "showLocal": openLocal(); break;
-      case "full": listen.onFull(m.tab && m.tab.id); S.tab = m.tab; renderAll(); renderEditBar(); renderEnhance(); voice.tabChanged(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
+      case "full": listen.onFull(m.tab && m.tab.id); S.tab = m.tab; renderAll(); renderEditBar(); enhanceTab(m.tab && m.tab.id); renderEnhance(); voice.tabChanged(); if (S.menu) closeMenu(); if (S.focusNext) { S.focusNext = false; input.focus(); } break;
       case "openLocal": closeMenu(); openLocal(); break;
       // Auto mode, a big task: "Use 3 agents?" for 15 s above the box; no answer = one agent.
       case "history": S.history = m.items; S.hereName = m.here || ""; renderHistory(); break;

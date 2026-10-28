@@ -258,5 +258,50 @@ check("a project's news line: waiting first, then working, then new answers (not
   assert.strictEqual(news([chat("1", "done")]), null, "this window's finished chats aren't news here");
 });
 
+check("History: a project's saved chats, newest first, without its open chats; folded projects get none; a search reads every project's", () => {
+  const meta = (id, folder, when, extra = {}) => ({ id, title: `Saved ${id}`, when, count: 2, workspace: { key: path.resolve(folder), name: path.basename(folder), open: path.resolve(folder) }, ...extra });
+  const archive = [meta("a1", "/p/a", NOW - 2 * H), meta("a2", "/p/a", NOW - 5 * MIN), meta("open1", "/p/a", NOW), meta("b1", "/p/b", NOW - DAY * 3),
+    meta("multi", "/p/a", NOW - 9 * H, { workspace: { key: "/p/a|/p/z", name: "ws", open: "/w/ws.code-workspace" } }), { id: "lost", title: "No workspace", when: 1 }];
+  const windows = [win("me", "/p/a", { chats: [chat("open1", "idle")] })];
+  const base = { windows, recent: [{ path: "/p/b", workspaceFile: null }], archive };
+  const closed = build({ ...base, historyOpen: [] });
+  const a0 = section(closed, "open").projects[0];
+  assert.deepStrictEqual(a0.history, { open: false, loaded: false, total: 0, items: [] }, "nothing is read for a folded History");
+  const m = build({ ...base, historyOpen: [path.resolve("/p/a")] });
+  const a = section(m, "open").projects[0], b = section(m, "recent").projects[0];
+  assert.deepStrictEqual(a.history.items.map((h) => h.id), ["a2", "a1", "multi"], "newest first, the open chat left out; a multi-root chat counts for its first folder");
+  assert.strictEqual(a.history.total, 3);
+  assert.strictEqual(a.history.items[0].ago, "5 min ago");
+  assert.strictEqual(a.history.items[1].title, "Saved a1");
+  assert.deepStrictEqual(b.history, { open: false, loaded: false, total: 0, items: [] });
+  const r = build({ ...base, historyOpen: [path.resolve("/p/b")] });
+  assert.deepStrictEqual(section(r, "recent").projects[0].history.items.map((h) => h.id), ["b1"], "a Recent project has its History too");
+  const s = build({ ...base, historyOpen: [], query: "saved b" });
+  assert.deepStrictEqual(s.sections.flatMap((x) => x.projects).map((p) => p.name), ["b"], "a search finds a saved chat by its title");
+  assert.deepStrictEqual(s.sections[0].projects[0].history.items.map((h) => h.id), ["b1"]);
+});
+
+check("History: a card belongs to a project by key, by workspace file or by folder; a Windows uri path matches its drive path", () => {
+  const p = { key: "/p/a", path: "/p/a", workspaceFile: null };
+  assert.ok(model.belongs({ workspace: { key: "/p/a" } }, p, "linux"));
+  assert.ok(model.belongs({ workspace: { key: "/p/a|/p/b", open: "/p/a" } }, p, "linux"));
+  assert.ok(!model.belongs({ workspace: { key: "/p/ab", open: "/p/ab" } }, p, "linux"));
+  assert.ok(!model.belongs({}, p, "linux"));
+  const ws = { key: "/w/x.code-workspace", path: "/w", workspaceFile: "/w/x.code-workspace" };
+  assert.ok(model.belongs({ workspace: { key: "/p/a|/p/b", open: "/w/x.code-workspace" } }, ws, "linux"));
+  const win32 = { key: "c:\\code\\app", path: "C:\\Code\\App", workspaceFile: null };
+  assert.ok(model.belongs({ workspace: { key: "/c:/Code/App", open: "/c:/Code/App" } }, win32, "win32"));
+  assert.ok(!model.belongs({ workspace: { key: "/c:/Code/Other", open: "/c:/Code/Other" } }, win32, "win32"));
+});
+
+check("History: at most HISTORY_MAX cards go to the page", () => {
+  const archive = Array.from({ length: model.HISTORY_MAX + 20 }, (_, i) => ({ id: `h${i}`, title: `T${i}`, when: i, workspace: { key: path.resolve("/p/a"), open: path.resolve("/p/a") } }));
+  const m = build({ windows: [win("me", "/p/a")], archive, historyOpen: [path.resolve("/p/a")] });
+  const h = section(m, "open").projects[0].history;
+  assert.strictEqual(h.items.length, model.HISTORY_MAX);
+  assert.strictEqual(h.total, model.HISTORY_MAX + 20);
+  assert.strictEqual(h.items[0].id, `h${model.HISTORY_MAX + 19}`);
+});
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log("\nall passed");

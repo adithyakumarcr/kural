@@ -124,8 +124,6 @@ const providerOf = (model) => PROVIDERS.find((p) => p.owns(model));
 // A conversation process for `model`, from its provider. All take the same handlers and send the same events.
 // opts.split: parallel agents (lib/split): the same events, from several of this provider's agents at once.
 function makeAgent(model, opts, local, handlers) {
-  // Debug mode is Agent for every program (same tools, same permissions): the difference is only in the instructions.
-  if (opts.mode === "debug") opts = { ...opts, mode: "agent" };
   if (opts.split) return new (require("../split/agent").SplitAgent)({ ...opts, model }, handlers, (m, o, h) => providerOf(m).agent(m, o, local || {}, h));
   return providerOf(model).agent(model, opts, local || {}, handlers);
 }

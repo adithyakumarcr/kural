@@ -189,6 +189,7 @@ class SettingsPage {
         break;
       case "autoUpdates": await vscode.workspace.getConfiguration("kural").update("updates.autoCheck", !!m.value, vscode.ConfigurationTarget.Global); this.push(); break;
       case "getStarted": this.gs.open(); break;
+      case "whatsNew": vscode.commands.executeCommand("kural.whatsNew"); break;
       case "profiles": vscode.commands.executeCommand("kural.profiles.switch"); break;
       case "tab": vscode.commands.executeCommand("kural.tabPanel.focus"); break;
       case "router": vscode.commands.executeCommand("kural.modelRouter"); break;

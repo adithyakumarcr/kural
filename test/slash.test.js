@@ -34,8 +34,15 @@ const FROM_CLAUDE = [
     assert.deepStrictEqual(slash.split("/superpowers:brainstorming a login page", l), { name: "superpowers:brainstorming", rest: "a login page" });
     assert.deepStrictEqual(slash.split("/brainstorming\nline two", l), { name: "brainstorming", rest: "\nline two" });
     assert.deepStrictEqual(slash.split("/code-review", l), { name: "code-review", rest: "" });
-    for (const t of ["/usr/bin/env is missing", "/config", "please /code-review", "/code-reviewer", "/", ""]) assert.strictEqual(slash.split(t, l), null, t);
+    for (const t of ["/usr/bin/env is missing", "/config", "/code-reviewer", "see /usr/bin and a/code-review", "/", ""]) assert.strictEqual(slash.split(t, l), null, t);
     assert.strictEqual(slash.split("/code-review", null), null);
+  });
+  await check("split: a command in the middle of a message comes out of the text (Claude Code runs it only at the start)", () => {
+    const l = slash.clean(FROM_CLAUDE);
+    assert.deepStrictEqual(slash.split("please /code-review this", l), { name: "code-review", rest: "please this" });
+    assert.deepStrictEqual(slash.split("please /code-review", l), { name: "code-review", rest: "please" });
+    assert.deepStrictEqual(slash.split("line one\n/brainstorming a page", l), { name: "brainstorming", rest: "line one\n a page" });
+    assert.deepStrictEqual(slash.split("see /usr/bin then /code-review it", l), { name: "code-review", rest: "see /usr/bin then it" });
   });
 
   // ---------- through the chat ----------
@@ -78,6 +85,10 @@ const FROM_CLAUDE = [
     assert.ok(said.includes("QUOTED-PART") && said.trimEnd().endsWith("a login page"), said);
     assert.ok(!reply.error, reply.error);
     assert.ok(tab.messages[tab.messages.length - 2].sentText.startsWith("/brainstorming "));
+  });
+  await check("slashOf: a skill typed in the middle moves to the front (lead + the rest)", async () => {
+    assert.deepStrictEqual(chat.slashOf(tab, "please /code-review this"), { lead: "/code-review ", rest: "please this" });
+    assert.strictEqual(chat.slashOf(tab, "see /usr/bin"), null);
   });
   await check("a model that isn't Claude: the list is empty and says why", async () => {
     tab.model = "codex:gpt-fake";

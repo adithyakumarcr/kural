@@ -102,8 +102,14 @@ check("build-mac.sh: without KURAL_SOURCE it downloads and checks VSCodium as be
   assert(s.lastIndexOf("codesign") > after, "signing");
 });
 
-check("install.sh --source sets KURAL_SOURCE; the workflow is by hand and pins its actions", () => {
-  assert(/--source\) export KURAL_SOURCE=1 ;;/.test(read("install.sh")));
+check("install.sh builds VS Code from source by default (--quick: VSCodium's download); the workflow is by hand and pins its actions", () => {
+  // (Adithya, 27 Oct 2026: one window for all projects on every system. That is patch 0100, only in the source build: the
+  // Mac app built from VSCodium's download opened a window per project while the Linux test build, from source, didn't.)
+  const sh = read("install.sh");
+  assert(/--source\) SOURCE=1 ;;/.test(sh) && /--quick\) SOURCE=0 ;;/.test(sh), "--source and --quick");
+  assert(/SOURCE=default/.test(sh) && /if \[ "\$SOURCE" = default \]; then\n  SOURCE=1\n/.test(sh), "the default is the source build");
+  assert(/"\$\(uname -s\)" = Linux \] && \[ "\$\(uname -m\)" != x86_64 \]; then\n    SOURCE=0/.test(sh), "except Linux that isn't x64 (make-deb.sh's source build is x64 only)");
+  assert(/export KURAL_SOURCE="\$SOURCE"/.test(sh), "exported for build-mac.sh / make-deb.sh, also as 0 over one in the environment");
   const w = read(".github/workflows/build-from-source.yml");
   assert(/^on:\n  workflow_dispatch:/m.test(w) && !/^\s+(push|pull_request|schedule):/m.test(w), "workflow_dispatch only");
   assert(/runs-on: macos-latest/.test(w) && /scripts\/vscode\/fetch\.sh/.test(w) && /scripts\/vscode\/build\.sh/.test(w) && /KURAL_SOURCE=1 \.\/build-mac\.sh/.test(w));
@@ -136,7 +142,7 @@ check("install.sh --source works on Ubuntu too, and says so elsewhere", () => {
   const linux = s.slice(lin, dispatch);
   assert(linux.includes('"${KURAL_SOURCE:-0}" = 1') && linux.includes("libkrb5-dev") && linux.includes("build-essential"), "linux() installs VS Code's build tools for --source");
   assert(linux.indexOf("./make-deb.sh") > linux.indexOf("KURAL_SOURCE"), "then the usual make-deb.sh (it reads KURAL_SOURCE, exported by --source)");
-  assert(/Mac or Ubuntu \(x64\): build VS Code from its source/.test(s) && !/--source   Mac: /.test(s), "the help doesn't say Mac only");
+  assert(/VS Code itself is built from\n#\s+its source with Kural's patches/.test(s) && /--quick    use VSCodium's download/.test(s) && !/--source   Mac: /.test(s), "the help says what the default and --quick are");
   assert(/die "this script is for a Mac or Ubuntu \(also with --source\)/.test(s), "a clear message on other systems");
 });
 

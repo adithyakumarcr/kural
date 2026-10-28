@@ -134,8 +134,8 @@ check("0100: Windows and Linux: a hidden window is never shown early (maximize, 
   const win = added(text, "src/vs/platform/windows/electron-main/windowImpl.ts");
   assert.match(win, /if \(!show && !isMacintosh\) \{\s*return;\s*\}/, "applyState: no maximize()/setFullScreen() on a window that waits hidden (not on macOS, where it was tested)");
   const show = win.slice(win.indexOf("async showInFrame("), win.indexOf("hideInFrame()"));
-  assert.ok(show.indexOf("matchFrameBounds(state)") >= 0 && show.indexOf("matchFrameBounds(state)") < show.indexOf("await this.whenPainted"), "the size is set before the paint");
-  assert.ok(show.indexOf("matchFrameMode(state)") > show.indexOf("await this.whenPainted") && show.indexOf("matchFrameMode(state)") < show.indexOf("this._win.show()"), "maximize and full screen: after the paint, right before show()");
+  assert.ok(show.indexOf("matchFrameBounds(state)") >= 0 && show.indexOf("matchFrameBounds(state)") < show.indexOf("this.whenPainted, timeout(5000)"), "the size is set before the paint");
+  assert.ok(show.indexOf("matchFrameMode(state)") > show.indexOf("this.whenPainted, timeout(5000)") && show.indexOf("matchFrameMode(state)") < show.indexOf("this._win.show()"), "maximize and full screen: after the paint, right before show()");
   assert.match(show, /if \(isMacintosh\) \{\s*this\.matchFrame\(state\);/, "macOS keeps its order");
   const mode = win.slice(win.indexOf("private matchFrameMode("), win.indexOf("private hasNormalBounds("));
   assert.match(mode, /setFullScreen\(true, true\)/, "full screen (F11's, not macOS Spaces)");

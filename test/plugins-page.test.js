@@ -108,6 +108,30 @@ const kinds = (rows) => rows.kids.map((r) => r._cls.has("head") ? `head:${byClas
     assert.deepStrictEqual(p.posted.slice(1), [{ type: "install", id: "elements-of-style@anthropic-plugin-directory" }, { type: "disable", id: "superpowers@anthropic-plugin-directory" }, { type: "uninstall", id: "superpowers@anthropic-plugin-directory" }]);
   });
 
+  // (Adithya, 27 Oct 2026: "there can be better spacing": "This project, only me" was cut off at the row's end, and the
+  // buttons squeezed the description.)
+  await check("a plugin's row has three lines like VS Code's Extensions: name and version; what it does; where it is and its buttons", () => {
+    const p = load();
+    p.send(base({ project: "kural", installed: [P("binzel-team-skills", { installed: true, enabled: true, scope: "local", version: "0.1.1", description: "Shared skills for the iBOT team" })] }));
+    const row = p.rows.kids.find((r) => r._cls.has("plugin")), main = byClass(row, "pmain")[0];
+    const lines = main.kids.map((k) => [...k._cls][0]);
+    assert.deepStrictEqual(lines, ["ptop", "pdesc", "pline"]);
+    assert.deepStrictEqual(byClass(main.kids[0], "pname").map((k) => k.textContent).concat(byClass(main.kids[0], "pver").map((k) => k.textContent)), ["binzel-team-skills", "0.1.1"]);
+    assert.strictEqual(main.kids[1].textContent, "Shared skills for the iBOT team");
+    assert.strictEqual(byClass(main.kids[2], "pmeta")[0].textContent, "This project, only me", "where it is: the third line");
+    assert.deepStrictEqual(all(byClass(main.kids[2], "pacts")[0], (k) => k.tag === "button").map((b) => b.textContent || b.attrs.title), ["Turn Off", "Remove binzel-team-skills"]);
+    assert.strictEqual(byClass(main.kids[0], "tag").length, 0, "nothing else on the name's line");
+    assert.strictEqual(row.style.height, "66px");
+    const css = require("fs").readFileSync(require("path").join(__dirname, "../extension/media/plugins.css"), "utf8");
+    assert.ok(!/\.hsub/.test(css) && !/max-width: 72%/.test(css));
+  });
+  await check("a section's description is its tooltip, not words cut off on its row", () => {
+    const p = load();
+    p.send(base());
+    const av = p.rows.kids.find((r) => r._cls.has("head") && byClass(r, "htitle")[0].textContent === "Available");
+    assert.strictEqual(av.attrs.title, "Anthropic's directory and your marketplaces");
+    assert.strictEqual(byClass(av, "hsub").length, 0);
+  });
   await check("a click on the row opens its page; one your organisation set up (managed) has no buttons", () => {
     const p = load();
     p.send(base({ installed: [P("team-tool", { installed: true, enabled: true, readOnly: true, scope: "managed" })] }));
@@ -187,7 +211,7 @@ const kinds = (rows) => rows.kids.map((r) => r._cls.has("head") ? `head:${byClas
     const many = Array.from({ length: 3500 }, (_, i) => P(`plugin-${String(i).padStart(4, "0")}`));
     p.send({ type: "available", ai: "claude", version: 1, items: many });
     assert.ok(p.rows.kids.length < 40, `${p.rows.kids.length} rows drawn`);
-    p.list.scrollTop = 44 * 2000; p.list.fire("scroll");
+    p.list.scrollTop = 46 * 2000; p.list.fire("scroll");   // (a plugin you can add: 46 px at font scale 1, no third line)
     const names = kinds(p.rows).filter((k) => k.startsWith("plugin"));
     assert.ok(names.includes("plugin:plugin-1999") || names.includes("plugin:plugin-2000"), names.slice(0, 3).join(","));
   });

@@ -26,6 +26,8 @@ jobs:
         run: scripts/vscode/fetch.sh
       - name: Build VS Code (gulp vscode-darwin-arm64-min)
         run: scripts/vscode/build.sh --download-node darwin-arm64
+        env:
+          GITHUB_TOKEN: ${{ github.token }}   # (npm ci downloads ripgrep through GitHub's API: see build.yml)
       - name: Build Kural from it (build-mac.sh)
         run: KURAL_SOURCE=1 ./build-mac.sh   # (build/vscode-out is up to date: it is not compiled again)
       - name: The app starts
@@ -62,6 +64,8 @@ jobs:
         run: KURAL_OS=linux scripts/vscode/fetch.sh
       - name: Build VS Code (gulp vscode-linux-x64-min)
         run: scripts/vscode/build.sh --download-node linux-x64
+        env:
+          GITHUB_TOKEN: ${{ github.token }}   # (npm ci downloads ripgrep through GitHub's API: see build.yml)
       - name: Build Kural from it (make-deb.sh)
         run: KURAL_SOURCE=1 ./make-deb.sh   # (build/vscode-out is up to date: it is not compiled again)
       - name: Install the .deb
@@ -119,6 +123,8 @@ jobs:
         with: { node-version-file: build/vscode-src/.nvmrc }
       - name: Build VS Code (gulp vscode-win32-x64-min)
         run: scripts/vscode/build.sh --download-node win32-x64
+        env:
+          GITHUB_TOKEN: ${{ github.token }}   # (npm ci downloads ripgrep through GitHub's API: see build.yml)
       - name: Build Kural from it (build-win.sh)
         run: KURAL_SOURCE=1 ./build-win.sh   # (build/vscode-out is up to date: it is not compiled again)
       - name: Built from the source, and the files are there

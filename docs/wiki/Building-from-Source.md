@@ -34,7 +34,7 @@ this repository.
 ### On a Mac with Apple Silicon
 
 ```bash
-./install.sh --source            # build from source and install
+./install.sh                     # build from source and install (the default since 27 Oct 2026; --source still works)
 KURAL_SOURCE=1 ./build-mac.sh    # only the files in dist/
 ```
 
@@ -54,16 +54,17 @@ scripts/vscode/build.sh darwin-arm64
 | Xcode command line tools (`xcode-select --install`) | Compiling native modules and signing |
 | Several GB of disk | The source, its `node_modules` and the result. `build/` can be deleted any time |
 
-Without `--source` or `KURAL_SOURCE=1` nothing changes: the build downloads VSCodium and takes about a minute.
+`./install.sh --quick` (or the build scripts without `KURAL_SOURCE=1`) downloads VSCodium instead and takes about a minute,
+but that Kural has no one-frame windows: every project opens a window of its own.
 
 ### On Ubuntu (x64)
 
 ```bash
-./install.sh --source            # build from source, make the .deb and install it
+./install.sh                     # build from source, make the .deb and install it (the default; --quick: VSCodium's .deb)
 KURAL_SOURCE=1 ./make-deb.sh     # only the .deb in dist/
 ```
 
-`./install.sh --source` first asks apt for what the build needs (it asks for your password through `sudo`). Or the steps
+`./install.sh` first asks apt for what the build needs (it asks for your password through `sudo`). Or the steps
 one by one:
 
 ```bash

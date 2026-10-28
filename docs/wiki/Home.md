@@ -17,26 +17,26 @@ Kural's AI comes from any of these (set up one or all; switch in the chat's mode
 | Page | What's in it |
 |---|---|
 | [[Getting Started]] | Install Kural, then pick Claude, Google Gemini, ChatGPT (Codex) or your own model |
-| [[Chat]] | The chat: modes, models, moods, files and pictures, history, two chats at once |
+| [[Chat]] | The chat: modes, models, preferences, files and pictures, history, two chats at once |
 | [[Projects]] | Every project and its chats in one list: what each is doing, one click to its window |
 | [[Parallel Agents]] | Split a big request between agents that work at once, each in its own copy; Kural merges |
 | [[Fix with Kural]] | Add an error or a failed terminal command to the chat with one click |
 | [[Rules]] | Instructions for the AI kept in your project (.kural/rules) |
 | [[Agent Review]] | An AI reads your uncommitted changes and comments on the lines |
-| [[Debug Mode]] | The AI adds temporary logging, you reproduce the bug, it fixes the cause |
 | [[Google Gemini and ChatGPT]] | Using your Google account (Gemini) or ChatGPT plan (Codex) in Kural |
 | [[Your Own Model]] | Models on your computer: finding, downloading, what they can and can't do |
+| [[Model Router]] | Auto in the model menu: Kural picks the model and intensity for each message, and moves on near a usage limit |
 | [[Tab Completion]] | Grey suggestions as you type; the Tab Completion panel; changing a name in other files too; what it learns |
 | [[Terminal]] | Whole command lines in the terminal, commit messages, plain words → commands |
 | [[Devices]] | A Raspberry Pi or board computer over SSH: link it to a chat, a terminal on it |
 | [[Inline Edit]] | Ctrl+K, and Apply from the chat |
 | [[Search and Ask]] | Find and replace text; find code by describing it |
-| [[Plugins]] | Extensions & Plugins: your chat's AI plugins (skills, agents, hooks, MCP servers) beside VS Code's extensions |
+| [[Plugins]] | Extensions, Plugins and Connectors: your chat's AI plugins (skills, agents, hooks) and connectors (MCP servers) beside VS Code's extensions |
 | [[Browser]] | Your app beside the code; select an element to add it to the chat; the AI uses pages there (it never publishes) |
 | [[Account and Updates]] | The usage meter; who's logged in, switch account, log out; updates |
 | [[Settings and Shortcuts]] | Every Kural setting and keyboard shortcut |
 | [[Troubleshooting]] | When something doesn't work |
-| [[Building from Source]] | Build Kural from VS Code's source (Mac for now), and what one-frame project windows need |
+| [[Building from Source]] | Build Kural from VS Code's source (a Mac or Ubuntu x64), and what one-frame project windows need |
 
 ## Missing something?
 

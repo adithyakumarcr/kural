@@ -2,7 +2,7 @@
   "name": "kural",
   "displayName": "Kural",
   "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude, Google Gemini, ChatGPT (Codex), or your own model on this computer (Ollama, offline).",
-  "version": "1.2.1-beta.4",
+  "version": "1.2.1-beta.5",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -412,6 +412,10 @@
         "title": "Move to..."
       },
       {
+        "command": "kural.projects.forkChat",
+        "title": "Fork to..."
+      },
+      {
         "command": "kural.projects.pin",
         "title": "Pin"
       },
@@ -766,6 +770,10 @@
           "when": "false"
         },
         {
+          "command": "kural.projects.forkChat",
+          "when": "false"
+        },
+        {
           "command": "kural.projects.pin",
           "when": "false"
         },
@@ -903,6 +911,16 @@
         {
           "command": "kural.projects.moveChat",
           "when": "webviewId == 'kural.projects' && webviewSection == 'chat' && projectOpen",
+          "group": "1_chat@2"
+        },
+        {
+          "command": "kural.projects.forkChat",
+          "when": "webviewId == 'kural.projects' && webviewSection =~ /^(chat|history)$/",
+          "group": "1_chat@3"
+        },
+        {
+          "command": "kural.projects.moveChat",
+          "when": "webviewId == 'kural.projects' && webviewSection == 'history'",
           "group": "1_chat@2"
         },
         {
@@ -1045,6 +1063,11 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "workbench.explorer.fileView.focus",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e"
+      },
       {
         "command": "kural.chat.voice",
         "key": "ctrl+alt+v",
@@ -1262,15 +1285,13 @@
             "agent",
             "auto",
             "plan",
-            "ask",
-            "debug"
+            "ask"
           ],
           "enumDescriptions": [
             "Kural edits files; asks before running commands",
             "Kural edits files and runs commands without asking",
             "Kural writes a plan first; click Build it to carry it out",
-            "Answers only; nothing changes",
-            "Kural finds a bug's cause with temporary logging, then fixes it; asks before running commands"
+            "Answers only; nothing changes"
           ],
           "description": "Mode for your very first chat. After that, new chats use whatever you picked last."
         },

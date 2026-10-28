@@ -424,6 +424,7 @@
       el("div", { class: "sechead" }, el("h2", {}, "More")),
       el("div", { class: "links" },
         link("rocket", "Get started", "set up an AI, step by step", "getStarted"),
+        link("megaphone", "What's new", "the release notes of this version", "whatsNew"),
         link("organization", "Profiles", "personal and work: separate Claude and ChatGPT accounts", "profiles"),
         link("export", "Export settings", "your preferences to a file, for another computer", "exportSettings"),
         link("desktop-download", "Import settings", "from a file you exported", "importSettings"),
