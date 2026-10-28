@@ -84,6 +84,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build and install with ./install.sh (what you run at home)
         run: ./install.sh
+        # (VS Code's npm ci downloads ripgrep through GitHub's API: without a token a shared runner's address hits the
+        # unauthenticated limit, 403, as the macOS job did on 27 Oct 2026. The job's token is read-only, like VS Code's own CI.)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Quick extension update (./install.sh --ext)
         run: ./install.sh --ext && test -f /usr/share/kural/resources/app/extensions/kural/lib/edit/code-reply.js
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -140,6 +144,10 @@ jobs:
       # Like a fresh Mac: macOS's own old bash (3.2), no Pillow (the icon comes from macOS's sips and iconutil)
       - name: Build and install with ./install.sh (what you run at home)
         run: /bin/bash ./install.sh --no-open && test -x /Applications/Kural.app/Contents/MacOS/Kural
+        # (VS Code's npm ci downloads ripgrep through GitHub's API: without a token a shared runner's address hits the
+        # unauthenticated limit, 403, as the macOS job did on 27 Oct 2026. The job's token is read-only, like VS Code's own CI.)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Quick extension update (./install.sh --ext)
         run: |
           /bin/bash ./install.sh --ext --no-open
