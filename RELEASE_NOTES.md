@@ -1,3 +1,15 @@
+## What's new in 1.2.1-beta.6
+
+- **Design Mode, like Cursor's.** The pen button in the browser bar, left of the inspect button (or **Cmd+Shift+D**,
+  Ctrl+Shift+D on Windows and Linux): point at your app, click an element and say what to change, and **Return** sends it
+  to the chat's AI at once, with the element's details, its React / Vue / Svelte component (file and line in a dev build)
+  and a picture of it. **Shift+click** puts more elements in one note, **Arrow Up/Down** move to the parent or child, a
+  **drag** boxes in an area, **Draw / Ellipse / Rectangle / Arrow** mark it up (**Cmd+Z** undoes), **double-click** text to
+  edit it in place, **Edit CSS properties** changes values live; **Cmd+L** or **Option+click** puts it in the chat box
+  instead, **Dictate** starts voice input there, **Batch** collects notes as numbered pins and **Send (n)** sends them
+  together; **Esc** backs out a step at a time. While it's on, links and buttons on the page don't act; while the chat's
+  AI is clicking in that tab, Design Mode steps aside.
+
 ## What's new in 1.2.1-beta.5
 
 - **Skills anywhere in a message.** The "/" list now works after a space too, not only at the start; a skill picked

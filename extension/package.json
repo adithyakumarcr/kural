@@ -2,7 +2,7 @@
   "name": "kural",
   "displayName": "Kural",
   "description": "Kural Code Editor's AI: Tab Completion, chat with tabs and agents (Ctrl+L), inline edit (Ctrl+K), Ask. With Claude, Google Gemini, ChatGPT (Codex), or your own model on this computer (Ollama, offline).",
-  "version": "1.2.1-beta.5",
+  "version": "1.2.1-beta.6",
   "publisher": "kural",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
@@ -336,6 +336,11 @@
         "command": "kural.browser.open",
         "title": "Kural: Open Browser (Pick Elements for the Chat)",
         "icon": "$(globe)"
+      },
+      {
+        "command": "kural.browser.designMode",
+        "title": "Kural: Toggle Design Mode",
+        "icon": "$(edit)"
       },
       {
         "command": "kural.modelRouter",
@@ -1069,6 +1074,12 @@
         "mac": "cmd+shift+e"
       },
       {
+        "command": "kural.browser.designMode",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
+        "when": "activeEditor == 'workbench.editor.browser'"
+      },
+      {
         "command": "kural.chat.voice",
         "key": "ctrl+alt+v",
         "mac": "cmd+alt+v",
@@ -1319,6 +1330,11 @@
           "type": "boolean",
           "default": true,
           "description": "While a chat is working, the Mac doesn't go to sleep by itself (the screen may still turn off; closing the lid still sleeps it). macOS only."
+        },
+        "kural.browser.designMode.batch": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Design Mode's **Batch**: Return saves each note as a numbered pin on the page instead of sending it, and **Send (n)** in Design Mode's toolbar sends them all together. Also switched in that toolbar."
         },
         "kural.browser.aiControl": {
           "type": "boolean",

@@ -909,6 +909,52 @@ def small_edit_box(text):
     return first.sub(mark, text, count=1)
 
 
+# Design Mode's button in the browser bar (Adithya, 28 Oct 2026: "a button just like the inspect button", like Cursor's).
+# VS Code draws that bar from its own menus (MenuId.BrowserActionsToolbar), which an extension's package.json can't add to.
+# One menu item goes in just before the inspect button's statement (the "Add to Chat" split button, order 1): Kural's command
+# kural.browser.designMode (extension/lib/browser/design-host.js), the pencil icon, shown pressed while the context key
+# kural.designMode is set (Design Mode on in the tab in front). The minified names come from that statement (the menu
+# registry, MenuId, Codicon, its group) and ContextKeyExpr from the code just before it. Both builds (VSCodium's download and
+# the build from source) have the same shape; a miss gives a ::warning:: and the command and Cmd/Ctrl+Shift+D still work.
+# The item runs a workbench command, _kural.designMode, not Kural's own: that toolbar runs every item with the browser editor
+# as its argument (actionsToolbar.context = editor, shouldForwardArgs), which can't be sent to an extension, so a click on
+# an extension command there did nothing (found in the built app, 28 Oct 2026). _kural.designMode drops it and runs
+# kural.browser.designMode with none; registered at the end of the file like _kural.osToast. The shortcut is in the title
+# (the tooltip only shows the menu command's own keybinding).
+DESIGN_MARK = "/*kural-design-button*/"
+DESIGN_ANCHOR = re.compile(r'([\w$]+)\.appendMenuItem\(([\w$]+)\.BrowserActionsToolbar,\{submenu:\2\.BrowserChatActionsMenu,'
+                           r'title:[\w$]+\(\d+,"Add to Chat"\),icon:([\w$]+)\.inspect,group:("[^"]*"|[\w$.]+),order:1,')
+DESIGN_CKE = re.compile(r'(?:when|precondition):([\w$]+)\.and\(')
+
+
+def add_design_mode_button(text):
+    if DESIGN_MARK in text:
+        return text
+    found = list(DESIGN_ANCHOR.finditer(text))
+    commands, service, end = TOAST_COMMANDS.findall(text), WSCOLOR_SERVICE.findall(text), list(TOAST_END.finditer(text))
+    if len(commands) != 1 or len(service) != 1 or len(end) != 1:
+        print(f"::warning::the command registry or service not found as expected ({len(commands)}, {len(service)}, {len(end)}); no Design Mode "
+              "button (Cmd/Ctrl+Shift+D and Kural: Toggle Design Mode still work)")
+        return text
+    if len(found) != 1:
+        print(f"::warning::the browser bar's inspect button not found as expected ({len(found)} matches); no Design Mode button "
+              "(Cmd/Ctrl+Shift+D and Kural: Toggle Design Mode still work)")
+        return text
+    m = found[0]
+    near = DESIGN_CKE.findall(text[max(0, m.start() - 6000):m.start()])
+    if not near:
+        print("::warning::ContextKeyExpr not found near the browser bar's inspect button; no Design Mode button")
+        return text
+    registry, menu, codicon, group = m.groups()
+    title = '(/Mac|iPhone|iPad/.test(navigator.platform)?"Design Mode (\u21e7\u2318D)":"Design Mode (Ctrl+Shift+D)")'
+    item = (f'{DESIGN_MARK}{registry}.appendMenuItem({menu}.BrowserActionsToolbar,{{command:{{id:"_kural.designMode",'
+            f'title:{title},icon:{codicon}.edit,toggled:{near[-1]}.equals("kural.designMode",!0)}},group:{group},order:0}});')
+    command = f'/*kural-design-command*/{commands[0]}.registerCommand("_kural.designMode",a=>a.get({service[0]}).executeCommand("kural.browser.designMode"));'
+    at = end[0].start() + 1
+    text = text[:at] + command + text[at:]   # (the end comes after the anchor: the anchor's position doesn't change)
+    return text[:m.start()] + item + text[m.start():]
+
+
 # The side bar stays when the chat is maximized (Adithya, 27 Oct 2026: "when Kural goes full screen, Projects also minimizes").
 # The chat panel's Maximize button is VS Code's "maximize the secondary side bar" (layoutService.setAuxiliaryBarMaximized),
 # which hides the editor, the bottom panel AND the primary side bar. Only the side bar's line is taken out: Projects, the
@@ -960,7 +1006,7 @@ def patch_workbench(app):
         print("::warning::unexpected workbench fingerprint; VS Code's code left as it is (no Help → Check for Updates, Search and Output stay)")
         return
     text = data.decode("utf-8")
-    new = keep_sidebar_when_maximized(small_edit_box(terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text))))))))))))))
+    new = add_design_mode_button(keep_sidebar_when_maximized(small_edit_box(terminal_suggest_prefix(webview_microphone(fresh_browser(skip_github_probe(add_workspace_color_item(add_plugins_tab(hide_debug_views(add_os_toast(route_browser_to_kural(hide_builtin_views(add_update_menu(drop_vscodium_welcome(text)))))))))))))))
     # (The Projects bar's four: after the views patches above, whose code at the start of addViews one of them looks for.
     # A build from source has them as patches/kural/*.patch and lists them in product.json's kuralSource: not done twice.)
     built = built_in_patches(product)

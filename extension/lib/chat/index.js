@@ -1719,7 +1719,7 @@ class ChatView {
     const seen = new Set();
     for (const c of contexts) {
       // (Two elements of one page are two; so are two quotes.)
-      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine, c.element && c.element.selector, c.kind === "quote" ? c.text : null]);
+      const key = JSON.stringify([c.kind, c.path, c.startLine, c.endLine, c.element && (c.element.selector || c.element.area || null), c.kind === "quote" ? c.text : null]);
       if (seen.has(key)) continue; seen.add(key);
       if (c.kind === "selection") {
         parts.push(`${c.path} (lines ${c.startLine}-${c.endLine}):\n\`\`\`${c.lang || ""}\n${c.code}\n\`\`\``);
@@ -3251,6 +3251,54 @@ class ChatView {
     if (added.length) vscode.window.setStatusBarMessage(`Kural: added ${added.join(", ")} to the chat`, 3000);
   }
 
+  // Design Mode (lib/browser/design*.js): notes from a page in Kural's browser. Each element (or the area you boxed in) is
+  // a pill whose details reach the AI through elementNote, the note's picture an attachment, and your words, CSS and text
+  // changes the message's text. send: straight to the chat's AI, like Cursor's Design Mode (while it answers, the message
+  // queues like any other); else into the chat box, for you to send (Cmd/Ctrl+L, Option/Alt+click, Dictate).
+  async addDesignNotes(notes, { send = true } = {}) {
+    await this.reveal();
+    const pane = this.cur();
+    const segments = [], contexts = [], pictures = [];
+    const list = (Array.isArray(notes) ? notes : []).slice(0, 20);
+    list.forEach((n, i) => {
+      if (list.length > 1) segments.push({ t: "text", v: `${i ? "\n\n" : ""}${i + 1}. ` });
+      const page = { url: String(n.url || ""), title: String(n.title || "") };
+      const pills = (n.elements || []).map((e) => ({ kind: "element", path: page.url || "browser", label: `<${String(e.short || e.tag || "element").slice(0, 60)}>`,
+        element: { ...e, ...page, design: true, rect: undefined } }));
+      if (n.area) pills.push({ kind: "element", path: page.url || "browser", label: `<area ${Math.round(n.area.w)}×${Math.round(n.area.h)}>`,
+        element: { ...page, design: true, area: n.area, short: "area" } });
+      for (const ctx of pills) { segments.push({ t: "pill", ctx }, { t: "text", v: " " }); contexts.push(ctx); }
+      const words = [];
+      if (n.text) words.push(String(n.text));
+      if (n.css && n.css.length) words.push(`CSS I changed on the page (only on screen, make it real in the code): ${n.css.map((c) => `${c.prop}: ${c.from} → ${c.to}`).join("; ")}.`);
+      if (n.textEdits && n.textEdits.length) words.push(`Text I edited on the page: ${n.textEdits.map((t) => `<${t.element}> "${t.from}" → "${t.to}"`).join("; ")}.`);
+      if (n.markup) words.push("(I marked it up on the page: see the picture.)");
+      if (words.length) segments.push({ t: "text", v: words.join(" ") });
+      if (n.picture && n.picture.data) {
+        const a = this.attachments.addData(`design-${Date.now() % 100000}-${i + 1}.${/png/i.test(n.picture.mime || "") ? "png" : "jpg"}`, n.picture.data);
+        if (a) pictures.push(a);
+      }
+    });
+    if (!contexts.length) return;
+    const tab = this.active();
+    if (send && tab && !tab.visiting) {
+      await this.send(tab, segments, contexts, pictures.map((a) => a.id));
+      vscode.window.setStatusBarMessage("Kural: sent your Design Mode note", 3000);
+      return;
+    }
+    // Into the chat box: the pictures as attachments, each pill with the words after it.
+    if (!pane) return;
+    if (pictures.length) this.postTo(pane, { type: "attached", items: pictures });
+    for (let i = 0; i < segments.length; i++) {
+      const s = segments[i];
+      if (s.t !== "pill") continue;
+      let text = "";
+      for (let j = i + 1; j < segments.length && segments[j].t === "text"; j++) text += segments[j].v;
+      this.postTo(pane, { type: "insertPill", ctx: s.ctx, text: text.replace(/\s+$/, " ") });
+    }
+    vscode.window.setStatusBarMessage("Kural: your Design Mode note is in the chat box. Press Send when you're ready", 3000);
+  }
+
   // Fix with Kural (lib/fix) and Agent Review's "Fix in Chat" (command kural.chat.addContext): a problem, a failed terminal
   // command or a review finding becomes a pill in the message you're writing, with a first line ("Fix this."). The chat
   // comes on screen first. It is never sent by itself: you read it and press Send.
@@ -3452,13 +3500,21 @@ function elementNote(e) {
     out.push("(Find the code that makes this element in my project, searching for its classes, id or text, before you change anything.)");
     return out.join("\n\n");
   }
-  const lines = [`An element I picked on the page ${e.url || ""}${e.title ? ` ("${e.title}")` : ""}:`,
-    `- element: <${e.short || e.tag}>, selector: ${e.selector || "?"}${e.size ? `, ${e.size[0]}x${e.size[1]} px` : ""}`];
-  if (e.component && e.component.name) lines.push(`- ${e.component.framework || ""} component: ${e.component.name}${e.component.file ? ` (${e.component.file}${e.component.line ? `:${e.component.line}` : ""})` : ""}`);
+  const where = `${e.url || "the page"}${e.title ? ` ("${String(e.title).slice(0, 200)}")` : ""}`;
+  // Design Mode: an area you boxed in (the picture attached shows it).
+  if (e.area) return `An area of the page ${where}: ${Math.round(e.area.w)}x${Math.round(e.area.h)} px at (${Math.round(e.area.x)}, ${Math.round(e.area.y)}) in the window (the picture attached shows it, with any marks I drew).`;
+  const tag = e.tag || e.short || "element";
+  const lines = [`An element I picked on ${where}:`,
+    `- element: <${tag}${e.elId ? ` id="${e.elId}"` : ""}${e.classes && e.classes.length ? ` class="${e.classes.join(" ")}"` : ""}${e.attrs ? ` ${e.attrs}` : ""}>`,
+    `- selector: ${e.selector || "?"}`];
+  if (e.size) lines.push(`- size: ${e.size[0]}x${e.size[1]} px${e.pos ? `, at (${e.pos[0]}, ${e.pos[1]}) on the page` : ""}`);
+  const c = e.component;
+  if (c && c.name) lines.push(`- ${c.framework || ""} component: ${c.name}${c.file ? ` (${c.file}${c.line ? `:${c.line}` : ""})` : ""}${c.stack && c.stack.length > 1 ? `, inside: ${c.stack.slice(1).join(" < ")}` : ""}`);
   if (e.text) lines.push(`- text: ${JSON.stringify(e.text)}`);
   const st = Object.entries(e.styles || {}).map(([k, v]) => `${k}: ${v}`).join("; ");
   if (st) lines.push(`- styles: ${st}`);
   if (e.html) lines.push("```html\n" + e.html + "\n```");
+  if (e.design) lines.push("(From Kural's Design Mode: a picture of it is attached. Find the code that makes it in my project, by its component, classes, id or text, before you change anything.)");
   return lines.join("\n");
 }
 

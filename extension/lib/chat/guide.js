@@ -242,6 +242,23 @@ model on their computer (Ollama, offline, no account). Features and how to use t
   use a screenshot of the area instead.) It keeps nothing: no cookies, logins, history of sites' data or cache are saved;
   each time Kural starts the browser is fresh (logins last until that window closes). Data older versions saved is
   deleted once.
+- Design Mode (like Cursor's): the pen button in the browser bar, left of the inspect button, or Cmd/Ctrl+Shift+D with a
+  browser tab in front ("Kural: Toggle Design Mode"); the button looks pressed while it's on, and a small toolbar shows at
+  the top of the page (Select, Draw, Ellipse, Rectangle, Arrow, Batch, Exit). Point at the page: whatever is under the
+  pointer gets an outline with its tag and size, Arrow Up/Down move it to the parent/child; links and buttons don't act
+  meanwhile. Click: a note opens beside the element; type what to change; Return sends it to the chat's AI at once
+  (Shift+Return a new line; while the AI answers it queues like any message). Shift+click adds more elements to the same
+  note; Option/Alt+click puts an element straight into the chat box; Cmd/Ctrl+L puts the note in the chat box instead of
+  sending; drag boxes in an area (Shift: one axis, Option/Alt: from the centre); the markup tools draw on the page and
+  Cmd/Ctrl+Z undoes a mark; double-click text to edit it in place (Return keeps, Esc reverts; text edits collect and the
+  toolbar's Send sends them); Edit CSS properties (one element) changes values live, sent as old → new; Dictate puts the
+  note in the chat box and starts voice input there; Batch (in the toolbar, setting kural.browser.designMode.batch) saves
+  notes as numbered pins and Send (n) sends them together and turns Design Mode off; Esc backs out a step at a time, then
+  turns it off. The AI gets each element's tag, id, classes, attributes, selector, first 200 characters of text, size and
+  position, six computed styles, the start of its HTML, its React/Vue/Svelte component (name, the ones around it, file
+  and line in a dev build), a picture cropped to the note (with your marks), your words and your edits. Edits change only
+  the page you see until it reloads: the AI makes them real in your code. While the chat's AI itself is clicking in that
+  tab, Design Mode steps aside. Main page only (not inside an iframe).
 - The AI uses Kural's browser (Claude and ChatGPT (Codex) models; setting kural.browser.aiControl, on by default): ask
   it to do something on a site ("open instagram.com and make a reel from videos/run.mp4 up to the caption", "fill in
   this form", "answer the quiz on this page"). It opens pages in a tab beside the code (log in there yourself first;

@@ -380,7 +380,12 @@ code selected, **Add to Chat** and **Quick Edit** buttons show at the cursor.
   always asks first: a plugin runs code as you.
 - **Kural Settings** (person icon in the status bar, which shows your account's name): your accounts and usage,
   updates, the guide, in one tab.
-- **Browser with Design Mode.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
+- **Design Mode.** The pen button in the browser bar (or **Ctrl+Shift+D**): point at your app, click an element (Shift+click
+  for more, drag for an area, draw on it, double-click text to edit it, change its CSS), say what to change, and **Return**
+  sends it to the chat's AI with each element's details, its React/Vue/Svelte component and a picture, like Cursor's
+  Design Mode. **Ctrl+L** puts it in the chat box instead; Batch collects notes as pins and sends them together.
+  More: [docs/wiki/Browser.md](docs/wiki/Browser.md#design-mode).
+- **Kural's browser.** Real web pages inside Kural (your app on localhost, any site; every web link in a chat
   answer opens there). Click the inspect button, click an element, and it's added to the chat with its HTML, CSS and a
   picture; add a comment ("make this bigger") and Kural finds the code behind it and changes it, like Cursor. It keeps
   nothing: no cookies, logins or cache are saved, so it's fresh every time Kural starts.
@@ -439,6 +444,7 @@ On a Mac, use **Cmd** where it says Ctrl, except for the chat shortcuts marked *
 | **Ctrl+Shift+E** | the Explorer's files (under Projects) |
 | In the Ctrl+K box: **Alt+Enter** / **Ctrl+L** | quick question / send to the chat |
 | In the chat: **Ctrl+Alt+V** | voice input |
+| **Ctrl+Shift+D** (a browser tab in front) | Design Mode on / off |
 | **Ctrl+Esc** | Claude Code terminal |
 | In the chat: **Ctrl+M / H / O** | intensity Medium / High / Max *(Ctrl on Mac too)* |
 | In the chat: **Ctrl+P** | Plan mode on/off *(Ctrl on Mac too)* |

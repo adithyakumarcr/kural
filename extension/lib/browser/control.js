@@ -14,7 +14,7 @@
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
-const { Cdp } = require("./cdp");
+const { Cdp, transportOf } = require("./cdp");
 const { Page, Stop } = require("./page");
 const { Bridge, TOOLS } = require("./bridge");
 const { Browser } = require("./index");
@@ -37,7 +37,9 @@ class BrowserControl {
     this.current = new Map();     // chat id → the tab it works in
     this.shots = 0;
     this.bridge = new Bridge((s, tool, args) => this.call(s.chat, tool, args, s.ask, s.cwd));
+    this.onBusy = null;           // (tab, on): a chat's AI started / stopped using a tab (Design Mode steps aside meanwhile)
   }
+  busy(t, on) { try { if (this.onBusy) this.onBusy(t, on); } catch { /* Design Mode's own problem */ } }
 
   // A chat's AI gets the browser tools: { token, server } (the MCP server for its program: bridge.js). ask: the chat's
   // approveBrowser. cwd: the project (where relative paths for upload start).
@@ -109,6 +111,7 @@ class BrowserControl {
         if (!up || !up.allow) return { text: (up && up.message) || "The user chose not to upload that file.", isError: true };
       }
       const a = await this.attach(t);
+      if (!a.holders.size) this.busy(t, true);
       a.holders.add(chat);
       const hooks = {
         commit: (v) => ask({ kind: "commit", site, label: v.label || v.word, word: v.word }),
@@ -161,6 +164,7 @@ class BrowserControl {
     const t = await vscode.window.openBrowserTab(url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
     this.current.set(chat, t);
     const a = await this.attach(t, false);
+    if (!a.holders.size) this.busy(t, true);
     a.holders.add(chat);
     return this.queued(a, async () => { await a.page.ready(url); return { text: `Opened ${url} in a new tab, ${this.idOf(t)}.\n\n${await a.page.snapshot()}` }; });
   }
@@ -176,15 +180,7 @@ class BrowserControl {
   async attach(t, show = true) {
     let a = this.attached.get(t);
     if (a && !a.cdp.closed) return a;
-    const s = await t.startCDPSession();
-    const subs = [];
-    const transport = {
-      send: (m) => { Promise.resolve(s.sendMessage(m)).catch(() => {}); },
-      onMessage: (f) => subs.push(s.onDidReceiveMessage(f)),
-      onClose: (f) => subs.push(s.onDidClose(f)),
-      close: () => { Promise.resolve(s.close()).catch(() => {}); for (const d of subs) d.dispose(); },
-    };
-    const cdp = new Cdp(transport);
+    const cdp = new Cdp(transportOf(await t.startCDPSession()));
     const id = this.idOf(t);
     try {
       const ps = await cdp.attach();
@@ -193,7 +189,7 @@ class BrowserControl {
       a = { cdp, page, holders: new Set(), queue: Promise.resolve(), viewId: cdp.target && cdp.target.vscodeBrowserViewId, note: null };
       await page.guardNetwork((rule, url) => this.blocked(t, a, rule, url));
     } catch (e) { cdp.close(); throw e; }
-    cdp.onClose(() => { a.page.close(); if (this.attached.get(t) === a) this.attached.delete(t); });
+    cdp.onClose(() => { a.page.close(); if (this.attached.get(t) === a) { this.attached.delete(t); if (a.holders.size) this.busy(t, false); } });
     this.attached.set(t, a);
     log(`browser: the AI is using ${id} (${siteOf(t.url) || t.url})`);
     if (show) this.show(t, a);
@@ -228,7 +224,7 @@ class BrowserControl {
   release(chat) {
     for (const [t, a] of this.attached) {
       a.holders.delete(chat);
-      if (!a.holders.size) { a.cdp.close(); this.attached.delete(t); log(`browser: let go of ${this.idOf(t)}`); }
+      if (!a.holders.size) { this.attached.delete(t); a.cdp.close(); this.busy(t, false); log(`browser: let go of ${this.idOf(t)}`); }
     }
   }
   // The chat closed (or its program stopped): also forget which tab it used.
