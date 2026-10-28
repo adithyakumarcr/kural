@@ -83,4 +83,15 @@ class PageSession {
   get closed() { return this.cdp.closed; }
 }
 
-module.exports = { Cdp, PageSession, TIMEOUT };
+// A transport over a VS Code browser tab's CDP session (tab.startCDPSession(): sendMessage, onDidReceiveMessage, onDidClose).
+function transportOf(s) {
+  const subs = [];
+  return {
+    send: (m) => { Promise.resolve(s.sendMessage(m)).catch(() => {}); },
+    onMessage: (f) => subs.push(s.onDidReceiveMessage(f)),
+    onClose: (f) => subs.push(s.onDidClose(f)),
+    close: () => { Promise.resolve(s.close()).catch(() => {}); for (const d of subs) d.dispose(); },
+  };
+}
+
+module.exports = { Cdp, PageSession, TIMEOUT, transportOf };

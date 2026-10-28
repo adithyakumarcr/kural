@@ -15,6 +15,51 @@ deleted once.) On a Mac this also means the browser never needs the keychain.
 - **Any web link** in a chat answer opens here, not in your outside browser. So does a `localhost` link in the terminal
   (setting `workbench.browser.openLocalhostLinks`, on by default in Kural).
 
+## Design Mode
+
+Like Cursor's Design Mode: point at your app, say what to change, and the chat's AI changes the code.
+
+**Turn it on:** the **pen button** in the browser bar, left of the inspect button (it looks pressed while Design Mode is
+on), or **Cmd+Shift+D** (Ctrl+Shift+D on Windows and Linux) with the browser tab in front, or **Kural: Toggle Design
+Mode**. A small toolbar appears at the top of the page: Select, the markup tools, Batch and Exit. While Design Mode is on,
+links and buttons on the page don't act: your clicks are for Design Mode.
+
+| Keys | Where | What it does |
+|---|---|---|
+| point | the page | outlines what's under the pointer, with its tag and size |
+| Arrow Up / Down | pointing at an element | moves the outline to its parent / its first child |
+| click | the page | opens a note for that element |
+| Shift+click | the page | adds the element to the same note |
+| Option+click (Alt+click) | the page | puts the element straight into the chat box (or into the open note) |
+| drag (Shift: one axis, Option/Alt: from the centre) | the page | boxes in an area |
+| Return | a note | sends it to the chat's AI at once (with Batch on: saves it as a numbered pin) |
+| Shift+Return | a note | a new line |
+| Cmd+L (Ctrl+L) | a note | puts it in the chat box instead of sending |
+| double-click, then Return or Esc | text on the page | edits it in place: keeps it / puts the old text back |
+| Cmd+Z (Ctrl+Z) | markup | undoes the last mark |
+| Esc | anywhere | backs out one step (a mark, a text edit, the CSS panel, the note, the selection, the tool), then turns Design Mode off |
+
+- **Markup:** the toolbar's Draw, Ellipse, Rectangle and Arrow tools draw on the page; the marks go into the note's picture.
+- **Edit text in place:** double-click a piece of text. Text edits collect; the toolbar's **Send** sends them.
+- **Edit CSS properties:** in a note for one element: filter the list, change a value, see it at once. The changes go with
+  the note as old → new.
+- **Dictate:** puts the note in the chat box and starts Kural's voice input there (offline, on your computer).
+- **Batch** (toolbar, or the setting `kural.browser.designMode.batch`): Return saves each note as a numbered pin;
+  **Send (n)** sends them all in one message and turns Design Mode off. The list beside it shows them; remove one there.
+- **While the AI works:** a note you send while an answer runs queues like any message you send then. If the chat's AI is
+  itself clicking in that tab, Design Mode steps aside until its answer ends.
+
+**What the AI gets:** for each element its tag, id, classes, attributes, a selector path, its first 200 characters of text,
+its size and position, six computed styles (color, background color, font size, font family, display, position) and the
+start of its HTML; in React, Vue and Svelte apps (dev builds) the component, the components around it, and its source
+file and line. With the note: a picture cropped to it (your marks drawn in), your words, and the text and CSS you changed.
+Your edits change only what you see until the page reloads; the AI makes the real change in your code, and your dev
+server's hot reload shows it.
+
+Design Mode draws inside the page in a closed shadow root, from a world of its own the page's scripts can't reach, and
+talks to Kural through a channel only that world has, so a page can't send Kural a note. It works on the main page, not
+inside an iframe.
+
 ## Pick an element
 
 1. Click the **inspect button** in the browser's bar (**Add Element to Chat**, **Cmd/Ctrl+Shift+C**), then click
@@ -82,6 +127,10 @@ ChatGPT's own browser and computer use are off in every mode (Kural can't see wh
 (Antigravity's) asks before every action, in Auto too.
 
 ## Under the hood
+
+Design Mode's button is a build-time change too (`scripts/rebrand.py` `add_design_mode_button`: one menu item beside the
+inspect button); without it, Cmd/Ctrl+Shift+D and **Kural: Toggle Design Mode** still turn Design Mode on. Design Mode
+itself is Kural's (`extension/lib/browser/design*.js`): over the same DevTools connection the AI's browser tools use.
 
 VS Code's browser sends what you pick to VS Code's own chat panel, which Kural doesn't have. A small build-time change
 (`scripts/rebrand.py`) makes it call Kural instead, and turns on the "Add to Chat" buttons that VS Code hides when its

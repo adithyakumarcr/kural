@@ -552,6 +552,34 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   the "Kural Safe Storage" keychain item), package.json sets `workbench.browser.dataStorage` "ephemeral" as a fallback,
   and `lib/browser/fresh.js` deletes `<user data>/Partitions/vscode-browser` and `workspaceStorage/*/browserStorage` at
   start (`test/rebrand-fresh-browser.test.js`).
+- **Design Mode** (`lib/browser/`: `design-page.js` in the page, `design.js` Kural's side (no vscode), `design-host.js` the
+  editor; Adithya, 28 Oct 2026: like Cursor's, all of it at once, Return sends at once; mockup `docs/mockups/design-mode/`,
+  local). The button: `rebrand.py add_design_mode_button` (one `MenuId.BrowserActionsToolbar` item before the inspect split
+  button, `icon: Codicon.edit`, `toggled: kural.designMode`; names read from that statement, ContextKeyExpr from the line
+  before; same shape in VSCodium's and the source build, `test/rebrand-design-button.test.js`); package.json's menus can't
+  reach that bar. Cmd/Ctrl+Shift+D when `activeEditor == 'workbench.editor.browser'` (VS Code's own is Run and Debug, hidden);
+  a focused page forwards a modified key to the workbench only if nothing called preventDefault (VS Code's
+  preload-browserView), so the page script takes Return/Esc/arrows/Cmd+L/Cmd+Z first. `DesignSession` per tab over its own
+  CDP connection (`transportOf` in cdp.js, shared with control.js; VS Code keeps several per tab): `Runtime.addBinding`
+  `__kuralDesignSend` with `executionContextName: "kural-design"` (the page's main world never has it: no fake notes),
+  `Page.addScriptToEvaluateOnNewDocument({worldName})` (back after a reload or hot reload; the script waits for
+  DOMContentLoaded: a new document has no `<html>` yet) + `Page.createIsolatedWorld` for the page that's there. The page
+  script: a closed shadow root on `<html>`, styles as a constructed stylesheet and CSSOM only (a page's CSP blocks `<style>`
+  and style attributes, not those), window CAPTURE listeners (before the page's handlers; wheel passes, so the page
+  scrolls), `pointerdown/up` only stopped, never cancelled (cancelling pointerdown drops the mousedown/up after it), and
+  the layer stops its own events bubbling out (clicks in the note reached the page's document handlers: found by the
+  test). Element facts are read in the isolated world (`describe`); the component by `PROBE` in the page's MAIN world
+  (`DOM.describeNode` → `DOM.resolveNode` without a context → `Runtime.callFunctionOn`): React fibers (`__reactFiber$`,
+  `_debugSource`), Vue 3 `__vueParentComponent`, Vue 2 `__vue__`, Svelte `__svelte_meta`; nothing found → null. The picture:
+  `capture(true)` hides everything but the marks, two frames, `Page.captureScreenshot` clipped to the union box (+8 px),
+  PNG at full scale, JPEG at 1/dpr above 4 Mpx. Notes → `chat.addDesignNotes(notes, {send})`: a pill per element / area
+  (`elementNote` describes both; `buildPrompt`'s dedupe key includes the area), words + CSS/text edits as text, pictures
+  as attachments; send = the chat's `send()` (queues while it answers), else `insertPill` + `attached` into the box. Dictate
+  = into the box + `kural.chat.voice`. `BrowserControl.onBusy(tab, on)` (the AI's holders) → `busy`: listeners off, a
+  "paused" pill. Setting `kural.browser.designMode.batch`. Tests: `test/design.test.js` (the probe, the chat's half, and the
+  real DesignSession + page script in headless Chrome under a strict CSP with real input: hover, arrows, click/type/Return
+  with the component and a PNG, Shift+click, area, Option+click, text edit, Batch, Esc, a click in the note not reaching the
+  page, busy, reload, off; skips without Chrome). Checked in a built app: see the release notes' check. Main frame only.
 - **The AI in the browser** (`lib/browser/`: `guard.js` the rule, `snapshot.js` the outline, `keys.js`, `cdp.js`, `page.js`
   the driver, all no vscode; `control.js` tabs/asking/the network stop; `bridge.js` + `browser-mcp.js` the MCP server
   `kural_browser`, like the device's): Adithya's rule, **the AI never publishes, posts, shares or sends anything** (in

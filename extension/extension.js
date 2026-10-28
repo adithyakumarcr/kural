@@ -32,6 +32,7 @@ const { Account } = require("./lib/account");
 const { SettingsPage } = require("./lib/settings-page");
 const { Browser } = require("./lib/browser");
 const { BrowserControl } = require("./lib/browser/control");
+const { DesignHost } = require("./lib/browser/design-host");
 const { Lessons } = require("./lib/learn");
 const { UsagePanel } = require("./lib/usage-panel");
 const { Devices } = require("./lib/devices");
@@ -352,6 +353,9 @@ function activate(context) {
   const browserAi = new BrowserControl(context);
   browserAi.register();
   chat.browserAi = browserAi;
+  // Design Mode (like Cursor's): the pen button in the browser bar / Cmd+Shift+D; click, mark up, say what to change, and the
+  // note goes to the chat's AI with the elements and a picture (lib/browser/design*.js).
+  new DesignHost(context, { chat, control: browserAi }).register();
   // Learn mood's lesson pages: the AI writes a slide deck, Kural shows it next to the chat (lib/learn).
   chat.lessons = new Lessons(context, {
     add: (id, item) => chat.addLessonItem(id, item),
