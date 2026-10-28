@@ -32,14 +32,16 @@
 .sel .n { position: absolute; right: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: #8b6cef; color: #fff; font: 600 10px/18px sans-serif; text-align: center; }
 .area { border: 2px dashed #8b6cef; background: rgba(139,108,239,.08); display: none; }
 .markup { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; overflow: visible; }
-.bar { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 9px;
+.bar { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); max-width: calc(100vw - 16px); display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 9px;
   background: #1e1e1e; border: 1px solid #3a3a3a; box-shadow: 0 8px 24px rgba(0,0,0,.35); pointer-events: auto; color: #ddd; font-size: 12px; white-space: nowrap; }
 .bar button { height: 26px; min-width: 28px; padding: 0 7px; border-radius: 6px; border: 0; background: none; color: #ccc; display: inline-flex; align-items: center;
   gap: 5px; cursor: pointer; font: 12px inherit; }
 .bar button:hover { background: rgba(255,255,255,.08); }
 .bar button.on { background: rgba(139,108,239,.25); color: #fff; }
 .bar svg { width: 15px; height: 15px; }
-.bar .words { color: #a9a9a9; padding: 0 8px; }
+.bar .words { color: #a9a9a9; padding: 0 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bar button, .batch { flex-shrink: 0; }
+@media (max-width: 720px) { .bar .words { display: none; } }   /* (a narrow tab: the tools first) */
 .bar .vr { width: 1px; height: 16px; background: #3a3a3a; margin: 0 3px; }
 .bar .primary { background: #8b6cef; color: #fff; font-weight: 600; }
 .bar .primary:hover { background: #7c5ce6; }

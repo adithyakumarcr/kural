@@ -916,6 +916,11 @@ def small_edit_box(text):
 # kural.designMode is set (Design Mode on in the tab in front). The minified names come from that statement (the menu
 # registry, MenuId, Codicon, its group) and ContextKeyExpr from the code just before it. Both builds (VSCodium's download and
 # the build from source) have the same shape; a miss gives a ::warning:: and the command and Cmd/Ctrl+Shift+D still work.
+# The item runs a workbench command, _kural.designMode, not Kural's own: that toolbar runs every item with the browser editor
+# as its argument (actionsToolbar.context = editor, shouldForwardArgs), which can't be sent to an extension, so a click on
+# an extension command there did nothing (found in the built app, 28 Oct 2026). _kural.designMode drops it and runs
+# kural.browser.designMode with none; registered at the end of the file like _kural.osToast. The shortcut is in the title
+# (the tooltip only shows the menu command's own keybinding).
 DESIGN_MARK = "/*kural-design-button*/"
 DESIGN_ANCHOR = re.compile(r'([\w$]+)\.appendMenuItem\(([\w$]+)\.BrowserActionsToolbar,\{submenu:\2\.BrowserChatActionsMenu,'
                            r'title:[\w$]+\(\d+,"Add to Chat"\),icon:([\w$]+)\.inspect,group:("[^"]*"|[\w$.]+),order:1,')
@@ -926,6 +931,11 @@ def add_design_mode_button(text):
     if DESIGN_MARK in text:
         return text
     found = list(DESIGN_ANCHOR.finditer(text))
+    commands, service, end = TOAST_COMMANDS.findall(text), WSCOLOR_SERVICE.findall(text), list(TOAST_END.finditer(text))
+    if len(commands) != 1 or len(service) != 1 or len(end) != 1:
+        print(f"::warning::the command registry or service not found as expected ({len(commands)}, {len(service)}, {len(end)}); no Design Mode "
+              "button (Cmd/Ctrl+Shift+D and Kural: Toggle Design Mode still work)")
+        return text
     if len(found) != 1:
         print(f"::warning::the browser bar's inspect button not found as expected ({len(found)} matches); no Design Mode button "
               "(Cmd/Ctrl+Shift+D and Kural: Toggle Design Mode still work)")
@@ -936,8 +946,12 @@ def add_design_mode_button(text):
         print("::warning::ContextKeyExpr not found near the browser bar's inspect button; no Design Mode button")
         return text
     registry, menu, codicon, group = m.groups()
-    item = (f'{DESIGN_MARK}{registry}.appendMenuItem({menu}.BrowserActionsToolbar,{{command:{{id:"kural.browser.designMode",'
-            f'title:"Design Mode",icon:{codicon}.edit,toggled:{near[-1]}.equals("kural.designMode",!0)}},group:{group},order:0}});')
+    title = '(/Mac|iPhone|iPad/.test(navigator.platform)?"Design Mode (\u21e7\u2318D)":"Design Mode (Ctrl+Shift+D)")'
+    item = (f'{DESIGN_MARK}{registry}.appendMenuItem({menu}.BrowserActionsToolbar,{{command:{{id:"_kural.designMode",'
+            f'title:{title},icon:{codicon}.edit,toggled:{near[-1]}.equals("kural.designMode",!0)}},group:{group},order:0}});')
+    command = f'/*kural-design-command*/{commands[0]}.registerCommand("_kural.designMode",a=>a.get({service[0]}).executeCommand("kural.browser.designMode"));'
+    at = end[0].start() + 1
+    text = text[:at] + command + text[at:]   # (the end comes after the anchor: the anchor's position doesn't change)
     return text[:m.start()] + item + text[m.start():]
 
 

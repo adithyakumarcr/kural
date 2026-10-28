@@ -557,7 +557,10 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   local). The button: `rebrand.py add_design_mode_button` (one `MenuId.BrowserActionsToolbar` item before the inspect split
   button, `icon: Codicon.edit`, `toggled: kural.designMode`; names read from that statement, ContextKeyExpr from the line
   before; same shape in VSCodium's and the source build, `test/rebrand-design-button.test.js`); package.json's menus can't
-  reach that bar. Cmd/Ctrl+Shift+D when `activeEditor == 'workbench.editor.browser'` (VS Code's own is Run and Debug, hidden);
+  reach that bar. The item runs the workbench command `_kural.designMode` (registered at the file's end like
+  `_kural.osToast`), which runs `kural.browser.designMode` with NO argument: that toolbar runs its items with the browser
+  editor as the argument (`actionsToolbar.context = editor`, `shouldForwardArgs`), which can't be sent to an extension, so a
+  click on Kural's own command did nothing (found in the built app); the shortcut is in the title. Cmd/Ctrl+Shift+D when `activeEditor == 'workbench.editor.browser'` (VS Code's own is Run and Debug, hidden);
   a focused page forwards a modified key to the workbench only if nothing called preventDefault (VS Code's
   preload-browserView), so the page script takes Return/Esc/arrows/Cmd+L/Cmd+Z first. `DesignSession` per tab over its own
   CDP connection (`transportOf` in cdp.js, shared with control.js; VS Code keeps several per tab): `Runtime.addBinding`
@@ -579,7 +582,9 @@ Feature folders; a new feature gets its own file or folder, wired in `extension.
   "paused" pill. Setting `kural.browser.designMode.batch`. Tests: `test/design.test.js` (the probe, the chat's half, and the
   real DesignSession + page script in headless Chrome under a strict CSP with real input: hover, arrows, click/type/Return
   with the component and a PNG, Shift+click, area, Option+click, text edit, Batch, Esc, a click in the note not reaching the
-  page, busy, reload, off; skips without Chrome). Checked in a built app: see the release notes' check. Main frame only.
+  page, busy, reload, off; skips without Chrome). Checked in a built app (28 Oct 2026, a source build driven over CDP with real
+  input): the button (pressed while on), Command Palette, a click blocked from the page, a note sent with the pill, the
+  words and the picture, the fake Claude answering; the toolbar fitting a 520 px tab. Main frame only.
 - **The AI in the browser** (`lib/browser/`: `guard.js` the rule, `snapshot.js` the outline, `keys.js`, `cdp.js`, `page.js`
   the driver, all no vscode; `control.js` tabs/asking/the network stop; `bridge.js` + `browser-mcp.js` the MCP server
   `kural_browser`, like the device's): Adithya's rule, **the AI never publishes, posts, shares or sends anything** (in
