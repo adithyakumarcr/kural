@@ -9,7 +9,9 @@ let fail = 0;
 const check = (name, fn) => { try { fn(); console.log("ok  ", name); } catch (e) { fail++; console.log("FAIL", name, e.message); } };
 const root = path.join(__dirname, "..");
 const patch = (text) => spawnSync("python3", ["-c", `import sys\nsys.path.insert(0, ${JSON.stringify(path.join(root, "scripts"))})\nimport rebrand\n` +
-  "sys.stdout.write(rebrand.add_design_mode_button(sys.stdin.read()))"], { input: text, encoding: "utf8", maxBuffer: 1 << 28 });
+  "sys.stdout.write(rebrand.add_design_mode_button(sys.stdin.read()))"],
+  // (UTF-8 both ways: on Windows Python reads stdin in the code page, and the title's ⇧⌘ came back garbled on the second pass.)
+  { input: text, encoding: "utf8", maxBuffer: 1 << 28, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
 
 // As minified in 1.140: the command registry and service, the last action's precondition (ContextKeyExpr T), then the split
 // button's statement; the file's end.
