@@ -1,3 +1,7 @@
+## Not released yet
+
+- Kural is built on VSCodium 1.143.17232 with Electron 43.8.6: the latest editor and browser security fixes.
+
 ## What's new in 1.2.1-beta.6
 
 - **Design Mode, like Cursor's.** The pen button in the browser bar, left of the inspect button (or **Cmd+Shift+D**,
