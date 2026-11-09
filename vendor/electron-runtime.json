@@ -1,27 +1,27 @@
 {
-  "version": "43.7.11",
-  "replaces": "43.7.3",
+  "version": "43.8.7",
+  "replaces": "43.7.7",
   "abi": "148",
   "fuses": "101100011",
   "platforms": {
-    "linux-x64": "37342601dc246db0269487b786856044b2476e58cdd07d00a57ac155329c5130",
-    "darwin-arm64": "e60ad7fb9c030ddfb5005a6bc54712bc78c2d3e760f7f010fa5b997e956aaefa",
-    "win32-x64": "4948fb44c6d466b361734f43252846286728adb0bd2f348a95c7fbf5fae21122"
+    "linux-x64": "2f8e1a625c4f84bd7a6cbf1c0cb8d37a6ddb45050aab89be1adcbc818a5c1689",
+    "darwin-arm64": "e09665902c46a648800b998e4271052a7819bd48ad02dc22d8c1452d248bfa09",
+    "win32-x64": "eb1dd74239ca8488a9b48c46a04a3c36c24287734efa34b93f3508e6034f8a35"
   },
   "bundles": {
     "chromium": "150.0.7871.250",
-    "node": "24.21.0",
+    "node": "24.22.1",
     "v8": "15.0.245.31-electron.0",
     "libuv": "1.52.1",
     "icu": "78.2",
     "sqlite": "3.53.4",
     "zlib": "1.3.2.1-motley",
     "nghttp2": "1.70.0",
-    "undici": "7.29.1",
+    "undici": "7.30.1",
     "brotli": "1.2.0",
-    "c-ares": "1.34.8",
-    "simdjson": "4.6.7",
+    "c-ares": "1.34.9",
+    "simdjson": "4.6.11",
     "zstd": "1.6.0"
   },
-  "bundlesSource": "process.versions of electron-v43.7.11-linux-x64 (ELECTRON_RUN_AS_NODE=1); checked again at each Linux/Mac build"
+  "bundlesSource": "process.versions of electron-v43.8.7-linux-x64 (ELECTRON_RUN_AS_NODE=1); checked again at each Linux/Mac build"
 }
