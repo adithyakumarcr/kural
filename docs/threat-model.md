@@ -1,4 +1,4 @@
-# Kural's threat model
+# Kural's threat model   https://github.com/adithyakumarcr/kural.wiki.git
 
 One page: what Kural protects, from whom, how, and what it doesn't protect against.
 
